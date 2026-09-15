@@ -1,4 +1,5 @@
 require "test_helper"
+require "stringio"
 
 class MemoryEtags
   def initialize
@@ -181,9 +182,8 @@ class PerfectBookClientTest < ActiveSupport::TestCase
   end
 
   test "authorization header never lands in the logs" do
-    logged = []
-    logger = Logger.new(nil)
-    logger.formatter = ->(_sev, _time, _prog, msg) { logged << msg; "" }
+    logged = StringIO.new
+    logger = Logger.new(logged)
     old_logger = Rails.logger
     Rails.logger = logger
     begin
@@ -193,7 +193,8 @@ class PerfectBookClientTest < ActiveSupport::TestCase
     ensure
       Rails.logger = old_logger
     end
-    assert logged.none? { |line| line.to_s.include?("secret") }
+    assert_includes logged.string, "PerfectBook GET /api/v1/trips -> 200"
+    assert_not_includes logged.string, "secret"
   end
 
   test "contact payload maps all fields including null phone" do
