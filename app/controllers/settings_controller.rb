@@ -30,8 +30,13 @@ class SettingsController < ApplicationController
     elsif setting_params.key?(:pipeline_digest)
       @settings.update!(pipeline_digest: setting_params[:pipeline_digest] == "1")
       redirect_to edit_settings_path, notice: "Settings saved.", status: :see_other
+    elsif @settings.update(sender_params)
+      redirect_to edit_settings_path, notice: "Settings saved.", status: :see_other
     else
-      redirect_to edit_settings_path, status: :see_other
+      @perfectbook_configured = PerfectBook.configured?
+      @perfectbook_last_success = PerfectBook::SyncState.last_success_at
+      @perfectbook_last_error = PerfectBook::SyncState.last_error_row
+      render :edit, status: :unprocessable_entity
     end
   end
 
@@ -120,6 +125,10 @@ class SettingsController < ApplicationController
     @imports = MailImport.ordered.limit(5)
     @ai_calls_today = AiCall.today.count
     @ai_cost_today = AiCall.daily_cost_cents
+  end
+
+  def sender_params
+    params.require(:setting).permit(:sender_name, :email_signature)
   end
 
   def update_appearance(value)

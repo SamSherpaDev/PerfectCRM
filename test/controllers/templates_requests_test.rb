@@ -91,6 +91,10 @@ class TemplatesRequestsTest < ActionDispatch::IntegrationTest
     assert_equal "#{@template.name} (copy)", copy.name
     assert_equal 0, copy.usage_count
     assert_nil copy.last_used_at
+    # Correction C: the copy takes the next free position so move up/down
+    # keeps working after duplicating.
+    assert_equal Template.maximum(:position), copy.position
+    assert copy.move("up")
     assert_redirected_to edit_template_path(copy)
   end
 
@@ -111,15 +115,27 @@ class TemplatesRequestsTest < ActionDispatch::IntegrationTest
     assert_equal [ other.id, @template.id ], Template.active.for_purpose("deposit_nudge").ordered.map(&:id)
   end
 
+  # Correction A: operational rendering never samples. The use endpoint
+  # returns live values only; the reply box passes them as context.
   test "use counts the insert and returns rendered text as JSON" do
     sign_in
-    post use_template_path(@template, format: :json)
+    post use_template_path(@template, format: :json),
+      params: { context: { first_name: "Maya", trip: "Everest Base Camp trek" } }
     assert_response :success
     assert_equal 1, @template.reload.usage_count
     assert_not_nil @template.last_used_at
     payload = JSON.parse(response.body)
     assert_equal "Your Everest Base Camp trek deposit", payload["subject"]
     assert_match(/Hi Maya/, payload["body"])
+  end
+
+  test "use marks unknown values instead of sampling them" do
+    sign_in
+    post use_template_path(@template, format: :json)
+    assert_response :success
+    payload = JSON.parse(response.body)
+    assert_match(/\[missing: trip\]/, payload["subject"])
+    assert_match(/\[missing: first_name\]/, payload["body"])
   end
 
   test "picker page renders the embeddable list" do
@@ -130,6 +146,7 @@ class TemplatesRequestsTest < ActionDispatch::IntegrationTest
     assert_select "button", text: "Insert"
   end
 
+  # Correction A: the picker returns live values only, never samples.
   test "picker JSON searches and returns rendered subject and body" do
     Template.create!(name: "Review ask", purpose: "review_ask", subject: "Welcome home", body: "How was {{trip}}?")
     sign_in
@@ -138,7 +155,7 @@ class TemplatesRequestsTest < ActionDispatch::IntegrationTest
     payload = JSON.parse(response.body)
     assert_equal 1, payload.size
     assert_equal "Welcome home", payload.first["subject"]
-    assert_match(/Everest Base Camp trek/, payload.first["body"])
+    assert_match(/\[missing: trip\]/, payload.first["body"])
   end
 
   test "picker JSON accepts caller context overrides" do

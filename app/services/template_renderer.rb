@@ -63,9 +63,11 @@ class TemplateRenderer
   end
   private_class_method :substitute
 
+  # Unknown AND empty values render [missing: name]: a half-filled message
+  # is never sent silently (correction A from the templates review).
   def self.normalize(context)
     normalized = {}
-    context.each { |key, value| normalized[key.to_s] = value unless value.nil? }
+    context.each { |key, value| normalized[key.to_s] = value unless value.blank? }
     normalized
   end
   private_class_method :normalize

@@ -44,4 +44,5 @@
   <% end %>
 
   <p class="mt-4"><a href="#thread-newest" class="btn-secondary btn btn-sm">Jump to newest ↑</a></p>
+  <%= render "reply_box/box", owner: @reply_owner if @reply_owner %>
 </div>

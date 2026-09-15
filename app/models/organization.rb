@@ -10,6 +10,7 @@ class Organization < ApplicationRecord
   has_many :taggings, as: :taggable, dependent: :destroy
   has_many :tags, -> { order(:name) }, through: :taggings
   has_many :activity_events, as: :subject, dependent: :destroy
+  has_many :conversations, as: :owner, dependent: :destroy
 
   include TaggedRecord
 

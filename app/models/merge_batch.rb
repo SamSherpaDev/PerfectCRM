@@ -1,19 +1,22 @@
 # frozen_string_literal: true
 
 # A preview of one template rendered for several recipients at once — the
-# group-departure merge. No sending happens here; the mail task will consume
-# this object (each entry becomes one personal send) when delivery lands.
+# group-departure merge. No sending happens here; GroupSendsController
+# consumes this object (each entry becomes one personal send) when delivery
+# lands.
 #
-# Recipients are plain name/email pairs for now; the bookings task will feed
-# richer per-recipient contexts (trip, dates, balances) through +context_for+.
+# Malformed recipient lines are RETAINED with their line numbers and shown
+# as errors: the batch refuses to present itself as complete until they are
+# fixed or removed, so a mistyped address can never silently drop a traveler.
 class MergeBatch
   Recipient = Data.define(:name, :email)
+  RecipientError = Data.define(:line_number, :line, :problem)
   Message = Data.define(:name, :email, :subject, :body)
 
-  attr_reader :template, :recipients, :messages
+  attr_reader :template, :recipients, :messages, :errors
 
   def self.build(template:, recipient_lines:, context_for: nil)
-    recipients = parse_recipients(recipient_lines)
+    recipients, errors = parse_recipients_with_errors(recipient_lines)
     messages = recipients.map do |recipient|
       context = { "first_name" => first_name_for(recipient.name), "full_name" => recipient.name }
       context.merge!(context_for.call(recipient)) if context_for
@@ -21,22 +24,34 @@ class MergeBatch
       Message.new(name: recipient.name, email: recipient.email,
         subject: rendered[:subject], body: rendered[:body])
     end
-    new(template: template, recipients: recipients, messages: messages)
+    new(template: template, recipients: recipients, messages: messages, errors: errors)
   end
 
   # One recipient per line: "Maya Gurung <maya@example.com>" or "maya@example.com".
   def self.parse_recipients(lines)
-    lines.to_s.lines.filter_map do |line|
-      line = line.strip
+    parse_recipients_with_errors(lines).first
+  end
+
+  # Same parse, but malformed lines come back as RecipientError entries with
+  # 1-based line numbers instead of vanishing.
+  def self.parse_recipients_with_errors(lines)
+    recipients = []
+    errors = []
+    lines.to_s.lines.each_with_index do |raw, index|
+      line = raw.strip
       next if line.empty?
 
       if (match = line.match(/^(.*?)\s*<([^<>@\s]+@[^<>@\s]+)>\s*$/))
         name = match[1].strip
-        Recipient.new(name: name.presence || match[2], email: match[2])
+        recipients << Recipient.new(name: name.presence || match[2], email: match[2])
       elsif line.match?(/\A[^<>\s]+@[^<>\s]+\z/)
-        Recipient.new(name: line, email: line)
+        recipients << Recipient.new(name: line, email: line)
+      else
+        errors << RecipientError.new(line_number: index + 1, line: line,
+          problem: "Needs an email address: “Name <email>” or just “email”.")
       end
     end
+    [ recipients, errors ]
   end
 
   def self.first_name_for(name)
@@ -44,13 +59,19 @@ class MergeBatch
   end
   private_class_method :first_name_for
 
-  def initialize(template:, recipients:, messages:)
+  def initialize(template:, recipients:, messages:, errors: [])
     @template = template
     @recipients = recipients
     @messages = messages
+    @errors = errors
   end
 
   def size
     recipients.size
+  end
+
+  # Complete means sendable: at least one good recipient and no broken lines.
+  def complete?
+    errors.empty? && recipients.any?
   end
 end

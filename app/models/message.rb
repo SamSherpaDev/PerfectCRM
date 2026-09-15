@@ -1,7 +1,28 @@
 class Message < ApplicationRecord
   DIRECTIONS = %w[in out].freeze
 
-  belongs_to :conversation, inverse_of: :messages
+  belongs_to :conversation, inverse_of: :messages, optional: true
+  alias_attribute :references, :references_text
+
+  STATUSES = %w[queued sending sent failed received].freeze
+
+  belongs_to :group_send, optional: true
+  belongs_to :template, optional: true
+
+  validates :status, inclusion: { in: STATUSES }
+  validates :to_addrs, presence: true, if: :outbound?
+  validates :subject, presence: true, if: :outbound?
+  validates :text_body, presence: true, if: :outbound?
+  validate :needs_a_home
+
+  scope :for_owner, ->(owner) {
+    joins(:conversation)
+      .where(conversations: { linkable_type: owner.class.name, linkable_id: owner.id })
+  }
+  scope :newest_first, -> { order(Arel.sql("COALESCE(messages.sent_at, messages.created_at) DESC, messages.id DESC")) }
+  scope :for_timeline, -> { outbound.where(status: %w[queued sending sent failed]) }
+
+
   has_many_attached :files
 
   serialize :to_addresses, coder: JSON
@@ -16,7 +37,6 @@ class Message < ApplicationRecord
   scope :inbound, -> { where(direction: "in") }
   scope :outbound, -> { where(direction: "out") }
   scope :unread, -> { where(direction: "in", read_at: nil) }
-  scope :newest_first, -> { order(sent_at: :desc, id: :desc) }
   scope :oldest_first, -> { order(sent_at: :asc, id: :asc) }
 
   after_create :bump_conversation
@@ -48,7 +68,7 @@ class Message < ApplicationRecord
     return unless unread?
 
     update!(read_at: Time.current)
-    conversation.refresh_counters!
+    conversation&.refresh_counters!
   end
 
   # Plain-text preview for lists: stored text body, else stripped HTML.
@@ -69,18 +89,80 @@ class Message < ApplicationRecord
     Array(gmail_labels).reject(&:blank?)
   end
 
+  def sent?
+    status == "sent"
+  end
+
+  def failed?
+    status == "failed"
+  end
+
+  def to_addrs
+    to_list.join(", ")
+  end
+
+  def to_addrs=(value)
+    self.to_addresses = value.to_s.split(",").map(&:strip).reject(&:blank?)
+  end
+
+  def cc_addrs
+    cc_list.join(", ")
+  end
+
+  def cc_addrs=(value)
+    self.cc_addresses = value.to_s.split(",").map(&:strip).reject(&:blank?)
+  end
+
+  def recipients
+    to_addrs.to_s.split(/[,\n;]/).map(&:strip).reject(&:blank?)
+  end
+
+  def mark_sending!
+    update!(status: "sending", send_error: nil)
+  end
+
+  def mark_sent!
+    transaction do
+      update!(status: "sent", sent_at: Time.current, send_error: nil)
+      conversation&.touch_activity!
+      conversation&.draft&.destroy
+      owner&.touch_activity!
+    end
+  end
+
+  def mark_failed!(error)
+    update!(status: "failed", send_error: error.to_s.truncate(500))
+  end
+
+  # The record whose timeline carries this message, via its conversation.
+  def owner
+    conversation&.owner
+  end
+
+  # Value for the hidden X-PerfectCRM-Client header, so a bounced or
+  # forwarded copy still maps back to its record.
+  def client_header
+    owner ? "#{owner.class.name}:#{owner.id}" : "GroupSend:#{group_send_id}"
+  end
+
+
   private
+  def needs_a_home
+    if conversation.nil? && group_send.nil?
+      errors.add(:conversation, "or group send must be present")
+    end
+  end
 
   def bump_conversation
-    conversation.refresh_counters!
-    conversation.expire_ai_caches! if conversation.has_attribute?(:ai_summary)
-    conversation.touch_linkable!
+    conversation&.refresh_counters!
+    conversation.expire_ai_caches! if conversation&.has_attribute?(:ai_summary)
+    conversation&.touch_linkable!
   rescue ActiveRecord::RecordNotFound
     nil
   end
 
   def rebalance_conversation
-    conversation.refresh_counters!
+    conversation&.refresh_counters!
   rescue ActiveRecord::RecordNotFound
     nil
   end

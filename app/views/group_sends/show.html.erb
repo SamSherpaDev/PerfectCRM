@@ -1,0 +1,42 @@
+<% content_for :title, "Group send summary · PerfectCRM" %>
+<div class="page">
+  <%= render layout: "shared/page_header", locals: { back: [ "Templates", templates_path ], eyebrow: "Group departures", title: "Send summary", subtitle: "“#{@group_send.template.name}” · #{@group_send.total_count} personal emails." } do %><% end %>
+  <%= render "shared/flash" %>
+
+  <section class="card card-pad" aria-label="Batch summary">
+    <div class="card-header">
+      <h2 class="card-title">Batch state</h2>
+      <%= status_badge @group_send.status == "complete" ? "done" : "sending" %>
+    </div>
+    <%= card_caption "Each traveler got their own email. Failed ones keep their message and can be retried from their timeline." %>
+    <dl class="facts mt-2">
+      <div><dt>Sent</dt><dd><%= @group_send.sent_count %> of <%= @group_send.total_count %></dd></div>
+      <div><dt>Still sending</dt><dd><%= @group_send.pending_count %></dd></div>
+      <div><dt>Failed</dt><dd><%= @group_send.failed_count %></dd></div>
+    </dl>
+  </section>
+
+  <section class="card card-pad" aria-label="Recipients">
+    <div class="card-header">
+      <h2 class="card-title">Recipients</h2>
+    </div>
+    <%= card_caption "Who got what, and where it is logged." %>
+    <ul class="mt-2 divide-y divide-rule-2">
+      <% @group_send.messages.each do |message| %>
+        <li class="flex items-center justify-between gap-3 py-2.5">
+          <div class="min-w-0">
+            <p class="truncate text-sm font-medium text-ink"><%= message.recipients.first %></p>
+            <p class="truncate text-xs muted">
+              <% if message.owner %>
+                Logged on <%= link_to message.owner.name, message.owner, class: "link" %>
+              <% else %>
+                No matching CRM record — sent without a timeline
+              <% end %>
+            </p>
+          </div>
+          <%= delivery_badge message.status %>
+        </li>
+      <% end %>
+    </ul>
+  </section>
+</div>

@@ -1,0 +1,49 @@
+# Outbound client email, sent as the mailbox identity through Gmail SMTP
+# exactly like PerfectBook's InvoiceMailer (smtp.gmail.com:587 with the
+# mailbox app password; see .env.app.example SMTP_*). Threads are preserved
+# with In-Reply-To/References; the Message-ID is generated once by
+# Outbound::Composer and kept, so replies stay in one Gmail thread.
+class ClientMailer < ApplicationMailer
+  def outbound(message)
+    @message = message
+    @body_html = simple_html(@message.text_body.to_s)
+
+    headers["In-Reply-To"] = @message.in_reply_to if @message.in_reply_to.present?
+    headers["References"] = @message.references if @message.references.present?
+    headers["Message-ID"] = @message.message_id if @message.message_id.present?
+    headers["X-PerfectCRM-Client"] = @message.client_header
+
+    @message.files.each do |file|
+      attachments[file.filename.to_s] = {
+        mime_type: file.content_type,
+        content: file.download
+      }
+    end
+
+    mail(
+      from: Outbound::Composer.from_display,
+      reply_to: Outbound::Composer.from_address,
+      to: @message.recipients,
+      cc: split_addrs(@message.cc_addrs),
+      bcc: split_addrs(@message.bcc_addrs),
+      subject: @message.subject
+    ) do |format|
+      format.text { render plain: @message.text_body.to_s }
+      format.html { render html: @body_html.html_safe } # rubocop:disable Rails/OutputSafety
+    end
+  end
+
+  private
+
+  def split_addrs(value)
+    value.to_s.split(/[,\n;]/).map(&:strip).reject(&:blank?).presence
+  end
+
+  def simple_html(text)
+    paragraphs = text.split(/\n{2,}/).map do |para|
+      lines = para.split("\n").map { |line| Outbound::Emphasis.to_html(line) }
+      "<p>#{lines.join('<br>')}</p>"
+    end
+    paragraphs.join("\n")
+  end
+end

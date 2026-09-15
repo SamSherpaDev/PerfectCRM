@@ -51,11 +51,19 @@ class TemplateTest < ActiveSupport::TestCase
     assert_equal %w[first_name trip], template.placeholders
   end
 
-  test "rendered fills from sample context with caller overrides" do
+  # Correction A: operational rendering never falls back to sample data.
+  # Unknown or empty values stay visible as [missing: name] markers; the
+  # sample context lives only in the labeled editor preview.
+  test "rendered uses only caller values and marks the rest missing" do
     template = Template.new(subject: "Hi {{first_name}}", body: "{{trip}} owes {{balance_due}}")
     rendered = template.rendered("first_name" => "Tashi")
     assert_equal "Hi Tashi", rendered[:subject]
-    assert_includes rendered[:body], "Everest Base Camp trek"
+    assert_equal "[missing: trip] owes [missing: balance_due]", rendered[:body]
+  end
+
+  test "rendered treats empty values as missing" do
+    template = Template.new(subject: "Hi", body: "{{trip}}!")
+    assert_equal "[missing: trip]!", template.rendered("trip" => " ").fetch(:body)
   end
 
   test "move swaps positions within the purpose group" do

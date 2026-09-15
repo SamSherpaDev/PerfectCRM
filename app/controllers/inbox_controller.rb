@@ -1,4 +1,5 @@
 class InboxController < ApplicationController
+  include ReplyBox
   TABS = %w[waiting waiting_them all triage].freeze
 
   def index
@@ -35,5 +36,14 @@ class InboxController < ApplicationController
     @conversation.mark_read!
     @messages = @conversation.messages.newest_first.includes(files_attachments: :blob)
     @linkable = @conversation.linkable
+    @reply_owner = @conversation.owner
+    return unless @reply_owner
+
+    @reply_conversation = @conversation
+    @reply_draft = @conversation.draft || @conversation.build_draft(owner: @reply_owner)
+    @reply_bookings = TemplateContext.bookings_for(@reply_owner)
+    @reply_context = TemplateContext.for(@reply_owner)
+    @reply_chips = Template.active.order(usage_count: :desc, last_used_at: :desc).limit(3)
+    @thread_messages = @conversation.messages.newest_first.to_a
   end
 end

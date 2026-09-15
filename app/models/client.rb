@@ -15,6 +15,7 @@ class Client < ApplicationRecord
   has_many :taggings, as: :taggable, dependent: :destroy
   has_many :tags, -> { order(:name) }, through: :taggings
   has_many :activity_events, as: :subject, dependent: :destroy
+  has_many :conversations, as: :owner, dependent: :destroy
 
   accepts_nested_attributes_for :people, allow_destroy: true,
     reject_if: proc { |attrs| attrs["name"].blank? && attrs["email"].blank? && attrs["phone"].blank? }

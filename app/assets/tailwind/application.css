@@ -918,6 +918,149 @@
   scroll-margin-top: 5rem;
 }
 
+/* ---------------------------------------------------------------------------
+ * Reply box and thread (crm-mail-out). Docked at the bottom of every thread
+ * view per docs/DESIGN.md 4.4: pressed textarea, template chips in one
+ * scrolling row, 44px Send, keyboard-safe docking over the home indicator.
+ * ------------------------------------------------------------------------- */
+.reply-dock {
+  @apply mt-6;
+}
+.reply-box {
+  @apply scroll-mt-24;
+}
+.reply-to-line {
+  @apply mt-1 text-xs text-ink-3;
+}
+.reply-chips {
+  @apply mt-3 flex gap-2 overflow-x-auto pb-1;
+  scrollbar-width: none;
+}
+.reply-chips::-webkit-scrollbar {
+  display: none;
+}
+.rchip {
+  @apply inline-flex shrink-0 items-center gap-1.5 rounded-full border border-edge bg-paper px-3.5 py-2 text-[12.5px] font-medium text-ink-2 shadow-raise-sm cursor-pointer whitespace-nowrap
+    hover:text-ink hover:border-seal/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seal;
+  min-height: 38px;
+}
+.rchip-assist {
+  @apply text-seal-text border-seal/40;
+}
+.reply-format {
+  @apply mb-1.5 flex gap-1;
+}
+.reply-format button {
+  @apply inline-flex h-9 min-w-9 items-center justify-center rounded-control border border-edge bg-paper px-2 text-[13px] text-ink-3 shadow-raise-sm cursor-pointer
+    hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seal;
+}
+.reply-body {
+  min-height: 104px;
+}
+.reply-cc, .reply-templates, .reply-details {
+  @apply mt-3;
+}
+.reply-cc > summary, .reply-templates > summary, .reply-details > summary {
+  @apply cursor-pointer text-[12.5px] font-medium text-seal-text w-fit;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+.reply-cc > summary {
+  @apply mb-2;
+}
+.reply-actions {
+  @apply mt-4 flex flex-wrap items-center gap-2;
+}
+.reply-status {
+  @apply mr-auto basis-full sm:basis-auto;
+}
+.reply-send {
+  min-width: 92px;
+}
+.reply-ev {
+  @apply flex items-start gap-2.5;
+}
+.reply-thread {
+  @apply mt-2 space-y-4;
+}
+.reply-stone {
+  @apply mt-1.5 h-[11px] w-[11px] shrink-0 rounded-full;
+}
+.stone-outbound {
+  background-color: var(--pb-ink-3);
+}
+.stone-inbound {
+  background-color: var(--pb-seal);
+}
+.msg-outbound {
+  @apply mt-1 rounded-card border border-edge bg-paper-3 px-3.5 py-3 shadow-press;
+  margin-left: 40px;
+}
+
+@media (max-width: 749px) {
+  .reply-body {
+    min-height: 72px;
+  }
+  .rchip {
+    min-height: 44px;
+  }
+  .reply-send {
+    min-height: 44px;
+    min-width: 92px;
+  }
+  .reply-close {
+    @apply inline-flex items-center;
+    min-height: 44px;
+  }
+  /* Bottom-sheet composer per docs/DESIGN.md 4.4: a floating Reply pill
+     keeps the thread clear; the full box opens as a sheet over the home
+     indicator only when the captain taps it. */
+  .reply-dock {
+    @apply mt-0;
+  }
+  .reply-pill {
+    @apply fixed z-30 inline-flex items-center gap-2 rounded-full;
+    right: 16px;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    min-height: 52px;
+    padding-inline: 20px;
+    box-shadow: 0 8px 24px rgba(20, 17, 14, 0.28);
+  }
+  .reply-pill[hidden] {
+    display: none;
+  }
+  .reply-composer[hidden] {
+    display: none;
+  }
+  .reply-composer:not([hidden]) {
+    @apply fixed inset-x-0 bottom-0 z-30 px-3;
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+    background-color: var(--pb-paper);
+    background-image: var(--pb-grain);
+    border-top: 1px solid var(--pb-rule);
+    box-shadow: 0 -8px 20px rgba(20, 17, 14, 0.10);
+  }
+  .reply-composer:not([hidden]) .reply-box {
+    @apply shadow-raise;
+    max-height: 78vh;
+    overflow-y: auto;
+  }
+  .msg-outbound {
+    margin-left: 20px;
+  }
+}
+
+@media (min-width: 750px) {
+  .reply-pill,
+  .reply-close {
+    display: none !important;
+  }
+  .reply-composer {
+    display: block !important;
+  }
+}
+
 @media print {
   html, body {
     background: #fff !important;

@@ -96,6 +96,40 @@ reply box to catch. Group departures get a merge preview at
 review every rendered message. Nothing sends from there; the mail task
 consumes the `MergeBatch` value object (`app/models/merge_batch.rb`).
 
+## Replying
+
+Replies send as `info@sherpaholidays.com` through Gmail SMTP
+(`smtp.gmail.com:587`, `SMTP_USERNAME`/`SMTP_PASSWORD` plus `MAIL_FROM` in
+`.env.app.example` — the same app password the mailbox sync stores), with
+`From` and `Reply-To` on the mailbox, `In-Reply-To`/`References` from the
+thread, a generated `Message-ID` that is kept, a hidden
+`X-PerfectCRM-Client` header, the signature from Settings → Email replies,
+and uploaded attachments. Delivery runs on Solid Queue
+(`OutboundDeliveryJob`, retries with backoff); the timeline shows each
+message as sending, sent, or failed, and a failure keeps the draft so no
+words are lost. Failed messages retry from their timeline row.
+
+The reply box docks at the bottom of the client, lead, organization, and
+inbox thread views: recipient chips prefilled from the thread, `Re:`
+subject, plain-text editor with basic `*bold*` / `_italic_` / list
+formatting, attachments, one-tap template chips and the full picker
+(filled from live data), a booking select when several mirrored bookings
+exist, Save draft per conversation, and Send. `reply_box/_assist` (with
+its `data-assist` hook) is the reserved slot where AI drafts will appear
+for approval; nothing sends without the captain pressing Send.
+
+Placeholders (`TemplateContext.for(client_or_lead, booking:)`) fill from
+the CRM record plus the most recent active mirrored PerfectBook booking:
+`first_name`, `full_name`, `trip`, `departure_dates`, `balance_due`,
+`invoice_number`, `payment_reference`, `advisor_name`, `my_name`,
+`signature`. Unknown or empty values render `[missing: name]`, never
+blank; sample data appears only in the labeled template-editor preview.
+Group sends (`POST /group_sends` from the merge preview) take recipients
+from a departure's mirrored bookings or pasted lines, refuse malformed
+lines with line numbers until fixed or removed, then send one personal
+email per traveler — each logged on its own timeline — with a per-batch
+summary at `GET /group_sends/:id`.
+
 ## Google sign-in
 
 Its own OAuth client will be created by the captain: create a Google OAuth

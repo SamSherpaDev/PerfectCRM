@@ -23,7 +23,7 @@ export default class extends Controller {
 
   async insert(event) {
     const button = event.currentTarget
-    const url = button.dataset.url
+    const url = this.urlWithContext(button.dataset.url)
     if (!url) return
     const token = document.querySelector('meta[name="csrf-token"]')?.content
     button.disabled = true
@@ -48,5 +48,24 @@ export default class extends Controller {
       this.errorTarget.textContent = "Could not insert template. Please try again."
       this.errorTarget.hidden = false
     }
+  }
+
+  // Live placeholder values ride along so the insert arrives filled.
+  // Without them unknown values render [missing: …] by design.
+  urlWithContext(url) {
+    if (!url) return url
+    let context = {}
+    try {
+      context = JSON.parse(this.element.dataset.templatePickerContextValue || "{}") || {}
+    } catch {
+      context = {}
+    }
+    const target = new URL(url, window.location.origin)
+    for (const [key, value] of Object.entries(context)) {
+      if (value !== null && value !== undefined && value !== "") {
+        target.searchParams.set(`context[${key}]`, value)
+      }
+    }
+    return target.toString()
   }
 }

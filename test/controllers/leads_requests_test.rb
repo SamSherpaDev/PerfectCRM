@@ -51,7 +51,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     assert_select "button", text: /Convert to client/
     assert_select "h2", text: "Facts"
     assert_select "h2", text: "Timeline"
-    assert_select "p", text: /Conversations will appear here once mail is connected/
+    assert_select "p", text: /Replies you send from here will appear on this timeline/
   end
 
   test "show of a converted lead is read-only with a forward link" do

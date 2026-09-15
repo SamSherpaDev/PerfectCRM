@@ -67,7 +67,7 @@ class ClientsRequestsTest < ActionDispatch::IntegrationTest
     assert_select "h2", text: "Bookings in PerfectBook"
     assert_select "h2", text: "Follow-ups"
     assert_select "h2", text: "Quotes"
-    assert_select "p", text: /Conversations will appear here once mail is connected/
+    assert_select "p", text: /Replies you send from here will appear on this timeline/
   end
 
   test "show renders notes and timeline events newest first" do

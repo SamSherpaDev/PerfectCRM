@@ -1,5 +1,6 @@
 class OrganizationsController < ApplicationController
   include RecordHistory
+  include ReplyBox
 
   before_action :set_organization, only: %i[show edit update]
 
@@ -7,6 +8,8 @@ class OrganizationsController < ApplicationController
     @note = Note.new
     load_record_history(@organization)
     @conversations = Conversation.where(linkable: @organization).ordered
+    load_reply_box(@organization)
+    @timeline_items = timeline_items(@events, @outbound_messages)
     @referred_clients = @organization.referred_clients.active.ordered.limit(20).includes(:tags)
   end
 

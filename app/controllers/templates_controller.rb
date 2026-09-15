@@ -53,6 +53,9 @@ class TemplatesController < ApplicationController
     copy.usage_count = 0
     copy.last_used_at = nil
     copy.archived_at = nil
+    # The dup carries the original position; take the next free one so
+    # move up/down keeps working after duplicating.
+    copy.position = (Template.maximum(:position) || 0) + 1
     copy.save!
     redirect_to edit_template_path(copy), notice: "Template duplicated."
   end
@@ -75,7 +78,7 @@ class TemplatesController < ApplicationController
   # One-tap insert from the picker: counts the use and returns rendered text.
   def use
     @template.record_use!
-    render json: { id: @template.id, **@template.rendered(use_context) }
+    render json: { id: @template.id, name: @template.name, **@template.rendered(use_context) }
   end
 
   # Compact embeddable list for the reply box (a later mail task embeds
@@ -93,28 +96,80 @@ class TemplatesController < ApplicationController
     end
   end
 
-  # Group-departure merge: pick a template, paste recipients, preview each
-  # rendered message. Nothing is sent; the mail task consumes MergeBatch.
+  # Group-departure merge: pick a template, take recipients from a
+  # departure's mirrored bookings (or paste), preview each rendered
+  # message. Nothing is sent; GroupSendsController consumes MergeBatch.
   def merge
     @templates = Template.active.ordered
     @selected = @templates.find_by(id: params[:template_id]) || @templates.first
+    @departures = merge_departures
+    @departure = @departures.find { |departure| departure.perfectbook_id.to_s == params[:departure_id].to_s } if params[:departure_id].present?
+    @recipient_lines = params[:recipients].presence || recipients_from_departure(@departure)
+    @skipped_without_email = @skipped_without_email || 0
   end
 
   def merge_preview
     @templates = Template.active.ordered
     @selected = @templates.find_by(id: params[:template_id])
+    @departures = merge_departures
+    @departure = @departures.find { |departure| departure.perfectbook_id.to_s == params[:departure_id].to_s } if params[:departure_id].present?
     @recipient_lines = params[:recipients].to_s
     if @selected.nil?
       flash.now[:alert] = "Pick a template first."
       render :merge, status: :unprocessable_entity
     else
-      @batch = MergeBatch.build(template: @selected, recipient_lines: @recipient_lines)
-      flash.now[:alert] = "Add at least one recipient email." if @batch.recipients.empty?
+      contexts = live_merge_contexts(@recipient_lines)
+      @batch = MergeBatch.build(template: @selected, recipient_lines: @recipient_lines,
+        context_for: ->(recipient) { contexts[recipient.email.strip.downcase] || {} })
+      if @batch.errors.any?
+        flash.now[:alert] = "#{@batch.errors.size} #{'line'.pluralize(@batch.errors.size)} need#{@batch.errors.size == 1 ? 's' : ''} fixing before this batch can send."
+      elsif @batch.recipients.empty?
+        flash.now[:alert] = "Add at least one recipient email."
+      end
       render :merge
     end
   end
 
   private
+
+  # Departures with mirrored bookings, newest first — the only ones a
+  # group send can address. Past departures stay listed: post-trip
+  # review asks go to travelers who already returned.
+  def merge_departures
+    # Note: NULL check only — comparing the integer column to "" makes
+    # SQLite drop every row, so a blank string is never queried.
+    booked = PerfectBook::Booking.where.not(departure_id: nil).distinct.pluck(:departure_id)
+    PerfectBook::Departure.where(perfectbook_id: booked)
+      .order(Arel.sql("start_date IS NULL, start_date DESC")).limit(100).to_a
+  end
+
+  # "Name <email>" lines from a departure's mirrored bookings. Bookings
+  # without a reachable email are counted, never guessed.
+  def recipients_from_departure(departure)
+    @skipped_without_email = 0
+    return nil if departure.nil?
+
+    PerfectBook::Booking.where(departure_id: departure.perfectbook_id)
+      .order(:id).filter_map do |booking|
+        contact = PerfectBook::Contact.find_by(perfectbook_id: booking.perfectbook_contact_id)
+        email = contact&.email.to_s.strip
+        if email.blank?
+          @skipped_without_email += 1
+          next
+        end
+        name = contact.name.presence || email
+        "#{name} <#{email}>"
+      end.join("\n")
+  end
+
+  # Live per-recipient contexts so the preview shows real trip, dates,
+  # and balances where the CRM knows them.
+  def live_merge_contexts(lines)
+    MergeBatch.parse_recipients(lines).index_by { |recipient| recipient.email.strip.downcase }.transform_values do |recipient|
+      owner = Outbound::OwnerLookup.for_email(recipient.email)
+      owner ? TemplateContext.for(owner) : {}
+    end
+  end
 
   def set_template
     @template = Template.find(params[:id])

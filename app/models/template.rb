@@ -64,8 +64,12 @@ class Template < ApplicationRecord
   end
 
   # Rendered subject and body against a plain-hash context (see TemplateRenderer).
+  # Operational sends render ONLY the caller's live values: unknown or
+  # empty values stay visible as [missing: name] markers, never silent
+  # blanks. Sample data appears solely in the labeled editor preview
+  # (templates/_preview_contents), never here.
   def rendered(context = {})
-    values = TemplateRenderer::SAMPLE_CONTEXT.merge(context.transform_keys(&:to_s))
+    values = context.transform_keys(&:to_s)
     {
       subject: TemplateRenderer.render(subject, values),
       body: TemplateRenderer.render(body, values)

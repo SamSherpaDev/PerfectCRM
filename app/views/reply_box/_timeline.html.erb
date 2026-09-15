@@ -1,0 +1,28 @@
+<%# Unified timeline: activity events and outbound messages, newest first.
+    Locals: items (array of [time, :event/:message, record]). %>
+<% if items.any? %>
+  <ol class="mt-2 space-y-3 reply-thread">
+    <% items.each do |(_, kind, record)| %>
+      <% if kind == :message %>
+        <%= render "reply_box/message", message: record %>
+      <% else %>
+        <li class="flex items-start gap-3">
+          <% if record.kind == "automation" %>
+            <%= render "shared/icon", name: :bolt, class: "h-4 w-4 mt-0.5 text-info" %>
+          <% end %>
+          <%= status_badge record.kind %>
+          <div class="min-w-0">
+            <p class="text-sm text-ink"><%= record.summary %></p>
+            <p class="text-xs muted"><%= time_ago_in_words(record.occurred_at) %> ago · <%= date_short(record.occurred_at) %></p>
+          </div>
+        </li>
+      <% end %>
+    <% end %>
+  </ol>
+<% else %>
+  <div class="empty-inline">
+    <%= sketch :enso, class: "enso" %>
+    <p class="text-sm text-ink">No activity yet.</p>
+    <p class="text-xs muted">Replies you send from here will appear on this timeline.</p>
+  </div>
+<% end %>
