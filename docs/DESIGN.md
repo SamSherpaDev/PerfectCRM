@@ -143,7 +143,7 @@ Header with back link, eyebrow "Client · {stage}", the client's name as title, 
 
 ### 4.7 Quote builder
 
-Two columns on desktop (`3fr 2fr`): left, "Trip and departure" (a `.select` fed by PerfectBook's catalog, then departure rows `.dep` as raised radio rows with date, seats left and catalog price; the chosen row goes pressed with a seal dot), "Lines" (compact table with quantity wells, each and total right-aligned, an Add line button in the header), "Note to the client" (textarea). Right, "Summary" (subtotal, deposit, balance due date, valid until, then the total in Gelasio 30px with "Total for 4 guests" as its label, Send quote and Preview as the client), "When they accept" (three checked lines). On the phone the columns stack, the summary's buttons hide, and a docked bar shows the total (Gelasio 22px, guests and dates beneath) with a 44px Send quote.
+Two columns on desktop (`3fr 2fr`): left, "Trip and departure" (a `.select` fed by PerfectBook's catalog, then departure rows `.dep` as raised radio rows with date and seats left; pricing follows README.md, "Quotes"; the chosen row goes pressed with a seal dot), "Lines" (compact table with quantity wells, each and total right-aligned, an Add line button in the header), "Note to the client" (textarea). Right, "Summary" (subtotal, deposit, balance due date, valid until, then the total in Gelasio 30px with "Total for 4 guests" as its label, Send quote and Preview as the client), "When they accept" (three checked lines). On the phone the columns stack, the summary's buttons hide, and a docked bar shows the total (Gelasio 22px, guests and dates beneath) with a 44px Send quote.
 
 ### 4.8 Templates
 

@@ -474,5 +474,4 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
       end
     end
   end
-
 end
