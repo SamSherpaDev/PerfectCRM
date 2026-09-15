@@ -124,6 +124,24 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_001005) do
     t.index ["linkable_type", "linkable_id"], name: "index_conversations_on_linkable_type_and_linkable_id"
   end
 
+  create_table "drafts", force: :cascade do |t|
+    t.text "bcc_addrs", default: ""
+    t.text "body", default: ""
+    t.text "cc_addrs", default: ""
+    t.integer "conversation_id"
+    t.datetime "created_at", null: false
+    t.integer "owner_id", null: false
+    t.string "owner_type", null: false
+    t.integer "perfectbook_booking_id"
+    t.string "subject", default: ""
+    t.integer "template_id"
+    t.text "to_addrs", default: ""
+    t.datetime "updated_at", null: false
+    t.index ["conversation_id"], name: "index_drafts_on_conversation_id", unique: true, where: "conversation_id IS NOT NULL"
+    t.index ["owner_type", "owner_id"], name: "index_drafts_on_owner_type_and_owner_id"
+    t.index ["template_id"], name: "index_drafts_on_template_id"
+  end
+
   create_table "email_identities", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "email", null: false
@@ -134,6 +152,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_001005) do
     t.datetime "updated_at", null: false
     t.index ["email"], name: "index_email_identities_on_email", unique: true
     t.index ["linkable_type", "linkable_id"], name: "index_email_identities_on_linkable_type_and_linkable_id"
+  end
+
+  create_table "group_sends", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "perfectbook_departure_id"
+    t.text "recipient_lines"
+    t.string "status", default: "sending", null: false
+    t.integer "template_id", null: false
+    t.integer "total_count", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["status"], name: "index_group_sends_on_status"
+    t.index ["template_id"], name: "index_group_sends_on_template_id"
   end
 
   create_table "lead_notifications", force: :cascade do |t|
@@ -257,13 +287,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_001005) do
 
   create_table "messages", force: :cascade do |t|
     t.text "attachment_notices"
+    t.text "bcc_addrs", default: ""
     t.text "cc_addresses", default: "[]", null: false
-    t.integer "conversation_id", null: false
+    t.integer "conversation_id"
     t.datetime "created_at", null: false
     t.string "direction", default: "in", null: false
     t.string "from_address"
     t.string "gm_message_id"
     t.text "gmail_labels", default: "[]", null: false
+    t.integer "group_send_id"
     t.text "held_attachments", default: "[]", null: false
     t.text "html_body"
     t.string "in_reply_to"
@@ -271,15 +303,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_001005) do
     t.integer "raw_size", default: 0, null: false
     t.datetime "read_at"
     t.text "references_text"
+    t.text "send_error"
     t.datetime "sent_at"
+    t.string "status", default: "received", null: false
     t.string "subject"
+    t.integer "submitted_draft_id"
+    t.datetime "submitted_draft_updated_at"
+    t.integer "template_id"
     t.text "text_body"
     t.text "to_addresses", default: "[]", null: false
     t.datetime "updated_at", null: false
     t.index ["conversation_id", "sent_at"], name: "index_messages_on_conversation_id_and_sent_at"
     t.index ["conversation_id"], name: "index_messages_on_conversation_id"
     t.index ["gm_message_id"], name: "index_messages_on_gm_message_id", unique: true, where: "gm_message_id IS NOT NULL AND gm_message_id != ''"
+    t.index ["group_send_id"], name: "index_messages_on_group_send_id"
     t.index ["message_id"], name: "index_messages_on_message_id"
+    t.index ["status"], name: "index_messages_on_status"
+    t.index ["template_id"], name: "index_messages_on_template_id"
   end
 
   create_table "notes", force: :cascade do |t|
@@ -445,6 +485,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_001005) do
     t.string "appearance", default: "paper", null: false
     t.datetime "created_at", null: false
     t.boolean "digest_enabled", default: true, null: false
+    t.text "email_signature", default: "", null: false
     t.string "lead_webhook_url"
     t.string "mailbox_app_password"
     t.text "mailbox_last_error"
@@ -454,6 +495,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_001005) do
     t.boolean "pipeline_digest", default: true, null: false
     t.datetime "relay_last_used_at"
     t.text "relay_secret"
+    t.string "sender_name", default: "", null: false
     t.integer "singleton_key", default: 1, null: false
     t.string "site_key"
     t.datetime "site_key_last_used_at"
@@ -533,11 +575,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_001005) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "clients", "organizations", column: "referred_by_organization_id"
+  add_foreign_key "drafts", "conversations"
+  add_foreign_key "drafts", "templates"
+  add_foreign_key "group_sends", "templates"
   add_foreign_key "lead_notifications", "leads"
   add_foreign_key "lead_webhook_deliveries", "leads"
   add_foreign_key "leads", "clients", column: "converted_client_id"
   add_foreign_key "leads", "organizations", column: "referred_by_organization_id"
   add_foreign_key "messages", "conversations"
+  add_foreign_key "messages", "group_sends"
+  add_foreign_key "messages", "templates"
   add_foreign_key "notes", "users", column: "author_id"
   add_foreign_key "people", "clients"
   add_foreign_key "people", "leads"
