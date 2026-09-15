@@ -1,21 +1,36 @@
 <% content_for :title, "Merge preview · PerfectCRM" %>
 <div class="page">
-  <%= render layout: "shared/page_header", locals: { back: [ "Templates", templates_path ], eyebrow: "Group departures", title: "Merge preview", subtitle: "One message, personally addressed to each traveler. Nothing sends from here." } do %><% end %>
+  <%= render layout: "shared/page_header", locals: { back: [ "Templates", templates_path ], eyebrow: "Group departures", title: "Merge preview", subtitle: "Preview personal emails for each traveler, then send when ready." } do %><% end %>
   <%= render "shared/flash" %>
 
   <div class="card card-pad">
     <%= form_with url: merge_templates_path, method: :post, data: { turbo: false } do |form| %>
       <div class="grid gap-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-        <div>
-          <%= form.label :template_id, "Template", class: "label" %>
-          <%= form.select :template_id, options_from_collection_for_select(@templates, :id, :name, @selected&.id), {}, class: "select" %>
-          <p class="hint">Placeholders fill per recipient: {{first_name}} and {{full_name}} from each line below.</p>
+        <div class="space-y-4">
+          <div>
+            <%= form.label :template_id, "Template", class: "label" %>
+            <%= form.select :template_id, options_from_collection_for_select(@templates, :id, :name, @selected&.id), {}, class: "select" %>
+            <p class="hint">Placeholders fill per recipient from live data where the CRM knows them.</p>
+          </div>
+          <div>
+            <%= form.label :departure_id, "Departure travelers", class: "label" %>
+            <%= form.select :departure_id,
+                  options_for_select([ [ "Paste addresses below", "" ] ] +
+                    @departures.map { |departure| [ "#{departure.trip_name} · #{departure.label.presence || departure.start_date}", departure.perfectbook_id ] },
+                    @departure&.perfectbook_id),
+                  {}, class: "select", onchange: "this.form.requestSubmit(this.form.querySelector('[name=refill]'))" %>
+            <button type="submit" name="refill" value="1" hidden>Load travelers</button>
+            <p class="hint">Choosing a departure fills the list from its mirrored bookings. Changing it refills the list.</p>
+          </div>
         </div>
         <div>
           <%= form.label :recipients, "Recipients", class: "label" %>
           <%= form.text_area :recipients, value: @recipient_lines, rows: 5, class: "textarea mono",
                 placeholder: "Maya Gurung <maya@example.com>&#10;Pemba Sherpa <pemba@example.com>".html_safe %>
           <p class="hint">One per line: name and email, or just an email.</p>
+          <% if @skipped_without_email.to_i.positive? %>
+            <p class="hint"><%= pluralize(@skipped_without_email, "booking") %> without an email were left out.</p>
+          <% end %>
         </div>
       </div>
       <div class="mt-5">
@@ -25,17 +40,43 @@
   </div>
 
   <% if @batch %>
+    <% if @batch.errors.any? %>
+      <section class="card card-pad" aria-label="Recipient problems" role="alert">
+        <div class="card-header">
+          <h2 class="card-title"><%= pluralize(@batch.errors.size, "line") %> need fixing</h2>
+          <%= badge "Not complete", :warning %>
+        </div>
+        <%= card_caption "Fix these lines or remove them. The batch cannot send until every line parses." %>
+        <ul class="mt-2 space-y-1.5">
+          <% @batch.errors.each do |error| %>
+            <li class="text-sm text-ink-2">
+              <span class="font-medium">Line <%= error.line_number %>:</span>
+              <span class="mono text-[13px]"><%= error.line %></span>
+              <span class="muted">— <%= error.problem %></span>
+            </li>
+          <% end %>
+        </ul>
+      </section>
+    <% end %>
+
     <section class="card card-pad" aria-label="Merged messages" aria-live="polite">
       <div class="card-header">
         <h2 class="card-title"><%= pluralize(@batch.size, "message") %> ready</h2>
-        <span class="badge badge-brand">Nothing sent</span>
+        <% if @batch.complete? %>
+          <span class="badge badge-brand">Nothing sent</span>
+        <% else %>
+          <%= badge "Not complete", :warning %>
+        <% end %>
       </div>
-      <%= card_caption "Each traveler gets their own rendered copy of “#{@selected.name}”. Sending arrives with the mail task." %>
+      <%= card_caption "Each traveler gets their own rendered copy of “#{@selected.name}”. Review the messages and fix any recipient errors before sending." %>
       <% if @batch.messages.any? %>
         <ul class="space-y-4">
           <% @batch.messages.each do |message| %>
             <li class="rounded-control border border-edge bg-paper-2 px-4 py-3 shadow-raise-sm">
-              <p class="text-sm font-medium text-ink">To <%= message.name %> <span class="font-normal muted">&lt;<%= message.email %>&gt;</span></p>
+              <p class="text-sm font-medium text-ink">To <%= message.name.presence || message.email %> <span class="font-normal muted">&lt;<%= message.email %>&gt;</span></p>
+              <% if message.booking_owner_name.present? %>
+                <p class="hint">Booking reference: <%= message.booking_owner_name %>'s booking.</p>
+              <% end %>
               <p class="mt-1 text-[13px] font-medium text-ink-2"><%= highlight_missing(ERB::Util.html_escape(message.subject)) %></p>
               <div class="mt-1 text-sm leading-relaxed text-ink-2">
                 <%= plain_preview(message.body) %>
@@ -43,6 +84,17 @@
             </li>
           <% end %>
         </ul>
+        <% if @batch.complete? %>
+          <div class="mt-5">
+            <%= form_with url: group_sends_path, method: :post, data: { turbo: false } do |form| %>
+              <%= form.hidden_field :template_id, value: @selected.id %>
+              <%= form.hidden_field :departure_id, value: @departure&.perfectbook_id %>
+              <%= form.hidden_field :recipients, value: @recipient_lines %>
+              <%= form.submit "Send #{@batch.size} personal emails", class: "btn btn-primary",
+                    data: { turbo_confirm: "Send #{@batch.size} personal emails now? Each traveler gets their own copy." } %>
+            <% end %>
+          </div>
+        <% end %>
       <% end %>
     </section>
   <% end %>

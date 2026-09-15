@@ -1,10 +1,8 @@
-<%# Reusable one-tap picker for the reply box (a later mail task embeds this).
-    Emits a window "template:insert" event with {subject, body} detail when the
-    captain taps Insert; the reply box listens and fills itself. Each Insert
-    also counts a use so dead templates get pruned.
-    Locals: templates, query (String). %>
+<%# Reusable one-tap picker embedded in the reply box.
+    Locals: templates, query (String), context (Hash, optional live values so
+    inserts arrive filled; without it unknown values show [missing: …]). %>
 <%= turbo_frame_tag "template_picker" do %>
-  <div data-controller="template-picker">
+  <div data-controller="template-picker"<% if local_assigns[:context] %> data-template-picker-context-value="<%= h local_assigns[:context].to_json %>"<% end %>>
     <%= form_with url: picker_templates_path, method: :get, data: { turbo_frame: "template_picker", action: "input->template-picker#search" } do |form| %>
       <%= form.label :q, "Search templates", class: "sr-only" %>
       <%= form.search_field :q, value: local_assigns[:query], class: "input", placeholder: "Search templates…",
@@ -21,7 +19,7 @@
             <div class="flex items-center justify-between gap-3">
               <div class="min-w-0">
                 <p class="truncate text-sm font-medium text-ink"><%= template.name %></p>
-                <p class="truncate text-xs muted"><%= rendered[:subject].presence || "No subject" %></p>
+                <p class="truncate text-xs muted"><%= highlight_missing(ERB::Util.html_escape(rendered[:subject].presence || "No subject")) %></p>
               </div>
               <button type="button" class="btn btn-secondary btn-sm shrink-0"
                       data-action="template-picker#insert"

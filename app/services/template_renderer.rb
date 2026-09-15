@@ -2,11 +2,9 @@
 
 # Substitutes {{placeholders}} in template subject lines and bodies.
 #
-# Context contract (kept a plain Hash on purpose): the mail task and the
-# PerfectBook-link task will supply real values later (Client names, Booking
-# trip and dates, Invoice amounts and references) without changing this code.
-# Keys may be symbols or strings. The chooser's supported keys are defined
-# in PLACEHOLDERS below.
+# Context stays a plain Hash so rendering is independent of data lookup;
+# TemplateContext resolves live values. Keys may be symbols or strings.
+# The chooser's supported keys are defined in PLACEHOLDERS below.
 #
 # Unknown placeholders render as a visible "[missing: name]" marker so a
 # half-filled message is never sent silently. Values are substituted raw by
@@ -21,7 +19,7 @@ class TemplateRenderer
 
   PATTERN = /{{\s*([A-Za-z0-9_]+)\s*}}/.freeze
 
-  # Warm sample values for the preview pane and the picker fallback.
+  # Only for the labeled template-editor preview, never operational rendering.
   SAMPLE_CONTEXT = {
     "first_name" => "Maya",
     "full_name" => "Maya Gurung",
@@ -63,9 +61,11 @@ class TemplateRenderer
   end
   private_class_method :substitute
 
+  # Unknown AND empty values render [missing: name]: a half-filled message
+  # is never sent silently (correction A from the templates review).
   def self.normalize(context)
     normalized = {}
-    context.each { |key, value| normalized[key.to_s] = value unless value.nil? }
+    context.each { |key, value| normalized[key.to_s] = value unless value.blank? }
     normalized
   end
   private_class_method :normalize

@@ -1,5 +1,6 @@
 class ClientsController < ApplicationController
   include RecordHistory
+  include ReplyBox
 
   before_action :set_client, only: %i[show edit update archive unarchive]
 
@@ -26,6 +27,8 @@ class ClientsController < ApplicationController
     @note = Note.new
     load_record_history(@client)
     @conversations = Conversation.where(linkable: @client).ordered
+    load_reply_box(@client)
+    @timeline_items = timeline_items(@events, @outbound_messages)
     origin_event = @client.activity_events.find_by(kind: "conversion", summary: "Started as a lead")
     @origin_lead = Lead.find_by(id: origin_event.metadata["lead_id"], converted_client_id: @client.id) if origin_event
   end

@@ -57,6 +57,8 @@ When updating this file, preserve this bar for all agents and keep entries conci
   contract in README.md, "Mail". Keep-only-info@ rule lives in
   `Mail.keeps?`; inside `module Mail` always write `::Message` and
   `::Conversation` because `Mail::Message` is the mail gem.
+- Outbound email: see README.md, "Replying"; recipient context is shared
+  through `TemplateContext.resolve_recipient` for reply and group rendering.
 - Views cannot name the `Template` model bare: the
   constant resolves to `ActionView::Template`. Expose what views need
   through helpers with explicit `::Template` references instead.

@@ -100,25 +100,9 @@
       <h2 class="card-title" id="timeline-heading">Timeline</h2>
     </div>
     <%= card_caption "Every conversation, note, and change in one scroll, newest first." %>
-    <% if @events.any? %>
-      <ol class="mt-2 space-y-3">
-        <% @events.each do |event| %>
-          <li class="flex items-start gap-3">
-            <%= status_badge event.kind %>
-            <div class="min-w-0">
-              <p class="text-sm text-ink"><%= event.summary %></p>
-              <p class="text-xs muted"><%= time_ago_in_words(event.occurred_at) %> ago</p>
-            </div>
-          </li>
-        <% end %>
-      </ol>
-    <% else %>
-      <div class="empty-inline">
-        <%= sketch :enso, class: "enso" %>
-        <p class="text-sm text-ink">No activity yet.</p>
-        <p class="text-xs muted">Conversations will appear here once mail is connected.</p>
-      </div>
-    <% end %>
+    <%= render "reply_box/timeline", items: @timeline_items %>
     <%= render "shared/history_pagination", record: @organization, page: @events_page, older: @older_events, parameter: :events_page, label: "activity", anchor: "timeline-heading" %>
+      <%= render "reply_box/box", owner: @organization %>
+
   </section>
 </div>

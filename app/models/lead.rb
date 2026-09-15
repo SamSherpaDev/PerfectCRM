@@ -26,6 +26,7 @@ class Lead < ApplicationRecord
   has_many :tags, -> { order(:name) }, through: :taggings
   has_many :lead_notifications, dependent: :destroy
   has_many :activity_events, as: :subject, dependent: :destroy
+  has_many :conversations, as: :linkable, dependent: :destroy
 
   accepts_nested_attributes_for :people, allow_destroy: true,
     reject_if: proc { |attrs| attrs["name"].blank? && attrs["email"].blank? && attrs["phone"].blank? }
@@ -199,8 +200,12 @@ class Lead < ApplicationRecord
         )
       end
       tasks.update_all(subject_type: "Client", subject_id: client.id)
+      Draft.where(owner: self, conversation_id: nil).find_each do |draft|
+        draft.update!(conversation: conversations.create!(subject_line: draft.subject.presence || "New message"))
+      end
       Conversation.where(linkable: self).update_all(linkable_type: "Client", linkable_id: client.id)
       EmailIdentity.where(linkable: self).update_all(linkable_type: "Client", linkable_id: client.id)
+      Draft.where(owner: self).update_all(owner_type: "Client", owner_id: client.id)
       update!(converted_client: client, converted_at: Time.current)
       ActivityEvent.create!(
         subject: self, kind: "conversion", summary: "Converted to client",

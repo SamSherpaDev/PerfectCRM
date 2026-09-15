@@ -1,5 +1,6 @@
 class LeadsController < ApplicationController
   include RecordHistory
+  include ReplyBox
 
   before_action :set_lead, only: %i[show edit update convert]
   before_action :block_converted_edit, only: %i[edit update]
@@ -51,6 +52,8 @@ class LeadsController < ApplicationController
     @note = Note.new
     load_record_history(@lead)
     @conversations = Conversation.where(linkable: @lead).ordered
+    load_reply_box(@lead)
+    @timeline_items = timeline_items(@events, @outbound_messages)
   end
 
   def new

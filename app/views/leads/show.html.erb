@@ -199,19 +199,23 @@
       <h2 class="card-title" id="timeline-heading">Timeline</h2>
     </div>
     <%= card_caption "Every ask, score, note, and automation in one scroll, newest first." %>
-    <% if @events.any? %>
-      <ol class="mt-2 space-y-3">
-        <% @events.each do |event| %>
-          <li class="flex items-start gap-3">
-            <% if event.kind == "automation" %>
-              <%= render "shared/icon", name: automation_icon(automation_caller(event)), class: "h-4 w-4 mt-0.5 text-info" %>
-            <% end %>
-            <%= status_badge event.kind %>
-            <div class="min-w-0">
-              <p class="text-sm text-ink"><%= event.summary %></p>
-              <p class="text-xs muted"><%= time_ago_in_words(event.occurred_at) %> ago · <%= date_short(event.occurred_at) %></p>
-            </div>
-          </li>
+    <% if @timeline_items.any? %>
+      <ol class="mt-2 space-y-3 reply-thread">
+        <% @timeline_items.each do |(_, kind, event)| %>
+          <% if kind == :message %>
+            <%= render "reply_box/message", message: event %>
+          <% else %>
+            <li class="flex items-start gap-3">
+              <% if event.kind == "automation" %>
+                <%= render "shared/icon", name: automation_icon(automation_caller(event)), class: "h-4 w-4 mt-0.5 text-info" %>
+              <% end %>
+              <%= status_badge event.kind %>
+              <div class="min-w-0">
+                <p class="text-sm text-ink"><%= event.summary %></p>
+                <p class="text-xs muted"><%= time_ago_in_words(event.occurred_at) %> ago · <%= date_short(event.occurred_at) %></p>
+              </div>
+            </li>
+          <% end %>
         <% end %>
       </ol>
     <% else %>
@@ -222,5 +226,8 @@
       </div>
     <% end %>
     <%= render "shared/history_pagination", record: @lead, page: @events_page, older: @older_events, parameter: :events_page, label: "activity", anchor: "timeline-heading" %>
+    <% unless @lead.converted? %>
+      <%= render "reply_box/box", owner: @lead %>
+    <% end %>
   </section>
 </div>

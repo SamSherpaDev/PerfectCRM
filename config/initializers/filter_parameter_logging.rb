@@ -6,5 +6,5 @@
 Rails.application.config.filter_parameters += [
   :passw, :email, :phone, :recipients, :secret, :token, :_key, :crypt, :salt, :certificate, :otp, :ssn, :cvv, :cvc,
   # PerfectBook sibling-API token: never log it (client logs status only).
-  :perfectbook_api_token
+  /\A(?:to|cc|bcc)\z/, :perfectbook_api_token
 ]

@@ -142,7 +142,7 @@ module Mail
         .map { |value| value.to_s.strip.downcase }.reject(&:blank?).uniq
     end
 
-    def partition_attachments(attachments)
+    def self.partition_attachments(attachments)
       ordinary = []
       held = []
       Array(attachments).each do |file|
@@ -155,7 +155,7 @@ module Mail
           held << { "filename" => filename, "byte_size" => data.bytesize, "content_type" => content_type,
             "status" => "held: collect in PerfectBook" }
         elsif content_type == "message/rfc822" || filename.downcase.end_with?(".eml")
-          enclosed, sensitive = partition_attachments(self.class.parse_raw(data).attachments)
+          enclosed, sensitive = partition_attachments(parse_raw(data).attachments)
           if sensitive.any?
             ordinary.concat(enclosed)
             held.concat(sensitive)
@@ -171,7 +171,7 @@ module Mail
 
     def attach_files(message, attachments, uploaded)
       skipped = []
-      ordinary, held = partition_attachments(attachments)
+      ordinary, held = self.class.partition_attachments(attachments)
       ordinary.each do |file|
         filename = file[:filename]
         content_type = file[:content_type]

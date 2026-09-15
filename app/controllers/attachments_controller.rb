@@ -17,7 +17,7 @@ class AttachmentsController < ApplicationController
       return redirect_to inbox_thread_path(conversation), alert: "Storage deletion failed. The document is still in triage; please retry."
     end
     @attachment.transaction do
-      @attachment.delete
+      ActiveStorage::Attachment.where(blob_id: blob.id).delete_all
       blob.destroy!
       Note.create!(notable: conversation,
         body: "Collect the sensitive document from message #{message.id} in PerfectBook. The file was removed from CRM storage.")

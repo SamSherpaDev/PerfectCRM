@@ -1,0 +1,47 @@
+# Shared reply-box setup for the client, lead, organization, and inbox
+# thread views: the conversation a reply continues, its persisted draft,
+# the PerfectBook bookings that fill {{placeholders}}, and the outbound
+# messages shown on the timeline with their delivery state.
+module ReplyBox
+  extend ActiveSupport::Concern
+
+  private
+
+  def load_reply_box(owner)
+    @reply_owner = owner
+    if params[:new_thread].present?
+      @reply_conversation = nil
+      @reply_draft = Draft.for_owner(owner, conversation: nil)
+    else
+      @reply_conversation = Conversation.latest_for(owner)
+      @reply_draft = Draft.for_owner(owner, conversation: @reply_conversation)
+    end
+    load_reply_context
+    @outbound_messages = Message.for_owner(owner).for_timeline.newest_first.limit(@events_page * 100 + 1).to_a
+  end
+
+  def load_reply_context
+    @reply_to = if @reply_draft.persisted?
+      @reply_draft.to_addrs
+    elsif @reply_conversation
+      @reply_conversation.thread_parent&.recipients&.join(", ")
+    else
+      @reply_owner.try(:display_email) || @reply_owner.try(:email)
+    end
+    @reply_data = TemplateContext.for_reply(to: @reply_to, owner: @reply_owner,
+      booking_id: @reply_draft.perfectbook_booking_id)
+    @reply_context = @reply_data[:context]
+    @reply_chips = Template.active.order(usage_count: :desc, last_used_at: :desc).limit(3)
+  end
+
+  # Activity events and outbound messages, newest first, for one scroll.
+  def timeline_items(events, messages)
+    event_rows = events.map { |event| [ event.occurred_at, :event, event ] }
+    message_rows = messages.map do |message|
+      [ message.sent_at || message.created_at, :message, message ]
+    end
+    rows = (event_rows + message_rows).sort_by { |time, kind, record| [ time || Time.zone.at(0), kind.to_s, record.id ] }.reverse
+    @older_events = rows.size > @events_page * 100
+    rows.slice((@events_page - 1) * 100, 100) || []
+  end
+end

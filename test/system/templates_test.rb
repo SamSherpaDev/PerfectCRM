@@ -63,7 +63,7 @@ class TemplatesTest < ApplicationSystemTestCase
     assert_no_overflow
   end
 
-  test "picker inserts one-handed at 390px and counts the use" do
+  test "picker inserts one-handed at 390px without counting an unsent use" do
     Template.create!(name: "Deposit nudge", purpose: "deposit_nudge",
       subject: "Your {{trip}} deposit", body: "Hi {{first_name}}.")
     sign_in_through_google
@@ -76,7 +76,7 @@ class TemplatesTest < ApplicationSystemTestCase
     assert_selector "button", text: /Inserted/, wait: 5
 
     visit templates_path
-    assert_text "Used once"
+    assert_text "Used 0 times"
     assert_no_overflow
   end
 
@@ -113,7 +113,7 @@ class TemplatesTest < ApplicationSystemTestCase
     click_button "Insert"
     assert_selector "button", text: /Inserted/
     assert_no_text "Could not insert template. Please try again."
-    assert_equal 1, restored.reload.usage_count
+    assert_equal 0, restored.reload.usage_count
     capture_evidence("picker-retry-mobile")
   end
 
@@ -143,7 +143,7 @@ class TemplatesTest < ApplicationSystemTestCase
       click_button "Insert"
       assert_selector "button", text: /Inserted/
       assert_no_text "Could not insert template. Please try again."
-      assert_equal 1, template.reload.usage_count
+      assert_equal 0, template.reload.usage_count
     end
   end
 
@@ -217,7 +217,7 @@ class TemplatesTest < ApplicationSystemTestCase
     fill_in "Recipients", with: "Maya Gurung <maya@example.com>\nPemba Sherpa <pemba@example.com>"
     before_deliveries = ActionMailer::Base.deliveries.size
     click_button "Preview merge"
-    assert_text "2 messages ready"
+    assert_selector "[aria-label='Merged messages'] h2", text: "2 messages ready"
     assert_text "Dear Maya Gurung, welcome aboard."
     assert_text "Dear Pemba Sherpa, welcome aboard."
     assert_text "Nothing sent"

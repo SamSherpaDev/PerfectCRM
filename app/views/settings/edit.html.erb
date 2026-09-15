@@ -206,6 +206,26 @@
     </div>
   </section>
 
+  <section class="card card-pad" aria-labelledby="sender-heading">
+    <h2 class="section-title" id="sender-heading">Email replies</h2>
+    <%= card_caption "The name and signature on every reply sent as info@sherpaholidays.com." %>
+    <%= form_with model: @settings, url: settings_path, method: :patch, class: "mt-4 space-y-4" do |form| %>
+      <div>
+        <%= form.label :sender_name, "Your name", class: "label" %>
+        <%= form.text_field :sender_name, class: "input", autocomplete: "off", placeholder: "Sam" %>
+        <p class="hint">Fills {{my_name}} in templates and signs the From line.</p>
+      </div>
+      <div>
+        <%= form.label :email_signature, "Signature", class: "label" %>
+        <%= form.text_area :email_signature, rows: 3, class: "textarea", placeholder: "Sam Sherpa\nSherpa Holidays" %>
+        <p class="hint">Added under every reply. Fills {{signature}} too.</p>
+      </div>
+      <div>
+        <%= form.submit "Save email settings", class: "btn-secondary btn btn-sm" %>
+      </div>
+    <% end %>
+  </section>
+
   <section class="card card-pad" aria-labelledby="export-heading">
     <h2 class="section-title" id="export-heading">Export everything</h2>
     <%= card_caption "A zip of leads, clients, people, organizations, notes, tags, and timeline events as CSV. Opens cleanly in Excel." %>

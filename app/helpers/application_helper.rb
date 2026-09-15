@@ -14,7 +14,9 @@ module ApplicationHelper
     "connected" => :success, "pulling" => :info, "error" => :danger, "disconnected" => :neutral,
     "new" => :info, "chatting" => :neutral, "nudged" => :warning, "lost" => :neutral,
     "won" => :success, "post_trip" => :info, "stage_change" => :info,
-    "converted" => :success, "conversion" => :success, "automation" => :info
+    "converted" => :success, "conversion" => :success, "automation" => :info,
+    "queued" => :neutral, "sending" => :info, "failed" => :danger,
+    "received" => :brand, "complete" => :success
   }.freeze
 
   # USD amounts from integer cents: "$1,234.56", "-$12.00".
@@ -47,6 +49,18 @@ module ApplicationHelper
   def status_badge(status, label: nil)
     tone = STATUS_TONES.fetch(status.to_s, :neutral)
     badge(label || status.to_s.humanize.downcase, tone, dot: true)
+  end
+
+  # Delivery states for outbound messages: sending is in flight, sent is
+  # confirmed, failed keeps its words and a Retry. Kept separate from
+  # status_badge so the shared "sent" event tone stays untouched.
+  DELIVERY_TONES = {
+    "queued" => :neutral, "sending" => :info, "sent" => :success, "failed" => :danger
+  }.freeze
+
+  def delivery_badge(status)
+    tone = DELIVERY_TONES.fetch(status.to_s, :neutral)
+    badge(status.to_s.humanize.downcase, tone, dot: true)
   end
 
   # One plain-language line under a card or table title: what it shows and what to do with it.

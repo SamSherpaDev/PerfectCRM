@@ -1,8 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
 
-// One-tap insert for the templates/_picker partial. Tapping Insert records a
-// use (so dead templates get pruned) and emits a window "template:insert"
-// event with {subject, body} detail; the reply box listens and fills itself.
 export default class extends Controller {
   static targets = ["query", "error"]
 
@@ -23,20 +20,20 @@ export default class extends Controller {
 
   async insert(event) {
     const button = event.currentTarget
-    const url = button.dataset.url
-    if (!url) return
+    if (!button.dataset.url) return
     const token = document.querySelector('meta[name="csrf-token"]')?.content
     button.disabled = true
     this.errorTarget.textContent = ""
     this.errorTarget.hidden = true
     try {
+      const url = await this.urlWithContext(button.dataset.url)
       const response = await fetch(url, {
         method: "POST",
         headers: { Accept: "application/json", ...(token ? { "X-CSRF-Token": token } : {}) }
       })
       if (!response.ok) throw new Error("Insertion failed")
       const data = await response.json()
-      window.dispatchEvent(new CustomEvent("template:insert", { detail: data, bubbles: true }))
+      this.element.dispatchEvent(new CustomEvent("template:insert", { detail: data, bubbles: true }))
       const original = button.textContent
       button.textContent = `Inserted: ${data.name ?? button.dataset.name ?? "template"}`
       setTimeout(() => {
@@ -48,5 +45,27 @@ export default class extends Controller {
       this.errorTarget.textContent = "Could not insert template. Please try again."
       this.errorTarget.hidden = false
     }
+  }
+
+  // Live placeholder values ride along so the insert arrives filled.
+  // Without them unknown values render [missing: …] by design.
+  urlWithContext(url) {
+    if (!url) return url
+    const composer = this.element.closest('[data-controller~="reply-box"]')
+    const controller = composer && this.application.getControllerForElementAndIdentifier(composer, "reply-box")
+    if (controller) return controller.urlWithContext(url)
+    let context = {}
+    try {
+      context = JSON.parse(this.element.dataset.templatePickerContextValue || "{}") || {}
+    } catch {
+      context = {}
+    }
+    const target = new URL(url, window.location.origin)
+    for (const [key, value] of Object.entries(context)) {
+      if (value !== null && value !== undefined && value !== "") {
+        target.searchParams.set(`context[${key}]`, value)
+      }
+    }
+    return target.toString()
   }
 }

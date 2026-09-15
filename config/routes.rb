@@ -52,6 +52,9 @@ Rails.application.routes.draw do
       post :convert
     end
     resources :notes, only: %i[create]
+    resources :messages, only: %i[create]
+    resource :draft, only: %i[update], controller: "drafts"
+    post :draft, to: "drafts#update"
   end
   resources :clients, except: %i[destroy] do
     collection do
@@ -62,16 +65,29 @@ Rails.application.routes.draw do
       patch :unarchive
     end
     resources :notes, only: %i[create]
+    resources :messages, only: %i[create]
+    resource :draft, only: %i[update], controller: "drafts"
+    post :draft, to: "drafts#update"
   end
   resources :organizations, except: %i[index destroy] do
     resources :notes, only: %i[create]
+    resources :messages, only: %i[create]
+    resource :draft, only: %i[update], controller: "drafts"
+    post :draft, to: "drafts#update"
   end
+  resources :messages, only: [] do
+    member do
+      post :retry
+    end
+  end
+  resources :group_sends, only: %i[create show]
   get "pipeline", to: "pipeline#show"
   patch "pipeline/move", to: "pipeline#move", as: :pipeline_move
   resources :quotes, only: %i[index]
   resources :templates, except: :show do
     collection do
       post :preview, action: :collection_preview
+      get :reply_context
       get :picker
       get :merge
       post :merge, action: :merge_preview
