@@ -47,16 +47,46 @@ module ApplicationHelper
     content_tag :p, text, class: "card-caption"
   end
 
-  # A drawing from the sketch library (shared/_sketches): :ridge, :river, :stupa, :teahouse, :wheel, :enso, :rule.
+  # Pipeline stage tones (docs/DESIGN.md 2.2): one badge per stage, always with the word.
+  STAGE_TONES = {
+    "new" => :info, "chatting" => :neutral, "quoted" => :brand,
+    "nudged" => :warning, "won" => :success, "post-trip" => :info,
+    "lost" => :quiet
+  }.freeze
+
+  def stage_badge(stage)
+    tone = STAGE_TONES.fetch(stage.to_s, :neutral)
+    badge(stage.to_s.humanize.downcase, tone, dot: true)
+  end
+
+  # A drawing from the sketch library (shared/_sketches): shared drawings plus
+  # the CRM's everest, bridge, pass, cairn, stream and mark-a (docs/DESIGN.md 7).
   SKETCH_VIEWBOXES = { ridge: "0 0 600 150", river: "0 0 720 40", stupa: "0 0 300 150", teahouse: "0 0 300 150",
-                       wheel: "0 0 120 150", enso: "0 0 64 64", rule: "0 0 720 6", mark: "0 0 24 24" }.freeze
+                       wheel: "0 0 120 150", enso: "0 0 64 64", rule: "0 0 720 6", mark: "0 0 24 24",
+                       everest: "0 0 600 150", bridge: "0 0 300 150", pass: "0 0 300 150",
+                       cairn: "0 0 300 150", stream: "0 0 40 720", "mark-a": "0 0 24 24" }.freeze
+
+  SKETCH_PRESERVE = { river: "none", rule: "none", ridge: "xMaxYMax meet",
+                      everest: "xMaxYMax meet", stream: "none" }.freeze
 
   def sketch(name, **options)
-    name = name.to_sym
-    preserve = %i[river rule].include?(name) ? "none" : (name == :ridge ? "xMaxYMax meet" : "xMidYMid meet")
+    name = name.to_s.dasherize.to_sym
+    preserve = SKETCH_PRESERVE.fetch(name, "xMidYMid meet")
     css = options.delete(:class) || "sk"
     content_tag(:svg, tag.use(href: "#sk-#{name}"),
       { viewBox: SKETCH_VIEWBOXES.fetch(name), preserveAspectRatio: preserve, class: css, "aria-hidden": true, focusable: false }.merge(options))
+  end
+
+  # Thinking orb (Stimulus `orb` controller on a canvas): `composing` while
+  # drafting, `shaping` while scoring or triaging. Sizes 20 (inline) or 64
+  # (avatar); ochre on Paper, cream on Night, static when reduced motion.
+  ORB_LABELS = { "composing" => "Composing…", "shaping" => "Shaping…" }.freeze
+
+  def orb(state, size: 20, label: nil)
+    state = ORB_LABELS.key?(state.to_s) ? state.to_s : "composing"
+    size = size.to_i == 64 ? 64 : 20
+    tag.canvas(role: "img", "aria-label": label || ORB_LABELS.fetch(state),
+      class: "orb", data: { controller: "orb", orb_state_value: state, orb_size_value: size, orb_label_value: label })
   end
 
   # Plain rendered text (merge results) to safe preview HTML: escape, keep

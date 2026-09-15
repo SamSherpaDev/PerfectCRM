@@ -41,6 +41,15 @@ class LeadsSystemTest < ApplicationSystemTestCase
     assert_selector "h1", text: "Ad Tashi"
     assert_text "Started as a lead"
     assert_no_overflow("converted client page")
+
+    click_link "Open the lead"
+    assert_text "Converted leads stay read-only."
+    assert_no_button "Convert to client"
+    assert_no_link "Edit"
+    visit "#{page.current_path}/edit"
+    assert_text "Converted leads stay read-only."
+    assert_no_button "Save lead"
+    assert_no_link "Edit"
   end
 
   private

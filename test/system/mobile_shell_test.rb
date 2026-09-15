@@ -21,7 +21,15 @@ class MobileShellTest < ApplicationSystemTestCase
     assert_selector "nav[aria-label=Primary] a", text: "Leads"
     assert_selector "nav[aria-label=Primary] a", text: "Settings"
     click_button "Close menu"
-    [ "/", "/inbox", "/leads", "/clients", "/pipeline", "/quotes", "/templates", "/settings/edit" ].each do |path|
+    within "nav.tabbar" do
+      click_button "More: pipeline, quotes, templates, settings"
+    end
+    within "aside" do
+      click_link "Pipeline"
+    end
+    assert_selector "h1", text: "Pipeline"
+    assert_selector "nav.tabbar button.on", text: "More"
+    [ "/", "/inbox", "/leads", "/clients", "/pipeline", "/quotes", "/templates", "/design", "/settings/edit" ].each do |path|
       visit path
       width = page.evaluate_script("document.documentElement.scrollWidth")
       assert_operator width, :<=, 390, "#{path} overflows a 390px viewport (#{width}px)"

@@ -69,11 +69,11 @@
       </ul>
     <% else %>
       <% if @query.present? %>
-        <%= render "shared/empty_state", title: "No matches", body: "Nothing matches that search. Try a name fragment or a campaign.", scene: :stupa %>
+        <%= render "shared/empty_state", title: "No matches", body: "Nothing matches that search. Try a name fragment or a campaign.", scene: :cairn %>
       <% elsif @tab == "converted" %>
-        <%= render "shared/empty_state", title: "No conversions yet", body: "Converted leads stay here with a link forward to their client.", scene: :stupa %>
+        <%= render "shared/empty_state", title: "No conversions yet", body: "Converted leads stay here with a link forward to their client.", scene: :cairn %>
       <% else %>
-        <%= render "shared/empty_state", title: "No leads here", body: "New asks from ads, the website, and email will gather here for scoring.", scene: :stupa do %>
+        <%= render "shared/empty_state", title: "No leads here", body: "New asks from ads, the website, and email will gather here for scoring.", scene: :cairn do %>
           <%= link_to "Add your first lead", new_lead_path, class: "btn-primary btn btn-sm" %>
         <% end %>
       <% end %>

@@ -1,8 +1,8 @@
 <%# Page header. Render with a block for actions:
     render layout: "shared/page_header", locals: { title:, eyebrow:, subtitle:, back: [label, path] } do ... end
-    The ridge drawing sits top-right above the actions and draws itself on load (docs/DESIGN.md 9.3). %>
+    The Everest drawing sits top-right above the actions and draws itself on load (docs/DESIGN.md 7, 8). %>
 <header class="page-header">
-  <%= sketch :ridge, class: "sk hdr-ridge" %>
+  <%= sketch :everest, class: "sk hdr-ridge" %>
   <div class="relative min-w-0 sm:max-w-[62%]">
     <% if local_assigns[:back] %>
       <%= link_to local_assigns[:back][1], class: "link-quiet mb-4 inline-flex items-center gap-1.5 text-xs" do %>

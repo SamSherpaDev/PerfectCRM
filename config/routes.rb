@@ -61,4 +61,6 @@ Rails.application.routes.draw do
       post :create_review_ask
     end
   end
+  # Component kit preview (signed-in only, listed nowhere in the rail).
+  get "design", to: "design#show"
 end

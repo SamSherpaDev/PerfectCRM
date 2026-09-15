@@ -1,9 +1,9 @@
 <% content_for :title, "Sign in · PerfectCRM" %>
 <section class="card w-full max-w-md overflow-hidden p-8 sm:p-10">
   <%= sketch :ridge, class: "sk hdr-ridge !-top-2 !max-w-[70%]" %>
-  <div class="relative">
-    <span class="flex h-16 w-16 items-center justify-center rounded-[14px] bg-ochre text-cream shadow-[0_12px_28px_-10px_rgba(201,111,26,0.8)]">
-      <%= sketch :mark, class: "h-9 w-9" %>
+  <div class="relative pb-36">
+    <span class="flex h-16 w-16 items-center justify-center rounded-[14px] bg-[#14110e] text-[#e2963f] shadow-[0_12px_28px_-10px_rgba(0,0,0,0.7)] ring-1 ring-inset ring-[#e2963f]/35">
+      <%= sketch :"mark-a", class: "h-9 w-9" %>
     </span>
     <p class="mt-8 font-display text-[17px] text-ink">PerfectCRM</p>
     <p class="text-[10px] font-semibold uppercase tracking-[0.2em] text-ink-4">Sherpa Holidays</p>
@@ -16,4 +16,5 @@
     <% end %>
     <p class="mt-6 text-center text-xs muted">Single-user access · perfectcrm.sherpaholidays.com</p>
   </div>
+  <%= sketch :bridge, class: "sk absolute bottom-0 left-1/2 h-auto w-[280px] -translate-x-1/2" %>
 </section>

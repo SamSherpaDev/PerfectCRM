@@ -1,8 +1,9 @@
 <%# locals: (compact: false, on_paper: false)
-    The prayer wheel is the mark (docs/DESIGN.md 9.9): cream line drawing on the ochre tile. %>
+    Mark A "the wheel that speaks" on the ink tile (docs/DESIGN.md 7, 12):
+    ink tile, ochre mark, so the two browser tabs never get mixed up. %>
 <span class="flex items-center gap-3">
-  <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-ochre text-cream shadow-[0_8px_20px_-8px_rgba(201,111,26,0.8)]">
-    <%= sketch :mark, class: "h-5 w-5" %>
+  <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-[#14110e] text-[#e2963f] shadow-[0_8px_20px_-8px_rgba(0,0,0,0.7)] ring-1 ring-inset ring-[#e2963f]/35">
+    <%= sketch :"mark-a", class: "h-5 w-5" %>
   </span>
   <span class="rail-label leading-tight">
     <span class="block font-display text-[17px] <%= local_assigns[:on_paper] ? 'text-ink' : 'text-cream' %>">PerfectCRM</span>

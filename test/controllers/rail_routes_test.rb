@@ -12,6 +12,7 @@ class RailRoutesTest < ActionDispatch::IntegrationTest
     "/pipeline" => "Pipeline",
     "/quotes" => "Quotes",
     "/templates" => "Templates",
+    "/design" => "Design kit",
     "/settings/edit" => "Settings"
   }.freeze
 
