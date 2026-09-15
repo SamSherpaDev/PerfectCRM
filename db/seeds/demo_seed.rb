@@ -49,6 +49,7 @@ module DemoSeed
           model.reflect_on_all_associations.each do |association|
             next unless [ :has_many, :has_one ].include?(association.macro)
             next if association.options[:through]
+            next unless association.options[:dependent]
 
             Array(record.public_send(association.name)).each do |child|
               unless DemoRecord.exists?(record_type: child.class.name, record_id: child.id)

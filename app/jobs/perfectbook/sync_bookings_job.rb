@@ -38,20 +38,24 @@ module PerfectBook
       seen_ids = []
       result[:data].each do |booking|
         seen_ids << booking.id
-        Booking.find_or_initialize_by(perfectbook_id: booking.id).update!(
-          perfectbook_contact_id: mirror.perfectbook_id, ref: booking.ref, status: booking.status,
-          trip_id: booking.trip_id, trip_name: booking.trip_name,
-          departure_id: booking.departure_id, departure_place: booking.departure_place,
-          start_date: parse_date(booking.start_date), end_date: parse_date(booking.end_date),
-          party_size: booking.party_size, price_per_person_minor: booking.price_per_person_minor,
-          total_minor: booking.total_minor, paid_minor: booking.paid_minor,
-          balance_due_minor: booking.balance_due_minor, currency: booking.currency,
-          invoice_badge: booking.invoice_badge, invoice_number: booking.invoice_number,
-          payment_reference: booking.payment_reference, deep_link: booking.deep_link,
-          documents_json: booking.documents.presence || {}, missing_count: booking.missing_count.to_i,
-          checklist_json: booking.checklist.presence || [],
-          synced_at: now
-        )
+        Booking.transaction(requires_new: true) do
+          booking_mirror = Booking.find_or_initialize_by(perfectbook_id: booking.id)
+          booking_mirror.update!(
+            perfectbook_contact_id: mirror.perfectbook_id, ref: booking.ref, status: booking.status,
+            trip_id: booking.trip_id, trip_name: booking.trip_name,
+            departure_id: booking.departure_id, departure_place: booking.departure_place,
+            start_date: parse_date(booking.start_date), end_date: parse_date(booking.end_date),
+            party_size: booking.party_size, price_per_person_minor: booking.price_per_person_minor,
+            total_minor: booking.total_minor, paid_minor: booking.paid_minor,
+            balance_due_minor: booking.balance_due_minor, currency: booking.currency,
+            invoice_badge: booking.invoice_badge, invoice_number: booking.invoice_number,
+            payment_reference: booking.payment_reference, deep_link: booking.deep_link,
+            documents_json: booking.documents.presence || {}, missing_count: booking.missing_count.to_i,
+            checklist_json: booking.checklist.presence || [],
+            synced_at: now
+          )
+          DemoRecord.where(record_type: Booking.name, record_id: booking_mirror.id).delete_all
+        end
       end
       # A successful response is the full list, even when empty. Only a
       # first-page 304 above preserves all existing rows for this contact.

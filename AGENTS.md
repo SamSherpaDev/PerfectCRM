@@ -89,5 +89,6 @@ When updating this file, preserve this bar for all agents and keep entries conci
   Ownership is recorded in `DemoRecord`; collisions with unmarked records
   fail the load. Wipe removes only manifest records and refuses if unmarked
   records are attached. Converted leads stay read-only on reseed.
+  PerfectBook syncs release mirror demo ownership atomically on real upserts.
 - A partial's first-line `<%# locals: (...) %>` is parsed as strict locals:
   keep it pure Ruby on one line and put prose in a separate comment.
