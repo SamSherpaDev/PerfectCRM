@@ -31,11 +31,12 @@ class Lead < ApplicationRecord
   validates :kind, inclusion: { in: KINDS }
   validates :source, inclusion: { in: SOURCES }
   validates :status, inclusion: { in: STATUSES }
-  validates :email, uniqueness: { allow_nil: true },
-    format: { with: URI::MailTo::EMAIL_REGEXP, allow_blank: true }
+  validates :email, format: { with: URI::MailTo::EMAIL_REGEXP, allow_blank: true }
+  validates :email, :perfectbook_contact_id,
+    uniqueness: { allow_nil: true, conditions: -> { open } },
+    if: -> { converted_client_id.nil? && status != "lost" }
   validates :external_ref, uniqueness: { allow_nil: true }
-  validates :perfectbook_contact_id, uniqueness: { allow_nil: true },
-    numericality: { only_integer: true, greater_than: 0, allow_nil: true }
+  validates :perfectbook_contact_id, numericality: { only_integer: true, greater_than: 0, allow_nil: true }
   validates :fit_score, numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 100, allow_nil: true }
   validates :fit_band, inclusion: { in: FIT_BANDS }, allow_blank: true
 

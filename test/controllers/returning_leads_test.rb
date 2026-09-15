@@ -62,4 +62,33 @@ class ReturningLeadsTest < ActionDispatch::IntegrationTest
     assert_empty client.activity_events
   end
 
+  test "multiple inquiries can convert to the same client" do
+    client = Client.create!(name: "Returning", email: "repeat@example.com", perfectbook_contact_id: 321)
+    first = Lead.create!(name: "Email inquiry", email: client.email)
+    second = Lead.create!(name: "Booking inquiry", perfectbook_contact_id: client.perfectbook_contact_id)
+    [ first, second ].each do |lead|
+      assert_no_difference -> { Client.count } do
+        post convert_lead_path(lead), params: { expected_client_id: client.id }
+      end
+      assert_redirected_to client_path(client)
+      assert_equal client.id, lead.reload.converted_client_id
+    end
+  end
+
+  test "a returning traveler can submit and convert a second inquiry" do
+    first = Lead.create!(name: "First inquiry", email: "repeat@example.com", perfectbook_contact_id: 321)
+    post convert_lead_path(first), params: { expected_client_id: "new" }
+    client = first.reload.converted_client
+    assert_difference -> { Lead.count }, 1 do
+      post leads_path, params: { lead: { name: "Next trip", email: " REPEAT@example.com ", perfectbook_contact_id: 321 } }
+    end
+    second = Lead.order(:id).last
+    assert_redirected_to lead_path(second)
+    assert_no_difference -> { Client.count } do
+      post convert_lead_path(second), params: { expected_client_id: client.id }
+    end
+    assert_redirected_to client_path(client)
+    assert_equal [ first.id, second.id ], Lead.where(converted_client_id: client.id).order(:id).pluck(:id)
+  end
+
 end

@@ -22,10 +22,10 @@ class CreateLeads < ActiveRecord::Migration[8.1]
       t.datetime :last_activity_at
       t.timestamps
     end
-    add_index :leads, :email, unique: true, where: "email IS NOT NULL AND email != ''"
+    add_index :leads, :email, unique: true, where: "email IS NOT NULL AND email != '' AND converted_client_id IS NULL AND status != 'lost'"
     add_index :leads, :external_ref, unique: true, where: "external_ref IS NOT NULL AND external_ref != ''"
-    add_index :leads, :converted_client_id, unique: true, where: "converted_client_id IS NOT NULL"
-    add_index :leads, :perfectbook_contact_id, unique: true, where: "perfectbook_contact_id IS NOT NULL"
+    add_index :leads, :converted_client_id
+    add_index :leads, :perfectbook_contact_id, unique: true, where: "perfectbook_contact_id IS NOT NULL AND converted_client_id IS NULL AND status != 'lost'"
     add_index :leads, :status
     add_index :leads, :last_activity_at
   end

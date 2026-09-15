@@ -69,11 +69,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_202112) do
     t.string "state"
     t.string "status", default: "new", null: false
     t.datetime "updated_at", null: false
-    t.index ["converted_client_id"], name: "index_leads_on_converted_client_id", unique: true, where: "converted_client_id IS NOT NULL"
-    t.index ["email"], name: "index_leads_on_email", unique: true, where: "email IS NOT NULL AND email != ''"
+    t.index ["converted_client_id"], name: "index_leads_on_converted_client_id"
+    t.index ["email"], name: "index_leads_on_email", unique: true, where: "email IS NOT NULL AND email != '' AND converted_client_id IS NULL AND status != 'lost'"
     t.index ["external_ref"], name: "index_leads_on_external_ref", unique: true, where: "external_ref IS NOT NULL AND external_ref != ''"
     t.index ["last_activity_at"], name: "index_leads_on_last_activity_at"
-    t.index ["perfectbook_contact_id"], name: "index_leads_on_perfectbook_contact_id", unique: true, where: "perfectbook_contact_id IS NOT NULL"
+    t.index ["perfectbook_contact_id"], name: "index_leads_on_perfectbook_contact_id", unique: true, where: "perfectbook_contact_id IS NOT NULL AND converted_client_id IS NULL AND status != 'lost'"
     t.index ["referred_by_organization_id"], name: "index_leads_on_referred_by_organization_id"
     t.index ["status"], name: "index_leads_on_status"
   end
