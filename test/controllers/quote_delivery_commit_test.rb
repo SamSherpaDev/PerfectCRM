@@ -7,6 +7,7 @@ class QuoteDeliveryCommitTest < ActionDispatch::IntegrationTest
 
   test "edit and send exposes committed terms to the queue worker" do
     sign_in
+    user = User.find_by!(google_sub: @claims.fetch("sub"))
     client = Client.create!(name: "Delivery client", email: "delivery@example.com")
     quote = Quote.create!(client: client, party_size: 2, valid_until: Date.current + 14, notes: "Original")
     line = quote.lines.create!(kind: "custom", description: "Trek", quantity: 1, unit_minor: 150000)
@@ -35,5 +36,6 @@ class QuoteDeliveryCommitTest < ActionDispatch::IntegrationTest
     quote&.destroy!
     client&.activity_events&.delete_all
     client&.destroy!
+    user&.destroy!
   end
 end
