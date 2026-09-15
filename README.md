@@ -189,11 +189,23 @@ A lead carries source (`google_ads`, `meta_ads`, `website_form`, `email`,
 `referral`, `manual`), campaign, `external_ref` for n8n idempotency, Panda
 AI fit (`fit_score`, `fit_band`, `fit_reason`), and status (`new`,
 `chatting`, `quoted`, `nudged`, `lost`). Tabs are New, Chatting, Quoted,
-Nudged, Lost, and Converted. Conversion is one-way and manual: Convert to
-client copies facts, people, tags, notes, and activity, links forward, and
-freezes the lead read-only in the model (no reverse, no automation may
-reverse it). Conversion preserves the exact source and campaign on the
-client, which also shows Started as a lead with that attribution.
+Nudged, Lost, and Converted. An email or PerfectBook contact ID can recur
+across lost or converted inquiries, but only one open lead (unconverted
+and not lost) can hold each identity. `external_ref` remains unique across
+all leads.
+
+Conversion is one-way and manual. Convert to client matches an existing
+client by PerfectBook contact ID first, then normalized primary email.
+The confirmation names a matched client before attaching the lead's
+people (deduplicated by email), tags, notes, and activity to them. Existing
+client facts stay intact; their timeline records Returned as a lead from
+the source, with the campaign in the event metadata. Multiple historical
+leads can link to the same client; conversion never merges two clients.
+Without a match, conversion creates a client with the lead's facts,
+including its exact source and campaign, and copies people and history.
+Only clients created by conversion show Started as a lead.
+Both paths link forward and freeze the lead read-only, with no reverse path.
+
 Fit labels and bar colors use the supplied fit band; the CRM does not
 derive a band from the numeric score. Edit lets you enter these fields
 manually and add another person in the blank People fields. The n8n/Panda

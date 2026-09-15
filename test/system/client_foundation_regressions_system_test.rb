@@ -186,6 +186,88 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
     capture("converted-lead-readonly-phone")
   end
 
+  test "returning inquiries name the existing client and append history without creating clients" do
+    client = Client.create!(name: "Returning traveler", email: "repeat@example.com", perfectbook_contact_id: 321, source: "referral", tag_list: "original")
+    client.people.create!(name: "Maya", email: "maya@example.com")
+    [ :email, :perfectbook_contact_id, :email ].each_with_index do |identity, index|
+      visit new_lead_path
+      fill_in "Display name", with: "Return inquiry #{index}"
+      if identity == :email
+        fill_in "Primary email", with: "REPEAT@example.com"
+      else
+        fill_in "PerfectBook contact id", with: "321"
+      end
+      select "Google ads", from: "Source"
+      fill_in "Campaign", with: "Spring #{index}"
+      fill_in "Tags", with: "everest"
+      fill_in "lead[people_attributes][0][name]", with: "Maya"
+      fill_in "lead[people_attributes][0][email]", with: "maya@example.com"
+      click_button "Save lead"
+      assert_selector "h1", text: "Return inquiry #{index}"
+      lead = Lead.find_by!(name: "Return inquiry #{index}")
+      fill_in "Add a note", with: "Return plans #{index}"
+      click_button "Save note"
+      assert_text "Return plans #{index}"
+      before = Client.count
+      accept_confirm "This is an existing client: Returning traveler. Convert will attach this lead's history to them." do
+        click_button "Convert to client"
+      end
+      assert_selector "h1", text: "Returning traveler"
+      assert_text "Returned as a lead from Google ads"
+      event = client.activity_events.where(kind: "conversion").order(:id).last
+      assert_equal "Spring #{index}", event.metadata["campaign"]
+      assert_text "Return plans #{index}"
+      assert_no_text "Started as a lead"
+      assert_equal before, Client.count
+      assert_equal client.id, lead.reload.converted_client_id
+      assert_equal 1, client.people.count
+      assert_equal %w[everest original], client.tags.reload.pluck(:name)
+      assert_equal "referral", client.reload.source
+      assert_equal index + 1, client.notes.count
+      assert_equal index + 1, client.activity_events.where(kind: "note").count
+      capture("returning-client-#{index}-phone")
+      visit lead_path(lead)
+      assert_no_button "Save note"
+      assert_no_button "Convert to client"
+    end
+  end
+
+  test "only open leads reserve identities and external references remain unique" do
+    [ { email: "open@example.com" }, { perfectbook_contact_id: 765 } ].each do |identity|
+      active = Lead.create!(name: "Active inquiry", **identity)
+      visit new_lead_path
+      fill_in "Display name", with: "Next inquiry"
+      fill_in(identity.key?(:email) ? "Primary email" : "PerfectBook contact id", with: identity.values.first)
+      click_button "Save lead"
+      assert_selector "[role=alert]", text: "has already been taken"
+      select "Lost", from: "Status"
+      click_button "Save lead"
+      assert_selector "h1", text: "Next inquiry"
+      lost = Lead.order(:id).last
+      visit edit_lead_path(lost)
+      select "Chatting", from: "Status"
+      click_button "Save changes"
+      assert_selector "[role=alert]", text: "has already been taken"
+      capture("lead-#{identity.keys.first}-open-guard")
+      visit edit_lead_path(active)
+      select "Lost", from: "Status"
+      click_button "Save changes"
+      assert_selector "h1", text: "Active inquiry"
+      visit edit_lead_path(lost)
+      select "Chatting", from: "Status"
+      click_button "Save changes"
+      assert_selector "h1", text: "Next inquiry"
+      assert_equal "chatting", lost.reload.status
+    end
+    Lead.create!(name: "Historical import", status: "lost", external_ref: "import-123")
+    visit new_lead_path
+    fill_in "Display name", with: "Duplicate import"
+    fill_in "External reference", with: "import-123"
+    click_button "Save lead"
+    assert_selector "[role=alert]", text: "External ref has already been taken"
+    capture("lead-external-reference-guard")
+  end
+
   private
 
   def capture(name)
