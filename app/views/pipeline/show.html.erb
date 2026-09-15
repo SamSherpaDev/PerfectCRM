@@ -1,5 +1,5 @@
 <% content_for :title, "Pipeline · PerfectCRM" %>
-<div class="page" data-controller="pipeline" data-pipeline-move-url-value="<%= pipeline_move_path %>" data-pipeline-auto-lost-value="<%= @lost_lead.present? %>"
+<div class="page" data-controller="pipeline" data-pipeline-move-url-value="<%= pipeline_move_path(**@filters) %>" data-pipeline-auto-lost-value="<%= @lost_lead.present? %>"
   data-action="dragstart->pipeline#dragstart dragend->pipeline#dragend dragover->pipeline#dragover dragleave->pipeline#dragleave drop->pipeline#drop">
   <%= render layout: "shared/page_header", locals: { eyebrow: "Enquiries", title: "Pipeline", subtitle: "Leads and clients on one trail, from first hello to home again." } do %><% end %>
   <%= render "shared/flash" %>
@@ -10,7 +10,7 @@
     <%= form_with url: pipeline_path, method: :get, class: "mt-3 flex flex-col gap-2 sm:flex-row sm:items-end" do %>
       <div class="flex-1">
         <%= label_tag :source, "Source", class: "label" %>
-        <%= select_tag :source, options_for_select([ [ "Every source", "" ] ] + Lead::SOURCES.map { |s| [ s.humanize, s ] }, @filters[:source]), class: "select" %>
+        <%= select_tag :source, options_for_select([ [ "Every source", "" ] ] + (Lead::SOURCES | Client::SOURCES).map { |s| [ s.humanize, s ] }, @filters[:source]), class: "select" %>
       </div>
       <div class="flex-1">
         <%= label_tag :trip, "Trip", class: "label" %>

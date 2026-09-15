@@ -153,6 +153,46 @@ class PipelineSystemTest < ApplicationSystemTestCase
     assert_not lead.activity_events.exists?(kind: "stage_change")
   end
 
+  test "dragging preserves every active pipeline filter" do
+    referrer = Organization.create!(name: "Alpine referrals")
+    lead = Lead.create!(name: "Filtered traveler", source: "referral", trip_interest: "Annapurna",
+      referred_by_organization: referrer)
+    Lead.create!(name: "Unrelated traveler")
+    page.current_window.resize_to(1400, 900)
+    visit pipeline_path(source: "referral", trip: "Annapurna", advisor: referrer.id)
+    assert_selector "article.kcard", text: lead.name
+    page.execute_script <<~JS
+      const card = document.querySelector('.board [data-pipeline-target="card"]')
+      const destination = document.querySelector('.board [data-stage="chatting"]')
+      card.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: new DataTransfer() }))
+      destination.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true }))
+      destination.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true }))
+    JS
+    assert_text "Moved to Chatting."
+    assert_equal "chatting", lead.reload.status
+    assert_field "Source", with: "referral"
+    assert_field "Trip", with: "Annapurna"
+    assert_field "Referred by", with: referrer.id.to_s
+    assert_no_selector "article.kcard", text: "Unrelated traveler"
+  end
+
+  test "source picker filters client-only sources" do
+    Client.create!(name: "Returning traveler", source: "repeat")
+    Client.create!(name: "Website traveler", source: "website")
+    Lead.create!(name: "Manual inquiry", source: "manual")
+    page.current_window.resize_to(1400, 900)
+    visit pipeline_path
+    select "Repeat", from: "Source"
+    click_button "Filter"
+    assert_selector "article.kcard", text: "Returning traveler"
+    assert_no_selector "article.kcard", text: "Website traveler"
+    assert_no_selector "article.kcard", text: "Manual inquiry"
+    select "Website", from: "Source"
+    click_button "Filter"
+    assert_selector "article.kcard", text: "Website traveler"
+    assert_no_selector "article.kcard", text: "Returning traveler"
+  end
+
   private
 
   def assert_no_overflow(context)
