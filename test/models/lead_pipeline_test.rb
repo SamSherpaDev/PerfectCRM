@@ -1,5 +1,5 @@
 require "test_helper"
-require_relative "../../db/migrate/20260914211506_backfill_lead_last_touch"
+require_relative "../../db/migrate/20260914211512_backfill_lead_last_touch"
 
 class LeadPipelineTest < ActiveSupport::TestCase
   test "lost requires a reason" do

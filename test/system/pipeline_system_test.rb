@@ -1,5 +1,5 @@
 require "application_system_test_case"
-require_relative "../../db/migrate/20260914211507_backfill_lead_stage_changed_at"
+require_relative "../../db/migrate/20260914211513_backfill_lead_stage_changed_at"
 require_relative "../support/google_sign_in_test_helper"
 
 # The pipeline board on desktop and the stage list on the phone: move a
