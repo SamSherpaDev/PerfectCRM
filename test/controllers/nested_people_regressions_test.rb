@@ -98,5 +98,4 @@ class NestedPeopleReplacementTest < ActionDispatch::IntegrationTest
       end
     end
   end
-
 end

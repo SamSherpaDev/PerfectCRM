@@ -91,5 +91,4 @@ class ExportsRequestsTest < ActionDispatch::IntegrationTest
     assert_equal lead.id.to_s, exported_event["subject_id"]
     assert_equal event.metadata, JSON.parse(exported_event["metadata"])
   end
-
 end

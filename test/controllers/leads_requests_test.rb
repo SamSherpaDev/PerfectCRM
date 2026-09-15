@@ -139,5 +139,4 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     assert_select "span", text: "Strong"
     assert_select ".bar-good", count: 1
   end
-
 end

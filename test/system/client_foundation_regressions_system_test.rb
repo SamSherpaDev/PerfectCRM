@@ -17,7 +17,7 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
   end
 
   test "traveler emails can be reassigned and duplicates show errors for both owner types" do
-    [Client, Lead].each do |model|
+    [ Client, Lead ].each do |model|
       record = model.create!(name: "Everest family")
       one = record.people.create!(name: "First", email: "one@example.com")
       two = record.people.create!(name: "Second", email: "two@example.com")
@@ -102,7 +102,7 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
   end
 
   test "older notes and activity are reachable on every record type" do
-    [Client, Lead, Organization].each do |model|
+    [ Client, Lead, Organization ].each do |model|
       record = model.create!(name: "Long history")
       51.times { |i| record.notes.create!(body: "Historic note #{i}", created_at: i.minutes.ago) }
       51.times { |i| record.activity_events.create!(kind: "email", summary: "Historic email #{i}", occurred_at: i.days.ago) }
@@ -116,7 +116,7 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
   end
 
   test "search sorting and export operate through the running application" do
-    [Client, Lead, Organization].each do |model|
+    [ Client, Lead, Organization ].each do |model|
       model.create!(name: "Match Alpha")
       model.create!(name: "Match Zulu")
       visit(model == Lead ? leads_path : clients_path(tab: model == Organization ? "organizations" : "clients"))
@@ -124,7 +124,7 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
       click_button "Search"
       select "Name", from: "sort"
       assert_selector "select option[selected][value=name]"
-      assert_equal ["Match Alpha", "Match Zulu"], all("main a").map(&:text).select { |text| text.start_with?("Match") }
+      assert_equal [ "Match Alpha", "Match Zulu" ], all("main a").map(&:text).select { |text| text.start_with?("Match") }
     end
     client = Client.create!(name: "=SUM(1,2)", phone: "+123456", tag_list: "@tag")
     client.notes.create!(body: "=1+1")
@@ -167,7 +167,7 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
       Promise.all([fetch(path, {method: 'POST', headers}), fetch(path, {method: 'POST', headers})])
         .then(responses => done(responses.map(r => r.status))).catch(e => done(String(e)));
     JS
-    assert_equal [200, 200], result
+    assert_equal [ 200, 200 ], result
     assert_equal before + 1, Client.count
     assert lead.reload.converted?
     result = page.evaluate_async_script(<<~JS, lead_path(lead), lead_notes_path(lead))
@@ -177,7 +177,7 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
         fetch(notePath, {method: 'POST', headers, body: 'note[body]=Late+note'})])
         .then(responses => done(responses.map(r => r.status))).catch(e => done(String(e)));
     JS
-    assert_equal [200, 200], result
+    assert_equal [ 200, 200 ], result
     assert_equal "Concurrent inquiry", lead.reload.name
     assert_empty lead.notes
     assert_empty lead.converted_client.notes

@@ -89,5 +89,4 @@ class LeadTest < ActiveSupport::TestCase
       assert_equal "Spring", client.campaign_name
     end
   end
-
 end
