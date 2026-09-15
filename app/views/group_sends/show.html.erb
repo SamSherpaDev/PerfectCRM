@@ -8,7 +8,7 @@
       <h2 class="card-title">Batch state</h2>
       <%= status_badge @group_send.status == "complete" ? "done" : "sending" %>
     </div>
-    <%= card_caption "Each traveler got their own email. Failed ones keep their message and can be retried from their timeline." %>
+    <%= card_caption "Each traveler got their own email. Failed ones keep their message and can be retried below." %>
     <dl class="facts mt-2">
       <div><dt>Sent</dt><dd><%= @group_send.sent_count %> of <%= @group_send.total_count %></dd></div>
       <div><dt>Still sending</dt><dd><%= @group_send.pending_count %></dd></div>
@@ -34,7 +34,12 @@
               <% end %>
             </p>
           </div>
-          <%= delivery_badge message.status %>
+          <div class="flex flex-wrap items-center gap-2">
+            <%= delivery_badge message.status %>
+            <% if message.failed? %>
+              <%= button_to "Retry", retry_message_path(message), class: "btn btn-secondary btn-sm" %>
+            <% end %>
+          </div>
         </li>
       <% end %>
     </ul>

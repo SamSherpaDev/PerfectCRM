@@ -1,1 +1,2 @@
 <%= turbo_stream.update "draft-status" do %><% if @saved %>Draft saved just now.<% else %>Draft cleared.<% end %><% end %>
+<%= turbo_stream.replace "draft-attachments", partial: "reply_box/attachments", locals: { draft: @draft } %>

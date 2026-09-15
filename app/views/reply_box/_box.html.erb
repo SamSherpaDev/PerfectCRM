@@ -38,7 +38,7 @@
     Reply to <%= owner.name %><% if subject_default.present? %> · <%= subject_default %><% end %>
   </p>
 
-  <%= form_with url: send_url, scope: :message, html: { novalidate: false }, data: { "reply-box-target": "form" } do |form| %>
+  <%= form_with url: send_url, scope: :message, html: { novalidate: false, multipart: true }, data: { "reply-box-target": "form" } do |form| %>
     <%= hidden_field_tag :conversation_id, conversation&.id, data: { "reply-box-target": "conversation" } %>
     <%= form.hidden_field :template_id, value: draft.template_id, data: { "reply-box-target": "templateId" } %>
 
@@ -87,17 +87,7 @@
               data: { "reply-box-target": "subject" } %>
       </div>
 
-      <div class="mt-3">
-        <%= form.label :files, "Attachments", class: "label" %>
-        <%= form.file_field :files, multiple: true, class: "input", data: { "reply-box-target": "files" } %>
-        <% if draft.files.attached? %>
-          <ul class="mt-1 space-y-0.5" aria-label="Draft attachments">
-            <% draft.files.each do |file| %>
-              <li class="text-xs muted"><%= file.filename %> · kept with the draft</li>
-            <% end %>
-          </ul>
-        <% end %>
-      </div>
+      <%= render "reply_box/attachments", draft: draft %>
     </details>
 
     <div class="mt-3">

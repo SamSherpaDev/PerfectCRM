@@ -24,14 +24,15 @@ class MessagesController < ApplicationController
   def retry
     message = Message.find(params[:id])
     owner = message.owner
-    return render_not_found unless owner
+    return render_not_found unless owner || message.group_send
+    destination = message.group_send ? group_send_path(message.group_send) : owner_path_for(owner)
 
     if message.failed?
       message.update!(status: "queued", send_error: nil)
       OutboundDeliveryJob.perform_later(message.id)
-      redirect_to owner_path_for(owner), notice: "Retrying delivery…"
+      redirect_to destination, notice: "Retrying delivery…"
     else
-      redirect_to owner_path_for(owner), alert: "Only a failed message can be retried."
+      redirect_to destination, alert: "Only a failed message can be retried."
     end
   end
 

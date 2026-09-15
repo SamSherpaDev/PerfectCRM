@@ -8,7 +8,7 @@ class MergeBatchTest < ActiveSupport::TestCase
 
   test "parses name/email pairs and bare emails, skipping blanks" do
     recipients = MergeBatch.parse_recipients("Maya Gurung <maya@example.com>\n\npemba@example.com\n")
-    assert_equal [ "Maya Gurung", "pemba@example.com" ], recipients.map(&:name)
+    assert_equal [ "Maya Gurung", nil ], recipients.map(&:name)
     assert_equal [ "maya@example.com", "pemba@example.com" ], recipients.map(&:email)
   end
 
@@ -23,6 +23,13 @@ class MergeBatchTest < ActiveSupport::TestCase
     assert_equal [ 2, 4 ], batch.errors.map(&:line_number)
     assert_equal [ "not-an-email", "Broken <nope>" ], batch.errors.map(&:line)
     assert_not batch.complete?
+  end
+
+  test "bare addresses have missing names in operational rendering" do
+    batch = MergeBatch.build(template: @template, recipient_lines: "stranger@example.com")
+    assert_equal "Hi [missing: first_name]", batch.messages.first.subject
+    assert_includes batch.messages.first.body, "[missing: full_name]"
+    assert_equal "stranger@example.com", batch.messages.first.email
   end
 
   test "a clean batch with recipients is complete" do

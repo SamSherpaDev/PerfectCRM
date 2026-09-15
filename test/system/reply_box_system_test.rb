@@ -97,6 +97,24 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     assert_not Draft.exists?(owner: @client)
   end
 
+  test "saving attachments clears selections before another save and send" do
+    sign_in_browser
+    page.current_window.resize_to(1400, 1000)
+    visit client_path(@client)
+    fill_in "Subject", with: "Attachment"
+    fill_in "Message", with: "See attached"
+    attach_file "Attachments", Rails.root.join("test/fixtures/files/sample.txt")
+    click_button "Save draft"
+    assert_selector "[aria-label='Draft attachments'] li", text: "sample.txt", count: 1
+    assert_equal "", find_field("Attachments").value
+    click_button "Save draft"
+    assert_text "Draft saved"
+    assert_equal 1, Draft.find_by!(owner: @client).files.count
+    click_button "Send"
+    assert_text "Sending your reply"
+    assert_equal [ "sample.txt" ], Message.last.files.map { |file| file.filename.to_s }
+  end
+
   private
 
   def sign_in_browser

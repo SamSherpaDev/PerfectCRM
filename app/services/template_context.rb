@@ -11,14 +11,16 @@ class TemplateContext
   INACTIVE_BOOKING_STATUSES = %w[cancelled voided refunded].freeze
 
   def self.for_recipient(recipient, departure_id: nil)
-    owner = Outbound::OwnerLookup.for_email(recipient.email)
-    return owner ? self.for(owner) : {} if departure_id.blank?
-
-    contact = PerfectBook::Contact.find_by("lower(email) = ?", recipient.email.strip.downcase)
-    contact_id = owner.try(:perfectbook_contact_id).presence || contact&.perfectbook_id
-    booking = PerfectBook::Booking.where(departure_id: departure_id, perfectbook_contact_id: contact_id).order(:id).first if contact_id
-    context = self.for(owner || contact || recipient, booking: nil)
-    context.merge!(booking_context(booking).compact_blank) if booking
+    email = recipient.email.strip.downcase
+    owner = Outbound::OwnerLookup.for_email(email)
+    contact = PerfectBook::Contact.find_by("lower(email) = ?", email)
+    person = Person.find_by("lower(email) = ?", email)
+    identity = contact || person || (owner if owner.try(:email).to_s.downcase == email) || recipient
+    contact_id = contact ? contact.perfectbook_id : owner.try(:perfectbook_contact_id)
+    bookings = bookings_for_contact(contact_id)
+    booking = departure_id.present? ? bookings.find { |row| row.departure_id.to_s == departure_id.to_s } : bookings.first
+    context = self.for(identity, booking: booking)
+    context["booking_owner_name"] = owner.name if booking && !contact && owner
     context
   end
 
@@ -37,7 +39,10 @@ class TemplateContext
   # Every mirrored booking this record could fill placeholders from, best
   # first. The reply box offers the rest in a select when several exist.
   def self.bookings_for(record)
-    contact_id = record.try(:perfectbook_contact_id)
+    bookings_for_contact(record.try(:perfectbook_contact_id))
+  end
+
+  def self.bookings_for_contact(contact_id)
     return [] if contact_id.blank?
 
     rows = PerfectBook::Booking.where(perfectbook_contact_id: contact_id).to_a

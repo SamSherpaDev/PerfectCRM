@@ -160,8 +160,7 @@ class TemplatesController < ApplicationController
           @skipped_without_email += 1
           next
         end
-        name = contact.name.presence || email
-        "#{name} <#{email}>"
+        contact.name.present? ? "#{contact.name} <#{email}>" : email
       end.join("\n")
   end
 

@@ -26,7 +26,7 @@ class InboxController < ApplicationController
     @has_older = @conversations.offset(@page * 50).exists?
     @conversations = @conversations.offset((@page - 1) * 50).limit(50).to_a
     page_threads = Conversation.where(id: @conversations.map(&:id))
-    latest_ids = page_threads.select(Arel.sql("(SELECT messages.id FROM messages WHERE messages.conversation_id = conversations.id ORDER BY messages.sent_at DESC, messages.id DESC LIMIT 1)"))
+    latest_ids = page_threads.select(Arel.sql("(SELECT messages.id FROM messages WHERE messages.conversation_id = conversations.id ORDER BY COALESCE(messages.sent_at, messages.created_at) DESC, messages.id DESC LIMIT 1)"))
     @latest_messages = Message.where(id: latest_ids).index_by(&:conversation_id)
     @document_thread_ids = page_threads.merge(Conversation.sensitive_documents.or(Conversation.held_documents)).pluck(:id).to_set
   end

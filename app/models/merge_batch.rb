@@ -11,7 +11,7 @@
 class MergeBatch
   Recipient = Data.define(:name, :email)
   RecipientError = Data.define(:line_number, :line, :problem)
-  Message = Data.define(:name, :email, :subject, :body)
+  Message = Data.define(:name, :email, :subject, :body, :booking_owner_name)
 
   attr_reader :template, :recipients, :messages, :errors
 
@@ -22,7 +22,7 @@ class MergeBatch
       context.merge!(context_for.call(recipient)) if context_for
       rendered = template.rendered(context)
       Message.new(name: recipient.name, email: recipient.email,
-        subject: rendered[:subject], body: rendered[:body])
+        subject: rendered[:subject], body: rendered[:body], booking_owner_name: context["booking_owner_name"])
     end
     new(template: template, recipients: recipients, messages: messages, errors: errors)
   end
@@ -43,7 +43,7 @@ class MergeBatch
 
       match = line.match(/\A([^<>]*)\s*<([^<>]+)>\z/)
       email = match ? match[2] : line
-      name = match ? match[1].strip.presence || email : email
+      name = match ? match[1].strip.presence : nil
       if email.match?(URI::MailTo::EMAIL_REGEXP) && !email.match?(/[,;\s]/)
         recipients << Recipient.new(name: name, email: email)
       else
