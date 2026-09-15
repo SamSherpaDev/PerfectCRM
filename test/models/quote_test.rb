@@ -166,7 +166,7 @@ class QuoteTest < ActiveSupport::TestCase
   test "monetary inputs validate the whole value and retain invalid input" do
     quote = Quote.new(client: @client)
     line = quote.lines.build(kind: "custom", description: "Trek", quantity: 1, unit_minor: 200000)
-    ["1,500", "12oops", "1e3", "12.345", "-2"].each do |input|
+    [ "1,500", "12oops", "1e3", "12.345", "-2" ].each do |input|
       quote.deposit_dollars = input
       assert_not quote.valid?, "Accepted invalid deposit #{input}"
       assert_equal input, quote.deposit_dollars
@@ -203,5 +203,4 @@ class QuoteTest < ActiveSupport::TestCase
     assert_equal 160000, stale.subtotal_minor
     assert_not quote.deliver!
   end
-
 end
