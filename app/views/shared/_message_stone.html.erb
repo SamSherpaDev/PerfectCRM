@@ -46,16 +46,23 @@
               <span class="min-w-0 flex-1 truncate"><%= file.filename %> · <%= number_to_human_size(file.byte_size) %></span>
               <%= link_to "Download", attachment_path(file.id), class: "link text-xs" %>
               <% if file.blob.metadata["sensitive"] %><%= badge "Potentially sensitive", :warning %><% end %>
+              <%= link_to "Send to PerfectBook", new_document_handoff_path(attachment_id: file.id), class: "link text-xs" %>
               <%= button_to "Remove from CRM, collect in PerfectBook", move_to_perfectbook_attachment_path(file.id), method: :post, class: "btn-ghost btn btn-sm" %>
             </li>
           <% end %>
         </ul>
       <% end %>
       <% Array(message.held_attachments).each do |file| %>
+        <% holding = file["holding_id"].present? ? DocumentHolding.find_by(id: file["holding_id"]) : nil %>
         <div class="attachment-row mt-2" role="note">
           <span><%= file["filename"] %> · <%= number_to_human_size(file["byte_size"]) %> · <%= file["content_type"] %></span>
           <span><%= file["status"] %></span>
-          <p>Collect this document in PerfectBook. Its file was not stored in CRM.</p>
+          <% if holding&.live? %>
+            <p>Held for hand-off only. No download here; it purges automatically in <%= distance_of_time_in_words(Time.current, holding.expires_at) %>.</p>
+            <%= link_to "Send to PerfectBook", new_document_handoff_path(holding_id: holding.id), class: "link text-xs" %>
+          <% else %>
+            <p>Collect this document in PerfectBook. Its file was not stored in CRM.</p>
+          <% end %>
         </div>
       <% end %>
       <% Array(message.attachment_notices).each do |notice| %>

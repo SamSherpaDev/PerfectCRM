@@ -16,8 +16,27 @@ module ReplyBox
       @reply_conversation = Conversation.latest_for(owner)
       @reply_draft = Draft.for_owner(owner, conversation: @reply_conversation)
     end
+    prefill_document_nudge(owner)
     load_reply_context
     @outbound_messages = Message.for_owner(owner).for_timeline.newest_first.limit(@events_page * 100 + 1).to_a
+  end
+
+  # Booking-card nudge (?nudge_booking_id=): prefill an untouched draft
+  # with the document-request template naming exactly the missing types.
+  # Never clobbers the captain's own draft text.
+  def prefill_document_nudge(owner)
+    mirror_id = params[:nudge_booking_id].presence
+    return if mirror_id.nil? || !@reply_draft.empty?
+
+    booking = PerfectBook::Booking.find_by(id: mirror_id,
+      perfectbook_contact_id: owner.try(:perfectbook_contact_id))
+    return if booking.nil? || booking.missing_lines.blank?
+
+    nudge = TemplateContext.for_document_nudge(owner, booking)
+    return if nudge[:template].nil?
+
+    @reply_draft.assign_attributes(subject: nudge[:subject], body: nudge[:body],
+      template: nudge[:template], perfectbook_booking_id: booking.id)
   end
 
   def load_reply_context

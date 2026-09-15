@@ -4,12 +4,33 @@
   <section class="card card-pad">
     <div class="card-header"><h2 class="card-title">Message to copy</h2></div>
     <%= card_caption "Review the missing documents in PerfectBook, then copy this email. Nothing sends automatically." %>
-    <p class="hint">Document status arrives with the PerfectBook update</p>
+    <% if @booking.documents_ready? %>
+      <% if @booking.missing_lines.present? %>
+        <ul class="mt-2 space-y-1 text-[13px]" aria-label="Missing documents">
+          <% @booking.travelers.each do |traveler| %>
+            <% missing = Array(traveler["documents"]).select { |doc| PerfectBook::Booking::MISSING_STATUSES.include?(doc["status"].to_s) } %>
+            <% next if missing.empty? %>
+            <li><strong class="font-medium text-ink"><%= traveler["first_name"].presence || "Traveler" %></strong>
+              <span class="muted"><%= missing.map { |doc| doc["type"].to_s }.join(", ") %></span>
+              <% missing.each do |doc| %><%= document_status_badge(doc["status"]) %><% end %>
+            </li>
+          <% end %>
+        </ul>
+        <p class="mt-1 text-xs muted"><%= pluralize(@booking.outstanding_count, "document") %> missing on this booking.</p>
+      <% else %>
+        <p class="hint">All documents received for this booking — nothing to nudge.</p>
+      <% end %>
+    <% else %>
+      <p class="hint">Document status arrives with the PerfectBook update</p>
+    <% end %>
     <%= label_tag :recipient, "To", class: "label mt-4" %>
     <%= text_field_tag :recipient, @recipient.display_email, class: "input" %>
     <%= label_tag :subject, "Subject", class: "label mt-4" %>
     <%= text_field_tag :subject, @subject, class: "input" %>
     <%= label_tag :body, "Message", class: "label mt-4" %>
     <%= text_area_tag :body, @body, rows: 12, class: "textarea" %>
+    <% if @booking.missing_lines.present? %>
+      <p class="mt-4"><%= link_to "Open in reply box", @reply_path, class: "btn btn-primary" %></p>
+    <% end %>
   </section>
 </div>

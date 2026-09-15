@@ -174,8 +174,10 @@ app, removing an email also denies its existing session on its next request;
 PerfectBook (live at `perfectbook.sherpaholidays.com`) stays the system
 of record for bookings, invoices, money, and every sensitive traveler
 document. The CRM mirrors contacts, the trip and departure catalog, and
-customer booking and invoice status. It never stores passport, visa,
-insurance, or date-of-birth data. Production polling is scheduled in
+customer booking and invoice status, plus the per-traveler document-status
+summary and checklist flags. It never stores passport, visa,
+insurance, or date-of-birth data long-term: the only exception is the
+24-hour hand-off holding area described under "Mail". Production polling is scheduled in
 [`config/recurring.yml`](config/recurring.yml); these recurring jobs are
 not scheduled in development. `PerfectBook::Catalog` feeds the quote
 builder, and the `perfectbook_contact_url` and `perfectbook_booking_url`
@@ -259,14 +261,19 @@ status, total, paid, balance due, invoice badge and number, and "Open in
 PerfectBook", plus a Refresh button that re-pulls just that contact
 (`PerfectBook::SyncBookingsJob` with `perfectbook_contact_id`). Refresh
 runs in the background; reload the page after the sync completes.
-PerfectBook's API exposes no document-status fields yet, so there is no
-received/missing line; each booking links "Nudge for missing documents"
-to an editable copy of the document-request template with client, trip,
-dates, and booking reference. Check what is missing in PerfectBook, edit
-the request, and copy it into an email; this page does not send it.
-Document status arrives with the PerfectBook update.
-TODO(pb-api-documents): consume the PerfectBook booking API
-document-status/checklist follow-up when it becomes available.
+PerfectBook mirrors each booking's traveler documents summary (per traveler:
+first name plus received/missing/expiring per document type, with the
+booking-level missing count; never contents or values) and checklist done
+flags (`documents_json`, `missing_count`, `checklist_json` on
+`PerfectBook::Booking`, stored by `SyncBookingsJob`; the ETag flow is
+unchanged). Each booking card shows every traveler with a badge per
+document type and the missing count. While anything is outstanding the card
+links "Nudge for missing documents", which prefills the reply box with the
+document-request template naming the travelers and exactly the missing types,
+plus the booking ref and dates; the action disappears once everything is
+received. The copy page (`document-nudge/:booking_id`) still offers the same
+text to review and an "Open in reply box" shortcut. Today lists the missing
+count on departing-soon rows.
 
 ## Checks
 
@@ -439,13 +446,25 @@ Ordinary email attachments are part of the conversation and stay in CRM storage.
 There is no attachment-count cap. On import, files over 25 MB are skipped with a visible
 message notice. Before any blob is created or uploaded, filenames, content types,
 and PDF titles are screened for passport, visa, insurance, identity/ID,
-date-of-birth, and scan documents. Flagged attachments are never uploaded.
-On import, only a placeholder with filename, size, type, and "held: collect in PerfectBook"
-remains on the timeline, with a follow-up note to collect the document in
-PerfectBook. PDF metadata is parsed in memory; unreadable or encrypted PDFs
-are also held. Document bytes and PDF titles are not persisted. Attached emails are screened
-recursively: sensitive enclosures become placeholders, safe enclosures remain
-available, and an enclosing .eml containing a sensitive file is never uploaded. Held documents
+date-of-birth, and scan documents. Flagged attachments are held, never filed
+as ordinary attachments. On import, the bytes wait in a short-lived holding
+area (`DocumentHolding`, Active Storage on the same private bucket, expiring
+24 hours after arrival and swept hourly) purely so the captain can hand the
+file to PerfectBook; the timeline shows only a placeholder with filename,
+size, type, and "held: send to PerfectBook", with no download link anywhere.
+From the placeholder — or from a still-stored ordinary attachment the captain
+flags — **Send to PerfectBook** asks for the booking, traveler, and document
+type, uploads the bytes to PerfectBook's traveler-document endpoint through
+`PerfectBook::Client` (multipart, idempotent on a stable upload id per CRM
+file), then deletes every CRM copy, records an activity event with the
+PerfectBook response, and refreshes that booking's mirror. Unclaimed holdings
+purge on expiry and their placeholders are marked expired. Files over 10 MB
+stay metadata-only placeholders because PerfectBook refuses larger uploads.
+PDF metadata is parsed in memory; unreadable or encrypted PDFs
+are also held. PDF titles are not persisted. Attached emails are screened
+recursively: sensitive enclosures become held placeholders, safe enclosures remain
+available, and an enclosing .eml containing a sensitive file is never uploaded as
+an ordinary attachment. Held documents
 appear in Triage even on linked conversations.
 
 Send, Save draft, and recovery after a send validation error use the same
@@ -458,8 +477,9 @@ Every stored ordinary attachment still offers **Remove from CRM, collect in
 PerfectBook** if the captain identifies a sensitive file that screening missed.
 This deletes its stored file and removes every message or draft attachment
 sharing that file, records an activity event, and leaves a follow-up note.
-Storage failures preserve the reference and triage retry path. Neither
-holding nor removing a file changes Gmail or uploads it to PerfectBook.
+Storage failures preserve the reference and triage retry path. Only the
+explicit **Send to PerfectBook** action uploads bytes to PerfectBook; neither
+holding nor removing a file changes Gmail.
 
 Settings → Import history backfills past mail: all, since a date, or last
 N months (no 90-day cap), as requested by the captain. Preview scans the whole

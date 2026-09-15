@@ -20,8 +20,10 @@ module PerfectBook
     end
   end
 
-  # 5xx, timeouts, and connection failures.
   class UnavailableError < Error; end
+
+  # PerfectBook rejected the file (empty, oversized, unsupported type).
+  class UnprocessableError < Error; end
 
   # Raised without an HTTP call while the circuit is open.
   class CircuitOpenError < UnavailableError; end

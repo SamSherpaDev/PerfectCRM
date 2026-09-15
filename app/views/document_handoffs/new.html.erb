@@ -1,0 +1,33 @@
+<% content_for :title, "Send to PerfectBook · PerfectCRM" %>
+<div class="page">
+  <%= render layout: "shared/page_header", locals: { title: "Send to PerfectBook", subtitle: "#{@filename} · from #{@message.from_address}", back: ["Thread", inbox_thread_path(@message.conversation)] } do %><% end %>
+  <%= render "shared/flash" %>
+  <section class="card card-pad">
+    <div class="card-header"><h2 class="card-title">Where it goes in PerfectBook</h2></div>
+    <%= card_caption "The file uploads into the traveler's encrypted record, then every CRM copy is deleted. PerfectBook stays the only long-term store." %>
+    <p class="mt-2 text-[13px] text-ink-2"><%= @filename %> · <%= number_to_human_size(@byte_size) %> · <%= @content_type %></p>
+    <% if @bookings.empty? %>
+      <div class="empty-inline">
+        <%= sketch :enso, class: "enso" %>
+        <p class="text-sm text-ink">No mirrored bookings to file under.</p>
+        <p class="text-xs muted">Link this thread to a client or lead with PerfectBook bookings first.</p>
+      </div>
+    <% else %>
+      <%= form_with url: document_handoffs_path, scope: :handoff, method: :post do |form| %>
+        <%= hidden_field_tag :holding_id, @holding.id if @holding %>
+        <%= hidden_field_tag :attachment_id, @attachment.id if @attachment %>
+        <%= form.label :booking_id, "Booking", class: "label mt-4" %>
+        <%= form.select :booking_id, options_from_collection_for_select(@bookings, :id, ->(booking) { "#{booking.ref} · #{booking.trip_name}" }, params.dig(:handoff, :booking_id)), {}, class: "select", required: true %>
+        <%= form.label :traveler_id, "Traveler", class: "label mt-4" %>
+        <%= form.select :traveler_id, grouped_traveler_options(@bookings, params.dig(:handoff, :traveler_id)), {}, class: "select", required: true %>
+        <p class="hint">Travelers come from the mirrored booking's document summary.</p>
+        <%= form.label :document_type, "Document type", class: "label mt-4" %>
+        <%= form.select :document_type, options_for_select(DocumentHandoffsController::DOCUMENT_TYPES.map { |type| [ type.humanize, type ] }, params.dig(:handoff, :document_type)), {}, class: "select", required: true %>
+        <p class="mt-4 flex flex-wrap gap-2">
+          <%= form.submit "Send to PerfectBook", class: "btn btn-primary" %>
+          <%= link_to "Back to thread", inbox_thread_path(@message.conversation), class: "btn btn-ghost" %>
+        </p>
+      <% end %>
+    <% end %>
+  </section>
+</div>

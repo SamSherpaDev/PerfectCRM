@@ -60,14 +60,15 @@ def pb_contact(id: 7, kind: "customer", archived: false, updated_at: "2026-03-01
     created_at: "2026-01-01T00:00:00Z", updated_at: updated_at)
 end
 
-def pb_booking(id: 11, status: "deposit_received", badge: "partially_paid")
+def pb_booking(id: 11, status: "deposit_received", badge: "partially_paid", documents: nil, checklist: nil, missing_count: nil)
   PerfectBook::Client::Booking.new(id: id, ref: "BK-#{id}", status: status,
     trip_id: 1, trip_name: "Everest Base Camp", departure_id: 10, departure_place: "Lukla",
     start_date: "2026-10-01", end_date: "2026-10-14", party_size: 2,
     price_per_person_minor: 10000, total_minor: 20000, paid_minor: 5000,
     balance_due_minor: 15000, currency: "USD", invoice_badge: badge,
     invoice_number: "SH-2026-0001", payment_reference: "SH20260001",
-    deep_link: "https://perfectbook.sherpaholidays.com/bookings/#{id}")
+    deep_link: "https://perfectbook.sherpaholidays.com/bookings/#{id}",
+    documents: documents, checklist: checklist, missing_count: missing_count)
 end
 
 class PerfectBookSyncJobsTest < ActiveSupport::TestCase
@@ -198,6 +199,40 @@ class PerfectBookSyncJobsTest < ActiveSupport::TestCase
     PerfectBook::SyncBookingsJob.perform_now(client: client)
     assert_nil PerfectBook::Booking.find_by(perfectbook_id: 99)
     assert_not_nil PerfectBook::Booking.find_by(perfectbook_id: 11)
+  end
+
+  test "bookings sync stores the documents summary and checklist flags" do
+    PerfectBook::Contact.create!(perfectbook_id: 7, kind: "customer", name: "Ama", synced_at: Time.current)
+    documents = { "travelers" => [
+      { "id" => 3, "first_name" => "Ama",
+        "documents" => [
+          { "type" => "passport", "status" => "received", "received_at" => "2026-08-01" },
+          { "type" => "visa", "status" => "missing", "received_at" => nil },
+          { "type" => "insurance", "status" => "expiring", "received_at" => "2026-08-02" },
+          { "type" => "waiver", "status" => "not_required", "received_at" => nil }
+        ] }
+    ], "missing_count" => 2 }
+    checklist = [ { "key" => "payment", "label" => "Payment", "done" => true },
+      { "key" => "waiver", "label" => "Waiver", "done" => false } ]
+    client = FakePbCatalogClient.new(bookings_by_contact: { 7 => [ pb_booking(documents: documents, checklist: checklist, missing_count: 2) ] })
+    PerfectBook::SyncBookingsJob.perform_now(client: client)
+    booking = PerfectBook::Booking.find_by!(perfectbook_id: 11)
+    assert_equal 2, booking.missing_count
+    assert_equal "Ama", booking.travelers.first["first_name"]
+    assert_equal %w[visa insurance], booking.missing_types
+    assert_equal [ "Ama: visa, insurance" ], booking.missing_lines
+    assert_equal [ true, false ], booking.checklist.map { |item| item["done"] }
+    assert_equal 2, booking.outstanding_count
+  end
+
+  test "bookings without a documents summary keep the legacy card" do
+    PerfectBook::Contact.create!(perfectbook_id: 7, kind: "customer", name: "Ama", synced_at: Time.current)
+    client = FakePbCatalogClient.new(bookings_by_contact: { 7 => [ pb_booking ] })
+    PerfectBook::SyncBookingsJob.perform_now(client: client)
+    booking = PerfectBook::Booking.find_by!(perfectbook_id: 11)
+    assert_not booking.documents_ready?
+    assert_equal 0, booking.outstanding_count
+    assert_nil booking.missing_lines
   end
 
   test "failed sync records the error without wiping the last success" do

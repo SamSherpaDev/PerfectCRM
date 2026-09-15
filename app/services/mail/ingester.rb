@@ -27,8 +27,10 @@ module Mail
       return { status: :duplicate, conversation: existing.conversation, message: existing } if existing
 
       uploaded = []
+      holdings = []
       ::Message.transaction(requires_new: true) do |transaction|
         transaction.after_rollback { uploaded.each(&:delete) }
+        transaction.after_rollback { holdings.each { |holding| holding.destroy! if holding.persisted? } }
         conversation = find_conversation(gm_thread_id: gm_thread_id, parsed: parsed)
         direction = Mail.direction_for(parsed.from_addresses)
 
@@ -48,7 +50,7 @@ module Mail
           raw_size: parsed.raw_size.to_i,
           gmail_labels: labels
         )
-        attach_files(message, parsed.attachments, uploaded)
+        attach_files(message, parsed.attachments, uploaded, holdings)
         link_conversation(conversation, parsed)
         conversation.update!(
           subject: parsed.subject.presence || conversation.subject.presence || "(no subject)",
@@ -153,7 +155,7 @@ module Mail
 
         if ::Message.sensitive_attachment?(filename, content_type, data: data)
           held << { "filename" => filename, "byte_size" => data.bytesize, "content_type" => content_type,
-            "status" => "held: collect in PerfectBook" }
+            "data" => data, "status" => "held: send to PerfectBook" }
         elsif content_type == "message/rfc822" || filename.downcase.end_with?(".eml")
           enclosed, sensitive = partition_attachments(parse_raw(data).attachments)
           if sensitive.any?
@@ -169,7 +171,7 @@ module Mail
       [ ordinary, held ]
     end
 
-    def attach_files(message, attachments, uploaded)
+    def attach_files(message, attachments, uploaded, holdings = [])
       skipped = []
       ordinary, held = self.class.partition_attachments(attachments)
       ordinary.each do |file|
@@ -187,10 +189,26 @@ module Mail
         blob.upload_without_unfurling(StringIO.new(data))
         message.files.attach(blob)
       end
-      message.update!(attachment_notices: skipped, held_attachments: held)
-      if held.any?
+      placeholders = held.map do |entry|
+        # In-memory bytes only: stripped before the JSON column is saved.
+        data = entry.delete("data").to_s
+        if data.bytesize > DocumentHolding::MAX_BYTES
+          entry.merge("status" => "held: too large for the PerfectBook hand-off (10 MB max)")
+        else
+          holding = DocumentHolding.create!(message: message, filename: entry["filename"],
+            content_type: entry["content_type"], byte_size: data.bytesize,
+            expires_at: DocumentHolding::HOLD_HOURS.hours.from_now)
+          holding.file.attach(io: StringIO.new(data),
+            filename: entry["filename"], content_type: entry["content_type"])
+          uploaded << holding.file.blob
+          holdings << holding
+          entry.merge("holding_id" => holding.id)
+        end
+      end
+      message.update!(attachment_notices: skipped, held_attachments: placeholders)
+      if placeholders.any?
         ::Note.create!(notable: message.conversation,
-          body: "Collect the held documents from message #{message.id} in PerfectBook. Their files were not stored in CRM.")
+          body: "Sensitive documents arrived with message #{message.id} and wait in the 24-hour holding area. Send each to PerfectBook from the thread; unclaimed files purge automatically.")
       end
     end
 

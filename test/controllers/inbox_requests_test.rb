@@ -94,9 +94,10 @@ class InboxRequestsTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "a", text: "Passport review"
     get inbox_thread_path(result[:conversation])
-    assert_select "span", text: "held: collect in PerfectBook"
-    assert_select "p", text: /Collect the held documents/
+    assert_select "span", text: "held: send to PerfectBook"
+    assert_select "p", text: /holding area/
     assert_select "a", text: "Download", count: 0
+    assert_select "a", text: "Send to PerfectBook", count: 1
   end
 
   test "waiting count excludes unknown senders just like the list" do
@@ -114,7 +115,7 @@ class InboxRequestsTest < ActionDispatch::IntegrationTest
     get inbox_thread_path(result[:conversation])
     assert_response :success
     assert_not_includes response.body, "PRIVATE INSURANCE CONTENT"
-    assert_select "span", text: "held: collect in PerfectBook"
+    assert_select "span", text: "held: send to PerfectBook"
     assert_nil result[:message].reload.text_body
     assert_nil result[:message].html_body
     assert_empty result[:message].files

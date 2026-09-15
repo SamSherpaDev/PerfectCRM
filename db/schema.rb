@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_15_001005) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_15_030002) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -122,6 +122,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_001005) do
     t.index ["ignored"], name: "index_conversations_on_ignored"
     t.index ["last_message_at"], name: "index_conversations_on_last_message_at"
     t.index ["linkable_type", "linkable_id"], name: "index_conversations_on_linkable_type_and_linkable_id"
+  end
+
+  create_table "document_holdings", force: :cascade do |t|
+    t.integer "byte_size", default: 0, null: false
+    t.string "content_type"
+    t.datetime "created_at", null: false
+    t.datetime "expires_at", null: false
+    t.string "filename", null: false
+    t.integer "message_id", null: false
+    t.string "status", default: "held", null: false
+    t.datetime "updated_at", null: false
+    t.index ["expires_at"], name: "index_document_holdings_on_expires_at"
+    t.index ["message_id"], name: "index_document_holdings_on_message_id"
   end
 
   create_table "drafts", force: :cascade do |t|
@@ -368,14 +381,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_001005) do
 
   create_table "perfectbook_bookings", force: :cascade do |t|
     t.integer "balance_due_minor"
+    t.text "checklist_json", default: "[]", null: false
     t.datetime "created_at", null: false
     t.string "currency", default: "USD"
     t.string "deep_link"
     t.integer "departure_id"
     t.string "departure_place"
+    t.text "documents_json", default: "{}", null: false
     t.date "end_date"
     t.string "invoice_badge"
     t.string "invoice_number"
+    t.integer "missing_count", default: 0, null: false
     t.integer "paid_minor"
     t.integer "party_size"
     t.string "payment_reference"

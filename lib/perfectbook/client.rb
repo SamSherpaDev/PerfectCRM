@@ -34,7 +34,12 @@ module PerfectBook
       :departure_id, :departure_place, :start_date, :end_date, :party_size,
       :price_per_person_minor, :total_minor, :paid_minor, :balance_due_minor,
       :currency, :invoice_badge, :invoice_number, :payment_reference,
-      :deep_link, keyword_init: true)
+      :deep_link, :documents, :checklist, :missing_count, keyword_init: true)
+
+    # Upload handoff result: traveler + document outcome, booking
+    # missing_count, and whether PerfectBook replayed an earlier upload_id.
+    UploadResult = Struct.new(:traveler_id, :traveler_name, :document_type,
+      :document_status, :received_at, :missing_count, :duplicate, keyword_init: true)
 
     # Collection fetch result: data plus whether the server answered 304.
     Page = Struct.new(:data, :pagination, :not_modified, :etag, keyword_init: true)
@@ -79,6 +84,51 @@ module PerfectBook
       params = { limit: limit }
       params[:trip_id] = trip_id if trip_id.present?
       walk_collection("/api/v1/departures", params) { |row| build_departure(row) }
+    end
+
+    # Document upload handoff (the API's only write): stores a traveler
+    # file in PerfectBook's encrypted record. upload_id must be stable
+    # per CRM attachment (the holding or blob id) so retries replay
+    # instead of duplicating. Returns an UploadResult.
+    def upload_traveler_document(booking_ref:, traveler_id:, file:, filename:, content_type:, document_type:, upload_id:)
+      raise NotConfiguredError, "PerfectBook API token is not configured" if @api_token.blank?
+      raise CircuitOpenError, "PerfectBook circuit is open; skipping request" unless Circuit.allow_request?
+
+      started = Time.current
+      http_response = perform_upload(booking_ref, traveler_id,
+        file: file, filename: filename, content_type: content_type,
+        document_type: document_type, upload_id: upload_id)
+      elapsed = ((Time.current - started) * 1000).round
+      Rails.logger.info("PerfectBook POST bookings/#{booking_ref}/travelers/#{traveler_id}/documents -> #{http_response.code} (#{elapsed}ms)")
+
+      case http_response.code.to_i
+      when 200, 201
+        Circuit.record_success
+        build_upload_result(JSON.parse(http_response.body.to_s))
+      when 400
+        raise BadRequestError, safe_message(http_response)
+      when 401
+        raise UnauthorizedError, "PerfectBook rejected the API token"
+      when 404
+        raise NotFoundError, safe_message(http_response)
+      when 422
+        raise UnprocessableError, safe_message(http_response)
+      when 429
+        raise RateLimitedError.new("PerfectBook rate limit reached", retry_after: retry_after(http_response))
+      when 500..599
+        Circuit.record_failure
+        raise UnavailableError, "PerfectBook is unavailable (#{http_response.code})"
+      else
+        raise Error, safe_message(http_response)
+      end
+    rescue Net::OpenTimeout, Net::ReadTimeout => e
+      Circuit.record_failure
+      raise UnavailableError, "PerfectBook timed out (#{e.class})"
+    rescue SocketError, SystemCallError, IOError, OpenSSL::SSL::SSLError => e
+      Circuit.record_failure
+      raise UnavailableError, "PerfectBook connection failed (#{e.class})"
+    rescue JSON::ParserError
+      raise Error, "PerfectBook returned invalid JSON"
     end
 
     private
@@ -249,6 +299,7 @@ module PerfectBook
       trip = row["trip"] || {}
       departure = row["departure"] || {}
       invoice = row["invoice"] || {}
+      documents = row["documents"] || {}
       Booking.new(
         id: row["id"], ref: row["ref"], status: row["status"],
         trip_id: trip["id"], trip_name: trip["name"],
@@ -258,8 +309,57 @@ module PerfectBook
         total_minor: row["total_minor"], paid_minor: row["paid_minor"],
         balance_due_minor: row["balance_due_minor"], currency: row["currency"] || "USD",
         invoice_badge: invoice["badge"], invoice_number: invoice["number"],
-        payment_reference: invoice["payment_reference"], deep_link: row["deep_link"]
+        payment_reference: invoice["payment_reference"], deep_link: row["deep_link"],
+        documents: documents, checklist: Array(row["checklist"]),
+        missing_count: documents["missing_count"].to_i
       )
+    end
+
+    def build_upload_result(body)
+      data = body["data"] || {}
+      traveler = data["traveler"] || {}
+      document = data["document"] || {}
+      UploadResult.new(
+        traveler_id: traveler["id"], traveler_name: traveler["first_name"],
+        document_type: document["type"], document_status: document["status"],
+        received_at: document["received_at"],
+        missing_count: data["missing_count"].to_i,
+        duplicate: data["duplicate"] == true
+      )
+    end
+
+    def perform_upload(booking_ref, traveler_id, file:, filename:, content_type:, document_type:, upload_id:)
+      parts = [
+        { name: "document_type", data: document_type.to_s, filename: nil, content_type: nil },
+        { name: "upload_id", data: upload_id.to_s, filename: nil, content_type: nil },
+        { name: "file", data: file, filename: filename.to_s, content_type: content_type.to_s }
+      ]
+      boundary = "----PerfectCRM#{SecureRandom.hex(16)}"
+      body = build_multipart(parts, boundary)
+      path = "/api/v1/bookings/#{URI.encode_uri_component(booking_ref.to_s)}/travelers/#{URI.encode_uri_component(traveler_id.to_s)}/documents"
+      uri = URI.join("#{@base_url}/", path.sub(%r{\A/}, ""))
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = uri.scheme == "https"
+      http.open_timeout = OPEN_TIMEOUT
+      http.read_timeout = READ_TIMEOUT
+      request = Net::HTTP::Post.new(uri.request_uri)
+      request["Accept"] = "application/json"
+      request["Authorization"] = "Bearer #{@api_token}"
+      request["Content-Type"] = "multipart/form-data; boundary=#{boundary}"
+      request.body = body
+      http.request(request)
+    end
+
+    def build_multipart(parts, boundary)
+      chunks = parts.map do |part|
+        header = +"--#{boundary}\r\nContent-Disposition: form-data; name=\"#{part[:name]}\""
+        header << "; filename=\"#{part[:filename]}\"" if part[:filename].present?
+        header << "\r\nContent-Type: #{part[:content_type]}" if part[:content_type].present?
+        header << "\r\n\r\n"
+        data = part[:data].is_a?(String) ? part[:data] : part[:data].to_s
+        header + data + "\r\n"
+      end
+      (chunks.join + "--#{boundary}--\r\n").b
     end
   end
 end

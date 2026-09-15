@@ -52,6 +52,12 @@ When updating this file, preserve this bar for all agents and keep entries conci
 - PerfectBook link: `PerfectBook::Client` (`lib/perfectbook/`) + mirror tables
   (`app/models/perfectbook/`) + `config/recurring.yml` jobs; contract in
   README.md, "PerfectBook connection". Mirrors only, never money truth.
+  Booking mirrors carry the traveler documents summary + checklist flags;
+  cards render them via `document_status_badge`, nudges prefill through
+  `TemplateContext.for_document_nudge`. Sensitive files hand off via
+  `DocumentHandoffsController` from 24-hour `DocumentHolding` rows (the
+  only short-term sensitive bytes in the CRM); PerfectBook stays the
+  long-term store.
 - Mail inbound: `Conversation`/`Message`/`EmailIdentity` + `Mail::SyncJob`
   (5 min, read-only IMAP over `[Gmail]/All Mail`) + `Mail::ImportJob`;
   contract in README.md, "Mail". Keep-only-info@ rule lives in
