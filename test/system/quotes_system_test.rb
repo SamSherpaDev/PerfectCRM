@@ -48,6 +48,14 @@ class QuotesSystemTest < ApplicationSystemTestCase
     end
     fill_in "Note", with: "Held two seats for you."
     assert_no_overflow("builder with lines")
+    sticky_send = find(".sticky button", text: "Send quote")
+    assert sticky_send.evaluate_script(<<~JS), "Phone navigation must not cover the sticky Send quote button"
+      (() => {
+        const rect = this.getBoundingClientRect()
+        const target = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)
+        return this === target || this.contains(target)
+      })()
+    JS
     dimensions = all("[data-line-row]").last.evaluate_script(<<~JS)
       (() => {
         const description = this.querySelector("input[data-description]").getBoundingClientRect()
@@ -66,13 +74,32 @@ class QuotesSystemTest < ApplicationSystemTestCase
     assert_operator dimensions["removeWidth"], :>=, 44
     assert_operator dimensions["removeHeight"], :>=, 44
 
-    click_button "Send quote", match: :first
+    sticky_send.click
     assert_text "Quote sent"
     assert_no_overflow("quote page")
     quote = Quote.order(:created_at).last
     assert_equal "sent", quote.status
     assert_equal 2, quote.lines.count
     assert_equal 305_000, quote.subtotal_minor
+  end
+
+  test "send an edited draft above phone navigation" do
+    client = Client.create!(name: "Maya Gurung", email: "maya@example.com")
+    quote = Quote.create!(client: client, party_size: 2, valid_until: Date.current + 14)
+    quote.lines.create!(kind: "custom", description: "Trek", quantity: 2, unit_dollars: "1500")
+    visit edit_quote_path(quote)
+    fill_in "Note", with: "Held two seats for you."
+    sticky_send = find(".sticky button", text: "Send quote")
+    assert sticky_send.evaluate_script(<<~JS), "Phone navigation must not cover the sticky Send quote button"
+      (() => {
+        const rect = this.getBoundingClientRect()
+        const target = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)
+        return this === target || this.contains(target)
+      })()
+    JS
+    sticky_send.click
+    assert_text "Quote sent"
+    assert_equal "sent", quote.reload.status
   end
 
   test "client accepts from the public page at phone width" do
