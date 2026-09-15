@@ -200,11 +200,13 @@ class Lead < ApplicationRecord
   end
 
   # The last real contact with the traveler: mail in or out, or a note.
-  # Future mail sync can call this; notes call it on creation (see Note).
   def record_touch!(at: Time.current)
     return unless persisted?
 
-    update_columns(last_touch_at: at, last_activity_at: at)
+    self.class.where(id: id).update_all([
+      "last_touch_at = MAX(COALESCE(last_touch_at, ?), ?), last_activity_at = MAX(COALESCE(last_activity_at, ?), ?)",
+      at, at, at, at
+    ])
   end
 
   def last_touch

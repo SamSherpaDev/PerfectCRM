@@ -4,6 +4,8 @@ class Conversation < ApplicationRecord
 
   serialize :participant_emails, coder: JSON
 
+  after_update :touch_linkable!, if: -> { saved_change_to_linkable_id? || saved_change_to_linkable_type? }
+
   validates :unread_count, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
 
   scope :ordered, -> { order(Arel.sql("COALESCE(conversations.last_message_at, conversations.updated_at) DESC, conversations.id DESC")) }
@@ -63,6 +65,16 @@ class Conversation < ApplicationRecord
     count = messages.where(direction: "in", read_at: nil).count
     last_at = messages.maximum(:sent_at)
     update_columns(unread_count: count, last_message_at: last_at, updated_at: Time.current)
+  end
+
+  def touch_linkable!
+    target = linkable
+    if target.is_a?(Lead)
+      at = messages.maximum(Arel.sql("COALESCE(sent_at, created_at)"))
+      target.record_touch!(at: at) if at
+    elsif target&.respond_to?(:touch_activity!)
+      target.touch_activity!
+    end
   end
 
   def linkable_name

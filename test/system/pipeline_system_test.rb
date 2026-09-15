@@ -372,6 +372,22 @@ class PipelineSystemTest < ApplicationSystemTestCase
     end
   end
 
+  test "incoming email clears a stale pipeline card" do
+    lead = Lead.create!(name: "Active email traveler", email: "active@example.com")
+    lead.update_columns(last_touch_at: 8.days.ago)
+    page.current_window.resize_to(1400, 900)
+    visit pipeline_path
+    assert_selector "article.kcard-stale", text: lead.name
+    parsed = Mail::Ingester.parse_raw("From: active@example.com\r\nTo: info@sherpaholidays.com\r\nSubject: Trip dates\r\nDate: #{Time.current.rfc2822}\r\n\r\nHere are my dates.")
+    result = Mail::Ingester.ingest(parsed: parsed, gmail: { gm_thrid: "active-thread", gm_msgid: "active-message" })
+    assert_equal :stored, result[:status]
+    visit pipeline_path
+    assert_selector "article.kcard", text: lead.name
+    assert_no_selector "article.kcard-stale", text: lead.name
+    assert_not lead.reload.stale?
+    assert_match "0 stale", Pipeline::Report.new.digest_line
+  end
+
   private
 
   def browser_request(path, method, params)
