@@ -9,8 +9,15 @@
     <div class="min-w-0 flex-1">
       <p class="text-[11.5px] font-medium muted">
         <%= inbound ? "From #{message.from_address}" : "You to #{message.to_list.first(2).join(", ")}" %>
-        · <%= date_short(message.sent_at) %>
+        · <%= date_short(message.sent_at || message.created_at) %>
       </p>
+      <% if message.outbound? && message.status != "received" %>
+        <%= delivery_badge(message.status) %>
+        <% if message.failed? %>
+          <p class="mt-2 text-xs text-bad">Could not deliver: <%= message.send_error.presence || "unknown error" %></p>
+          <%= button_to "Retry", retry_message_path(message), method: :post, class: "btn btn-secondary btn-sm mt-1" %>
+        <% end %>
+      <% end %>
       <% if message.subject.present? %>
         <p class="mt-1 font-semibold text-ink text-[13px]"><%= message.subject %></p>
       <% end %>

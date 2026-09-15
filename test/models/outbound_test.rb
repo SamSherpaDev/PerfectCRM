@@ -7,7 +7,7 @@ class MessageTest < ActiveSupport::TestCase
   end
 
   test "outbound messages require recipients, subject, and body" do
-    message = @conversation.messages.build(direction: "outbound", status: "queued")
+    message = @conversation.messages.build(direction: "out", status: "queued")
     assert_not message.valid?
     assert_includes message.errors[:to_addrs], "can't be blank"
     assert_includes message.errors[:subject], "can't be blank"
@@ -15,7 +15,7 @@ class MessageTest < ActiveSupport::TestCase
   end
 
   test "a message needs a conversation or a group send" do
-    message = Message.new(direction: "outbound", status: "queued",
+    message = Message.new(direction: "out", status: "queued",
       to_addrs: "a@example.com", subject: "Hi", text_body: "Hello")
     assert_not message.valid?
     assert_includes message.errors[:conversation], "or group send must be present"
@@ -23,7 +23,7 @@ class MessageTest < ActiveSupport::TestCase
 
   test "mark_sent stamps, touches the thread, and preserves unrelated drafts" do
     draft = @conversation.create_draft!(owner: @client, body: "words")
-    message = @conversation.messages.create!(direction: "outbound", status: "sending",
+    message = @conversation.messages.create!(direction: "out", status: "sending",
       to_addrs: "maya@example.com", subject: "Hi", text_body: "Hello")
     message.mark_sent!
     assert message.sent?
@@ -33,7 +33,7 @@ class MessageTest < ActiveSupport::TestCase
   end
 
   test "mark_failed keeps the words and the reason" do
-    message = @conversation.messages.create!(direction: "outbound", status: "sending",
+    message = @conversation.messages.create!(direction: "out", status: "sending",
       to_addrs: "maya@example.com", subject: "Hi", text_body: "Hello")
     message.mark_failed!("Connection refused")
     assert message.failed?
@@ -56,9 +56,9 @@ class ConversationTest < ActiveSupport::TestCase
 
   test "thread_parent is the newest message with an id" do
     conversation = @client.conversations.create!(subject_line: "T")
-    first = conversation.messages.create!(direction: "outbound", status: "sent",
+    first = conversation.messages.create!(direction: "out", status: "sent",
       to_addrs: "m@example.com", subject: "Hi", text_body: "one", message_id: "<one@x>")
-    conversation.messages.create!(direction: "outbound", status: "sent",
+    conversation.messages.create!(direction: "out", status: "sent",
       to_addrs: "m@example.com", subject: "Hi", text_body: "two", message_id: "<two@x>")
     assert_equal "<two@x>", conversation.thread_parent.message_id
     assert_equal 2, conversation.messages.count
@@ -99,11 +99,11 @@ class GroupSendTest < ActiveSupport::TestCase
   test "counts flow from its messages" do
     group = GroupSend.create!(template: @template, total_count: 3)
     conversation = Client.create!(name: "A B", email: "a@example.com").conversations.create!
-    group.messages.create!(conversation: conversation, direction: "outbound", status: "sent",
+    group.messages.create!(conversation: conversation, direction: "out", status: "sent",
       to_addrs: "a@example.com", subject: "Hi", text_body: "Hello")
-    group.messages.create!(conversation: conversation, direction: "outbound", status: "failed",
+    group.messages.create!(conversation: conversation, direction: "out", status: "failed",
       to_addrs: "b@example.com", subject: "Hi", text_body: "Hello")
-    group.messages.create!(conversation: conversation, direction: "outbound", status: "queued",
+    group.messages.create!(conversation: conversation, direction: "out", status: "queued",
       to_addrs: "c@example.com", subject: "Hi", text_body: "Hello")
     assert_equal 1, group.sent_count
     assert_equal 1, group.failed_count

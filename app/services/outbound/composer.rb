@@ -36,8 +36,9 @@ module Outbound
       message.submitted_draft_id = @draft.id if @draft&.persisted?
       message.submitted_draft_updated_at = @draft.updated_at if @draft&.persisted?
       message.group_send = @group_send if @group_send
-      message.direction = "outbound"
+      message.direction = "out"
       message.status = "queued"
+      message.from_address = self.class.from_address
       message.to_addrs = recipients.join(", ")
       message.cc_addrs = @params[:cc].to_s
       message.bcc_addrs = @params[:bcc].to_s
@@ -50,7 +51,7 @@ module Outbound
       message.html_body = nil
       message.template_id = @params[:template_id].presence
       thread_under_parent(message)
-      message.message_id ||= "<#{SecureRandom.uuid}@#{domain}>"
+      message.message_id ||= "#{SecureRandom.uuid}@#{domain}"
       attach_files(message)
       message.save!
       @params[:template_id].present? && Template.where(id: @params[:template_id]).first&.record_use!

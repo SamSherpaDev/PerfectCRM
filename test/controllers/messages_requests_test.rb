@@ -108,7 +108,7 @@ class MessagesRequestsTest < ActionDispatch::IntegrationTest
 
   test "failed messages retry from the timeline" do
     conversation = @client.conversations.create!(subject_line: "Hi")
-    message = conversation.messages.create!(direction: "outbound", status: "failed",
+    message = conversation.messages.create!(direction: "out", status: "failed",
       to_addrs: "maya@example.com", subject: "Hi", text_body: "Hello", send_error: "boom")
     sign_in
     assert_enqueued_with(job: OutboundDeliveryJob) do
@@ -119,7 +119,7 @@ class MessagesRequestsTest < ActionDispatch::IntegrationTest
 
   test "attachments download for the captain, 404 without sign-in" do
     message = @client.conversations.create!(subject_line: "Hi").messages.create!(
-      direction: "outbound", status: "sent",
+      direction: "out", status: "sent",
       to_addrs: "maya@example.com", subject: "Hi", text_body: "Hello")
     message.files.attach(io: StringIO.new("hello"), filename: "hi.txt", content_type: "text/plain")
     get attachment_message_path(message, message.files.first.id)
@@ -132,7 +132,7 @@ class MessagesRequestsTest < ActionDispatch::IntegrationTest
 
   test "inbox thread shows messages with the reply box" do
     conversation = @client.conversations.create!(subject_line: "Your trek")
-    conversation.messages.create!(direction: "outbound", status: "sent",
+    conversation.messages.create!(direction: "out", status: "sent",
       to_addrs: "maya@example.com", subject: "Hi", text_body: "Hello")
     sign_in
     get inbox_thread_path(conversation)

@@ -42,6 +42,5 @@ class InboxController < ApplicationController
     @reply_conversation = @conversation
     @reply_draft = @conversation.draft || @conversation.build_draft(owner: @reply_owner)
     load_reply_context
-    @thread_messages = @conversation.messages.newest_first.to_a
   end
 end

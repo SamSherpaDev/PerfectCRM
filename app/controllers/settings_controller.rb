@@ -36,6 +36,9 @@ class SettingsController < ApplicationController
       @perfectbook_configured = PerfectBook.configured?
       @perfectbook_last_success = PerfectBook::SyncState.last_success_at
       @perfectbook_last_error = PerfectBook::SyncState.last_error_row
+      @mailbox_address = Mail.mailbox_address
+      @mail_sync = MailSyncState.find_by(folder: Mail::FOLDER)
+      @imports = MailImport.ordered.limit(5)
       render :edit, status: :unprocessable_entity
     end
   end

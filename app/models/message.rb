@@ -10,9 +10,9 @@ class Message < ApplicationRecord
   belongs_to :template, optional: true
 
   validates :status, inclusion: { in: STATUSES }
-  validates :to_addrs, presence: true, if: :outbound?
-  validates :subject, presence: true, if: :outbound?
-  validates :text_body, presence: true, if: :outbound?
+  validates :to_addrs, presence: true, if: -> { outbound? && status != "received" }
+  validates :subject, presence: true, if: -> { outbound? && status != "received" }
+  validates :text_body, presence: true, if: -> { outbound? && status != "received" }
   validate :needs_a_home
 
   scope :for_owner, ->(owner) {
@@ -21,7 +21,6 @@ class Message < ApplicationRecord
   }
   scope :newest_first, -> { order(Arel.sql("COALESCE(messages.sent_at, messages.created_at) DESC, messages.id DESC")) }
   scope :for_timeline, -> { outbound.where(status: %w[queued sending sent failed]) }
-
 
   has_many_attached :files
 
@@ -102,7 +101,7 @@ class Message < ApplicationRecord
   end
 
   def to_addrs=(value)
-    self.to_addresses = value.to_s.split(",").map(&:strip).reject(&:blank?)
+    self.to_addresses = value.to_s.split(/[,\n;]/).map(&:strip).reject(&:blank?)
   end
 
   def cc_addrs
@@ -110,15 +109,15 @@ class Message < ApplicationRecord
   end
 
   def cc_addrs=(value)
-    self.cc_addresses = value.to_s.split(",").map(&:strip).reject(&:blank?)
+    self.cc_addresses = value.to_s.split(/[,\n;]/).map(&:strip).reject(&:blank?)
   end
 
   def recipients
-    to_addrs.to_s.split(/[,\n;]/).map(&:strip).reject(&:blank?)
+    inbound? ? Array(from_address).compact_blank : to_list
   end
 
   def mark_sending!
-    claimed = self.class.where(id: id, direction: "outbound", status: "queued")
+    claimed = self.class.where(id: id, direction: "out", status: "queued")
       .update_all(status: "sending", send_error: nil, updated_at: Time.current)
     return false unless claimed == 1
 
@@ -129,6 +128,7 @@ class Message < ApplicationRecord
   def mark_sent!
     transaction do
       update!(status: "sent", sent_at: Time.current, send_error: nil)
+      conversation&.refresh_counters!
       conversation&.touch_activity!
       draft = Draft.find_by(id: submitted_draft_id)
       draft&.with_lock do
@@ -147,8 +147,8 @@ class Message < ApplicationRecord
     conversation&.owner
   end
 
-
   private
+
   def needs_a_home
     if conversation.nil? && group_send.nil?
       errors.add(:conversation, "or group send must be present")

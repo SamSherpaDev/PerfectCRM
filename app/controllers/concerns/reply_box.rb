@@ -17,14 +17,14 @@ module ReplyBox
       @reply_draft = Draft.for_owner(owner, conversation: @reply_conversation)
     end
     load_reply_context
-    @outbound_messages = Message.for_owner(owner).newest_first.limit(@events_page * 100 + 1).to_a
+    @outbound_messages = Message.for_owner(owner).for_timeline.newest_first.limit(@events_page * 100 + 1).to_a
   end
 
   def load_reply_context
     @reply_to = if @reply_draft.persisted?
       @reply_draft.to_addrs
     elsif @reply_conversation
-      @reply_conversation.thread_parent&.to_addrs
+      @reply_conversation.thread_parent&.recipients&.join(", ")
     else
       @reply_owner.try(:display_email) || @reply_owner.try(:email)
     end

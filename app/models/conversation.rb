@@ -1,7 +1,6 @@
 # One thread of email with a client, lead, or organization. Replies share
-# threading headers; an explicit new message starts a new conversation. The mail-in
-# task will attach inbound messages here; outbound sends create (or reuse)
-# the conversation through Outbound::Composer.
+# threading headers; an explicit new message starts a new conversation.
+# Mail::Ingester attaches inbound mail; Outbound::Composer queues replies.
 class Conversation < ApplicationRecord
   OWNER_TYPES = %w[Client Lead Organization].freeze
   alias_attribute :owner_type, :linkable_type
@@ -12,7 +11,7 @@ class Conversation < ApplicationRecord
   scope :recent, -> { ordered }
 
   belongs_to :linkable, polymorphic: true, optional: true
-  has_many :messages, -> { order(sent_at: :desc, id: :desc) }, dependent: :destroy, inverse_of: :conversation
+  has_many :messages, -> { newest_first }, dependent: :destroy, inverse_of: :conversation
 
   serialize :participant_emails, coder: JSON
 
@@ -119,7 +118,7 @@ class Conversation < ApplicationRecord
   # Most recent message carrying a Message-ID we generated or received,
   # which the next reply threads under.
   def thread_parent
-    messages.where.not(message_id: [ nil, "" ]).order(created_at: :desc, id: :desc).first
+    messages.where.not(message_id: [ nil, "" ]).first
   end
 
   def touch_activity!

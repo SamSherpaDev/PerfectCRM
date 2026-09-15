@@ -44,7 +44,7 @@ class OutboundComposerTest < ActiveSupport::TestCase
   test "generates a Message-ID once and threads replies under the parent" do
     first = Outbound::Composer.call(owner: @client,
       params: { to: "maya@example.com", subject: "Your trek", body: "Hello" })
-    assert_match(/\A<[^@]+@sherpaholidays\.com>\z/, first.message_id)
+    assert_match(/\A[^@]+@sherpaholidays\.com\z/, first.message_id)
     assert_nil first.in_reply_to
 
     reply = Outbound::Composer.call(owner: @client, conversation: first.conversation,

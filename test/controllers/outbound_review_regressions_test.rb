@@ -80,7 +80,7 @@ class OutboundReviewRegressionsTest < ActionDispatch::IntegrationTest
   test "thread recipients and all history pages remain accessible" do
     conversation = @client.conversations.create!(subject_line: "Secondary")
     101.times do |i|
-      conversation.messages.create!(direction: "outbound", status: "sent", subject: "Message #{i}",
+      conversation.messages.create!(direction: "out", status: "sent", subject: "Message #{i}",
         to_addrs: "secondary@example.com", cc_addrs: "cc@example.com", text_body: "Body #{i}", message_id: "<#{i}@example.com>")
     end
     get client_path(@client)
@@ -90,9 +90,9 @@ class OutboundReviewRegressionsTest < ActionDispatch::IntegrationTest
     get client_path(@client), params: { events_page: 2 }
     assert_select ".reply-ev", text: /Message 0/
     50.times { |i| @client.conversations.create!(subject_line: "Thread #{i}") }
-    get inbox_path
-    assert_select "a", text: "Older threads"
-    get inbox_path, params: { page: 2 }
+    get inbox_path, params: { tab: "all" }
+    assert_select "a", text: "Load older"
+    get inbox_path, params: { page: 2, tab: "all" }
     assert_select "a[href=?]", inbox_thread_path(conversation)
   end
 

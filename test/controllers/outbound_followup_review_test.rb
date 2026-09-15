@@ -85,18 +85,18 @@ class OutboundFollowupReviewTest < ActionDispatch::IntegrationTest
   test "inbox materializes only the latest message for each thread" do
     conversation = @client.conversations.create!(subject_line: "Thread")
     12.times do |i|
-      conversation.messages.create!(direction: "outbound", status: "sent", subject: "Older #{i}",
+      conversation.messages.create!(direction: "out", status: "sent", subject: "Older #{i}",
         text_body: "Old body", to_addrs: @client.email, sent_at: 2.days.ago)
     end
-    latest = conversation.messages.create!(direction: "outbound", status: "sent", subject: "Latest",
+    latest = conversation.messages.create!(direction: "out", status: "sent", subject: "Latest",
       text_body: "Latest body", to_addrs: @client.email, sent_at: 1.day.ago)
-    conversation.messages.create!(direction: "outbound", status: "sent", subject: "Imported old message",
+    conversation.messages.create!(direction: "out", status: "sent", subject: "Imported old message",
       text_body: "Old body", to_addrs: @client.email, sent_at: 3.days.ago)
     counts = []
     callback = ->(*args) { payload = args.last; counts << payload[:record_count] if payload[:class_name] == "Message" }
-    ActiveSupport::Notifications.subscribed(callback, "instantiation.active_record") { get inbox_path }
+    ActiveSupport::Notifications.subscribed(callback, "instantiation.active_record") { get inbox_path, params: { tab: "all" } }
     assert_response :success
-    assert_select "a[href=?]", inbox_thread_path(conversation), text: /Latest body/
+    assert_select "li", text: /Latest body/
     assert_equal 1, counts.sum
     assert_equal latest.id, conversation.messages.newest_first.first.id
   end

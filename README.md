@@ -268,9 +268,7 @@ Settings → Morning digest toggles it; it is enabled by default.
 ## Clients
 
 Clients own people, tags, notes, and a timeline. Linked email appears in the
-Email card; see [Mail](#mail).
-See
-[Replying](#replying) for composing messages.
+Email card; see [Mail](#mail) and [Replying](#replying) for composing messages.
 Use New client to create a record, and Edit to update facts or add another
 person in the blank People fields. Archive moves a client to the Archived
 tab, where Restore makes it active again. The Organizations tab holds
