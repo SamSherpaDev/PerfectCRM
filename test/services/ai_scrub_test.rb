@@ -26,5 +26,4 @@ class AiScrubTest < ActiveSupport::TestCase
       end
     end
   end
-
 end

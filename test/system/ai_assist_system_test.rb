@@ -81,5 +81,4 @@ class AiAssistSystemTest < ApplicationSystemTestCase
     assert_text "Review it and press Send there"
     assert_equal 0, @conversation.messages.outbound.count
   end
-
 end

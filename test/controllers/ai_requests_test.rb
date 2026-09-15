@@ -102,7 +102,6 @@ class AiRequestsTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "new_inquiry", thread.reload.ai_triage
     assert_match "First ask", response.body
-
   end
 
   test "kill switch falls back without calling the provider" do
@@ -393,5 +392,4 @@ class AiRequestsTest < ActionDispatch::IntegrationTest
     end
     assert_equal "Call about dates", @client.tasks.last.title
   end
-
 end

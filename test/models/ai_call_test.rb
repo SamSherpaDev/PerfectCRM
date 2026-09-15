@@ -42,5 +42,4 @@ class AiCallTest < ActiveSupport::TestCase
     end
     assert_equal 1, client.activity_events.where("summary LIKE ?", "Accepted AI suggestion:%").count
   end
-
 end
