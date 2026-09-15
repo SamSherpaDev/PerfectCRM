@@ -111,6 +111,7 @@ class SettingsController < ApplicationController
   private
 
   def load_settings_supporting_data!
+    load_automation_log
     @perfectbook_configured = PerfectBook.configured?
     @perfectbook_last_success = PerfectBook::SyncState.last_success_at
     @perfectbook_last_error = PerfectBook::SyncState.last_error_row

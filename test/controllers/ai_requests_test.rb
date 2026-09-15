@@ -392,4 +392,18 @@ class AiRequestsTest < ActionDispatch::IntegrationTest
     end
     assert_equal "Call about dates", @client.tasks.last.title
   end
+  test "blank AI limits render validation feedback with automation activity" do
+    @client.activity_events.create!(kind: "automation", summary: "Website inquiry received", occurred_at: Time.current)
+    [ :ai_daily_cost_cap_cents, :ai_rate_limit_per_minute ].each do |limit|
+      saved_value = Setting.current.public_send(limit)
+      patch ai_settings_path, params: { setting: { limit => "" } }
+      assert_response :unprocessable_entity
+      assert_select "input[name=?]", "setting[#{limit}]" do |fields|
+        assert fields.first["value"].blank?
+      end
+      assert_match "is not a number", response.body
+      assert_select "li", text: /Website inquiry received/
+      assert_equal saved_value, Setting.current.public_send(limit)
+    end
+  end
 end
