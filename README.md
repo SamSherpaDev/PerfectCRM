@@ -48,9 +48,10 @@ configuration lives in `config/environments/development.rb`.
 On desktop, hover or focus the icon rail to reveal navigation labels and Sign
 out. On mobile, use Open menu to show the drawer. The rail holds **Today**
 (root), **Inbox**, **Leads**, **Clients**, **Pipeline**, **Quotes**, **Templates**, and
-**Settings**. Today, Inbox, Pipeline, and Quotes render branded empty states until
-their features land; Templates is live (see "Templates" below). Settings
-provides the appearance control and the export below.
+**Settings**. Inbox, Pipeline, and Quotes render branded empty states until
+their features land. See [Today and follow-ups](#today-and-follow-ups) and
+[Templates](#templates) for the live features. Settings provides appearance,
+morning digest, and export controls.
 
 PerfectCRM defaults to **Paper**, the light Washi scheme. In **Settings →
 Appearance**, choose **Paper** or **Night** to apply the scheme immediately
@@ -158,6 +159,57 @@ shellcheck -S warning deploy/*.sh test/deploy/*.sh
 bash test/deploy/test_deploy.sh
 ```
 
+## Today and follow-ups
+
+Today (the root route) is the captain's morning screen: four tiles
+(Waiting on you, Follow-ups due, Quotes out, Overdue), then Replies
+waiting, Follow-ups as one-tap check rows, Departing soon (trips leaving
+in the next 14 days), and Back from the mountains (returned in the last
+7 days). Returned bookings linked to a local record offer Create review
+ask. Waiting-on-you threads and the quotes count read zero until the
+mail and quotes tasks land (marked TODO in `app/services/today/summary.rb`).
+
+Tasks belong to clients, leads, or organizations. Today lists overdue tasks
+and those due through the next 7 days, using the Pacific date. Tap the
+circle to complete a task and record it on the subject's timeline.
+Snooze until tomorrow, 3 days, next week, or a picked date to hide a task
+until that date without changing its due date. The client's Follow-ups
+card lists unsnoozed open tasks and lets you add a title and due date.
+
+Tasks with a template offer Nudge, opening the client, lead, or organization
+with `?template=<id>&task=<id>`. Its Suggested message panel renders the
+template with the record's name, offers Copy message, and opens a prefilled
+draft in your email app with Open email draft. Review and fill missing
+details before sending; other placeholders follow the [Templates](#templates)
+rules. Nothing sends automatically. Tasks without a template have no Nudge
+link; deleting a template preserves its tasks and removes their template link.
+
+TODO (perfectcrm-mail-out-65): Replace the Suggested message copy/mailto
+fallback with the approval-only reply box, preserving the template and task
+parameters.
+
+`Tasks::Automatic` runs daily in production at 6am Pacific through
+`Tasks::GenerateAutomaticJob`; see [`config/recurring.yml`](config/recurring.yml).
+It proposes review asks due 3 days after return and repeat-trip nudges due
+10 months after return. Late booking syncs or local contact creation still
+produce eligible tasks with their original due dates. Deposit nudges require
+a mirrored invoice marked sent or overdue with a positive balance, a booking
+first seen at least 5 days ago, and a start date either missing or still in
+the future. Review asks and repeat nudges each fire once per booking; deposit
+nudges fire once per booking and invoice number. A matching local client,
+organization, or lead is required; converted leads resolve to their client.
+Everything is a task the captain acts on, never sent mail.
+
+`Tasks::OnStageChange.call(subject:, from:, to:)` is the integration hook
+for the pipeline task. Its `STAGE_TASK_TEMPLATES` mapping is currently empty,
+so stage changes propose no tasks until that integration supplies the mapping.
+
+The production 7am Pacific digest (`TodayDigestJob` + `CaptainDigestMailer`,
+same schedule file) emails today's follow-ups, overdue items, replies
+waiting, and departures. Task links open their records, and Open Today
+opens the morning screen. It goes to the first allowlisted address.
+Settings → Morning digest toggles it; it is enabled by default.
+
 ## Clients
 
 Clients own people, tags, notes, and the timeline later tasks fill in.
@@ -204,7 +256,8 @@ leads can link to the same client; conversion never merges two clients.
 Without a match, conversion creates a client with the lead's facts,
 including its exact source and campaign, and copies people and history.
 Only clients created by conversion show Started as a lead.
-Both paths link forward and freeze the lead read-only, with no reverse path.
+Both paths transfer the lead's tasks to the client, link forward, and freeze
+the lead read-only, with no reverse path.
 
 Fit labels and bar colors use the supplied fit band; the CRM does not
 derive a band from the numeric score. Edit lets you enter these fields

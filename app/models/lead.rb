@@ -10,6 +10,7 @@ class Lead < ApplicationRecord
   belongs_to :converted_client, class_name: "Client", optional: true
   has_many :people, -> { order(:created_at, :id) }, dependent: :destroy, inverse_of: :lead
   has_many :notes, as: :notable, dependent: :destroy
+  has_many :tasks, as: :subject, dependent: :destroy
   has_many :taggings, as: :taggable, dependent: :destroy
   has_many :tags, -> { order(:name) }, through: :taggings
   has_many :activity_events, as: :subject, dependent: :destroy
@@ -152,6 +153,7 @@ class Lead < ApplicationRecord
           occurred_at: event.occurred_at, metadata: metadata
         )
       end
+      tasks.update_all(subject_type: "Client", subject_id: client.id)
       update!(converted_client: client, converted_at: Time.current)
       ActivityEvent.create!(
         subject: self, kind: "conversion", summary: "Converted to client",

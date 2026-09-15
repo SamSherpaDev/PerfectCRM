@@ -1,7 +1,130 @@
 <% content_for :title, "Today · PerfectCRM" %>
 <div class="page">
-  <%= render layout: "shared/page_header", locals: { eyebrow: "Sherpa Holidays", title: "Today", subtitle: "Welcome, #{current_user.name.presence || current_user.email}. The day's follow-ups at a glance." } do %><% end %>
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Sherpa Holidays", title: "Today", subtitle: "Welcome, #{current_user.name.presence || current_user.email} · #{Date.current.strftime('%A, %B %-d')} · what is waiting on you, in one glance." } do %><% end %>
   <%= render "shared/flash" %>
 
-  <%= render "shared/empty_state", title: "A clear desk, for now", body: "Today's follow-ups, departures to watch, and open threads will gather here each morning.", scene: :ridge %>
+  <section aria-label="Counts">
+    <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div class="stat">
+        <%# TODO(mail-in): inbound threads newer than the last outbound, once mail lands. %>
+        <p class="stat-value"><%= @summary.waiting_on_you %></p>
+        <p class="text-sm text-ink-2">Waiting on you</p>
+        <p class="hint">Replies owed, newest first.</p>
+      </div>
+      <div class="stat">
+        <p class="stat-value"><%= @summary.followups_due.count %></p>
+        <p class="text-sm text-ink-2">Follow-ups due</p>
+        <p class="hint">Owed today, not yet done.</p>
+      </div>
+      <div class="stat">
+        <%# TODO(quotes): open quotes, once the quotes task lands. %>
+        <p class="stat-value"><%= @summary.quotes_out %></p>
+        <p class="text-sm text-ink-2">Quotes out</p>
+        <p class="hint">Sent, waiting on the client.</p>
+      </div>
+      <div class="stat">
+        <p class="stat-value"><%= @summary.overdue.count %><% if @summary.overdue.empty? %><%= sketch :enso, class: "enso" %><% end %></p>
+        <p class="text-sm text-ink-2">Overdue</p>
+        <p class="hint">Past due, oldest first.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="card card-pad" aria-labelledby="replies-heading">
+    <div class="card-header">
+      <h2 class="card-title" id="replies-heading">Replies waiting</h2>
+    </div>
+    <%= card_caption "Threads where the client wrote last. Answer these first." %>
+    <%# TODO(mail-in): list inbound-newer threads with a reply link, once mail lands. %>
+    <div class="empty-inline">
+      <%= sketch :enso, class: "enso" %>
+      <p class="text-sm text-ink">No replies waiting.</p>
+      <p class="text-xs muted">New client mail will queue here once the inbox connects.</p>
+    </div>
+  </section>
+
+  <section class="card card-pad" aria-labelledby="followups-heading">
+    <div class="card-header">
+      <h2 class="card-title" id="followups-heading">Follow-ups</h2>
+    </div>
+    <%= card_caption "Overdue and due in the next 7 days. Tap the circle to mark one done." %>
+    <% followups = @summary.followups %>
+    <% if followups.any? %>
+      <ul class="divide-y divide-rule-2">
+        <% followups.each do |task| %>
+          <%= render "tasks/row", task: task %>
+        <% end %>
+      </ul>
+    <% else %>
+      <div class="empty-inline">
+        <%= sketch :enso, class: "enso" %>
+        <p class="text-sm text-ink">Nothing owed this week.</p>
+        <p class="text-xs muted">New follow-ups from the client pages will gather here.</p>
+      </div>
+    <% end %>
+  </section>
+
+  <section class="card card-pad" aria-labelledby="departing-heading">
+    <div class="card-header">
+      <h2 class="card-title" id="departing-heading">Departing soon</h2>
+    </div>
+    <%= card_caption "Trips leaving in the next 14 days, from PerfectBook. Wish them well." %>
+    <% departing = @summary.departing_soon %>
+    <% if departing.any? %>
+      <ul class="divide-y divide-rule-2">
+        <% departing.each do |booking| %>
+          <li class="check-row">
+            <div class="min-w-0 flex-1 py-2">
+              <p class="text-sm font-medium text-ink"><%= booking.trip_name.presence || "Trip" %></p>
+              <p class="mt-0.5 text-xs muted">
+                <%= date_short(booking.start_date) %>
+                <% if booking.party_size.present? %> · <%= pluralize(booking.party_size, "traveler") %><% end %>
+                <% subject = @summary.subject_for(booking) %>
+                <% if subject %> · <%= link_to subject.name, polymorphic_path(subject), class: "link-quiet" %><% end %>
+              </p>
+            </div>
+          </li>
+        <% end %>
+      </ul>
+    <% else %>
+      <div class="empty-inline">
+        <%= sketch :enso, class: "enso" %>
+        <p class="text-sm text-ink">No departures in the next 14 days.</p>
+        <p class="text-xs muted">Upcoming trips from PerfectBook will appear here.</p>
+      </div>
+    <% end %>
+  </section>
+
+  <section class="card card-pad" aria-labelledby="returned-heading">
+    <div class="card-header">
+      <h2 class="card-title" id="returned-heading">Back from the mountains</h2>
+    </div>
+    <%= card_caption "Travelers home in the last 7 days. One tap queues a review ask." %>
+    <% returned = @summary.returned %>
+    <% if returned.any? %>
+      <ul class="divide-y divide-rule-2">
+        <% returned.each do |booking| %>
+          <% subject = @summary.subject_for(booking) %>
+          <li class="check-row">
+            <div class="min-w-0 flex-1 py-2">
+              <p class="text-sm font-medium text-ink"><%= booking.trip_name.presence || "Trip" %></p>
+              <p class="mt-0.5 text-xs muted">
+                Home <%= date_short(booking.end_date) %>
+                <% if subject %> · <%= link_to subject.name, polymorphic_path(subject), class: "link-quiet" %><% end %>
+              </p>
+            </div>
+            <% if subject %>
+              <%= button_to "Create review ask", create_review_ask_tasks_path, params: { booking_id: booking.id }, method: :post, class: "check-link" %>
+            <% end %>
+          </li>
+        <% end %>
+      </ul>
+    <% else %>
+      <div class="empty-inline">
+        <%= sketch :enso, class: "enso" %>
+        <p class="text-sm text-ink">Nobody back this week.</p>
+        <p class="text-xs muted">Recently returned travelers will appear here for a review ask.</p>
+      </div>
+    <% end %>
+  </section>
 </div>

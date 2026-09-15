@@ -1,4 +1,6 @@
 class Template < ApplicationRecord
+  has_many :tasks, dependent: :nullify
+
   enum :purpose, {
     first_reply: 0,
     itinerary_follow_up: 1,

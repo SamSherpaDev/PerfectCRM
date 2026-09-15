@@ -10,6 +10,7 @@
     <% end %>
   <% end %>
   <%= render "shared/flash" %>
+  <%= render "tasks/suggested_message", subject: @lead %>
 
   <% if @lead.converted? %>
     <div class="callout-neutral callout" role="note">

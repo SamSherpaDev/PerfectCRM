@@ -7,6 +7,7 @@ class Client < ApplicationRecord
   belongs_to :referred_by_organization, class_name: "Organization", optional: true
   has_many :people, -> { order(:created_at, :id) }, dependent: :destroy, inverse_of: :client
   has_many :notes, as: :notable, dependent: :destroy
+  has_many :tasks, as: :subject, dependent: :destroy
   has_many :taggings, as: :taggable, dependent: :destroy
   has_many :tags, -> { order(:name) }, through: :taggings
   has_many :activity_events, as: :subject, dependent: :destroy

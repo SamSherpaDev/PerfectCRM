@@ -1,0 +1,18 @@
+<% if (message = suggested_task_message(subject)) %>
+  <section class="card card-pad min-w-0" aria-labelledby="suggested-message-heading" data-controller="suggested-message">
+    <div class="card-header">
+      <h2 class="card-title" id="suggested-message-heading">Suggested message</h2>
+    </div>
+    <%= card_caption "Review and fill any missing details before sending in your email app. Nothing is sent automatically." %>
+    <p class="mt-3 text-sm font-medium text-ink break-words"><%= message[:subject] %></p>
+    <%= label_tag "suggested-message-body", "Message", class: "label mt-3" %>
+    <%= text_area_tag nil, message[:body], id: "suggested-message-body", readonly: true, rows: 6,
+          class: "textarea w-full", data: { suggested_message_target: "body" } %>
+    <div class="mt-3 flex flex-wrap gap-2">
+      <button type="button" class="btn-secondary btn min-h-[44px]" data-action="suggested-message#copy">Copy message</button>
+      <%= mail_to message[:email].to_s, "Open email draft", subject: message[:subject], body: message[:body],
+            class: "btn-primary btn min-h-[44px]" %>
+    </div>
+    <p class="mt-2 text-xs muted" role="status" data-suggested-message-target="status"></p>
+  </section>
+<% end %>

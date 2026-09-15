@@ -12,6 +12,7 @@
     <% end %>
   <% end %>
   <%= render "shared/flash" %>
+  <%= render "tasks/suggested_message", subject: @client %>
 
   <% if @origin_lead %>
     <div class="callout-neutral callout" role="note">

@@ -1,0 +1,19 @@
+<%# Follow-up check row: one-tap complete, subject link, one-tap nudge, snooze. locals: (task:) %>
+<li class="check-row">
+  <%= button_to complete_task_path(task), method: :patch, class: "check-btn",
+        aria: { label: "Mark done: #{task.title}" } do %>
+    <%= render "shared/icon", name: :check, class: "h-5 w-5" %>
+  <% end %>
+  <div class="min-w-0 flex-1">
+    <p class="text-sm font-medium text-ink"><%= task.title %></p>
+    <p class="mt-0.5 text-xs muted">
+      <%= link_to task.subject.name, polymorphic_path(task.subject), class: "link-quiet" %>
+      · <%= task.kind_label %>
+      · <%= due_label(task) %>
+    </p>
+  </div>
+  <% if task.template %>
+    <%= link_to "Nudge", polymorphic_path(task.subject, template: task.template_id, task: task.id), class: "check-link" %>
+  <% end %>
+  <%= render "tasks/snooze", task: task %>
+</li>

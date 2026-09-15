@@ -1,12 +1,29 @@
-<%# Slot for follow-up tasks. Filled by the later crm-tasks task. %>
+<%# Follow-up tasks for this client. Rendered in the client page slot. locals: (client:) %>
 <section class="card card-pad" aria-labelledby="tasks-heading">
   <div class="card-header">
     <h2 class="card-title" id="tasks-heading">Follow-ups</h2>
   </div>
-  <%= card_caption "Nudges and to-dos for this client. The Today view will gather them each morning." %>
-  <div class="empty-inline">
-    <%= sketch :enso, class: "enso" %>
-    <p class="text-sm text-ink">No follow-ups yet.</p>
-    <p class="text-xs muted">Tasks for this client will appear here once follow-ups land.</p>
-  </div>
+  <%= card_caption "Nudges and to-dos for this client. The Today view gathers them each morning." %>
+  <% open_tasks = client.tasks.visible.ordered.includes(:template) %>
+  <% if open_tasks.any? %>
+    <ul class="divide-y divide-rule-2">
+      <% open_tasks.each do |task| %>
+        <%= render "tasks/row", task: task %>
+      <% end %>
+    </ul>
+  <% else %>
+    <div class="empty-inline">
+      <%= sketch :enso, class: "enso" %>
+      <p class="text-sm text-ink">No follow-ups yet.</p>
+      <p class="text-xs muted">Add one below and it will wait on Today until it is done.</p>
+    </div>
+  <% end %>
+  <%= form_with model: Task.new(subject: client), url: tasks_path(subject_type: "Client", subject_id: client.id), class: "mt-4 flex flex-col gap-2" do |form| %>
+    <%= form.label :title, "New follow-up", class: "label" %>
+    <div class="flex flex-col gap-2 sm:flex-row">
+      <%= form.text_field :title, required: true, placeholder: "Nudge about the deposit…", class: "input min-h-[44px] flex-1" %>
+      <%= form.date_field :due_on, value: Date.current, required: true, class: "input min-h-[44px]" %>
+      <%= form.submit "Add", class: "btn-secondary btn min-h-[44px]" %>
+    </div>
+  <% end %>
 </section>
