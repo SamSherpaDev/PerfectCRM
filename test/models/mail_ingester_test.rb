@@ -137,6 +137,42 @@ class MailIngesterTest < ActiveSupport::TestCase
     assert_equal "route", result[:message].files.first.download
   end
 
+  test "failed holding upload rolls back all arrivals and allows the same message to retry" do
+    parsed = Mail::Ingester.parse_raw(mail_raw(from: "held-retry@example.com", message_id: "<held-retry@test>"))
+    parsed.attachments = [
+      { filename: "route.txt", content_type: "text/plain", data: "route bytes" },
+      { filename: "passport.pdf", content_type: "application/pdf", data: "passport bytes" },
+      { filename: "visa.png", content_type: "image/png", data: "visa bytes" }
+    ]
+    service = ActiveStorage::Blob.service
+    upload = service.method(:upload)
+    keys = []
+    failing_upload = lambda do |key, io, **options|
+      keys << key
+      upload.call(key, io, **options)
+      raise IOError, "holding upload failed" if keys.size == 3
+    end
+    assert_no_difference([ "Message.count", "Conversation.count", "DocumentHolding.count",
+      "ActiveStorage::Blob.count", "ActiveStorage::Attachment.count", "Note.count" ]) do
+      service.stub(:upload, failing_upload) do
+        assert_raises(IOError) do
+          Mail::Ingester.ingest(parsed: parsed, gmail: { gm_msgid: "held-retry" })
+        end
+      end
+    end
+    assert_equal 3, keys.size
+    keys.each { |key| assert_not service.exist?(key) }
+
+    result = Mail::Ingester.ingest(parsed: parsed, gmail: { gm_msgid: "held-retry" })
+    assert_equal :stored, result[:status]
+    message = result[:message].reload
+    assert_equal "route bytes", message.files.first.download
+    assert_equal [ "passport bytes", "visa bytes" ],
+      DocumentHolding.where(message: message).order(:id).map { |holding| holding.file.download }
+    assert_equal 2, message.held_attachments.size
+    assert_equal :duplicate, Mail::Ingester.ingest(parsed: parsed, gmail: { gm_msgid: "held-retry" })[:status]
+  end
+
   test "ignored identities skip triage on new threads" do
     EmailIdentity.remember!("ignored@example.com", ignored: true)
     result = ingest_raw(mail_raw(from: "ignored@example.com", message_id: "<ignored@test>"))
@@ -186,7 +222,7 @@ class MailIngesterTest < ActiveSupport::TestCase
     assert_nil Mail::Matcher.call([ Mail.mailbox_address ]).linkable
   end
 
-  test "sensitive documents never create blobs or upload bytes" do
+  test "sensitive documents wait in the short-lived holding area, never as message files" do
     files = [
       { filename: "passport.pdf", content_type: "application/pdf", data: "passport bytes" },
       { filename: "visa.png", content_type: "image/png", data: "visa bytes" },
@@ -199,17 +235,38 @@ class MailIngesterTest < ActiveSupport::TestCase
     ]
     parsed = Mail::Ingester.parse_raw(mail_raw(from: "held@example.com", message_id: "<held@test>"))
     parsed.attachments = files
-    result = nil
-    assert_no_difference("ActiveStorage::Blob.count") do
-      ActiveStorage::Blob.service.stub(:upload, ->(*) { flunk "sensitive bytes uploaded" }) do
-        result = Mail::Ingester.ingest(parsed: parsed, gmail: {})
-      end
-    end
+    result = Mail::Ingester.ingest(parsed: parsed, gmail: {})
     message = result[:message].reload
     assert_empty message.files
     assert_equal files.map { |file| { "filename" => file[:filename], "byte_size" => file[:data].bytesize,
-      "content_type" => file[:content_type], "status" => "held: collect in PerfectBook" } }, message.held_attachments
-    assert_match(/Collect the held documents/, Note.find_by!(notable: result[:conversation]).body)
+      "content_type" => file[:content_type], "status" => "held: send to PerfectBook",
+      "holding_id" => DocumentHolding.find_by!(message: message, filename: file[:filename]).id } },
+      message.held_attachments
+    holdings = DocumentHolding.where(message: message).to_a
+    assert_equal files.size, holdings.size
+    holdings.each do |holding|
+      assert_in_delta 24.hours.from_now.to_i, holding.expires_at.to_i, 60
+      assert holding.live?
+    end
+    assert_match(/holding area/, Note.find_by!(notable: result[:conversation]).body)
+  end
+
+  test "holding-area bytes purge on expiry and never outlive the 24-hour window" do
+    parsed = Mail::Ingester.parse_raw(mail_raw(from: "held@example.com", message_id: "<expiry@test>"))
+    parsed.attachments = [ { filename: "passport.pdf", content_type: "application/pdf", data: "passport bytes" } ]
+    result = Mail::Ingester.ingest(parsed: parsed, gmail: {})
+    message = result[:message].reload
+    holding = DocumentHolding.find_by!(message: message)
+    key = holding.file.blob.key
+    assert holding.file.blob.service.exist?(key)
+    travel 25.hours do
+      DocumentHoldingsPurgeJob.perform_now
+    end
+    assert_empty DocumentHolding.where(message: message)
+    assert_not ActiveStorage::Blob.service.exist?(key)
+    entry = message.reload.held_attachments.first
+    assert_nil entry["holding_id"]
+    assert_match(/expired/, entry["status"])
   end
 
   test "ordinary PDF with a nonsensitive title remains downloadable" do
@@ -225,11 +282,14 @@ class MailIngesterTest < ActiveSupport::TestCase
     part = "Content-Type: text/plain\r\nContent-Disposition: attachment; filename=insurance.txt\r\n\r\nPRIVATE DOCUMENT"
     [ part, "Content-Type: multipart/mixed; boundary=parts\r\n\r\n--parts\r\n#{part}\r\n--parts--" ].each_with_index do |body, index|
       raw = "From: documents@example.com\r\nTo: info@sherpaholidays.com\r\nMessage-ID: <disposition#{index}@test>\r\n#{body}"
-      result = nil
-      assert_no_difference("ActiveStorage::Blob.count") { result = ingest_raw(raw) }
+      result = ingest_raw(raw)
       assert_nil result[:message].text_body
       assert_nil result[:message].html_body
-      assert_equal "insurance.txt", result[:message].held_attachments.first["filename"]
+      assert_empty result[:message].files
+      entry = result[:message].held_attachments.first
+      assert_equal "insurance.txt", entry["filename"]
+      assert_equal "held: send to PerfectBook", entry["status"]
+      assert DocumentHolding.find_by!(id: entry["holding_id"]).live?
     end
   end
 
@@ -240,18 +300,15 @@ class MailIngesterTest < ActiveSupport::TestCase
     assert_equal "Ordinary itinerary", result[:message].files.first.download
   end
 
-  test "forwarded emails cannot upload enclosed sensitive attachments" do
+  test "forwarded emails hold enclosed sensitive attachments outside the message files" do
     enclosed = "From: traveler@example.com\r\nContent-Type: multipart/mixed; boundary=inside\r\n\r\n--inside\r\nContent-Type: text/plain\r\n\r\nForwarded note\r\n--inside\r\nContent-Type: application/pdf\r\nContent-Disposition: attachment; filename=passport.pdf\r\n\r\nPRIVATE PASSPORT BYTES\r\n--inside--\r\n"
     2.times do |index|
       enclosed = "Content-Type: message/rfc822\r\nContent-Disposition: attachment; filename=trip.eml\r\nContent-Transfer-Encoding: base64\r\n\r\n#{Base64.strict_encode64(enclosed)}"
       raw = "From: forwarder@example.com\r\nTo: info@sherpaholidays.com\r\nMessage-ID: <forwarded#{index}@test>\r\n#{enclosed}"
-      result = nil
-      assert_no_difference("ActiveStorage::Blob.count") do
-        ActiveStorage::Blob.service.stub(:upload, ->(*) { flunk "enclosed sensitive bytes uploaded" }) do
-          result = ingest_raw(raw)
-        end
-      end
+      result = ingest_raw(raw)
+      assert_empty result[:message].files
       assert_equal [ "passport.pdf" ], result[:message].held_attachments.map { |file| file["filename"] }
+      assert_equal "held: send to PerfectBook", result[:message].held_attachments.first["status"]
       assert_nil result[:message].text_body
       assert_nil result[:message].html_body
     end

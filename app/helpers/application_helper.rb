@@ -18,8 +18,37 @@ module ApplicationHelper
     "queued" => :neutral, "sending" => :info, "failed" => :danger,
     "received" => :brand, "complete" => :success,
     "draft" => :neutral, "viewed" => :info, "accepted" => :success,
-    "superseded" => :neutral, "expired" => :warning
+    "superseded" => :neutral, "expired" => :warning,
+    "missing" => :warning, "expiring" => :warning, "not_required" => :neutral
   }.freeze
+
+  # Traveler document tones (PerfectBook sibling API): received reads
+  # done, missing and expiring read owed, not_required reads quiet.
+  # Words always accompany the tone (docs/DESIGN.md badges).
+  DOCUMENT_TONES = {
+    "received" => :success, "missing" => :warning,
+    "expiring" => :warning, "not_required" => :neutral
+  }.freeze
+
+  def document_status_badge(status)
+    tone = DOCUMENT_TONES.fetch(status.to_s, :neutral)
+    label = status.to_s == "not_required" ? "Not required" : status.to_s.humanize.downcase
+    badge(label, tone, dot: true)
+  end
+
+  # Traveler picker for the PerfectBook hand-off: travelers grouped
+  # under their mirrored booking ref and trip.
+  def grouped_traveler_options(bookings, selected = nil)
+    groups = bookings.filter_map do |booking|
+      options = booking.travelers.map do |traveler|
+        [ "#{traveler['first_name'].presence || 'Traveler'} (##{traveler['id']})", traveler["id"] ]
+      end
+      next if options.empty?
+
+      [ "#{booking.ref} · #{booking.trip_name}", options ]
+    end
+    grouped_options_for_select(groups, selected)
+  end
 
   # USD amounts from integer cents: "$1,234.56", "-$12.00".
   def money(minor)

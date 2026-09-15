@@ -55,6 +55,24 @@ class Message < ApplicationRecord
     direction == "in"
   end
 
+  # Drop one hand-off placeholder after its bytes reach PerfectBook.
+  def remove_holding_entry!(holding_id)
+    update!(held_attachments: Array(held_attachments).reject do |entry|
+      entry["holding_id"].to_i == holding_id.to_i
+    end)
+  end
+
+  # Mark placeholders whose holding-area bytes were purged on expiry.
+  def mark_holding_expired!(holding_id)
+    entries = Array(held_attachments).map do |entry|
+      if entry["holding_id"].to_i == holding_id.to_i
+        entry.except("holding_id").merge("status" => "held: expired, purged from CRM holding area")
+      else
+        entry
+      end
+    end
+    update!(held_attachments: entries)
+  end
   def outbound?
     direction == "out"
   end

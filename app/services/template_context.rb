@@ -27,6 +27,20 @@ class TemplateContext
     context
   end
 
+  def self.for_document_nudge(record, booking)
+    template = Template.active.for_purpose(:document_request).ordered.first
+    context = self.for(record, booking: booking)
+    context["missing_documents"] ||= booking.try(:missing_lines)&.join("; ") ||
+      "[Check missing documents in PerfectBook]"
+    subject = TemplateRenderer.render(template&.subject.presence || "Documents for {{trip}}", context)
+    body_template = template&.body.presence ||
+      "Hi {{first_name}},\n\nPlease send these missing documents through PerfectBook: {{missing_documents}}.\n\n{{signature}}"
+    body = TemplateRenderer.render(body_template, context)
+    dates = booking.start_date || booking.end_date ? departure_dates_for(booking) : nil
+    body += "\n\n#{record.name} · #{booking.trip_name}\n#{dates}\nBooking: #{booking.ref}"
+    { template: template, subject: subject, body: body, context: context }
+  end
+
   def self.for_recipient(recipient, departure_id: nil)
     resolved = resolve_recipient(recipient)
     bookings = resolved[:bookings]
@@ -101,7 +115,7 @@ class TemplateContext
       "deposit_due" => nil,
       "invoice_number" => booking.invoice_number.presence,
       "payment_reference" => booking.payment_reference.presence,
-      "missing_documents" => nil
+      "missing_documents" => booking.respond_to?(:missing_lines) ? booking.missing_lines&.join("; ") : nil
     }
   end
 

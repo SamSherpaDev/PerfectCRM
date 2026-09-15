@@ -79,6 +79,7 @@
               <p class="mt-0.5 text-xs muted">
                 <%= date_short(booking.start_date) %>
                 <% if booking.party_size.present? %> · <%= pluralize(booking.party_size, "traveler") %><% end %>
+                <% if booking.documents_ready? && booking.outstanding_count.positive? %> · <%= pluralize(booking.outstanding_count, "document") %> missing<% end %>
                 <% subject = @summary.subject_for(booking) %>
                 <% if subject %> · <%= link_to subject.name, polymorphic_path(subject), class: "link-quiet" %><% end %>
               </p>

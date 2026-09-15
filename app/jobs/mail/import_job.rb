@@ -17,9 +17,10 @@ class Mail::ImportJob < ApplicationJob
           mail_import.update!(preview_json: progress, processed_messages: 0, linked_messages: 0, skipped_messages: 0)
         end
       }) do |item|
+      parsed = Mail::Ingester.parse_raw(item.raw)
+      prepared = Mail::Ingester.prepare(parsed: parsed)
       mail_import.with_lock do
-        parsed = Mail::Ingester.parse_raw(item.raw)
-        result = Mail::Ingester.ingest(parsed: parsed, gmail: item.gmail)
+        result = Mail::Ingester.ingest(parsed: parsed, gmail: item.gmail, prepared: prepared)
         conversation = result[:conversation]
         apply_import_choice(conversation, parsed, choices, mail_import)
         linked = conversation&.linked?

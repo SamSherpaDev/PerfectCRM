@@ -41,6 +41,7 @@ Rails.application.routes.draw do
       post :move_to_perfectbook
     end
   end
+  resources :document_handoffs, only: %i[new create]
   resources :mail_imports, only: %i[index new create show] do
     member do
       match :preview, via: %i[get post]

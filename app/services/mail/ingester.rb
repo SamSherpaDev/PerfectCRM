@@ -14,7 +14,31 @@ module Mail
       new.ingest(parsed: parsed, gmail: gmail, **kwargs)
     end
 
-    def ingest(parsed:, gmail:)
+    # Commit cleanup keys before uploads and before any caller transaction
+    # (including history import's lock), so rollback cannot orphan sensitive bytes.
+    # Callers inside a transaction must pass preparations made beforehand.
+    # Regression coverage: test/models/document_upload_orphan_test.rb.
+    def self.prepare(parsed:)
+      if DocumentUploadOrphan.connection.current_transaction.joinable?
+        raise ActiveRecord::ActiveRecordError, "Prepare mail uploads before starting a transaction"
+      end
+
+      ordinary, held = partition_attachments(parsed.attachments)
+      orphans = []
+      DocumentUploadOrphan.transaction do
+        held.each do |entry|
+          next if entry["data"].bytesize > DocumentHolding::MAX_BYTES
+
+          blob = ActiveStorage::Blob.build_after_unfurling(io: StringIO.new(entry["data"]),
+            filename: entry["filename"], content_type: entry["content_type"])
+          orphans << DocumentUploadOrphan.create!(key: blob.key, service_name: blob.service_name)
+          entry["blob"] = blob
+        end
+      end
+      [ ordinary, held, orphans ]
+    end
+
+    def ingest(parsed:, gmail:, prepared: nil)
       gmail = gmail.transform_keys(&:to_sym)
       gm_message_id = gmail[:gm_msgid]&.to_s.presence
       gm_thread_id = gmail[:gm_thrid]&.to_s.presence
@@ -26,8 +50,11 @@ module Mail
       existing ||= ::Message.find_by(message_id: parsed.message_id) if parsed.message_id.present?
       return { status: :duplicate, conversation: existing.conversation, message: existing } if existing
 
+      ordinary, held, orphans = prepared || self.class.prepare(parsed: parsed)
       uploaded = []
       ::Message.transaction(requires_new: true) do |transaction|
+        orphans.each(&:claim!)
+        transaction.after_commit { DocumentUploadOrphan.where(id: orphans.map(&:id)).delete_all }
         transaction.after_rollback { uploaded.each(&:delete) }
         conversation = find_conversation(gm_thread_id: gm_thread_id, parsed: parsed)
         direction = Mail.direction_for(parsed.from_addresses)
@@ -48,7 +75,7 @@ module Mail
           raw_size: parsed.raw_size.to_i,
           gmail_labels: labels
         )
-        attach_files(message, parsed.attachments, uploaded)
+        attach_files(message, ordinary, held, uploaded)
         link_conversation(conversation, parsed)
         conversation.update!(
           subject: parsed.subject.presence || conversation.subject.presence || "(no subject)",
@@ -153,7 +180,7 @@ module Mail
 
         if ::Message.sensitive_attachment?(filename, content_type, data: data)
           held << { "filename" => filename, "byte_size" => data.bytesize, "content_type" => content_type,
-            "status" => "held: collect in PerfectBook" }
+            "data" => data, "status" => "held: send to PerfectBook" }
         elsif content_type == "message/rfc822" || filename.downcase.end_with?(".eml")
           enclosed, sensitive = partition_attachments(parse_raw(data).attachments)
           if sensitive.any?
@@ -169,9 +196,8 @@ module Mail
       [ ordinary, held ]
     end
 
-    def attach_files(message, attachments, uploaded)
+    def attach_files(message, ordinary, held, uploaded)
       skipped = []
-      ordinary, held = self.class.partition_attachments(attachments)
       ordinary.each do |file|
         filename = file[:filename]
         content_type = file[:content_type]
@@ -187,10 +213,27 @@ module Mail
         blob.upload_without_unfurling(StringIO.new(data))
         message.files.attach(blob)
       end
-      message.update!(attachment_notices: skipped, held_attachments: held)
-      if held.any?
+      placeholders = held.map do |entry|
+        # In-memory bytes only: stripped before the JSON column is saved.
+        data = entry.delete("data").to_s
+        blob = entry.delete("blob")
+        if data.bytesize > DocumentHolding::MAX_BYTES
+          entry.merge("status" => "held: too large for the PerfectBook hand-off (10 MB max)")
+        else
+          holding = DocumentHolding.create!(message: message, filename: entry["filename"],
+            content_type: entry["content_type"], byte_size: data.bytesize,
+            expires_at: DocumentHolding::HOLD_HOURS.hours.from_now)
+          uploaded << blob
+          blob.save!
+          blob.upload_without_unfurling(StringIO.new(data))
+          holding.file.attach(blob)
+          entry.merge("holding_id" => holding.id)
+        end
+      end
+      message.update!(attachment_notices: skipped, held_attachments: placeholders)
+      if placeholders.any?
         ::Note.create!(notable: message.conversation,
-          body: "Collect the held documents from message #{message.id} in PerfectBook. Their files were not stored in CRM.")
+          body: "Sensitive documents arrived with message #{message.id} and wait in the 24-hour holding area. Send each to PerfectBook from the thread; unclaimed files purge automatically.")
       end
     end
 

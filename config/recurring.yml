@@ -31,6 +31,9 @@ production:
   mail_sync:
     class: Mail::SyncJob
     schedule: every 5 minutes
+  document_holdings_purge:
+    class: DocumentHoldingsPurgeJob
+    schedule: every hour
   pipeline_digest:
     class: PipelineDigestJob
     schedule: every monday at 7am

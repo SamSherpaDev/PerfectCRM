@@ -39,6 +39,26 @@
             <span class="muted">Paid <%= money_in(booking.paid_minor, booking.currency) %></span>
             <span>Balance due <strong class="font-display tabular-nums"><%= money_in(booking.balance_due_minor, booking.currency) %></strong></span>
           </div>
+          <% if booking.documents_ready? %>
+            <ul class="mt-2 space-y-1" aria-label="Document status for <%= booking.ref %>">
+              <% booking.travelers.each do |traveler| %>
+                <li class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
+                  <span class="font-medium text-ink"><%= traveler["first_name"].presence || "Traveler" %></span>
+                  <% Array(traveler["documents"]).each do |doc| %>
+                    <span class="inline-flex items-center gap-1">
+                      <span class="text-xs muted"><%= doc["type"].to_s.humanize %></span>
+                      <%= document_status_badge(doc["status"]) %>
+                    </span>
+                  <% end %>
+                </li>
+              <% end %>
+            </ul>
+            <% if booking.outstanding_count.positive? %>
+              <p class="mt-1 text-xs muted"><%= pluralize(booking.outstanding_count, "document") %> missing on this booking.</p>
+            <% else %>
+              <p class="mt-1 text-xs muted">All documents received.</p>
+            <% end %>
+          <% end %>
           <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
             <% if booking.invoice_badge.present? %>
               <%= status_badge booking.invoice_badge %>
@@ -51,8 +71,12 @@
                 <%= render "shared/icon", name: :external, class: "h-3.5 w-3.5" %>Open in PerfectBook
               <% end %>
             <% end %>
-            <span class="text-xs muted">Document status arrives with the PerfectBook update</span>
-            <%= link_to "Nudge for missing documents", document_nudge_path(booking_id: booking.id), class: "link-quiet text-xs", title: "Open the document-request template for this booking" %>
+            <% if booking.missing_lines.present? %>
+              <%= link_to "Nudge for missing documents", polymorphic_path(record, nudge_booking_id: booking.id, anchor: "reply-heading"), class: "link-quiet text-xs", title: "Open the reply box with the document request for this booking" %>
+            <% elsif !booking.documents_ready? %>
+              <span class="text-xs muted">Document status arrives with the PerfectBook update</span>
+              <%= link_to "Nudge for missing documents", document_nudge_path(booking_id: booking.id), class: "link-quiet text-xs", title: "Open the document-request template for this booking" %>
+            <% end %>
           </div>
         </li>
       <% end %>

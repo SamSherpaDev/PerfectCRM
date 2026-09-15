@@ -241,6 +241,9 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     page.current_window.resize_to(390, 844)
     visit merge_templates_path
     select "Annapurna · May 2027", from: "Departure travelers"
+    # The selection submits a full-page form. Wait for the result before
+    # inspecting fields that also exist in the document being replaced.
+    assert_selector "[aria-label='Merged messages']", visible: :all
     assert_field "Recipients", with: "Maya Gurung <maya@example.com>"
     assert_text "Hello Maya, thinking of Annapurna!"
     capture_outbound_evidence("departure-merge-mobile")

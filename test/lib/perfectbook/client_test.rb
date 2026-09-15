@@ -227,4 +227,101 @@ class PerfectBookClientTest < ActiveSupport::TestCase
     assert_equal "partially_paid", booking.invoice_badge
     assert_equal "https://pb.test/bookings/11", booking.deep_link
   end
+
+  test "booking payload maps the documents summary and checklist" do
+    row = { "id" => 11, "ref" => "SH-1", "status" => "deposit_received",
+            "trip" => { "id" => 2, "name" => "Everest" },
+            "departure" => { "id" => 5, "place" => "Lukla", "start_date" => "2026-10-01", "end_date" => "2026-10-14" },
+            "party_size" => 2, "price_per_person_minor" => 10000, "total_minor" => 20000,
+            "paid_minor" => 5000, "balance_due_minor" => 15000, "currency" => "USD",
+            "invoice" => { "badge" => "partially_paid", "number" => "SH-2026-0001", "payment_reference" => "SH20260001" },
+            "documents" => { "travelers" => [ { "id" => 3, "first_name" => "Ama",
+              "documents" => [ { "type" => "passport", "status" => "received", "received_at" => "2026-08-01" } ] } ],
+              "missing_count" => 0 },
+            "checklist" => [ { "key" => "payment", "label" => "Payment", "done" => true } ],
+            "deep_link" => "https://pb.test/bookings/11" }
+    body = { "data" => [ row ], "pagination" => { "has_more" => false } }.to_json
+    client = StubPbClient.new(responses: [ FakePbResponse.new("200", body, {}) ])
+    booking = client.list_contact_bookings(7)[:data].first
+    assert_equal 0, booking.missing_count
+    assert_equal "Ama", booking.documents["travelers"].first["first_name"]
+    assert_equal true, booking.checklist.first["done"]
+  end
+
+  def stub_upload_client(response)
+    client = PerfectBook::Client.new(base_url: "https://pb.test", api_token: "secret", etag_store: MemoryEtags.new)
+    calls = []
+    client.define_singleton_method(:perform_upload) do |booking_ref, traveler_id, **kwargs|
+      calls << { booking_ref: booking_ref, traveler_id: traveler_id, **kwargs }
+      response
+    end
+    [ client, calls ]
+  end
+
+  def upload_ok_body(duplicate: false)
+    { "data" => { "traveler" => { "id" => 3, "first_name" => "Ama" },
+      "document" => { "type" => "passport", "status" => "received", "received_at" => "2026-09-15" },
+      "missing_count" => 1, "duplicate" => duplicate } }.to_json
+  end
+
+  test "upload posts multipart fields and parses the created response" do
+    client, calls = stub_upload_client(FakePbResponse.new("201", upload_ok_body, {}))
+    result = client.upload_traveler_document(booking_ref: "BK-11", traveler_id: 3,
+      file: "%PDF-bytes", filename: "passport.pdf", content_type: "application/pdf",
+      document_type: "passport", upload_id: "holding-9")
+    assert_equal "BK-11", calls.first[:booking_ref]
+    assert_equal 3, calls.first[:traveler_id]
+    assert_equal "holding-9", calls.first[:upload_id]
+    assert_equal "passport", calls.first[:document_type]
+    assert_equal 3, result.traveler_id
+    assert_equal "received", result.document_status
+    assert_equal 1, result.missing_count
+    assert_equal false, result.duplicate
+  end
+
+  test "upload emits binary multipart content with escaped Unicode filenames" do
+    client = PerfectBook::Client.new(base_url: "https://pb.test", api_token: "secret",
+      etag_store: MemoryEtags.new)
+    requests = []
+    http = Net::HTTP.new("pb.test", 443)
+    data = "\xFF\xD8\xE9\x00".b
+    filename = "José-\"passport\".jpg"
+    http.stub(:request, ->(request) {
+      requests << request
+      FakePbResponse.new("201", upload_ok_body, {})
+    }) do
+      Net::HTTP.stub(:new, http) do
+        result = client.upload_traveler_document(booking_ref: "BK-11", traveler_id: 3,
+          file: data, filename: filename, content_type: "image/jpeg",
+          document_type: "passport", upload_id: "holding-9")
+        assert_equal "received", result.document_status
+      end
+    end
+    request = requests.fetch(0)
+    assert_equal Encoding::BINARY, request.body.encoding
+    assert_includes request.body, 'filename="José-%22passport%22.jpg"'.b
+    assert_includes request.body, "\r\n\r\n".b + data + "\r\n".b
+    assert_includes request.body, "name=\"upload_id\"\r\n\r\nholding-9".b
+  end
+
+  test "upload replay returns duplicate without an error" do
+    client, _calls = stub_upload_client(FakePbResponse.new("200", upload_ok_body(duplicate: true), {}))
+    result = client.upload_traveler_document(booking_ref: "BK-11", traveler_id: 3,
+      file: "%PDF-bytes", filename: "passport.pdf", content_type: "application/pdf",
+      document_type: "passport", upload_id: "holding-9")
+    assert_equal true, result.duplicate
+  end
+
+  test "upload maps rejection statuses to errors" do
+    { "400" => PerfectBook::BadRequestError, "401" => PerfectBook::UnauthorizedError,
+      "404" => PerfectBook::NotFoundError, "422" => PerfectBook::UnprocessableError,
+      "503" => PerfectBook::UnavailableError }.each do |code, error|
+      client, _calls = stub_upload_client(FakePbResponse.new(code, '{"error":"nope"}', {}))
+      assert_raises(error) do
+        client.upload_traveler_document(booking_ref: "BK-11", traveler_id: 3,
+          file: "x", filename: "passport.pdf", content_type: "application/pdf",
+          document_type: "passport", upload_id: "holding-9")
+      end
+    end
+  end
 end
