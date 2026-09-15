@@ -116,14 +116,6 @@ module ApplicationHelper
     date&.strftime("%b %-d, %Y")
   end
 
-  def perfectbook_base_url
-    ENV.fetch("PERFECTBOOK_BASE_URL", "https://perfectbook.sherpaholidays.com").chomp("/")
-  end
-
-  def perfectbook_contact_url(perfectbook_contact_id)
-    "#{perfectbook_base_url}/contacts/#{perfectbook_contact_id}"
-  end
-
   # Organization websites are user-entered. Only link http(s); otherwise text.
   def external_website_link(url)
     href = url.to_s.strip
