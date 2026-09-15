@@ -12,11 +12,11 @@
      owner.is_a?(Lead) ? lead_draft_path(owner) : organization_draft_path(owner) %>
 <% conversation = @reply_conversation %>
 <% draft = @reply_draft || Draft.new(owner: owner) %>
-<% owner_email = owner.try(:display_email) || owner.try(:email) %>
 <% subject_default = conversation ? "Re: #{conversation.display_subject.sub(/\ARe:\s*/i, '')}" : "" %>
 <div class="reply-dock" data-controller="reply-box"
      data-reply-box-default-context-value="<%= h @reply_context.to_json %>"
-     data-reply-box-booking-contexts-value="<%= h @reply_booking_contexts.to_json %>">
+     data-reply-box-context-url-value="<%= reply_context_templates_path(owner_type: owner.class.name, owner_id: owner.id) %>"
+     data-reply-box-booking-contexts-value="<%= h @reply_data[:booking_contexts].to_json %>">
   <button type="button" class="reply-pill btn btn-primary"
           data-action="reply-box#toggleComposer" data-reply-box-target="pill">
     <%= render "shared/icon", name: :mail, class: "h-4 w-4" %>
@@ -35,7 +35,7 @@
   </div>
   <%= card_caption "Replies send as info@sherpaholidays.com, in the same thread." %>
   <p class="reply-to-line hidden sm:block">
-    Reply to <%= owner.name %><% if subject_default.present? %> · <%= subject_default %><% end %>
+    Reply to <%= @reply_context["full_name"].presence || @reply_to %><% if subject_default.present? %> · <%= subject_default %><% end %>
   </p>
 
   <%= form_with url: send_url, scope: :message, html: { novalidate: false, multipart: true }, data: { "reply-box-target": "form" } do |form| %>
@@ -48,10 +48,10 @@
       <summary>Details</summary>
       <div class="mt-3">
         <%= form.label :to, "To", class: "label" %>
-        <%= form.text_field :to, value: draft.persisted? ? draft.to_addrs : (conversation ? conversation.thread_parent&.to_addrs : owner_email),
+        <%= form.text_field :to, value: @reply_to,
               class: "input reply-chips", required: true, autocomplete: "off",
               placeholder: "name@example.com",
-              data: { "reply-box-target": "to" } %>
+              data: { "reply-box-target": "to", action: "change->reply-box#recipientChanged" } %>
       </div>
 
       <details class="reply-cc">
@@ -68,17 +68,16 @@
         </div>
       </details>
 
-      <% if @reply_bookings.many? %>
-        <div class="mt-3">
-          <%= form.label :perfectbook_booking_id, "Placeholders fill from", class: "label" %>
-          <%= form.select :perfectbook_booking_id,
-                options_from_collection_for_select(@reply_bookings, :perfectbook_id,
-                  ->(booking) { "#{booking.trip_name.presence || 'Booking'} · #{booking.ref.presence || booking.invoice_number.presence || "##{booking.perfectbook_id}"}" },
-                  draft.perfectbook_booking_id.presence || @reply_bookings.first.perfectbook_id),
-                {}, class: "select", data: { action: "change->reply-box#bookingChanged", "reply-box-target": "booking" } %>
-          <p class="hint">Template inserts use this booking's trip, dates, and balance.</p>
-        </div>
-      <% end %>
+      <div class="mt-3" data-reply-box-target="bookingPanel" <%= "hidden" unless @reply_data[:bookings].many? %>>
+        <%= form.label :perfectbook_booking_id, "Placeholders fill from", class: "label" %>
+        <%= form.select :perfectbook_booking_id,
+              options_for_select(@reply_data[:bookings].map { |booking| [ booking[:label], booking[:id] ] }, @reply_data[:selected_booking_id]),
+              {}, class: "select", data: { action: "change->reply-box#bookingChanged", "reply-box-target": "booking" } %>
+        <p class="hint">Template inserts use this booking's trip, dates, and balance.</p>
+      </div>
+      <p class="hint" data-reply-box-target="bookingReference" <%= "hidden" unless @reply_context["booking_owner_name"].present? %>>
+        <% if @reply_context["booking_owner_name"].present? %>Booking reference: <%= @reply_context["booking_owner_name"] %>'s booking.<% end %>
+      </p>
 
       <div class="mt-3">
         <%= form.label :subject, class: "label" %>

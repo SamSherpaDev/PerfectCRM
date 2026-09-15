@@ -106,7 +106,7 @@ module Outbound
       id = @params[:template_id].presence
       return false if id.blank?
 
-      Template.where(id: id).pick(:body).to_s.include?("{{signature}}")
+      TemplateRenderer.placeholders_in(Template.where(id: id).pick(:body)).include?("signature")
     end
 
     def thread_under_parent(message)

@@ -31,6 +31,17 @@ class OutboundFollowupReviewTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "recipient identity retains advisor details from the CRM owner" do
+    advisor = Organization.create!(name: "Adventure advisor")
+    @client.update!(referred_by_organization: advisor)
+    PerfectBook::Contact.create!(perfectbook_id: 101, name: "Maya", email: @client.email, synced_at: Time.current)
+    @template.update!(body: "{{full_name}}: {{advisor_name}}")
+    post group_sends_path, params: { template_id: @template.id, recipients: @client.email }
+    assert_includes Message.last.text_body, "Maya: Adventure advisor"
+    get reply_context_templates_path, params: { owner_type: "Client", owner_id: @client.id, to: @client.email }
+    assert_equal "Adventure advisor", response.parsed_body["context"]["advisor_name"]
+  end
+
   test "fallback booking is labeled and never overrides the recipient name" do
     post merge_templates_path, params: { template_id: @template.id, departure_id: 701, recipients: "pemba@example.com" }
     assert_select ".hint", text: "Booking reference: Maya's booking."

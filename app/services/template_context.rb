@@ -10,18 +10,46 @@
 class TemplateContext
   INACTIVE_BOOKING_STATUSES = %w[cancelled voided refunded].freeze
 
-  def self.for_recipient(recipient, departure_id: nil)
-    email = recipient.email.strip.downcase
-    owner = Outbound::OwnerLookup.for_email(email)
-    contact = PerfectBook::Contact.find_by("lower(email) = ?", email)
-    person = Person.find_by("lower(email) = ?", email)
-    identity = contact || person || (owner if owner.try(:email).to_s.downcase == email) || recipient
+  def self.resolve_recipient(recipient, owner: nil)
+    email = recipient.email.to_s.strip.downcase
+    owner = Outbound::OwnerLookup.for_email(email) || owner
+    contact = PerfectBook::Contact.find_by("lower(email) = ?", email) if email.present?
+    person = Person.find_by("lower(email) = ?", email) if email.present?
+    identity = contact || person || (owner if email.blank? || owner.try(:email).to_s.downcase == email) || recipient
     contact_id = contact ? contact.perfectbook_id : owner.try(:perfectbook_contact_id)
-    bookings = bookings_for_contact(contact_id)
-    booking = departure_id.present? ? bookings.find { |row| row.departure_id.to_s == departure_id.to_s } : bookings.first
-    context = self.for(identity, booking: booking)
-    context["booking_owner_name"] = owner.name if booking && !contact && owner
+    { identity: identity, owner: owner, bookings: bookings_for_contact(contact_id), fallback: contact.nil? }
+  end
+
+  def self.resolved_context(resolved, booking)
+    context = self.for(resolved[:identity], booking: booking)
+    owner = resolved[:owner]
+    context["advisor_name"] = advisor_name_for(owner) if advisor_name_for(owner).present?
+    context["booking_owner_name"] = owner.name if booking && resolved[:fallback] && owner
     context
+  end
+
+  def self.for_recipient(recipient, departure_id: nil)
+    resolved = resolve_recipient(recipient)
+    bookings = resolved[:bookings]
+    booking = departure_id.present? ? bookings.find { |row| row.departure_id.to_s == departure_id.to_s } : bookings.first
+    resolved_context(resolved, booking)
+  end
+
+  def self.for_reply(to:, owner:, booking_id: nil)
+    address = to.to_s.split(/[,;\n]/).first.to_s.strip
+    parsed = MergeBatch.parse_recipients(address).first
+    recipient = parsed || MergeBatch::Recipient.new(name: nil, email: address)
+    resolved = resolve_recipient(recipient, owner: owner)
+    bookings = resolved[:bookings]
+    selected = bookings.find { |booking| booking.perfectbook_id.to_s == booking_id.to_s } || bookings.first
+    {
+      context: resolved_context(resolved, selected),
+      selected_booking_id: selected&.perfectbook_id,
+      bookings: bookings.map do |booking|
+        { id: booking.perfectbook_id, label: "#{booking.trip_name.presence || 'Booking'} · #{booking.ref.presence || booking.invoice_number.presence || "##{booking.perfectbook_id}"}" }
+      end,
+      booking_contexts: bookings.to_h { |booking| [ booking.perfectbook_id, resolved_context(resolved, booking) ] }
+    }
   end
 
   def self.for(record, booking: default_booking_for(record))

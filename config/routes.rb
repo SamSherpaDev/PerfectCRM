@@ -88,6 +88,7 @@ Rails.application.routes.draw do
   resources :templates, except: :show do
     collection do
       post :preview, action: :collection_preview
+      get :reply_context
       get :picker
       get :merge
       post :merge, action: :merge_preview

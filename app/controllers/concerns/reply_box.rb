@@ -16,13 +16,22 @@ module ReplyBox
       @reply_conversation = Conversation.latest_for(owner)
       @reply_draft = Draft.for_owner(owner, conversation: @reply_conversation)
     end
-    @reply_bookings = TemplateContext.bookings_for(owner)
-    @reply_context = TemplateContext.for(owner)
-    @reply_booking_contexts = @reply_bookings.to_h do |booking|
-      [ booking.perfectbook_id, TemplateContext.for(owner, booking: booking) ]
-    end
-    @reply_chips = Template.active.order(usage_count: :desc, last_used_at: :desc).limit(3)
+    load_reply_context
     @outbound_messages = Message.for_owner(owner).newest_first.limit(@events_page * 100 + 1).to_a
+  end
+
+  def load_reply_context
+    @reply_to = if @reply_draft.persisted?
+      @reply_draft.to_addrs
+    elsif @reply_conversation
+      @reply_conversation.thread_parent&.to_addrs
+    else
+      @reply_owner.try(:display_email) || @reply_owner.try(:email)
+    end
+    @reply_data = TemplateContext.for_reply(to: @reply_to, owner: @reply_owner,
+      booking_id: @reply_draft.perfectbook_booking_id)
+    @reply_context = @reply_data[:context]
+    @reply_chips = Template.active.order(usage_count: :desc, last_used_at: :desc).limit(3)
   end
 
   # Activity events and outbound messages, newest first, for one scroll.

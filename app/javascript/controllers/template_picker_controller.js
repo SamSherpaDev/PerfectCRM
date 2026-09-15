@@ -20,13 +20,13 @@ export default class extends Controller {
 
   async insert(event) {
     const button = event.currentTarget
-    const url = this.urlWithContext(button.dataset.url)
-    if (!url) return
+    if (!button.dataset.url) return
     const token = document.querySelector('meta[name="csrf-token"]')?.content
     button.disabled = true
     this.errorTarget.textContent = ""
     this.errorTarget.hidden = true
     try {
+      const url = await this.urlWithContext(button.dataset.url)
       const response = await fetch(url, {
         method: "POST",
         headers: { Accept: "application/json", ...(token ? { "X-CSRF-Token": token } : {}) }

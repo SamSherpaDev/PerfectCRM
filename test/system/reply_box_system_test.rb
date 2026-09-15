@@ -115,6 +115,40 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     assert_equal [ "sample.txt" ], Message.last.files.map { |file| file.filename.to_s }
   end
 
+  test "reply inserts and booking choices follow the actual recipient" do
+    @client.update!(perfectbook_contact_id: 101)
+    @client.people.create!(name: "Pemba", email: "pemba@example.com")
+    @client.people.create!(name: "Sona", email: "sona@example.com")
+    PerfectBook::Contact.create!(perfectbook_id: 102, name: "Pemba", email: "pemba@example.com", synced_at: Time.current)
+    [ [ 501, 101, "Maya trek" ], [ 502, 102, "Pemba trek" ], [ 503, 102, "Pemba later trek" ] ].each do |id, contact, trip|
+      PerfectBook::Booking.create!(perfectbook_id: id, perfectbook_contact_id: contact,
+        trip_name: trip, balance_due_minor: id * 100, invoice_number: "INV-#{id}", synced_at: Time.current)
+    end
+    @template.update!(body: "{{full_name}} {{trip}} {{balance_due}} {{invoice_number}}")
+    group = GroupSend.create!(template: @template, total_count: 1)
+    message = Outbound::Composer.call(owner: @client, group_send: group,
+      params: { to: "pemba@example.com", subject: "Pemba trip", body: "Hello" })
+    sign_in_browser
+    page.current_window.resize_to(1400, 1000)
+    [ inbox_thread_path(message.conversation), client_path(@client) ].each do |path|
+      visit path
+      assert_field "To", with: "pemba@example.com"
+      assert_select "Placeholders fill from", options: [ "Pemba later trek · INV-503", "Pemba trek · INV-502" ]
+      click_button "Quick hello", match: :first
+      assert_field "Message", with: "Pemba Pemba later trek $503.00 INV-503"
+      find("#message_perfectbook_booking_id option[value='502']").select_option
+      fill_in "Message", with: ""
+      find(".reply-templates > summary").click
+      within(".reply-templates") { click_button "Insert" }
+      assert_field "Message", with: "Pemba Pemba trek $502.00 INV-502"
+      fill_in "To", with: "sona@example.com"
+      fill_in "Message", with: ""
+      click_button "Quick hello", match: :first
+      assert_field "Message", with: "Sona Maya trek $501.00 INV-501"
+      assert_text "Booking reference: Maya Gurung's booking."
+    end
+  end
+
   private
 
   def sign_in_browser

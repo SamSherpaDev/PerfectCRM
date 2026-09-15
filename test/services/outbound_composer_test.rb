@@ -32,6 +32,15 @@ class OutboundComposerTest < ActiveSupport::TestCase
     assert_equal "Hello\n\nSam Sherpa", message.text_body
   end
 
+  test "spaced signature placeholders do not append another signature after a postscript" do
+    template = Template.create!(name: "Signed with postscript", purpose: "custom",
+      subject: "Hi", body: "Regards {{ signature }}\nPS: See you soon")
+    rendered = template.rendered("signature" => "Sam Sherpa")
+    message = Outbound::Composer.call(owner: @client,
+      params: { subject: rendered[:subject], body: rendered[:body], template_id: template.id })
+    assert_equal "Regards Sam Sherpa\nPS: See you soon", message.text_body
+  end
+
   test "generates a Message-ID once and threads replies under the parent" do
     first = Outbound::Composer.call(owner: @client,
       params: { to: "maya@example.com", subject: "Your trek", body: "Hello" })

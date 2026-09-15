@@ -3,10 +3,10 @@ import { Controller } from "@hotwired/stimulus"
 // Docked reply box (reply_box/_box): one-tap template inserts with live
 // placeholder values and a booking select that swaps the context.
 export default class extends Controller {
-  static values = { defaultContext: Object, bookingContexts: Object }
+  static values = { defaultContext: Object, bookingContexts: Object, contextUrl: String }
   static targets = [
     "form", "conversation", "templateId", "to", "subject", "body",
-    "booking", "status", "details", "pill", "composer"
+    "booking", "bookingPanel", "bookingReference", "status", "details", "pill", "composer"
   ]
 
   connect() {
@@ -41,7 +41,7 @@ export default class extends Controller {
     const token = document.querySelector('meta[name="csrf-token"]')?.content
     button.disabled = true
     try {
-      const response = await fetch(this.urlWithContext(url), {
+      const response = await fetch(await this.urlWithContext(url), {
         method: "POST",
         headers: { Accept: "application/json", ...(token ? { "X-CSRF-Token": token } : {}) }
       })
@@ -80,10 +80,43 @@ export default class extends Controller {
     if (picker) {
       picker.setAttribute("data-template-picker-context-value", JSON.stringify(this.activeContext()))
     }
+    this.updateBookingReference()
     this.setStatus("Placeholders now fill from the selected booking.")
   }
 
-  urlWithContext(url) {
+  async recipientChanged() {
+    try {
+      await this.refreshContext()
+    } catch {
+      this.setStatus("Could not load recipient context. Please try again.")
+    }
+  }
+
+  async refreshContext() {
+    const recipient = this.toTarget.value
+    const url = new URL(this.contextUrlValue, window.location.origin)
+    url.searchParams.set("to", recipient)
+    url.searchParams.set("booking_id", this.bookingTarget.value)
+    const response = await fetch(url, { headers: { Accept: "application/json" } })
+    if (!response.ok) throw new Error("Context unavailable")
+    const data = await response.json()
+    if (recipient !== this.toTarget.value) throw new Error("Recipient changed")
+    this.defaultContextValue = data.context
+    this.bookingContextsValue = data.booking_contexts
+    this.bookingTarget.replaceChildren(...data.bookings.map((booking) =>
+      new Option(booking.label, booking.id, false, booking.id === data.selected_booking_id)))
+    this.bookingPanelTarget.hidden = data.bookings.length < 2
+    this.updateBookingReference()
+  }
+
+  updateBookingReference() {
+    const name = this.activeContext().booking_owner_name
+    this.bookingReferenceTarget.hidden = !name
+    this.bookingReferenceTarget.textContent = name ? `Booking reference: ${name}'s booking.` : ""
+  }
+
+  async urlWithContext(url) {
+    await this.refreshContext()
     const target = new URL(url, window.location.origin)
     for (const [key, value] of Object.entries(this.activeContext())) {
       if (value !== null && value !== undefined && value !== "") {

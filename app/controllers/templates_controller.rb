@@ -80,6 +80,14 @@ class TemplatesController < ApplicationController
     redirect_to templates_path
   end
 
+  def reply_context
+    owner_class = { "Client" => Client, "Lead" => Lead, "Organization" => Organization }[params[:owner_type]]
+    owner = owner_class&.find(params[:owner_id])
+    return head :not_found unless owner
+
+    render json: TemplateContext.for_reply(to: params[:to], owner: owner, booking_id: params[:booking_id])
+  end
+
   def use
     render json: { id: @template.id, name: @template.name, **@template.rendered(use_context) }
   end
