@@ -8,9 +8,8 @@ class GroupSendsController < ApplicationController
     return redirect_to merge_templates_path, alert: "Pick a template first." unless @template
 
     lines = params[:recipients].to_s
-    contexts = live_contexts(lines)
     batch = MergeBatch.build(template: @template, recipient_lines: lines,
-      context_for: ->(recipient) { contexts[recipient.email.strip.downcase] || {} })
+      context_for: ->(recipient) { TemplateContext.for_recipient(recipient, departure_id: params[:departure_id]) })
 
     unless batch.complete?
       return redirect_to merge_templates_path(template_id: @template.id, recipients: lines,
@@ -41,14 +40,6 @@ class GroupSendsController < ApplicationController
   end
 
   private
-
-  # Per-recipient live contexts for departure bookings: matched CRM
-  # records fill every placeholder they can; strangers get names only.
-  def live_contexts(lines)
-    MergeBatch.parse_recipients(lines).index_with do |recipient|
-      TemplateContext.for_recipient(recipient, departure_id: params[:departure_id])
-    end.transform_keys { |recipient| recipient.email.strip.downcase }
-  end
 
   def match_owner(email)
     Outbound::OwnerLookup.for_email(email)

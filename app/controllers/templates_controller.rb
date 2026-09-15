@@ -129,9 +129,8 @@ class TemplatesController < ApplicationController
       flash.now[:alert] = "Pick a template first."
       render :merge, status: :unprocessable_entity
     else
-      contexts = live_merge_contexts(@recipient_lines)
       @batch = MergeBatch.build(template: @selected, recipient_lines: @recipient_lines,
-        context_for: ->(recipient) { contexts[recipient.email.strip.downcase] || {} })
+        context_for: ->(recipient) { TemplateContext.for_recipient(recipient, departure_id: params[:departure_id]) })
       if @batch.errors.any?
         flash.now[:alert] = "#{@batch.errors.size} #{'line'.pluralize(@batch.errors.size)} need#{@batch.errors.size == 1 ? 's' : ''} fixing before this batch can send."
       elsif @batch.recipients.empty?
@@ -170,14 +169,6 @@ class TemplatesController < ApplicationController
         end
         contact.name.present? ? "#{contact.name} <#{email}>" : email
       end.join("\n")
-  end
-
-  # Live per-recipient contexts so the preview shows real trip, dates,
-  # and balances where the CRM knows them.
-  def live_merge_contexts(lines)
-    MergeBatch.parse_recipients(lines).to_h do |recipient|
-      [ recipient.email.strip.downcase, TemplateContext.for_recipient(recipient, departure_id: params[:departure_id]) ]
-    end
   end
 
   def set_template

@@ -11,6 +11,27 @@ class GroupSendsRequestsTest < ActionDispatch::IntegrationTest
     @client = Client.create!(name: "Maya Gurung", email: "maya@example.com")
   end
 
+  test "shared addresses retain each recipient's personalization in preview and send" do
+    sign_in
+    recipients = "Maya <family@example.com>\nPemba <family@example.com>"
+    post merge_templates_path, params: { template_id: @template.id, recipients: recipients }
+    assert_response :success
+    assert_select "section[aria-label='Merged messages'] li", count: 2 do |rows|
+      assert_match(/Hi Maya/, rows[0].text)
+      assert_match(/Maya, see you/, rows[0].text)
+      assert_match(/Hi Pemba/, rows[1].text)
+      assert_match(/Pemba, see you/, rows[1].text)
+    end
+    assert_enqueued_jobs 2, only: OutboundDeliveryJob do
+      post group_sends_path, params: { template_id: @template.id, recipients: recipients }
+    end
+    messages = GroupSend.last.messages.order(:id).to_a
+    assert_equal [ "Hi Maya", "Hi Pemba" ], messages.map(&:subject)
+    assert_equal [ "family@example.com", "family@example.com" ], messages.map(&:to_addrs)
+    assert_includes messages[0].text_body, "Maya, see you"
+    assert_includes messages[1].text_body, "Pemba, see you"
+  end
+
   test "malformed lines refuse the batch and name their lines" do
     sign_in
     post group_sends_path, params: {
