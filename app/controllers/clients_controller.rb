@@ -79,9 +79,7 @@ class ClientsController < ApplicationController
       return redirect_to organization_path(organization)
     end
 
-    # TODO: when the sibling PerfectBook API client lands (PerfectBook::Client),
-    # fetch the contact here and build the record in one tap instead of
-    # prefilling the form. Until then, offer the create form with the id kept.
+    # Unlinked-contact behavior is documented in README.md, "Clients".
     @client = Client.new(perfectbook_contact_id: record_id)
     @client.people.build
     render :by_perfectbook, status: :not_found

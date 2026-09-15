@@ -6,7 +6,6 @@
   <section class="card card-pad" aria-labelledby="create-heading">
     <h2 class="section-title" id="create-heading">Create from PerfectBook</h2>
     <%= card_caption "Creates a client linked to this PerfectBook contact. Details can be filled in after." %>
-    <%# TODO: when PerfectBook::Client lands, fetch the contact here for a true one-tap build. %>
     <%= form_with model: @client, class: "mt-4 space-y-4" do |form| %>
       <%= form.hidden_field :perfectbook_contact_id %>
       <div>
