@@ -87,5 +87,4 @@ class LeadWebhookJobTest < ActiveJob::TestCase
     end
     assert_equal 0, LeadWebhookDelivery.count
   end
-
 end

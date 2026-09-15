@@ -165,5 +165,4 @@ class ApiV1LeadsVerdictsTest < ActionDispatch::IntegrationTest
     assert_nil @lead.fit_score
     assert_empty @lead.activity_events.where(kind: "automation")
   end
-
 end

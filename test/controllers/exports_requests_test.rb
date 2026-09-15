@@ -143,5 +143,4 @@ class ExportsRequestsTest < ActionDispatch::IntegrationTest
     assert_equal lead.metadata, JSON.parse(row["metadata"])
     assert_equal "click-id", JSON.parse(row["metadata"]).dig("attribution", "gclid")
   end
-
 end

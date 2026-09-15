@@ -100,5 +100,4 @@ class SettingsAutomationsTest < ActionDispatch::IntegrationTest
     assert_select "dd", text: /Timing unknown/
     assert_select "dd", text: /April|2027/, count: 0
   end
-
 end

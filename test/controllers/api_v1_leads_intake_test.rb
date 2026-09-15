@@ -395,5 +395,4 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     assert_response :ok
     assert_equal original, response.parsed_body
   end
-
 end

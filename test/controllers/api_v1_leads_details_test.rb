@@ -164,5 +164,4 @@ class ApiV1LeadsDetailsTest < ActionDispatch::IntegrationTest
     assert_equal "invalid", response.parsed_body["fields"]["name"]
     assert_nil @lead.reload.travel_month
   end
-
 end

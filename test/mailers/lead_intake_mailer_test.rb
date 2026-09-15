@@ -72,5 +72,4 @@ class LeadIntakeMailerTest < ActionMailer::TestCase
     assert_includes body, "Page: -"
     assert_not_includes body, "secret"
   end
-
 end
