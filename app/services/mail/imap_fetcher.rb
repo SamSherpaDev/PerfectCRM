@@ -7,9 +7,8 @@ require "net/imap"
 # (X-GM-THRID, X-GM-MSGID, X-GM-LABELS) where the server offers them, with
 # a Message-ID/In-Reply-To/References fallback in the ingester.
 #
-# Read-only guarantee: this class only ever calls #examine, #status,
-# #uid_fetch, and #logout. It never calls #select, #store, #copy, #move,
-# #expunge, or #uid_store. Covered by tests.
+# Use #examine, never #select, so fetching RFC822 cannot mark mail as read.
+# The read-only boundary is covered by test/jobs/mail_sync_job_test.rb.
 module Mail
   class ImapFetcher
     HOST = "imap.gmail.com"

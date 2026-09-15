@@ -1,7 +1,4 @@
-# Matches an inbound address to an existing record before anything is filed.
-# Exact email wins on client, person, lead, or organization; a remembered
-# EmailIdentity from a past triage confirmation wins next. Nothing is ever
-# created silently: unknown senders go to triage as suggested clients.
+# Matching and triage policy: see README.md, "Mail".
 module Mail
   class Matcher
     Result = Struct.new(:linkable, :via, keyword_init: true)

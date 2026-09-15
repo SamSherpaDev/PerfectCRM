@@ -1,12 +1,5 @@
-# Builds the import preview: how many messages fall in scope and which
-# distinct senders would become clients versus organizations.
-#
-# Heuristics (captain-flippable per row):
-# - a sender domain shared by several addresses, or matching a PerfectBook
-#   partner contact, suggests an organization;
-# - single addresses suggest clients;
-# - addresses already on a client, lead, person, or organization show as
-#   duplicates before commit.
+# Classifies counted counterparties for preview; PreviewJob owns counting.
+# User-facing suggestion and duplicate policy: see README.md, "Mail".
 module Mail
   class ImportPreview
     Row = Struct.new(:email, :count, :suggested_kind, :duplicate, :duplicate_name, keyword_init: true) do

@@ -53,5 +53,4 @@ class MailImport < ApplicationRecord
   def freeze_cutoff
     self.since_date = cutoff_date
   end
-
 end

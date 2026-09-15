@@ -83,5 +83,4 @@ class MailImportsController < ApplicationController
   rescue StandardError
     {}
   end
-
 end

@@ -17,8 +17,8 @@ class Conversation < ApplicationRecord
   scope :needs_triage, -> { triage.or(sensitive_documents).or(held_documents) }
   scope :ignored_scope, -> { where(ignored: true) }
 
-  # Inbox triage buckets. "Waiting on you" means the newest message is
-  # inbound and unread work remains; "waiting on them" means we replied last.
+  # Reading a thread does not resolve waiting: only a later outbound message does.
+  # An equal inbound/outbound timestamp remains in the waiting-on-you bucket.
   scope :waiting_on_you, -> {
     joins(:messages)
       .where(messages: { direction: "in" })

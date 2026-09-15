@@ -49,10 +49,10 @@ configuration lives in `config/environments/development.rb`.
 On desktop, hover or focus the icon rail to reveal navigation labels and Sign
 out. On mobile, use Open menu to show the drawer. The rail holds **Today**
 (root), **Inbox**, **Leads**, **Clients**, **Pipeline**, **Quotes**, **Templates**, and
-**Settings**. Inbox, Pipeline, and Quotes render branded empty states until
-their features land. See [Today and follow-ups](#today-and-follow-ups) and
-[Templates](#templates) for the live features. Settings provides appearance,
-morning digest, and export controls.
+**Settings**. Pipeline and Quotes render branded empty states until their
+features land. See [Today and follow-ups](#today-and-follow-ups), [Mail](#mail),
+and [Templates](#templates) for the live features. Settings provides appearance,
+morning digest, connections, history import, and export controls.
 
 On phones (under 750px) a bottom tab bar holds **Today**, **Inbox**,
 **Leads**, **Clients**, and **More** (Pipeline, Quotes, Templates,
@@ -219,7 +219,8 @@ Settings → Morning digest toggles it; it is enabled by default.
 
 ## Clients
 
-Clients own people, tags, notes, and the timeline later tasks fill in.
+Clients own people, tags, notes, and a timeline. Linked email appears in the
+Email card; see [Mail](#mail).
 Use New client to create a record, and Edit to update facts or add another
 person in the blank People fields. Archive moves a client to the Archived
 tab, where Restore makes it active again. The Organizations tab holds
@@ -263,8 +264,9 @@ leads can link to the same client; conversion never merges two clients.
 Without a match, conversion creates a client with the lead's facts,
 including its exact source and campaign, and copies people and history.
 Only clients created by conversion show Started as a lead.
-Both paths transfer the lead's tasks to the client, link forward, and freeze
-the lead read-only, with no reverse path.
+Both paths transfer the lead's tasks, linked conversations, and remembered
+email identities to the client, then link forward and freeze the lead read-only,
+with no reverse path.
 
 Fit labels and bar colors use the supplied fit band; the CRM does not
 derive a band from the numeric score. Edit lets you enter these fields
@@ -276,13 +278,19 @@ kind `automation` prepare for them without running automation today.
 
 Email only, from `info@sherpaholidays.com` (fixed to `MAILBOX_ADDRESS`,
 default `info@sherpaholidays.com`, with no additional accepted mailboxes). The CRM
-connects to that Google account by IMAP with an app password and syncs ONLY
-mail to or from the mailbox; personal mail is skipped without storing it.
+connects to the personal Google account that receives this alias by IMAP with
+an app password. It keeps only messages with an exact parsed mailbox address
+in From, To, Cc, Bcc, Delivered-To, or X-Original-To; personal mail is skipped
+without storing it. This release reads received and sent Gmail history;
+composing and sending replies in CRM is future work.
 
 Setup (captain, about 10 minutes): Google Account → Security → turn on
 2-step verification → App passwords → create one named PerfectCRM → paste
-it in Settings → Mailbox with the Google account login → Test connection.
-Sync runs every 5 minutes (`Mail::SyncJob` in `config/recurring.yml`) over
+it in Settings → Mailbox with the personal Google account login → Save mailbox
+→ Test connection. Leaving the password blank when saving preserves the saved
+password. Production encryption keys must be configured and preserved; see
+[Secrets inventory](docs/operations.md#secrets-inventory).
+Production sync runs every 5 minutes (`Mail::SyncJob` in `config/recurring.yml`) over
 `[Gmail]/All Mail` so sent mail is included, incremental by
 UIDVALIDITY/UID, threaded on `X-GM-THRID`/`X-GM-MSGID` with a
 Message-ID/In-Reply-To/References fallback. Read-only IMAP: it examines
@@ -325,8 +333,13 @@ supported and a resumable scan otherwise. Progress and failures are visible;
 commit is available only after the preview completes. Preview and import
 persist UID and UIDVALIDITY checkpoints and reset the scan if the folder is
 rebuilt. Import progress counts the same in-scope messages as preview; filtered
-personal mail advances only the UID checkpoint. Preview counts inbound and outbound mail and shows counterparties,
-remembered matches, duplicates, and editable creation choices. Shared domains
+personal mail advances only the UID checkpoint. Preview counts both inbound and
+outbound mail together and shows counterparties, remembered matches, duplicates,
+and editable creation choices. Choose Client, Organization, Lead, or Skip per
+address. Skip suppresses record creation, not message storage; unmatched threads
+remain in triage. Existing matches are reused. Approved creations apply to every
+chosen address, while each conversation stays linked to a single record. Use
+Resume preview or Resume import after a failure. Shared domains
 suggest organizations only with two or more distinct addresses on a non-public
 domain or a PerfectBook partner match. Public email providers (Gmail,
 Googlemail, Yahoo, Hotmail, Outlook, Live, iCloud, Me, AOL, Proton, Protonmail)
