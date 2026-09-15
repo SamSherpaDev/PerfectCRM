@@ -95,4 +95,15 @@ module ApplicationHelper
     moment = value.is_a?(String) ? Time.zone.parse(value) : value
     "#{moment.strftime('%H:%M')} (#{moment.strftime('%-I:%M %p')})"
   end
+
+  # Deep links into PerfectBook, the system of record for bookings.
+  # Contact links are built from the base URL; booking links reuse the
+  # absolute deep_link the API returns per booking.
+  def perfectbook_contact_url(id)
+    PerfectBook.contact_url(id)
+  end
+
+  def perfectbook_booking_url(booking)
+    booking.respond_to?(:deep_link) ? booking.deep_link : booking.to_s
+  end
 end

@@ -13,3 +13,12 @@ production:
   clear_solid_queue_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
     schedule: every hour at minute 12
+  perfectbook_sync_catalog:
+    class: PerfectBook::SyncCatalogJob
+    schedule: every 15 minutes
+  perfectbook_sync_contacts:
+    class: PerfectBook::SyncContactsJob
+    schedule: every 15 minutes
+  perfectbook_sync_bookings:
+    class: PerfectBook::SyncBookingsJob
+    schedule: every 15 minutes

@@ -9,8 +9,8 @@ at `perfectcrm.sherpaholidays.com` on the same VPS.
 
 PerfectBook stays the system of record for bookings, invoices, and money.
 The CRM owns people, conversations, quotes, tasks, and the pipeline, and
-reads PerfectBook through a small versioned, token-authenticated API (a later
-task; this scaffold has no business logic yet).
+reads PerfectBook through a small versioned, token-authenticated API (see
+"PerfectBook connection" below).
 
 Stack: Rails 8.1, Hotwire (Turbo, Stimulus, importmap), Tailwind v4, three
 SQLite databases (primary, cache, queue), Solid Queue running inside Puma,
@@ -81,6 +81,30 @@ expire after 12 hours of inactivity, and Sign out (`DELETE /sign-out`) clears
 the cookie session. After an updated allowlist takes effect in the running
 app, removing an email also denies its existing session on its next request;
 `/up` stays public.
+
+## PerfectBook connection
+
+PerfectBook (live at `perfectbook.sherpaholidays.com`) stays the system
+of record for bookings, invoices, money, and every sensitive traveler
+document. The CRM keeps a read-only mirror of the trip and departure
+catalog plus per-contact booking and invoice status, refreshed every 15
+minutes by `PerfectBook::SyncCatalogJob`, `SyncContactsJob`, and
+`SyncBookingsJob` (`config/recurring.yml`). The quote builder reads the
+mirror through `PerfectBook::Catalog`; client pages link out with
+`perfectbook_contact_url` and `perfectbook_booking_url`.
+
+Configure with `PERFECTBOOK_BASE_URL` (defaults to
+`https://perfectbook.sherpaholidays.com`) and `PERFECTBOOK_API_TOKEN`
+(see `.env.app.example`). Generate the token with `bin/rails secret` and
+set the same value in PerfectBook's `.env.app`; when PerfectBook has no
+token, its whole API answers 404. The client (`PerfectBook::Client` in
+`lib/perfectbook/`) polls with ETag/`If-None-Match` (304 means no change),
+walks cursor pagination, honors 429 `Retry-After`, times out fast, and
+opens a circuit after repeated failures until the next run. The token is
+never logged (see `filter_parameter_logging.rb`).
+
+Settings → PerfectBook connection shows configured/unconfigured, the last
+successful sync, the last error, and a Test connection button.
 
 ## Checks
 

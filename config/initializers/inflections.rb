@@ -14,3 +14,7 @@
 # ActiveSupport::Inflector.inflections(:en) do |inflect|
 #   inflect.acronym "RESTful"
 # end
+
+# Single-word vendor name: lib/perfectbook.rb and
+# app/models/perfectbook/*.rb map to the PerfectBook namespace.
+Rails.autoloaders.main.inflector.inflect("perfectbook" => "PerfectBook")
