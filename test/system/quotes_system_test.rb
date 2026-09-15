@@ -497,6 +497,63 @@ class QuotesSystemTest < ApplicationSystemTestCase
     assert_equal 150000, quote.lines.find_by!(kind: "departure").unit_minor
   end
 
+  test "expired draft stays editable and sends only after correcting its date" do
+    client = Client.create!(name: "Maya", email: "maya@example.com")
+    quote = Quote.create!(client: client, party_size: 2, valid_until: Date.yesterday)
+    quote.lines.create!(kind: "custom", description: "Trek", quantity: 2, unit_minor: 150000)
+
+    visit quote_path(quote)
+    click_button "Send quote"
+    assert_text "Valid until must be today or later"
+    assert_equal "draft", quote.reload.status
+    assert_nil quote.sent_at
+    assert_no_overflow("expired draft send blocked")
+    fill_in "quote_valid_until", with: Date.current.iso8601
+    click_button "Send quote", match: :first
+    assert_text "Quote sent"
+    Capybara.using_session(:traveler) do
+      visit public_quote_path(quote.accept_token)
+      assert_button "Accept this quote"
+    end
+  end
+
+  test "converted lead quote accepts for the client and keeps the original intake after profile edits" do
+    lead = Lead.create!(name: "Maya Gurung", email: "old@example.com")
+    quote = Quote.create!(lead: lead, party_size: 2, valid_until: Date.current + 14)
+    quote.lines.create!(kind: "custom", description: "Trek", quantity: 2, unit_minor: 150000)
+    client = lead.convert_to_client!
+    client.update!(email: "current@example.com")
+
+    visit client_path(client)
+    click_link quote.reference
+    click_button "Send quote"
+    assert_text "Quote sent"
+    assert_equal 1, client.activity_events.where(kind: "quote").count
+    assert_equal 0, lead.activity_events.where(kind: "quote").count
+    Capybara.using_session(:traveler) do
+      page.current_window.resize_to(390, 844)
+      visit public_quote_path(quote.accept_token)
+      click_button "Accept this quote"
+      assert_text "Accepted"
+    end
+    assert_equal 2, client.activity_events.where(kind: "quote").count
+    client.update!(name: "Changed name", email: "changed@example.com")
+    visit quote_path(quote)
+    assert_field "intake-details", with: /client: Maya Gurung.*email: current@example.com/m
+    link = find_link("Open PerfectBook booking page")
+    params = Rack::Utils.parse_query(URI.parse(link[:href]).query)
+    assert_equal "Maya Gurung", params["name"]
+    assert_equal "current@example.com", params["email"]
+    page.scroll_to(find("#intake-heading"), align: :top)
+    assert_no_overflow("accepted intake survives profile edits")
+    page.current_window.resize_to(1400, 900)
+    page.scroll_to(:top)
+    assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, 1400
+    if ENV["QUOTE_EVIDENCE_DIR"].present?
+      page.save_screenshot(File.join(ENV.fetch("QUOTE_EVIDENCE_DIR"), "accepted-quote-desktop.png"))
+    end
+  end
+
   private
 
   def assert_no_overflow(context)

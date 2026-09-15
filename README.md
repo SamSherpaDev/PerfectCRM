@@ -227,10 +227,14 @@ inclusions for this trip” saves CRM-owned preferences separately from the
 trip mirror. Remembered inclusions load on the initial trip selection when
 the field is untouched. New quotes default to two guests and a valid-until
 date 14 days from today. Drafts may omit these fields; sending requires a
-positive party size and a valid-until date, with missing fields shown in
-the builder. Sending a quote
+positive party size, at least one line, a recipient email, and a valid-until
+date of today or later. Drafts can retain past dates, but these must be
+updated before sending. Validation errors appear in the builder. Sending a quote
 moves a lead from New or Chatting to Quoted (`Quote#deliver!`). If the
-email cannot be queued, the quote remains a draft and shows a retry message.
+email cannot be queued, the quote remains a draft and shows a retry message;
+saved edits are retained. Edits commit before email enqueueing. After a lead
+converts, its quotes use the client's current contact details and record new
+quote activity on the client timeline.
 
 Each quote carries an unguessable tap-to-accept link (`/q/:token`, no
 sign-in). Public views are rate-limited and logged through `QuoteView`.
@@ -240,7 +244,9 @@ Accepting records `accepted_at`, queues an email to the captain at
 page in the "Create booking in PerfectBook" panel. Its "Open PerfectBook
 booking page" button opens
 PerfectBook's new-booking page with the intake details in query parameters
-and a copyable version alongside for manual entry. The captain reviews
+and a copyable version alongside for manual entry. Both use the intake details
+saved at acceptance, so later client edits do not change the staged intake.
+The captain reviews
 and creates the actual booking in PerfectBook. If the acceptance notice
 cannot be queued, acceptance is rolled back and the client is asked to retry.
 A direct post replaces the manual intake step once
