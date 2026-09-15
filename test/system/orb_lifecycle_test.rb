@@ -50,7 +50,7 @@ class OrbLifecycleTest < ApplicationSystemTestCase
     assert_equal baseline_visibility_listeners, visibility_listener_count(browser)
 
     visit "/design"
-    [ [1400, 1000, "desktop"], [390, 844, "phone"] ].each do |width, height, label|
+    [ [ 1400, 1000, "desktop" ], [ 390, 844, "phone" ] ].each do |width, height, label|
       page.current_window.resize_to(width, height)
       %w[mark orbs timeline pipeline].each do |section|
         page.execute_script("document.querySelector(arguments[0]).scrollIntoView()", "#design-#{section}")
