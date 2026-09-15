@@ -20,11 +20,11 @@ trap 'rm -rf "$TMPDIR"' EXIT
 
 for DB in production.sqlite3 production_queue.sqlite3; do
   NAME="${DB%.sqlite3}"
-  docker run --rm \
+  docker run --rm --user 0:0 \
     -v perfectcrm_storage:/rails/storage:ro \
     -v "$TMPDIR:/out" \
     "$IMAGE" sqlite3 "/rails/storage/$DB" ".backup '/out/$NAME-$STAMP.sqlite3'"
-  gzip -f "$TMPDIR/$NAME-$STAMP.sqlite3.gz"
+  gzip -f "$TMPDIR/$NAME-$STAMP.sqlite3"
   rclone copyto "$TMPDIR/$NAME-$STAMP.sqlite3.gz" \
     "$BACKUP_RCLONE_REMOTE:$LITESTREAM_BUCKET/nightly/$NAME-$STAMP.sqlite3.gz"
 done

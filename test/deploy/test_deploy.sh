@@ -28,20 +28,6 @@ else
   fail "restore drill lifecycle"
 fi
 
-# Shared-server layout: PerfectCRM publishes no web ports (the system Caddy owns
-# 80/443) and joins the shared external "apps" network. Source-level check on the
-# repo files so it runs even without Docker.
-if grep -vE '^\s*#' "$REPO_ROOT/deploy/compose.yml" | grep -qE '(^|\s)(ports|build):'; then
-  fail "perfectcrm compose must not publish ports or build (system Caddy owns web ports; image comes from GHCR)"
-else
-  pass "perfectcrm compose publishes no ports and builds nothing"
-fi
-if grep -q "external: true" "$REPO_ROOT/deploy/compose.yml"; then
-  pass "perfectcrm compose joins the shared external network"
-else
-  fail "perfectcrm compose must join the shared external network"
-fi
-
 # Remaining sections need Docker.
 if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
   skip "docker compose not available (compose config and caddy validate checks)"
@@ -88,8 +74,16 @@ services = config.get("services", {})
 problems = []
 
 app = services.get("app", {})
-if app.get("build"):
-    problems.append("app service must pull the CI image, not build")
+for name, service in services.items():
+    if service.get("ports"):
+        problems.append(f"{name} service must not publish ports")
+    if "build" in service:
+        problems.append(f"{name} service must pull its image, not build")
+if "apps" not in (app.get("networks") or {}):
+    problems.append("app service must join the shared apps network")
+apps_network = config.get("networks", {}).get("apps", {})
+if apps_network.get("external") is not True or apps_network.get("name") != "apps":
+    problems.append("apps network must use the external network named apps")
 image = app.get("image", "")
 if not image.startswith("ghcr.io/"):
     problems.append(f"app image must come from GHCR, got: {image!r}")
@@ -114,7 +108,7 @@ if ".env.app" in lite_files:
 if problems:
     print("\n".join(f"FAIL: {p}" for p in problems))
     sys.exit(1)
-print("ok: credential scoping (app has no LITESTREAM_*, litestream has no attachment/app secrets; image from GHCR, no build)")
+print("ok: credential scoping, GHCR app image, no builds or published ports, shared apps network membership")
 PYEOF
 then
   true

@@ -41,6 +41,9 @@ docker run --rm \
   restore -o "/restore/production.sqlite3" \
   "s3://$LITESTREAM_BUCKET/perfectcrm/primary"
 
+docker run --rm --user 0:0 -v "$WORKDIR:/restore" "$IMAGE" \
+  chown -R 1000:1000 /restore
+
 # 2. Integrity check.
 docker run --rm -v "$WORKDIR:/restore" "$IMAGE" \
   sqlite3 /restore/production.sqlite3 "PRAGMA integrity_check;"
@@ -49,7 +52,7 @@ docker run --rm -v "$WORKDIR:/restore" "$IMAGE" \
 CONTAINER_ID="$(docker run -d --name "$CONTAINER" \
   --env-file .env.app \
   -e RAILS_ENV=production -e SOLID_QUEUE_IN_PUMA=true \
-  -v "$WORKDIR/production.sqlite3:/rails/storage/production.sqlite3:ro" \
+  -v "$WORKDIR:/rails/storage" \
   -p "127.0.0.1:$PORT:80" \
   "$IMAGE")"
 for _ in $(seq 1 30); do
