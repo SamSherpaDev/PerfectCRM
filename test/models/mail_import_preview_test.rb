@@ -32,4 +32,23 @@ class MailImportPreviewTest < ActiveSupport::TestCase
     rows = Mail::ImportPreview.build(messages, choices: { "solo@example.com" => "organization" })
     assert_equal "organization", rows.first.suggested_kind
   end
+  test "outbound and remembered addresses share matching semantics" do
+    client = Client.create!(name: "Remembered", email: "original@example.com")
+    EmailIdentity.remember!("alternate@example.com", linkable: client)
+    messages = [ { raw: "From: info@sherpaholidays.com\r\nTo: alternate@example.com\r\n\r\nHello" } ]
+    row = Mail::ImportPreview.build(messages).first
+    assert_equal "alternate@example.com", row.email
+    assert_equal 1, row.count
+    assert row.duplicate?
+    assert_equal client.name, row.duplicate_name
+  end
+
+  test "public provider domains never suggest organizations" do
+    counts = %w[gmail googlemail yahoo hotmail outlook live icloud me aol proton protonmail].flat_map do |provider|
+      [ [ "one@#{provider}.com", 1 ], [ "two@#{provider}.com", 1 ] ]
+    end.to_h
+    rows = Mail::ImportPreview.new.build_counts(counts)
+    assert rows.all? { |row| row.suggested_kind == "client" }
+  end
+
 end

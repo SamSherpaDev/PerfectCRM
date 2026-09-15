@@ -35,7 +35,7 @@ class LeadsController < ApplicationController
     @matching_client = @lead.matching_client unless @lead.converted?
     @note = Note.new
     load_record_history(@lead)
-    @conversations = Conversation.where(linkable: @lead).ordered.limit(20).includes(messages: { files_attachments: :blob })
+    @conversations = Conversation.where(linkable: @lead).ordered
   end
 
   def new

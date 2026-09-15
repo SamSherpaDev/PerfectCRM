@@ -55,4 +55,42 @@ class InboxRequestsTest < ActionDispatch::IntegrationTest
     assert_select "h2", text: "Email"
     assert_select "article.stone", minimum: 1
   end
+  test "record timeline exposes older messages and the full expanded body" do
+    client = Client.create!(name: "Long history", email: "history@example.com")
+    21.times do |index|
+      conversation = Conversation.create!(linkable: client, subject: "History #{index}")
+      conversation.messages.create!(direction: "in", from_address: client.email, sent_at: index.minutes.ago,
+        text_body: index.zero? ? "x" * 4100 + " final itinerary detail" : "message #{index}")
+    end
+    get client_path(client)
+    assert_select "article.stone", count: 20
+    assert_select "details", text: /final itinerary detail/
+    older = css_select("a").find { |a| a.text == "Load older" }["href"]
+    get older
+    assert_response :success
+    assert_select "article.stone", count: 1
+    assert_select "article", text: /message 20/
+  end
+
+  test "inbox exposes the fifty first conversation" do
+    51.times { |index| Conversation.create!(subject: "Page thread #{index}", last_message_at: index.minutes.ago) }
+    get inbox_path(tab: "all")
+    older = css_select("a").find { |a| a.text == "Load older" }["href"]
+    get older
+    assert_response :success
+    assert_select "a", text: "Page thread 50"
+  end
+
+  test "sensitive attachment appears in triage even on a linked conversation" do
+    client = Client.create!(name: "Review files", email: "review-files@example.com")
+    parsed = Mail::Ingester.parse_raw("From: #{client.email}\r\nTo: info@sherpaholidays.com\r\nSubject: Passport review\r\n\r\nAttached")
+    parsed.attachments << { filename: "passport.pdf", content_type: "application/pdf", data: "file" }
+    result = Mail::Ingester.ingest(parsed: parsed, gmail: {})
+    get inbox_path(tab: "triage")
+    assert_response :success
+    assert_select "a", text: "Passport review"
+    get inbox_thread_path(result[:conversation])
+    assert_select "button", text: "Remove from CRM, collect in PerfectBook"
+  end
+
 end

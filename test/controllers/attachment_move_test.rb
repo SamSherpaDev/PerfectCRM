@@ -16,13 +16,21 @@ class AttachmentMoveTest < ActionDispatch::IntegrationTest
     message.files.attach(io: StringIO.new("file-bytes"), filename: "visa.pdf", content_type: "application/pdf")
     attachment = message.files.attachments.first
 
-    PerfectBook::DocumentUploader.stub(:upload, true) do
-      assert_difference("ActivityEvent.count", 1) do
-        post move_to_perfectbook_attachment_path(attachment), params: { booking_id: "11" }
-      end
+    blob = attachment.blob
+    assert blob.service.exist?(blob.key)
+    get attachment_path(attachment)
+    assert_response :success
+    assert_equal "file-bytes", response.body
+    assert_match(/attachment/, response.headers["Content-Disposition"])
+
+    assert_difference([ "ActivityEvent.count", "Note.count" ], 1) do
+      post move_to_perfectbook_attachment_path(attachment)
     end
     assert_redirected_to inbox_thread_path(conversation)
-    assert_match(/Moved/, flash[:notice].to_s)
+    assert_match(/Removed from CRM/, flash[:notice].to_s)
     assert_equal 0, message.files.attachments.count
+    assert_not blob.service.exist?(blob.key)
+    get inbox_thread_path(conversation)
+    assert_select "p", text: /Collect the sensitive document/
   end
 end

@@ -38,9 +38,6 @@ module Mail
       true
     end
 
-    # Incremental fetch: returns messages with UID above the stored cursor.
-    # Updates MailSyncState on success. Resets the cursor when UIDVALIDITY
-    # changes (Gmail rebuilt the folder).
     def fetch_new(limit: 200)
       raise NotConfiguredError, "Mailbox is not configured." unless configured?
 
@@ -55,31 +52,36 @@ module Mail
           state.update!(uid_validity: validity)
         end
         from_uid = state.last_uid.to_i + 1
-        uids = imap.uid_search([ "UID", "#{from_uid}:*" ]).first(limit)
+        uids = imap.uid_search([ "UID", "#{from_uid}:*" ]).select { |uid| uid >= from_uid }.sort.first(limit)
         uids.each do |uid|
           data = fetch_one(imap, uid)
           collected << data if data
         end
-        max_uid = uids.max || state.last_uid
-        ::MailSyncState.record_success!(FOLDER, uid_validity: validity || state.uid_validity || 0, last_uid: max_uid)
       end
       collected
-    rescue Net::IMAP::Error, SocketError, SystemCallError, IOError => e
-      ::MailSyncState.record_error!(FOLDER, e.message)
-      raise ConnectionError, e.message
     end
 
     # Full-folder scan for the history import preview/commit. Yields Fetched
     # structs; callers enforce the info@ rule via the ingester.
-    def fetch_all(since: nil, limit: nil, &block)
+    def fetch_all(since: nil, limit: nil, after_uid: 0, uid_validity: nil, on_mailbox: nil, &block)
       raise NotConfiguredError, "Mailbox is not configured." unless configured?
-      return enum_for(:fetch_all, since: since, limit: limit) unless block
+      return enum_for(:fetch_all, since: since, limit: limit, after_uid: after_uid, uid_validity: uid_validity, on_mailbox: on_mailbox) unless block
 
       with_connection do |imap|
         imap.examine(FOLDER)
         criteria = [ "ALL" ]
         criteria = [ "SINCE", since.strftime("%d-%b-%Y") ] if since
-        uids = imap.uid_search(criteria)
+        validity = imap.responses["UIDVALIDITY"]&.last || current_validity(imap)
+        on_mailbox&.call(validity)
+        after_uid = 0 if uid_validity != validity
+        fields = %w[FROM TO CC BCC Delivered-To X-Original-To]
+        address_search = fields.flat_map { |field| [ "HEADER", field, Mail.mailbox_address ] }
+        begin
+          uids = imap.uid_search(criteria + Array.new(fields.length - 1, "OR") + address_search)
+        rescue Net::IMAP::Error
+          uids = imap.uid_search(criteria)
+        end
+        uids = uids.select { |uid| uid > after_uid.to_i }.sort
         uids = uids.first(limit) if limit
         uids.each do |uid|
           data = fetch_one(imap, uid)
@@ -112,10 +114,12 @@ module Mail
           nil
         end
       end
+    rescue Net::IMAP::Error, SocketError, SystemCallError, IOError, OpenSSL::SSL::SSLError => e
+      raise ConnectionError, e.message
     end
 
     def current_validity(imap)
-      status = imap.status(FOLDER, [ "UIDVALIDITY" ]) rescue nil
+      status = imap.status(FOLDER, [ "UIDVALIDITY" ])
       status&.dig("UIDVALIDITY")
     end
 
@@ -140,9 +144,7 @@ module Mail
         gmail: {
           gm_thrid: row.attr["X-GM-THRID"]&.to_s,
           gm_msgid: row.attr["X-GM-MSGID"]&.to_s,
-          labels: Array(row.attr["X-GM-LABELS"]).map(&:to_s),
-          delivered_to: [],
-          x_original_to: []
+          labels: Array(row.attr["X-GM-LABELS"]).map(&:to_s)
         }
       )
     end

@@ -21,18 +21,16 @@ module Mail
 
     def build(messages, choices: {})
       grouped = Hash.new(0)
-      Array(messages).each do |item|
+      messages.each do |item|
         parsed = item.is_a?(Mail::Ingester::Parsed) ? item : Mail::Ingester.parse_raw(item[:raw] || item["raw"].to_s)
-        senders = Array(parsed.from_addresses).reject { |value| Mail.mailbox_aliases.include?(value) }
-        # Import respects the same info@ rule: skip mail with no mailbox trace.
-        headers = { "from" => parsed.from_addresses, "to" => parsed.to_addresses, "cc" => parsed.cc_addresses }
-        next unless Mail.keeps?(headers)
+        next unless Mail.keeps?(parsed.headers)
 
-        sender = senders.first.to_s.downcase.strip
-        next if sender.blank?
-
-        grouped[sender] += 1
+        Mail.counterparties(parsed).each { |email| grouped[email] += 1 }
       end
+      build_counts(grouped, choices: choices)
+    end
+
+    def build_counts(grouped, choices: {})
       domains = Hash.new(0)
       grouped.each_key { |email| domains[email.split("@").last] += 1 }
 
@@ -50,23 +48,14 @@ module Mail
     private
 
     def duplicate_name_for(email)
-      if (client = ::Client.find_by(email: email))
-        return client.name
-      end
-      if (person = ::Person.find_by(email: email))
-        return (person.client || person.lead)&.name || person.name
-      end
-      if (lead = ::Lead.find_by(email: email))
-        return lead.name
-      end
-      if (organization = ::Organization.find_by(email: email))
-        return organization.name
-      end
-      nil
+      match = Matcher.call([ email ])
+      match.via == "ignored" ? "Ignored sender" : match.linkable&.name
     end
 
     def suggest_kind(email, domains)
       domain = email.split("@").last.to_s.downcase
+      public_domains = %w[gmail googlemail yahoo hotmail outlook live icloud me aol proton protonmail]
+      return "client" if public_domains.include?(domain.split(".").first)
       return "organization" if domains[domain].to_i > 1
       return "organization" if perfectbook_partner?(email, domain)
 

@@ -7,6 +7,7 @@ class Message < ApplicationRecord
   serialize :to_addresses, coder: JSON
   serialize :cc_addresses, coder: JSON
   serialize :gmail_labels, coder: JSON
+  serialize :attachment_notices, coder: JSON
 
   validates :direction, inclusion: { in: DIRECTIONS }
   validates :gm_message_id, uniqueness: { allow_nil: true }
@@ -19,6 +20,10 @@ class Message < ApplicationRecord
 
   after_create :bump_conversation
   after_destroy :rebalance_conversation
+
+  def self.sensitive_attachment?(filename, content_type)
+    "#{filename} #{content_type}".match?(/passport|visa|insurance|identity|(?:\A|[^a-z])id(?:[^a-z]|\z)|scan/i)
+  end
 
   def inbound?
     direction == "in"

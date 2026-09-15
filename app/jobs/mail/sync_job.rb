@@ -17,6 +17,7 @@ class Mail::SyncJob < ApplicationJob
       # Enrich header rule with Gmail envelope hints when present.
       result = Mail::Ingester.ingest(parsed: parsed, gmail: item.gmail)
       stored += 1 if result[:status] == :stored
+      ::MailSyncState.record_success!(Mail::FOLDER, uid_validity: item.uid_validity, last_uid: item.uid)
     end
     ::Setting.current.update_columns(mailbox_last_sync_at: Time.current, updated_at: Time.current)
     stored

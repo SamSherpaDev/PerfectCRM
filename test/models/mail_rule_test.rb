@@ -20,10 +20,12 @@ class MailRuleTest < ActiveSupport::TestCase
     assert_equal "in", Mail.direction_for([ "client@example.com" ])
   end
 
-  test "respects configured aliases" do
+  test "rejects extra aliases and addresses containing the mailbox" do
     old = ENV["MAILBOX_ALIASES"]
     ENV["MAILBOX_ALIASES"] = "hello@sherpaholidays.com"
-    assert Mail.keeps?({ "from" => [ "a@test" ], "to" => [ "hello@sherpaholidays.com" ] })
+    assert_not Mail.keeps?({ "from" => [ "a@test" ], "to" => [ "hello@sherpaholidays.com" ] })
+    assert_not Mail.keeps?({ "from" => [ "info@sherpaholidays.com.example.org" ], "to" => [ "captain@gmail.com" ] })
+    assert_not Mail.keeps?({ "from" => [ '"info@sherpaholidays.com" <friend@gmail.com>' ] })
   ensure
     ENV["MAILBOX_ALIASES"] = old
   end

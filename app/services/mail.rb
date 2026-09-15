@@ -1,49 +1,33 @@
-# Inbound Gmail half (crm-mail-in): every message to or from the captain's
-# info@ mailbox lands on the right timeline, threaded, with attachments.
-# See README.md, "Mail".
+require "mail"
+
 module Mail
   FOLDER = "[Gmail]/All Mail"
 
   class << self
-    # The mailbox address is fixed to the configured value so personal mail
-    # can never drift in through a form field.
     def mailbox_address
       ENV.fetch("MAILBOX_ADDRESS", "info@sherpaholidays.com").to_s.strip.downcase.presence || "info@sherpaholidays.com"
     end
 
-    def mailbox_aliases
-      base = [ mailbox_address ]
-      extra = ENV.fetch("MAILBOX_ALIASES", "").split(",").map { |value| value.strip.downcase }.reject(&:blank?)
-      (base + extra).uniq
-    end
-
-    # HARD RULE: keep only messages where a mailbox address appears in any
-    # delivered header. Everything else is personal mail and is skipped
-    # without storing it.
     def keeps?(headers)
-      wanted = mailbox_aliases
-      candidates = []
-      %w[from to cc bcc delivered-to x-original-to].each do |key|
-        values = headers[key] || headers[key.to_s.downcase] || headers[key.to_s.upcase]
-        Array(values).each do |value|
-          candidates.concat(extract_addresses(value.to_s))
-          candidates << value.to_s.strip.downcase
-        end
+      headers = headers.transform_keys { |key| key.to_s.downcase }
+      %w[from to cc bcc delivered-to x-original-to].any? do |key|
+        Array(headers[key]).any? { |value| extract_addresses(value).include?(mailbox_address) }
       end
-      raw = headers.values.flatten.map(&:to_s).join(" ").downcase
-      candidates.map!(&:downcase)
-      wanted.any? { |address| candidates.include?(address) || raw.include?(address) }
     end
 
     def extract_addresses(text)
-      text.to_s.scan(/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/).map(&:downcase)
+      ::Mail::AddressList.new(text.to_s).addresses.map { |address| address.address.to_s.downcase }
+    rescue ::Mail::Field::ParseError
+      []
     end
 
     def direction_for(from_addresses)
-      froms = Array(from_addresses).map { |value| value.to_s.downcase }
-      return "out" if froms.any? { |address| mailbox_aliases.include?(address) }
+      Array(from_addresses).any? { |value| value.to_s.downcase == mailbox_address } ? "out" : "in"
+    end
 
-      "in"
+    def counterparties(parsed)
+      addresses = direction_for(parsed.from_addresses) == "in" ? parsed.from_addresses : parsed.to_addresses + parsed.cc_addresses + Array(parsed.headers["bcc"])
+      Array(addresses).reject { |value| value == mailbox_address }.uniq
     end
   end
 end

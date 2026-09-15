@@ -18,7 +18,7 @@
       <% if body.length > 600 %>
         <details>
           <summary class="link-quiet cursor-pointer text-[12.5px]">Read message</summary>
-          <div class="mt-2 whitespace-pre-line text-ink-2"><%= truncate(body, length: 4000) %></div>
+          <div class="mt-2 whitespace-pre-line text-ink-2"><%= body %></div>
         </details>
         <p class="mt-1 text-ink-2 whitespace-pre-line"><%= truncate(body, length: 280) %></p>
       <% else %>
@@ -28,23 +28,20 @@
         <div class="mt-2 text-ink-2 prose-sm"><%= sanitize(message.html_body, tags: Mail::Sanitizer::ALLOWED_TAGS, attributes: Mail::Sanitizer::ALLOWED_ATTRIBUTES) %></div>
       <% end %>
       <% if message.files.attached? %>
-        <% linkable = message.conversation.linkable %>
-        <% pb_bookings = linkable.try(:perfectbook_contact_id).present? ? PerfectBook::Booking.where(perfectbook_contact_id: linkable.perfectbook_contact_id).limit(20).to_a : [] %>
         <ul class="thread-attachments" aria-label="Attachments">
           <% message.files.each do |file| %>
             <li class="attachment-row">
               <%= render "shared/icon", name: :copy, class: "h-3.5 w-3.5" %>
               <span class="min-w-0 flex-1 truncate"><%= file.filename %> · <%= number_to_human_size(file.byte_size) %></span>
               <%= link_to "Download", attachment_path(file.id), class: "link text-xs" %>
-              <%= form_with url: move_to_perfectbook_attachment_path(file.id), method: :post, class: "flex flex-wrap items-center gap-1.5" do |form| %>
-                <% if pb_bookings.any? %>
-                  <%= form.select :booking_id, options_for_select(pb_bookings.map { |booking| [ "#{booking.trip_name.presence || booking.ref} · #{booking.ref}", booking.perfectbook_id ] }), { include_blank: "Pick booking" }, class: "select", aria: { label: "Booking for #{file.filename}" } %>
-                <% end %>
-                <%= form.submit "Move to PerfectBook", class: "btn-ghost btn btn-sm", data: { turbo_confirm: "Move #{file.filename} to PerfectBook and delete it here?" } %>
-              <% end %>
+              <% if file.blob.metadata["sensitive"] %><%= badge "Potentially sensitive", :warning %><% end %>
+              <%= button_to "Remove from CRM, collect in PerfectBook", move_to_perfectbook_attachment_path(file.id), method: :post, class: "btn-ghost btn btn-sm" %>
             </li>
           <% end %>
         </ul>
+      <% end %>
+      <% Array(message.attachment_notices).each do |notice| %>
+        <p class="mt-2 text-sm muted"><%= notice %></p>
       <% end %>
       <% if message.label_list.any? %>
         <p class="stone-meta">Labels: <%= message.label_list.join(", ") %></p>

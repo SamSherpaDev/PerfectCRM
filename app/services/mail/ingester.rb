@@ -16,53 +16,48 @@ module Mail
 
     def ingest(parsed:, gmail:)
       gmail = gmail.transform_keys(&:to_sym)
-      gm_message_id = gmail[:gm_msgid]&.to_s.presence || gmail[:gm_message_id]&.to_s
-      gm_thread_id = gmail[:gm_thrid]&.to_s.presence || gmail[:gm_thread_id]&.to_s
-      labels = Array(gmail[:labels] || gmail[:gmail_labels])
+      gm_message_id = gmail[:gm_msgid]&.to_s.presence
+      gm_thread_id = gmail[:gm_thrid]&.to_s.presence
+      labels = Array(gmail[:labels])
 
-      headers_for_rule = {
-        "from" => parsed.from_addresses, "to" => parsed.to_addresses,
-        "cc" => parsed.cc_addresses, "delivered-to" => Array(gmail[:delivered_to]),
-        "x-original-to" => Array(gmail[:x_original_to]),
-        "bcc" => Array(gmail[:bcc])
-      }
-      return skipped(:filtered) unless Mail.keeps?(headers_for_rule)
+      return skipped(:filtered) unless Mail.keeps?(parsed.headers)
 
-      if gm_message_id.present? && ::Message.exists?(gm_message_id: gm_message_id)
-        return skipped(:duplicate)
+      existing = ::Message.find_by(gm_message_id: gm_message_id) if gm_message_id.present?
+      existing ||= ::Message.find_by(message_id: parsed.message_id) if parsed.message_id.present?
+      return { status: :duplicate, conversation: existing.conversation, message: existing } if existing
+
+      uploaded = []
+      ::Message.transaction(requires_new: true) do |transaction|
+        transaction.after_rollback { uploaded.each(&:delete) }
+        conversation = find_conversation(gm_thread_id: gm_thread_id, parsed: parsed)
+        direction = Mail.direction_for(parsed.from_addresses)
+
+        message = conversation.messages.create!(
+          direction: direction,
+          gm_message_id: gm_message_id,
+          message_id: parsed.message_id,
+          in_reply_to: parsed.in_reply_to,
+          references_text: parsed.references,
+          from_address: parsed.from_addresses.first,
+          to_addresses: parsed.to_addresses,
+          cc_addresses: parsed.cc_addresses,
+          subject: parsed.subject.presence || conversation.subject,
+          text_body: parsed.text_body,
+          html_body: parsed.html_body.present? ? Sanitizer.clean(parsed.html_body) : nil,
+          sent_at: parsed.sent_at || Time.current,
+          raw_size: parsed.raw_size.to_i,
+          gmail_labels: labels
+        )
+        attach_files(message, parsed.attachments, uploaded)
+        link_conversation(conversation, parsed)
+        conversation.update!(
+          subject: parsed.subject.presence || conversation.subject.presence || "(no subject)",
+          participant_emails: participant_list(parsed),
+          last_message_at: conversation.messages.maximum(:sent_at)
+        )
+        conversation.refresh_counters!
+        { status: :stored, conversation: conversation, message: message }
       end
-      if parsed.message_id.present? && ::Message.exists?(message_id: parsed.message_id)
-        return skipped(:duplicate)
-      end
-
-      conversation = find_conversation(gm_thread_id: gm_thread_id, parsed: parsed)
-      direction = Mail.direction_for(parsed.from_addresses)
-
-      message = conversation.messages.create!(
-        direction: direction,
-        gm_message_id: gm_message_id,
-        message_id: parsed.message_id,
-        in_reply_to: parsed.in_reply_to,
-        references_text: parsed.references,
-        from_address: parsed.from_addresses.first,
-        to_addresses: parsed.to_addresses,
-        cc_addresses: parsed.cc_addresses,
-        subject: parsed.subject.presence || conversation.subject,
-        text_body: parsed.text_body,
-        html_body: parsed.html_body.present? ? Sanitizer.clean(parsed.html_body) : nil,
-        sent_at: parsed.sent_at || Time.current,
-        raw_size: parsed.raw_size.to_i,
-        gmail_labels: labels
-      )
-      attach_files(message, parsed.attachments)
-      link_conversation(conversation, parsed, direction)
-      conversation.update!(
-        subject: parsed.subject.presence || conversation.subject.presence || "(no subject)",
-        participant_emails: participant_list(parsed),
-        last_message_at: conversation.messages.maximum(:sent_at)
-      )
-      conversation.refresh_counters!
-      { status: :stored, conversation: conversation, message: message }
     end
 
     # Parses a raw RFC822 string into a Parsed struct. Used by the IMAP
@@ -95,7 +90,10 @@ module Mail
         end
       end
       Parsed.new(
-        headers: { "from" => from, "to" => to, "cc" => cc },
+        headers: { "from" => from, "to" => to, "cc" => cc,
+          "bcc" => Array(mail.bcc).map(&:downcase),
+          "delivered-to" => mail.header.fields.select { |field| field.name.casecmp?("Delivered-To") }.map(&:value),
+          "x-original-to" => mail.header.fields.select { |field| field.name.casecmp?("X-Original-To") }.map(&:value) },
         from_addresses: from, to_addresses: to, cc_addresses: cc,
         subject: mail.subject.to_s.strip.presence,
         message_id: mail.message_id.to_s.presence,
@@ -146,22 +144,37 @@ module Mail
         .map { |value| value.to_s.strip.downcase }.reject(&:blank?).uniq.first(20)
     end
 
-    def attach_files(message, attachments)
-      Array(attachments).first(10).each do |file|
+    def attach_files(message, attachments, uploaded)
+      skipped = []
+      Array(attachments).each do |file|
         filename = file[:filename].to_s.presence || "attachment"
         content_type = file[:content_type].to_s.presence || "application/octet-stream"
         data = file[:data].to_s
         next if data.blank?
+        if data.bytesize > 25.megabytes
+          skipped << "#{filename}: skipped because it exceeds 25 MB."
+          next
+        end
 
-        message.files.attach(io: StringIO.new(data), filename: filename, content_type: content_type)
+        blob = ActiveStorage::Blob.build_after_unfurling(io: StringIO.new(data), filename: filename, content_type: content_type,
+          metadata: { sensitive: ::Message.sensitive_attachment?(filename, content_type) })
+        uploaded << blob
+        blob.save!
+        blob.upload_without_unfurling(StringIO.new(data))
+        message.files.attach(blob)
       end
+      message.update!(attachment_notices: skipped)
     end
 
-    def link_conversation(conversation, parsed, direction)
+    def link_conversation(conversation, parsed)
       return if conversation.linkable.present?
 
-      counterparties = direction == "in" ? parsed.from_addresses : (parsed.to_addresses + parsed.cc_addresses)
+      counterparties = Mail.counterparties(parsed)
       match = Matcher.call(counterparties)
+      if match.via == "ignored"
+        conversation.update!(ignored: true)
+        return
+      end
       return if match.linkable.nil?
 
       conversation.update!(linkable: match.linkable)

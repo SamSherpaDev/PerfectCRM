@@ -113,4 +113,62 @@ class MailIngesterTest < ActiveSupport::TestCase
     assert result[:message].files.attached?
     assert_equal "note.txt", result[:message].files.first.filename.to_s
   end
+  test "delivery headers retain alias mail in preview and ingestion" do
+    %w[Bcc Delivered-To X-Original-To].each_with_index do |header, index|
+      raw = "#{header}: info@sherpaholidays.com\r\n" + mail_raw(from: "sender@example.com", to: "captain@gmail.com", message_id: "<delivery#{index}@test>")
+      parsed = Mail::Ingester.parse_raw(raw)
+      assert_equal 1, Mail::ImportPreview.build([ parsed ]).first.count
+      assert_equal :stored, Mail::Ingester.ingest(parsed: parsed, gmail: {})[:status]
+    end
+  end
+
+  test "failed upload rolls back ingestion and retries completely" do
+    client = Client.create!(name: "Retry", email: "retry@example.com")
+    parsed = Mail::Ingester.parse_raw(mail_raw(from: client.email, message_id: "<retry@test>"))
+    parsed.attachments << { filename: "route.txt", content_type: "text/plain", data: "route" }
+    service = ActiveStorage::Blob.service
+    assert_no_difference([ "Message.count", "Conversation.count", "ActiveStorage::Blob.count" ]) do
+      service.stub(:upload, ->(*) { raise IOError, "upload failed" }) do
+        assert_raises(IOError) { Mail::Ingester.ingest(parsed: parsed, gmail: { gm_msgid: "retry" }) }
+      end
+    end
+    result = Mail::Ingester.ingest(parsed: parsed, gmail: { gm_msgid: "retry" })
+    assert_equal :stored, result[:status]
+    assert_equal client, result[:conversation].linkable
+    assert_equal "route", result[:message].files.first.download
+  end
+
+  test "ignored identities skip triage on new threads" do
+    EmailIdentity.remember!("ignored@example.com", ignored: true)
+    result = ingest_raw(mail_raw(from: "ignored@example.com", message_id: "<ignored@test>"))
+    assert result[:conversation].ignored?
+    assert_not Conversation.triage.exists?(result[:conversation].id)
+  end
+
+  test "lead conversion transfers mail and resolves original person owners" do
+    lead = Lead.create!(name: "Traveler", email: "lead-mail@example.com", source: "email")
+    lead.people.create!(name: "Companion", email: "companion@example.com")
+    EmailIdentity.remember!("alias@example.com", linkable: lead)
+    first = ingest_raw(mail_raw(from: lead.email, message_id: "<lead-mail@test>"))
+    client = lead.convert_to_client!
+    assert_equal client, first[:conversation].reload.linkable
+    assert_equal client, EmailIdentity.find_for("alias@example.com").linkable
+    %w[lead-mail@example.com companion@example.com alias@example.com].each_with_index do |email, index|
+      result = ingest_raw(mail_raw(from: email, message_id: "<converted#{index}@test>"))
+      assert_equal client, result[:conversation].linkable
+    end
+  end
+
+  test "keeps all ordinary attachments and flags documents while explaining oversize skips" do
+    parsed = Mail::Ingester.parse_raw(mail_raw(from: "files@example.com", message_id: "<many-files@test>"))
+    parsed.attachments = 11.times.map { |i| { filename: "route#{i}.txt", content_type: "text/plain", data: "route" } }
+    parsed.attachments << { filename: "passport.pdf", content_type: "application/pdf", data: "passport" }
+    parsed.attachments << { filename: "large.txt", content_type: "text/plain", data: "a" * (25.megabytes + 1) }
+    result = Mail::Ingester.ingest(parsed: parsed, gmail: {})
+    assert_equal 12, result[:message].files.count
+    assert result[:message].files.find { |file| file.filename.to_s == "passport.pdf" }.blob.metadata["sensitive"]
+    assert_includes result[:message].attachment_notices.first, "25 MB"
+    assert Conversation.needs_triage.exists?(result[:conversation].id)
+  end
+
 end

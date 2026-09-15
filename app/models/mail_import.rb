@@ -1,5 +1,5 @@
 class MailImport < ApplicationRecord
-  STATUSES = %w[draft preview running done failed].freeze
+  STATUSES = %w[draft previewing preview_failed preview running done failed].freeze
   SCOPES = %w[all since_date last_n_months].freeze
 
   serialize :preview_json, coder: JSON
@@ -32,7 +32,7 @@ class MailImport < ApplicationRecord
   def cutoff_date
     case scope
     when "since_date" then since_date
-    when "last_n_months" then months.to_i.months.ago.to_date
+    when "last_n_months" then since_date || months.to_i.months.ago.to_date
     else nil
     end
   end

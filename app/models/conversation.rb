@@ -6,9 +6,14 @@ class Conversation < ApplicationRecord
 
   validates :unread_count, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
 
-  scope :ordered, -> { order(Arel.sql("COALESCE(conversations.last_message_at, conversations.updated_at) DESC")) }
+  scope :ordered, -> { order(Arel.sql("COALESCE(conversations.last_message_at, conversations.updated_at) DESC, conversations.id DESC")) }
   scope :linked, -> { where.not(linkable_type: nil) }
   scope :triage, -> { where(linkable_type: nil, ignored: false) }
+  scope :sensitive_documents, -> {
+    where(id: joins(messages: { files_attachments: :blob })
+      .where("json_extract(active_storage_blobs.metadata, '$.sensitive') = 1").select(:id))
+  }
+  scope :needs_triage, -> { triage.or(sensitive_documents) }
   scope :ignored_scope, -> { where(ignored: true) }
 
   # Inbox triage buckets. "Waiting on you" means the newest message is

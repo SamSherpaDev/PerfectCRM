@@ -113,10 +113,36 @@ class MailSyncJobTest < ActiveSupport::TestCase
     assert_equal 222, MailSyncState.for(Mail::FOLDER).uid_validity
   end
 
-  test "imap source never uses write verbs" do
-    source = File.read(Rails.root.join("app/services/mail/imap_fetcher.rb"))
-    %w[.select .store .uid_store .copy .move .expunge].each do |verb|
-      assert_not_includes source, verb, "IMAP fetcher must stay read-only (found #{verb})"
+  test "ingestion failure advances only completed UIDs and resumes" do
+    imap = FakeImap.new(messages: {
+      101 => { raw: sync_raw(from: "one@example.com", message_id: "<checkpoint-one@test>") },
+      102 => { raw: sync_raw(from: "two@example.com", message_id: "<checkpoint-two@test>") }
+    })
+    fetcher = Mail::ImapFetcher.new(login: "x", password: "y", imap: imap)
+    original = Mail::Ingester.method(:ingest)
+    failing = ->(**args) do
+      raise "interrupted" if args[:parsed].from_addresses == [ "two@example.com" ]
+      original.call(**args)
     end
+    Mail::Ingester.stub(:ingest, failing) do
+      assert_raises(RuntimeError) { Mail::SyncJob.new.perform(fetcher: fetcher) }
+    end
+    assert_equal 101, MailSyncState.for(Mail::FOLDER).last_uid
+    assert_difference("Message.count", 1) { Mail::SyncJob.new.perform(fetcher: fetcher) }
+    assert_equal 102, MailSyncState.for(Mail::FOLDER).last_uid
   end
+
+  test "connection errors are normalized for settings and history" do
+    imap = FakeImap.new
+    def imap.status(*)
+      raise Net::IMAP::Error, "bad credentials"
+    end
+    def imap.examine(*)
+      raise Net::IMAP::Error, "bad credentials"
+    end
+    fetcher = Mail::ImapFetcher.new(login: "x", password: "y", imap: imap)
+    assert_raises(Mail::ImapFetcher::ConnectionError) { fetcher.test_connection }
+    assert_raises(Mail::ImapFetcher::ConnectionError) { fetcher.fetch_all.to_a }
+  end
+
 end

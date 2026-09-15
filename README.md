@@ -275,7 +275,7 @@ kind `automation` prepare for them without running automation today.
 ## Mail
 
 Email only, from `info@sherpaholidays.com` (fixed to `MAILBOX_ADDRESS`,
-default `info@sherpaholidays.com`, plus optional `MAILBOX_ALIASES`). The CRM
+default `info@sherpaholidays.com`, with no additional accepted mailboxes). The CRM
 connects to that Google account by IMAP with an app password and syncs ONLY
 mail to or from the mailbox; personal mail is skipped without storing it.
 
@@ -287,27 +287,42 @@ Sync runs every 5 minutes (`Mail::SyncJob` in `config/recurring.yml`) over
 UIDVALIDITY/UID, threaded on `X-GM-THRID`/`X-GM-MSGID` with a
 Message-ID/In-Reply-To/References fallback. Read-only IMAP: it examines
 the folder and never moves, deletes, or flags server mail. Gmail labels
-mirror read-only on each message.
+are an initial read-only snapshot on each message; later Gmail label changes are not refreshed.
 
 Every kept message lands on the right client, lead, or organization
 timeline (`Conversation` + `Message`, attachments via Active Storage on
 the R2 bucket), threaded, newest first, with the unread mark clearing when
-the thread opens. Exact email matches first; remembered `EmailIdentity`
-choices win next. Unknown senders sit in triage as suggested clients —
+the thread opens. Remembered `EmailIdentity` choices take precedence,
+followed by exact email matches. Unknown senders sit in triage as suggested clients -
 Link to existing, Create client, Create lead, Create organization, or
-Ignore sender — and the choice is remembered. Nothing is ever created
+Ignore sender - and the choice is remembered. Nothing is ever created
 silently. Inbox tabs are Waiting on you, Waiting on them, All, and Triage,
-with icons and counts. Sensitive files move via Move to PerfectBook, which
-hands the file to PerfectBook (`PerfectBook::DocumentUploader`; needs
-PerfectBook task pb-document-intake for the upload endpoint) and deletes
-it here with an activity event.
+with icons and counts. Inbox and record timelines offer Load older so complete
+history is reachable, and expanded messages show their full body.
+
+Ordinary email attachments are part of the conversation and stay in CRM storage.
+There is no attachment-count cap. Files over 25 MB are skipped with a visible
+message notice. Filenames or types suggesting passport, visa, insurance,
+identity/ID, or scans are flagged in Triage, even on linked conversations.
+Every attachment offers **Remove from CRM, collect in PerfectBook**: one tap
+purges the file from CRM storage, records an activity event, and leaves a
+follow-up note in the thread to collect the document in PerfectBook. It does
+not change Gmail or claim that the file was uploaded to PerfectBook.
+`PerfectBook::DocumentUploader` remains the future upload interface; no file
+marked sensitive by the captain waits in CRM storage for that endpoint.
 
 Settings → Import history backfills past mail: all, since a date, or last
-N months (no 90-day cap). Preview shows the message count and distinct
-senders as clients versus organizations (shared domains or PerfectBook
-partner contacts suggest organizations), with duplicates shown before
-commit and per-row flips, then a resumable background job (`Mail::ImportJob`)
-with progress and a summary. Import respects the same info@ rule.
+N months (no 90-day cap), as requested by the captain. Preview scans the whole
+selected range in a background job, using server-side address SEARCH where
+supported and a resumable scan otherwise. Progress and failures are visible;
+commit is available only after the preview completes. Preview and import
+persist UID and UIDVALIDITY checkpoints and reset the scan if the folder is
+rebuilt. Preview counts inbound and outbound mail and shows counterparties,
+remembered matches, duplicates, and editable creation choices. Shared domains
+suggest organizations only with two or more distinct addresses on a non-public
+domain or a PerfectBook partner match. Public email providers (Gmail,
+Googlemail, Yahoo, Hotmail, Outlook, Live, iCloud, Me, AOL, Proton, Protonmail)
+are exempt. Import respects the same exact parsed mailbox-address rule.
 
 ## Production shape
 

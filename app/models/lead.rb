@@ -154,6 +154,8 @@ class Lead < ApplicationRecord
         )
       end
       tasks.update_all(subject_type: "Client", subject_id: client.id)
+      Conversation.where(linkable: self).update_all(linkable_type: "Client", linkable_id: client.id)
+      EmailIdentity.where(linkable: self).update_all(linkable_type: "Client", linkable_id: client.id)
       update!(converted_client: client, converted_at: Time.current)
       ActivityEvent.create!(
         subject: self, kind: "conversion", summary: "Converted to client",

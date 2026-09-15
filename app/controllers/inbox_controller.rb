@@ -8,7 +8,7 @@ class InboxController < ApplicationController
     @waiting_them_count = base.where.not(id: Conversation.waiting_on_you.select(:id))
       .where.not(linkable_type: nil).count
     @all_count = base.count
-    @triage_count = Conversation.triage.count
+    @triage_count = Conversation.needs_triage.count
 
     @conversations = case @tab
     when "waiting"
@@ -16,10 +16,13 @@ class InboxController < ApplicationController
     when "waiting_them"
       base.where.not(id: Conversation.waiting_on_you.select(:id)).where.not(linkable_type: nil)
     when "triage"
-      Conversation.triage.ordered.includes(:linkable, messages: { files_attachments: :blob })
+      Conversation.needs_triage.ordered.includes(:linkable, messages: { files_attachments: :blob })
     else
       base
-    end.limit(50)
+    end
+    @page = [ params[:page].to_i, 1 ].max
+    @has_older = @conversations.offset(@page * 50).exists?
+    @conversations = @conversations.offset((@page - 1) * 50).limit(50)
   end
 
   def show

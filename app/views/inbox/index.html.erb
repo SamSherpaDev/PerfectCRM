@@ -27,6 +27,9 @@
               <p class="mt-1 truncate text-sm muted"><%= conversation.other_participants.first(3).join(", ") %></p>
               <p class="mt-1 text-sm text-ink-2"><%= last&.preview_text(120) %></p>
               <div class="mt-2 flex flex-wrap items-center gap-2">
+                <% if conversation.messages.any? { |message| message.files.any? { |file| file.blob.metadata["sensitive"] } } %>
+                  <%= badge "Review sensitive document", :warning %>
+                <% end %>
                 <% if conversation.linkable %>
                   <%= status_badge "open", label: conversation.linkable_name || conversation.linkable_type %>
                 <% else %>
@@ -43,6 +46,10 @@
     </ul>
   <% else %>
     <%= render "shared/empty_state", title: "No conversations yet", body: "Client messages will land here in one thread per traveler, so every reply starts with the full story.", scene: :bridge %>
+  <% end %>
+
+  <% if @has_older %>
+    <%= link_to "Load older", inbox_path(tab: @tab, page: @page + 1), class: "btn-secondary btn mt-4" %>
   <% end %>
 
   <nav class="mobile-tabbar" aria-label="Inbox shortcuts">

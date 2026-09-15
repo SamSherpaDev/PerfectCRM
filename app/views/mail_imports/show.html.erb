@@ -3,6 +3,8 @@
   <%= render layout: "shared/page_header", locals: { eyebrow: "Mailbox", title: "Import", subtitle: "#{@import.scope_label} · #{@import.status.humanize}.", back: [ "Settings", edit_settings_path ] } do %><% end %>
   <%= render "shared/flash" %>
 
+  <% if @import.running? %><meta http-equiv="refresh" content="5"><% end %>
+  <% if @import.status == "failed" %><%= button_to "Resume import", commit_mail_import_path(@import), class: "btn-secondary btn" %><% end %>
   <section class="card card-pad" aria-labelledby="progress-heading">
     <h2 class="card-title" id="progress-heading">Progress</h2>
     <%= card_caption "Resumable: if it stops, rerunning continues where it left off." %>
@@ -10,7 +12,7 @@
     <dl class="mt-3 space-y-1 text-sm">
       <div class="flex gap-2"><dt class="muted">Processed:</dt><dd><%= @import.processed_messages %> / <%= @import.total_messages %></dd></div>
       <div class="flex gap-2"><dt class="muted">Linked:</dt><dd><%= @import.linked_messages %></dd></div>
-      <div class="flex gap-2"><dt class="muted">Skipped (personal or duplicate):</dt><dd><%= @import.skipped_messages %></dd></div>
+      <div class="flex gap-2"><dt class="muted">Unlinked or filtered:</dt><dd><%= @import.skipped_messages %></dd></div>
       <% if @import.error.present? %><div class="flex gap-2"><dt class="muted">Error:</dt><dd class="text-bad"><%= @import.error %></dd></div><% end %>
       <% if @import.finished_at %><div class="flex gap-2"><dt class="muted">Finished:</dt><dd><%= time_24_12(@import.finished_at) %></dd></div><% end %>
     </dl>

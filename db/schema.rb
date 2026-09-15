@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_14_211506) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_14_211507) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -167,6 +167,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_211506) do
   end
 
   create_table "messages", force: :cascade do |t|
+    t.text "attachment_notices"
     t.text "cc_addresses", default: "[]", null: false
     t.integer "conversation_id", null: false
     t.datetime "created_at", null: false

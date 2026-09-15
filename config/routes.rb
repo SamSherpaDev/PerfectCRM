@@ -29,7 +29,7 @@ Rails.application.routes.draw do
   end
   resources :mail_imports, only: %i[index new create show] do
     member do
-      post :preview
+      match :preview, via: %i[get post]
       post :commit
     end
   end

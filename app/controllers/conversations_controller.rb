@@ -74,7 +74,7 @@ class ConversationsController < ApplicationController
 
   def sender_email
     first_in = @conversation.messages.inbound.order(sent_at: :desc).first
-    raw = first_in&.from_address.presence || @conversation.other_participants.reject { |value| Mail.mailbox_aliases.include?(value) }.first
+    raw = first_in&.from_address.presence || @conversation.other_participants.reject { |value| value == Mail.mailbox_address }.first
     raw.to_s.strip.downcase.presence
   end
 

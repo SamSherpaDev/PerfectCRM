@@ -11,39 +11,44 @@ class MailImportsController < ApplicationController
     @import = MailImport.new(import_params)
     @import.status = "draft"
     if @import.save
+      @import.update!(since_date: @import.cutoff_date) if @import.scope == "last_n_months"
+      Mail::PreviewJob.perform_later(@import.id)
       redirect_to preview_mail_import_path(@import), status: :see_other
     else
       render :new, status: :unprocessable_entity
     end
   end
 
-  # Builds the preview from a live IMAP scan (or an empty set when the
-  # mailbox is not configured) and stores the rows for the commit step.
   def preview
     @import = MailImport.find(params[:id])
-    choices = preview_choices
-    messages = sample_messages(@import)
-    rows = Mail::ImportPreview.build(messages, choices: choices).map do |row|
-      { "email" => row.email, "count" => row.count, "suggested_kind" => row.suggested_kind,
-        "duplicate" => row.duplicate, "duplicate_name" => row.duplicate_name }
+    if request.post? && %w[draft preview_failed].include?(@import.status)
+      Mail::PreviewJob.perform_later(@import.id)
+      redirect_to preview_mail_import_path(@import), status: :see_other
+      return
     end
-    @import.update!(status: "preview", preview_json: { "rows" => rows, "choices" => choices },
-      total_messages: rows.sum { |row| row["count"].to_i })
-    @rows = rows
+    @rows = @import.preview_rows
   end
 
   def commit
     @import = MailImport.find(params[:id])
-    choices = commit_choices(@import)
-    preview = @import.preview_json.is_a?(Hash) ? @import.preview_json : {}
-    @import.update!(preview_json: preview.merge("choices" => choices), status: "running",
-      processed_messages: 0)
-    Mail::ImportJob.perform_later(@import.id)
+    @import.with_lock do
+      unless %w[preview failed].include?(@import.status)
+        return redirect_to mail_import_path(@import), alert: "Wait for a complete preview before importing."
+      end
+      choices = commit_choices(@import)
+      preview = @import.preview_json || {}
+      @import.update!(preview_json: preview.merge("choices" => choices), status: "running")
+      Mail::ImportJob.perform_later(@import.id)
+    end
     redirect_to mail_import_path(@import), notice: "Import started. Progress updates here."
   end
 
   def show
     @import = MailImport.find(params[:id])
+    if %w[draft previewing preview_failed preview].include?(@import.status)
+      redirect_to preview_mail_import_path(@import)
+      return
+    end
     @rows = @import.preview_rows
   end
 
@@ -53,13 +58,9 @@ class MailImportsController < ApplicationController
     params.require(:mail_import).permit(:scope, :since_date, :months)
   end
 
-  def preview_choices
-    sanitize_choices(params[:choices])
-  end
-
   def commit_choices(import)
     normalized = sanitize_choices(params[:choices])
-    existing = import.preview_json.is_a?(Hash) ? (import.preview_json["choices"] || {}) : {}
+    existing = import.preview_json.fetch("choices") { import.preview_rows.to_h { |row| [ row["email"], row["suggested_kind"] ] } }
     existing.merge(normalized)
   end
 
@@ -84,17 +85,4 @@ class MailImportsController < ApplicationController
     {}
   end
 
-  def sample_messages(import)
-    fetcher = Mail::ImapFetcher.new
-    return [] unless fetcher.configured?
-
-    cutoff = import.cutoff_date
-    collected = []
-    fetcher.fetch_all(since: cutoff ? cutoff.to_time : nil, limit: 2000) do |item|
-      collected << { raw: item.raw }
-    end
-    collected
-  rescue Mail::ImapFetcher::NotConfiguredError, Mail::ImapFetcher::ConnectionError
-    []
-  end
 end
