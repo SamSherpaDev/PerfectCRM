@@ -373,4 +373,25 @@ class AiRequestsTest < ActionDispatch::IntegrationTest
     assert_match "Classify with AI", response.body
   end
 
+  test "unlinked proposals require linking before acceptance is offered" do
+    @conversation.update!(linkable: nil)
+    get inbox_thread_path(@conversation)
+    assert_select ".ai-suggestion", text: /Link this thread to a client, lead, or organization before accepting a suggestion/
+    stub_adapter('{"title":"Call about dates","due_in_days":3,"reason":"Confirm plans"}') do
+      post ai_conversation_suggestion_path(@conversation), headers: { "Accept" => "text/vnd.turbo-stream.html" }
+    end
+    assert_response :success
+    assert_select "form[action=?]", ai_accept_conversation_suggestion_path(@conversation), count: 0
+    assert_select ".ai-suggestion", text: /Call about dates/
+    assert_select ".ai-suggestion", text: /Link this thread to a client, lead, or organization before accepting a suggestion/
+    post link_conversation_path(@conversation), params: { linkable_type: "Client", linkable_id: @client.id }
+    follow_redirect!
+    assert_select "form[action=?]", ai_accept_conversation_suggestion_path(@conversation), count: 1
+    version = Nokogiri::HTML(response.body).at_css('input[name="suggestion_version"]')["value"]
+    assert_difference "Task.count", 1 do
+      post ai_accept_conversation_suggestion_path(@conversation), params: { suggestion_version: version }
+    end
+    assert_equal "Call about dates", @client.tasks.last.title
+  end
+
 end
