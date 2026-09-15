@@ -1,8 +1,6 @@
 # PerfectBook link: the CRM reads bookings and the trip catalog from
 # PerfectBook's versioned read-only API and never writes money data.
 # See README.md, "PerfectBook connection".
-# PerfectBook holds every sensitive document; this app mirrors only
-# status fields and deep links.
 module PerfectBook
   DEFAULT_BASE_URL = "https://perfectbook.sherpaholidays.com"
 

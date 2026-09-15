@@ -83,8 +83,9 @@ module PerfectBook
 
     private
 
-    # Walks cursor pagination; returns { data:, not_modified: } where
     # not_modified is true only when the first page answered 304.
+    # Otherwise the consumer must call commit_etags only after applying
+    # the entire collection successfully, so failed syncs remain fetchable.
     def walk_collection(path, params)
       all = []
       cursor = nil

@@ -86,22 +86,30 @@ app, removing an email also denies its existing session on its next request;
 
 PerfectBook (live at `perfectbook.sherpaholidays.com`) stays the system
 of record for bookings, invoices, money, and every sensitive traveler
-document. The CRM keeps a read-only mirror of the trip and departure
-catalog plus per-contact booking and invoice status, refreshed every 15
-minutes by `PerfectBook::SyncCatalogJob`, `SyncContactsJob`, and
-`SyncBookingsJob` (`config/recurring.yml`). The quote builder reads the
-mirror through `PerfectBook::Catalog`; client pages link out with
-`perfectbook_contact_url` and `perfectbook_booking_url`.
+document. The CRM mirrors contacts, the trip and departure catalog, and
+customer booking and invoice status. It never stores passport, visa,
+insurance, or date-of-birth data. Production polling is scheduled in
+[`config/recurring.yml`](config/recurring.yml); these recurring jobs are
+not scheduled in development. `PerfectBook::Catalog` and the
+`perfectbook_contact_url` and `perfectbook_booking_url` helpers support
+the future quote builder and client booking cards; those screens are not
+implemented yet.
 
 Configure with `PERFECTBOOK_BASE_URL` (defaults to
 `https://perfectbook.sherpaholidays.com`) and `PERFECTBOOK_API_TOKEN`
 (see `.env.app.example`). Generate the token with `bin/rails secret` and
-set the same value in PerfectBook's `.env.app`; when PerfectBook has no
-token, its whole API answers 404. The client (`PerfectBook::Client` in
-`lib/perfectbook/`) polls with ETag/`If-None-Match` (304 means no change),
-walks cursor pagination, honors 429 `Retry-After`, times out fast, and
-opens a circuit after repeated failures until the next run. The token is
-never logged (see `filter_parameter_logging.rb`).
+set the same value in PerfectBook's `.env.app`, then recreate both app
+containers so the environment changes take effect. A collection read
+returning 404 is treated as an unconfigured PerfectBook API. The client
+(`PerfectBook::Client` in `lib/perfectbook/`) uses conditional ETag requests
+and cursor pagination. Booking polling paces requests, pauses on 429 using
+`Retry-After` (60 seconds when absent), and persists its contact position
+so a later run resumes after an interruption. Catalog and contact polling
+record and raise rate-limit errors; they do not pause and retry within the
+run. Timeouts fail fast, and repeated connection or server failures open
+a per-process circuit for a cooldown (see `lib/perfectbook/circuit.rb`).
+Request logs omit the token and Authorization header; Rails parameters
+also filter the token (`config/initializers/filter_parameter_logging.rb`).
 
 Settings → PerfectBook connection shows configured/unconfigured, the last
 successful sync, the last error, and a Test connection button.

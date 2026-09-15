@@ -64,19 +64,12 @@ are not repeated here. This file covers only what differs for the CRM.
 | `SPACES_*` (attachments bucket + keys) | Step 2 | `.env.app`, password manager |
 | `LITESTREAM_*`, backup-bucket `SPACES_ENDPOINT`/`SPACES_REGION` | Step 2 | `.env.litestream`, password manager |
 | `SMTP_USERNAME`, `SMTP_PASSWORD` | Gmail app password | `.env.app`, password manager |
-| `PERFECTBOOK_BASE_URL`, `PERFECTBOOK_API_TOKEN` | PerfectBook read API; generate the token with `bin/rails secret` in PerfectBook and set the same value in both apps ([PerfectBook connection](../README.md#perfectbook-connection)) | `.env.app` on both boxes, password manager |
+| `PERFECTBOOK_BASE_URL`, `PERFECTBOOK_API_TOKEN` | [PerfectBook connection setup](../README.md#perfectbook-connection) | CRM `.env.app`; token also in PerfectBook's `.env.app` and password manager |
 
 ## PerfectBook connection
 
-The CRM mirrors the trip catalog plus booking and invoice status from
-PerfectBook's read-only sibling API every 15 minutes (see
-[PerfectBook connection](../README.md#perfectbook-connection) and
-`config/recurring.yml`). The token is never logged. If Settings shows
-"Unconfigured" or sync errors, confirm `PERFECTBOOK_BASE_URL` and
-`PERFECTBOOK_API_TOKEN` match PerfectBook's `.env.app`, then use the
-Settings "Test connection" button. The API answers 404 when PerfectBook
-has no token configured and 429 past 120 requests/minute; the client backs
-off with ETag polling, Retry-After handling, and a circuit breaker.
+For configuration, sync behavior, and the Settings connection check, see
+[PerfectBook connection](../README.md#perfectbook-connection).
 
 ## Nightly backup
 

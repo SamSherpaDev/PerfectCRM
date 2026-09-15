@@ -48,8 +48,8 @@ module PerfectBook
           synced_at: now
         )
       end
-      # Cancelled-away bookings vanish from nothing: the API is the full
-      # list, so drop local rows the server no longer returns for this contact.
+      # A successful response is the full list, even when empty. Only a
+      # first-page 304 above preserves all existing rows for this contact.
       Booking.where(perfectbook_contact_id: mirror.perfectbook_id)
         .where.not(perfectbook_id: seen_ids).delete_all
       result[:commit_etags]&.call

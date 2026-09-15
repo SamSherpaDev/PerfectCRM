@@ -1,5 +1,5 @@
-# Polls PerfectBook contacts every 15 minutes using updated_since from
-# the last success, so each run only transfers changed rows.
+# Uses the last successful poll's start time as updated_since, so changes
+# made while that poll was running remain eligible for the next poll.
 module PerfectBook
   class SyncContactsJob < ApplicationJob
     queue_as :default
