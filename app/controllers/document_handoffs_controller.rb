@@ -93,8 +93,11 @@ class DocumentHandoffsController < ApplicationController
       @message.remove_holding_entry!(holding_id)
     else
       blob = @attachment.blob
-      ActiveStorage::Attachment.where(blob_id: blob.id).delete_all
-      blob.purge
+      blob.delete
+      @attachment.transaction do
+        ActiveStorage::Attachment.where(blob_id: blob.id).delete_all
+        blob.destroy!
+      end
     end
   end
 

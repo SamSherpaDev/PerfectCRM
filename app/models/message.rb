@@ -55,11 +55,6 @@ class Message < ApplicationRecord
     direction == "in"
   end
 
-  # Live sensitive holdings waiting for a PerfectBook hand-off.
-  def live_holdings
-    DocumentHolding.where(message_id: id).select(&:live?)
-  end
-
   # Drop one hand-off placeholder after its bytes reach PerfectBook.
   def remove_holding_entry!(holding_id)
     update!(held_attachments: Array(held_attachments).reject do |entry|

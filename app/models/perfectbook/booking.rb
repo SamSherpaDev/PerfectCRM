@@ -49,20 +49,6 @@ module PerfectBook
       lines.presence
     end
 
-    # Flat "passport, insurance, waiver" list across travelers for the
-    # {{missing_documents}} placeholder.
-    def missing_types
-      travelers.flat_map do |traveler|
-        Array(traveler["documents"]).select do |doc|
-          MISSING_STATUSES.include?(doc["status"].to_s)
-        end.map { |doc| doc["type"].to_s }
-      end. & DOCUMENT_TYPES
-    end
-
-    def traveler_names
-      travelers.map { |traveler| traveler["first_name"].presence }.compact_blank.uniq
-    end
-
     def documents_ready?
       documents_summary_present?
     end

@@ -97,6 +97,23 @@ class PerfectBookDocumentsTest < ActionDispatch::IntegrationTest
     assert_select "textarea.reply-body", text: /we still need: Ama: visa, insurance; Tashi: passport, waiver/m
   end
 
+  test "nudge without an active template fills the missing list and selects the upstream booking" do
+    Template.active.for_purpose(:document_request).update_all(archived_at: Time.current)
+    booking = make_booking
+    booking.update!(perfectbook_id: 811)
+    other = booking.dup
+    other.assign_attributes(perfectbook_id: 812, ref: "BK-12", trip_name: "Annapurna",
+      start_date: booking.start_date + 1.year)
+    other.save!
+
+    get client_path(@client, nudge_booking_id: booking.id)
+    assert_response :success
+    assert_select "textarea.reply-body", text: /Ama: visa, insurance; Tashi: passport, waiver/
+    assert_select "select[data-reply-box-target='booking'] option[selected][value='811']"
+    context = TemplateContext.for_document_nudge(@client, booking)[:context]
+    assert_equal "Ama: visa, insurance; Tashi: passport, waiver", context["missing_documents"]
+  end
+
   test "nudge prefill never clobbers the captain's own draft" do
     Template.create!(name: "Documents", purpose: :document_request,
       subject: "Documents for {{trip}}", body: "Hi {{first_name}}, we still need: {{missing_documents}}")
@@ -119,13 +136,11 @@ class PerfectBookDocumentsTest < ActionDispatch::IntegrationTest
   # -- Send to PerfectBook hand-off --
 
   def make_holding(filename: "passport.pdf", content_type: "application/pdf", data: "passport-bytes")
-    conversation = Conversation.create!(subject: "Docs", linkable: @client, last_message_at: Time.current)
-    message = conversation.messages.create!(direction: "in", from_address: @client.email,
-      to_addresses: [ "info@sherpaholidays.com" ], subject: "Docs", sent_at: Time.current,
-      text_body: "see attached", held_attachments: [])
-    holding = DocumentHolding.hold!(message: message, filename: filename, content_type: content_type, data: data)
-    message.update!(held_attachments: [ { "filename" => filename, "byte_size" => data.bytesize,
-      "content_type" => content_type, "status" => "held: send to PerfectBook", "holding_id" => holding.id } ])
+    raw = "From: #{@client.email}\r\nTo: info@sherpaholidays.com\r\nMessage-ID: <#{SecureRandom.uuid}@test>\r\nSubject: Docs\r\n\r\nsee attached"
+    parsed = Mail::Ingester.parse_raw(raw)
+    parsed.attachments = [ { filename: filename, content_type: content_type, data: data } ]
+    message = Mail::Ingester.ingest(parsed: parsed, gmail: {})[:message]
+    holding = DocumentHolding.find_by!(message: message)
     [ message, holding ]
   end
 
@@ -199,6 +214,51 @@ class PerfectBookDocumentsTest < ActionDispatch::IntegrationTest
     assert_equal "attachment-#{attachment.id}", calls.first[:upload_id]
     assert_equal "stored-bytes", calls.first[:file]
     assert_empty message.reload.files
+  end
+
+  test "failed storage deletion preserves an ordinary attachment for hand-off retry" do
+    booking = make_booking
+    message, _holding = make_holding
+    message.files.attach(io: StringIO.new("stored-bytes"), filename: "visa.pdf", content_type: "application/pdf")
+    attachment = message.files.attachments.first
+    blob = attachment.blob
+    fake, calls = stub_pb_upload
+    params = { attachment_id: attachment.id,
+      handoff: { booking_id: booking.id, traveler_id: 3, document_type: "visa" } }
+
+    PerfectBook::Client.stub(:new, fake) do
+      blob.service.stub(:delete, ->(*) { raise IOError, "storage unavailable" }) do
+        assert_raises(IOError) { post document_handoffs_path, params: params }
+      end
+      assert ActiveStorage::Attachment.exists?(attachment.id)
+      assert ActiveStorage::Blob.exists?(blob.id)
+      assert_equal "stored-bytes", blob.download
+      post document_handoffs_path, params: params
+    end
+    assert_redirected_to inbox_thread_path(message.conversation)
+    assert_equal [ "attachment-#{attachment.id}" ] * 2, calls.map { |call| call[:upload_id] }
+    assert_not blob.service.exist?(blob.key)
+    assert_not ActiveStorage::Blob.exists?(blob.id)
+  end
+
+  test "failed expiry deletion retains sensitive bytes and references for the next sweep" do
+    message, holding = make_holding
+    blob = holding.file.blob
+    travel 25.hours do
+      blob.service.stub(:delete, ->(*) { raise IOError, "storage unavailable" }) do
+        assert_raises(IOError) { DocumentHoldingsPurgeJob.perform_now }
+      end
+      assert DocumentHolding.exists?(holding.id)
+      assert ActiveStorage::Blob.exists?(blob.id)
+      assert_equal "passport-bytes", holding.reload.file.download
+      assert_equal holding.id, message.reload.held_attachments.first["holding_id"]
+
+      DocumentHoldingsPurgeJob.perform_now
+    end
+    assert_not DocumentHolding.exists?(holding.id)
+    assert_not ActiveStorage::Blob.exists?(blob.id)
+    assert_not blob.service.exist?(blob.key)
+    assert_match(/expired/, message.reload.held_attachments.first["status"])
   end
 
   test "hand-off keeps the CRM copy and shows the error when PerfectBook refuses" do

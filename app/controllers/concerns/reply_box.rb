@@ -33,10 +33,9 @@ module ReplyBox
     return if booking.nil? || booking.missing_lines.blank?
 
     nudge = TemplateContext.for_document_nudge(owner, booking)
-    return if nudge[:template].nil?
 
     @reply_draft.assign_attributes(subject: nudge[:subject], body: nudge[:body],
-      template: nudge[:template], perfectbook_booking_id: booking.id)
+      template: nudge[:template], perfectbook_booking_id: booking.perfectbook_id)
   end
 
   def load_reply_context

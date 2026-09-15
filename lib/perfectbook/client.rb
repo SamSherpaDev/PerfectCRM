@@ -352,14 +352,16 @@ module PerfectBook
 
     def build_multipart(parts, boundary)
       chunks = parts.map do |part|
-        header = +"--#{boundary}\r\nContent-Disposition: form-data; name=\"#{part[:name]}\""
-        header << "; filename=\"#{part[:filename]}\"" if part[:filename].present?
-        header << "\r\nContent-Type: #{part[:content_type]}" if part[:content_type].present?
-        header << "\r\n\r\n"
-        data = part[:data].is_a?(String) ? part[:data] : part[:data].to_s
-        header + data + "\r\n"
+        header = +"--#{boundary}\r\nContent-Disposition: form-data; name=\"#{part[:name]}\"".b
+        if part[:filename].present?
+          filename = part[:filename].gsub(/["\\\r\n]/) { |char| "%%%02X" % char.ord }
+          header << "; filename=\"#{filename}\"".b
+        end
+        header << "\r\nContent-Type: #{part[:content_type]}".b if part[:content_type].present?
+        header << "\r\n\r\n".b
+        header + part[:data].to_s.b + "\r\n".b
       end
-      (chunks.join + "--#{boundary}--\r\n").b
+      chunks.join.b + "--#{boundary}--\r\n".b
     end
   end
 end

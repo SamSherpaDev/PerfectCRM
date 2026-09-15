@@ -22,17 +22,6 @@ class DocumentHolding < ApplicationRecord
   scope :expired, -> { where(expires_at: ...Time.current) }
   scope :live, -> { where(expires_at: Time.current...) }
 
-  # Bytes for one sensitive arrival, expiring 24 hours later. Returns nil
-  # (metadata-only placeholder) when the file is too large to hand off.
-  def self.hold!(message:, filename:, content_type:, data:)
-    return nil if data.bytesize > MAX_BYTES
-
-    holding = create!(message: message, filename: filename, content_type: content_type,
-      byte_size: data.bytesize, expires_at: HOLD_HOURS.hours.from_now)
-    holding.file.attach(io: StringIO.new(data), filename: filename, content_type: content_type)
-    holding
-  end
-
   def live?
     expires_at.future?
   end
@@ -40,8 +29,15 @@ class DocumentHolding < ApplicationRecord
   # Delete the bytes and the row. The caller's placeholder entry on the
   # message is updated separately (hand-off removes it, expiry marks it).
   def purge!
-    file.purge if file.attached?
-    destroy!
+    blob = file.blob if file.attached?
+    blob&.delete
+    transaction do
+      if blob
+        ActiveStorage::Attachment.where(blob_id: blob.id).delete_all
+        blob.destroy!
+      end
+      destroy!
+    end
   end
 
   # Sweep expired holdings: drop their bytes, then mark their timeline

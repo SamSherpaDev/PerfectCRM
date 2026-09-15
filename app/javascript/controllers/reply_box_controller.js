@@ -14,8 +14,9 @@ export default class extends Controller {
     // Reply pill until the captain opens it. Desktop always shows it.
     if (this.hasComposerTarget && this.hasPillTarget) {
       const phone = window.innerWidth < 750
-      this.composerTarget.hidden = phone
-      this.pillTarget.hidden = !phone
+      const collapsed = phone && !new URL(window.location.href).searchParams.has("nudge_booking_id")
+      this.composerTarget.hidden = collapsed
+      this.pillTarget.hidden = !collapsed
     }
     // The phone keeps the docked box compact: envelope fields hide behind
     // Details until the captain opens them. Desktop starts expanded.

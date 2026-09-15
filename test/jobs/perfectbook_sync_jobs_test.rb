@@ -219,7 +219,6 @@ class PerfectBookSyncJobsTest < ActiveSupport::TestCase
     booking = PerfectBook::Booking.find_by!(perfectbook_id: 11)
     assert_equal 2, booking.missing_count
     assert_equal "Ama", booking.travelers.first["first_name"]
-    assert_equal %w[visa insurance], booking.missing_types
     assert_equal [ "Ama: visa, insurance" ], booking.missing_lines
     assert_equal [ true, false ], booking.checklist.map { |item| item["done"] }
     assert_equal 2, booking.outstanding_count

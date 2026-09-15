@@ -279,6 +279,31 @@ class PerfectBookClientTest < ActiveSupport::TestCase
     assert_equal false, result.duplicate
   end
 
+  test "upload emits binary multipart content with escaped Unicode filenames" do
+    client = PerfectBook::Client.new(base_url: "https://pb.test", api_token: "secret",
+      etag_store: MemoryEtags.new)
+    requests = []
+    http = Net::HTTP.new("pb.test", 443)
+    data = "\xFF\xD8\xE9\x00".b
+    filename = "José-\"passport\".jpg"
+    http.stub(:request, ->(request) {
+      requests << request
+      FakePbResponse.new("201", upload_ok_body, {})
+    }) do
+      Net::HTTP.stub(:new, http) do
+        result = client.upload_traveler_document(booking_ref: "BK-11", traveler_id: 3,
+          file: data, filename: filename, content_type: "image/jpeg",
+          document_type: "passport", upload_id: "holding-9")
+        assert_equal "received", result.document_status
+      end
+    end
+    request = requests.fetch(0)
+    assert_equal Encoding::BINARY, request.body.encoding
+    assert_includes request.body, 'filename="José-%22passport%22.jpg"'.b
+    assert_includes request.body, "\r\n\r\n".b + data + "\r\n".b
+    assert_includes request.body, "name=\"upload_id\"\r\n\r\nholding-9".b
+  end
+
   test "upload replay returns duplicate without an error" do
     client, _calls = stub_upload_client(FakePbResponse.new("200", upload_ok_body(duplicate: true), {}))
     result = client.upload_traveler_document(booking_ref: "BK-11", traveler_id: 3,

@@ -34,7 +34,7 @@ class TemplateContext
       "[Check missing documents in PerfectBook]"
     subject = TemplateRenderer.render(template&.subject.presence || "Documents for {{trip}}", context)
     body_template = template&.body.presence ||
-      "Hi {{first_name}},\n\nPlease send the documents we discussed through PerfectBook.\n\n{{signature}}"
+      "Hi {{first_name}},\n\nPlease send these missing documents through PerfectBook: {{missing_documents}}.\n\n{{signature}}"
     body = TemplateRenderer.render(body_template, context)
     dates = booking.start_date || booking.end_date ? departure_dates_for(booking) : nil
     body += "\n\n#{record.name} · #{booking.trip_name}\n#{dates}\nBooking: #{booking.ref}"
