@@ -21,14 +21,14 @@ class MessageTest < ActiveSupport::TestCase
     assert_includes message.errors[:conversation], "or group send must be present"
   end
 
-  test "mark_sent stamps, touches the thread, and clears the draft" do
+  test "mark_sent stamps, touches the thread, and preserves unrelated drafts" do
     draft = @conversation.create_draft!(owner: @client, body: "words")
     message = @conversation.messages.create!(direction: "outbound", status: "sending",
       to_addrs: "maya@example.com", subject: "Hi", text_body: "Hello")
     message.mark_sent!
     assert message.sent?
     assert_not_nil message.sent_at
-    assert_not Draft.exists?(draft.id)
+    assert Draft.exists?(draft.id)
     assert_not_nil @conversation.reload.last_message_at
   end
 

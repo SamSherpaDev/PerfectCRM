@@ -36,6 +36,10 @@ class Template < ApplicationRecord
 
   before_validation :assign_position, on: :create
 
+  def referenced?
+    [ Message, Draft, GroupSend ].any? { |model| model.exists?(template_id: id) }
+  end
+
   def archived?
     archived_at.present?
   end
@@ -48,7 +52,6 @@ class Template < ApplicationRecord
     update!(archived_at: nil)
   end
 
-  # One-tap use from the picker: counts the insert so dead templates get pruned.
   def record_use!
     increment!(:usage_count)
     touch(:last_used_at)

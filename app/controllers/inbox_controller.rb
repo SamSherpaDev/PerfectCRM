@@ -43,6 +43,7 @@ class InboxController < ApplicationController
     @reply_draft = @conversation.draft || @conversation.build_draft(owner: @reply_owner)
     @reply_bookings = TemplateContext.bookings_for(@reply_owner)
     @reply_context = TemplateContext.for(@reply_owner)
+    @reply_booking_contexts = @reply_bookings.to_h { |booking| [ booking.perfectbook_id, TemplateContext.for(@reply_owner, booking: booking) ] }
     @reply_chips = Template.active.order(usage_count: :desc, last_used_at: :desc).limit(3)
     @thread_messages = @conversation.messages.newest_first.to_a
   end

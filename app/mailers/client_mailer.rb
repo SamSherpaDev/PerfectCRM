@@ -11,7 +11,6 @@ class ClientMailer < ApplicationMailer
     headers["In-Reply-To"] = @message.in_reply_to if @message.in_reply_to.present?
     headers["References"] = @message.references if @message.references.present?
     headers["Message-ID"] = @message.message_id if @message.message_id.present?
-    headers["X-PerfectCRM-Client"] = @message.client_header
 
     @message.files.each do |file|
       attachments[file.filename.to_s] = {
@@ -41,7 +40,7 @@ class ClientMailer < ApplicationMailer
 
   def simple_html(text)
     paragraphs = text.split(/\n{2,}/).map do |para|
-      lines = para.split("\n").map { |line| Outbound::Emphasis.to_html(line) }
+      lines = para.split("\n").map { |line| ERB::Util.html_escape(line) }
       "<p>#{lines.join('<br>')}</p>"
     end
     paragraphs.join("\n")

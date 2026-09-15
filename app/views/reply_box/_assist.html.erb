@@ -1,6 +1,5 @@
 <%# Slot for the AI drafting task: approval-only drafts appear here and
-    nowhere else. The reply-box controller toggles this container; the AI
-    task fills it. Kept empty on purpose — see the data-assist hook. %>
-<div data-assist hidden data-reply-box-target="assist">
+    nowhere else. The AI task owns this unrendered data-assist hook. %>
+<div data-assist hidden>
   <p class="hint">Draft a reply will appear here for your approval. Nothing sends by itself.</p>
 </div>

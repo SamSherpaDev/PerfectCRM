@@ -41,14 +41,14 @@ class MergeBatch
       line = raw.strip
       next if line.empty?
 
-      if (match = line.match(/^(.*?)\s*<([^<>@\s]+@[^<>@\s]+)>\s*$/))
-        name = match[1].strip
-        recipients << Recipient.new(name: name.presence || match[2], email: match[2])
-      elsif line.match?(/\A[^<>\s]+@[^<>\s]+\z/)
-        recipients << Recipient.new(name: line, email: line)
+      match = line.match(/\A([^<>]*)\s*<([^<>]+)>\z/)
+      email = match ? match[2] : line
+      name = match ? match[1].strip.presence || email : email
+      if email.match?(URI::MailTo::EMAIL_REGEXP) && !email.match?(/[,;\s]/)
+        recipients << Recipient.new(name: name, email: email)
       else
         errors << RecipientError.new(line_number: index + 1, line: line,
-          problem: "Needs an email address: “Name <email>” or just “email”.")
+          problem: "Needs one email address: “Name <email>” or just “email”.")
       end
     end
     [ recipients, errors ]

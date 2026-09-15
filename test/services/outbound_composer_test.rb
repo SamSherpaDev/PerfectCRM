@@ -46,12 +46,12 @@ class OutboundComposerTest < ActiveSupport::TestCase
     assert_not_equal first.message_id, reply.message_id
   end
 
-  test "reuses a conversation with a matching subject" do
+  test "starts a new conversation even with a matching subject" do
     first = Outbound::Composer.call(owner: @client,
       params: { to: "maya@example.com", subject: "Your trek", body: "Hello" })
     second = Outbound::Composer.call(owner: @client,
       params: { to: "maya@example.com", subject: "Your trek", body: "Again" })
-    assert_equal first.conversation_id, second.conversation_id
+    assert_not_equal first.conversation_id, second.conversation_id
   end
 
   test "records template use and links the template" do
@@ -60,12 +60,6 @@ class OutboundComposerTest < ActiveSupport::TestCase
       params: { to: "maya@example.com", subject: "Hi", body: "Pay", template_id: template.id })
     assert_equal template.id, message.template_id
     assert_equal 1, template.reload.usage_count
-  end
-
-  test "exposes the client header for the mailed copy" do
-    message = Outbound::Composer.call(owner: @client,
-      params: { to: "maya@example.com", subject: "Hi", body: "Hello" })
-    assert_equal "Client:#{@client.id}", message.client_header
   end
 
   test "rejects sends with no words rather than queuing blanks" do
@@ -91,6 +85,6 @@ class OutboundComposerTest < ActiveSupport::TestCase
       params: { to: "stranger@example.com", subject: "Hi", body: "Hello" })
     assert message.persisted?
     assert_nil message.conversation_id
-    assert_equal "GroupSend:#{group.id}", message.client_header
+    assert_equal group.id, message.group_send_id
   end
 end

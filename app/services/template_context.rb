@@ -10,8 +10,19 @@
 class TemplateContext
   INACTIVE_BOOKING_STATUSES = %w[cancelled voided refunded].freeze
 
-  def self.for(record, booking: nil)
-    booking ||= default_booking_for(record)
+  def self.for_recipient(recipient, departure_id: nil)
+    owner = Outbound::OwnerLookup.for_email(recipient.email)
+    return owner ? self.for(owner) : {} if departure_id.blank?
+
+    contact = PerfectBook::Contact.find_by("lower(email) = ?", recipient.email.strip.downcase)
+    contact_id = owner.try(:perfectbook_contact_id).presence || contact&.perfectbook_id
+    booking = PerfectBook::Booking.where(departure_id: departure_id, perfectbook_contact_id: contact_id).order(:id).first if contact_id
+    context = self.for(owner || contact || recipient, booking: nil)
+    context.merge!(booking_context(booking).compact_blank) if booking
+    context
+  end
+
+  def self.for(record, booking: default_booking_for(record))
     context = {
       "first_name" => first_name_for(record),
       "full_name" => record.name.to_s,

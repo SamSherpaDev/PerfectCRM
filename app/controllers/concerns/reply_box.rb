@@ -22,7 +22,7 @@ module ReplyBox
       [ booking.perfectbook_id, TemplateContext.for(owner, booking: booking) ]
     end
     @reply_chips = Template.active.order(usage_count: :desc, last_used_at: :desc).limit(3)
-    @outbound_messages = Message.for_owner(owner).newest_first.limit(50).to_a
+    @outbound_messages = Message.for_owner(owner).newest_first.limit(@events_page * 100 + 1).to_a
   end
 
   # Activity events and outbound messages, newest first, for one scroll.
@@ -31,6 +31,8 @@ module ReplyBox
     message_rows = messages.map do |message|
       [ message.sent_at || message.created_at, :message, message ]
     end
-    (event_rows + message_rows).sort_by { |time, _, _| time || Time.zone.at(0) }.reverse
+    rows = (event_rows + message_rows).sort_by { |time, kind, record| [ time || Time.zone.at(0), kind.to_s, record.id ] }.reverse
+    @older_events = rows.size > @events_page * 100
+    rows.slice((@events_page - 1) * 100, 100) || []
   end
 end

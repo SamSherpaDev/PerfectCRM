@@ -102,8 +102,7 @@ Replies send as `info@sherpaholidays.com` through Gmail SMTP
 (`smtp.gmail.com:587`, `SMTP_USERNAME`/`SMTP_PASSWORD` plus `MAIL_FROM` in
 `.env.app.example` — the same app password the mailbox sync stores), with
 `From` and `Reply-To` on the mailbox, `In-Reply-To`/`References` from the
-thread, a generated `Message-ID` that is kept, a hidden
-`X-PerfectCRM-Client` header, the signature from Settings → Email replies,
+thread, a generated `Message-ID` that is kept, the signature from Settings → Email replies,
 and uploaded attachments. Delivery runs on Solid Queue
 (`OutboundDeliveryJob`, retries with backoff); the timeline shows each
 message as sending, sent, or failed, and a failure keeps the draft so no
@@ -111,8 +110,7 @@ words are lost. Failed messages retry from their timeline row.
 
 The reply box docks at the bottom of the client, lead, organization, and
 inbox thread views: recipient chips prefilled from the thread, `Re:`
-subject, plain-text editor with basic `*bold*` / `_italic_` / list
-formatting, attachments, one-tap template chips and the full picker
+subject, a plain-text editor, attachments, one-tap template chips and the full picker
 (filled from live data), a booking select when several mirrored bookings
 exist, Save draft per conversation, and Send. `reply_box/_assist` (with
 its `data-assist` hook) is the reserved slot where AI drafts will appear

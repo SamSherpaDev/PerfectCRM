@@ -125,7 +125,10 @@ class Message < ApplicationRecord
     transaction do
       update!(status: "sent", sent_at: Time.current, send_error: nil)
       conversation&.touch_activity!
-      conversation&.draft&.destroy
+      draft = Draft.find_by(id: submitted_draft_id)
+      draft&.with_lock do
+        draft.destroy! if draft.updated_at == submitted_draft_updated_at
+      end
       owner&.touch_activity!
     end
   end
@@ -137,12 +140,6 @@ class Message < ApplicationRecord
   # The record whose timeline carries this message, via its conversation.
   def owner
     conversation&.owner
-  end
-
-  # Value for the hidden X-PerfectCRM-Client header, so a bounced or
-  # forwarded copy still maps back to its record.
-  def client_header
-    owner ? "#{owner.class.name}:#{owner.id}" : "GroupSend:#{group_send_id}"
   end
 
 

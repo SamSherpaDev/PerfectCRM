@@ -1,14 +1,12 @@
 import { Controller } from "@hotwired/stimulus"
 
 // Docked reply box (reply_box/_box): one-tap template inserts with live
-// placeholder values, basic *bold* / _italic_ / list formatting, a booking
-// select that swaps the placeholder context, and the assist slot toggle.
-// The AI drafting task owns [data-assist]; this controller only shows it.
+// placeholder values and a booking select that swaps the context.
 export default class extends Controller {
   static values = { defaultContext: Object, bookingContexts: Object }
   static targets = [
     "form", "conversation", "templateId", "to", "subject", "body",
-    "booking", "status", "assist", "details", "pill", "composer"
+    "booking", "status", "details", "pill", "composer"
   ]
 
   connect() {
@@ -62,38 +60,7 @@ export default class extends Controller {
     if (data.body && this.hasBodyTarget) this.insertAtCursor(this.bodyTarget, data.body)
     if (this.hasTemplateIdTarget) this.templateIdTarget.value = data.id ?? ""
     const name = data.name ?? "template"
-    this.setStatus(`Inserted ${name} — review and press Send.`)
-  }
-
-  // Wrap the selection (or drop markers at the cursor) for *bold* and
-  // _italic_; prefix each selected line for lists.
-  format(event) {
-    const field = this.hasBodyTarget ? this.bodyTarget : null
-    if (!field) return
-    const { wrap, prefix } = event.currentTarget.dataset
-    field.focus()
-    const start = field.selectionStart ?? field.value.length
-    const end = field.selectionEnd ?? field.value.length
-    const selected = field.value.slice(start, end)
-    let replacement, cursor
-    if (prefix) {
-      const lines = (selected || "").split("\n").map((line) => `${prefix}${line}`)
-      replacement = lines.join("\n")
-      cursor = start + replacement.length
-    } else if (wrap) {
-      replacement = `${wrap}${selected}${wrap}`
-      cursor = selected ? start + replacement.length : start + wrap.length
-    } else {
-      return
-    }
-    field.value = field.value.slice(0, start) + replacement + field.value.slice(end)
-    field.selectionStart = field.selectionEnd = cursor
-    field.dispatchEvent(new Event("input", { bubbles: true }))
-  }
-
-  toggleAssist() {
-    if (!this.hasAssistTarget) return
-    this.assistTarget.hidden = !this.assistTarget.hidden
+    this.setStatus(`Inserted ${name} - review and press Send.`)
   }
 
   // The floating Reply pill opens the composer as a bottom sheet; Close

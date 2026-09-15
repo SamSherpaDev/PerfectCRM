@@ -37,8 +37,13 @@ class TemplatesController < ApplicationController
   end
 
   def destroy
-    @template.destroy!
-    redirect_to templates_path, notice: "Template deleted."
+    if @template.referenced?
+      @template.archive!
+      redirect_to templates_path, notice: "Template archived because it is referenced by correspondence."
+    else
+      @template.destroy!
+      redirect_to templates_path, notice: "Template deleted."
+    end
   end
 
   # Live preview for the unsaved form: subject/body come from the form fields.
@@ -75,9 +80,7 @@ class TemplatesController < ApplicationController
     redirect_to templates_path
   end
 
-  # One-tap insert from the picker: counts the use and returns rendered text.
   def use
-    @template.record_use!
     render json: { id: @template.id, name: @template.name, **@template.rendered(use_context) }
   end
 
@@ -113,7 +116,7 @@ class TemplatesController < ApplicationController
     @selected = @templates.find_by(id: params[:template_id])
     @departures = merge_departures
     @departure = @departures.find { |departure| departure.perfectbook_id.to_s == params[:departure_id].to_s } if params[:departure_id].present?
-    @recipient_lines = params[:recipients].to_s
+    @recipient_lines = params[:refill].present? ? recipients_from_departure(@departure).to_s : params[:recipients].to_s
     if @selected.nil?
       flash.now[:alert] = "Pick a template first."
       render :merge, status: :unprocessable_entity
@@ -165,9 +168,8 @@ class TemplatesController < ApplicationController
   # Live per-recipient contexts so the preview shows real trip, dates,
   # and balances where the CRM knows them.
   def live_merge_contexts(lines)
-    MergeBatch.parse_recipients(lines).index_by { |recipient| recipient.email.strip.downcase }.transform_values do |recipient|
-      owner = Outbound::OwnerLookup.for_email(recipient.email)
-      owner ? TemplateContext.for(owner) : {}
+    MergeBatch.parse_recipients(lines).to_h do |recipient|
+      [ recipient.email.strip.downcase, TemplateContext.for_recipient(recipient, departure_id: params[:departure_id]) ]
     end
   end
 
@@ -180,7 +182,6 @@ class TemplatesController < ApplicationController
   end
 
   # Extra context keys the caller may pass (flat ?context[first_name]=…).
-  # Everything else falls back to the sample context inside #rendered.
   def picker_context
     params.fetch(:context, {}).permit(*TemplateRenderer::PLACEHOLDERS).to_h
   end

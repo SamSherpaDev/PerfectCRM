@@ -46,8 +46,7 @@ class GroupSendsController < ApplicationController
   # records fill every placeholder they can; strangers get names only.
   def live_contexts(lines)
     MergeBatch.parse_recipients(lines).index_with do |recipient|
-      owner = match_owner(recipient.email)
-      owner ? TemplateContext.for(owner) : {}
+      TemplateContext.for_recipient(recipient, departure_id: params[:departure_id])
     end.transform_keys { |recipient| recipient.email.strip.downcase }
   end
 

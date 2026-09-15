@@ -10,7 +10,7 @@
 module Outbound
   class Composer
     def self.call(owner:, params:, conversation: nil, group_send: nil)
-      new(owner, params, conversation, group_send).compose
+      Message.transaction { new(owner, params, conversation, group_send).compose }
     end
 
     # The From/Reply-To identity for every CRM send. MAIL_FROM carries the
@@ -35,8 +35,11 @@ module Outbound
     end
 
     def compose
+      @draft = Draft.for_owner(@owner, conversation: @conversation) if @owner && !@group_send
       resolve_conversation
       message = @conversation ? @conversation.messages.build : Message.new
+      message.submitted_draft_id = @draft.id if @draft&.persisted?
+      message.submitted_draft_updated_at = @draft.updated_at if @draft&.persisted?
       message.group_send = @group_send if @group_send
       message.direction = "outbound"
       message.status = "queued"
@@ -66,18 +69,15 @@ module Outbound
       return if @owner.nil?
 
       subject = @params[:subject].to_s.strip
-      if subject.present? && (match = Conversation.where(owner: @owner)
-          .where("lower(subject_line) = ?", subject.downcase).recent.first)
-        @conversation = match
-      else
-        @conversation = @owner.conversations.build(subject_line: subject.presence || default_subject)
-      end
+      @conversation = @owner.conversations.build(subject_line: subject.presence || default_subject)
     end
 
     def recipients
       explicit = @params[:to].to_s.split(/[,\n;]/).map(&:strip).reject(&:blank?)
       return explicit if explicit.any?
       return [] if @owner.nil?
+
+      return @conversation.thread_parent.recipients if @conversation&.thread_parent
 
       Array(@owner.try(:display_email) || @owner.try(:email)).compact_blank
     end
@@ -123,6 +123,7 @@ module Outbound
     end
 
     def attach_files(message)
+      message.files.attach(@draft.files.blobs.to_a) if @draft&.files&.attached?
       files = @params[:files]
       files = files.values if files.is_a?(Hash)
       Array(files).compact_blank.each do |file|

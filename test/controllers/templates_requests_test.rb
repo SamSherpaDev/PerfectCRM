@@ -117,13 +117,13 @@ class TemplatesRequestsTest < ActionDispatch::IntegrationTest
 
   # Correction A: operational rendering never samples. The use endpoint
   # returns live values only; the reply box passes them as context.
-  test "use counts the insert and returns rendered text as JSON" do
+  test "use returns rendered text without counting a send" do
     sign_in
     post use_template_path(@template, format: :json),
       params: { context: { first_name: "Maya", trip: "Everest Base Camp trek" } }
     assert_response :success
-    assert_equal 1, @template.reload.usage_count
-    assert_not_nil @template.last_used_at
+    assert_equal 0, @template.reload.usage_count
+    assert_nil @template.last_used_at
     payload = JSON.parse(response.body)
     assert_equal "Your Everest Base Camp trek deposit", payload["subject"]
     assert_match(/Hi Maya/, payload["body"])

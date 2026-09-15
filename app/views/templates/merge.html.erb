@@ -18,7 +18,8 @@
                   options_for_select([ [ "Paste addresses below", "" ] ] +
                     @departures.map { |departure| [ "#{departure.trip_name} · #{departure.label.presence || departure.start_date}", departure.perfectbook_id ] },
                     @departure&.perfectbook_id),
-                  {}, class: "select" %>
+                  {}, class: "select", onchange: "this.form.requestSubmit(this.form.querySelector('[name=refill]'))" %>
+            <button type="submit" name="refill" value="1" hidden>Load travelers</button>
             <p class="hint">Choosing a departure fills the list from its mirrored bookings. Changing it refills the list.</p>
           </div>
         </div>

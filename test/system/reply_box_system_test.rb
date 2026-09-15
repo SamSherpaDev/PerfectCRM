@@ -13,14 +13,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
   end
 
   test "chip insert, draft save, and send at 390px" do
-    OmniAuth.config.mock_auth[:google_oauth2] = OmniAuth::AuthHash.new(
-      provider: "google_oauth2", uid: "google-captain",
-      extra: { id_token: JWT.encode(@claims, @key, "RS256") }
-    )
-    Google::Auth::IDTokens.stub(:oidc_key_source, @source) do
-      visit "/auth/google_oauth2/callback"
-      assert_selector "h1", text: "Today"
-    end
+    sign_in_browser
     page.current_window.resize_to(390, 844)
 
     visit client_path(@client)
@@ -64,7 +57,59 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     assert_no_overflow("after send")
   end
 
+  test "searched picker uses the resumed draft booking in the inbox" do
+    @client.update!(perfectbook_contact_id: 4242)
+    [ [ 9001, "October", "2026-10-01" ], [ 9002, "May", "2027-05-01" ] ].each do |id, trip, date|
+      PerfectBook::Booking.create!(perfectbook_id: id, perfectbook_contact_id: 4242,
+        trip_name: trip, start_date: date, synced_at: Time.current)
+    end
+    conversation = @client.conversations.create!(subject_line: "Trip")
+    conversation.create_draft!(owner: @client, body: "", perfectbook_booking_id: 9001, template: @template)
+    sign_in_browser
+    page.current_window.resize_to(1400, 1000)
+    visit inbox_thread_path(conversation)
+    find(".reply-templates > summary").click
+    within(".reply-templates") do
+      find("input[name=q]").set("Quick hello")
+      assert_selector "input[name=q][value='Quick hello']"
+      click_button "Insert"
+    end
+    assert_field "Message", with: "Hello Maya, thinking of October!"
+    find("#message_perfectbook_booking_id option[value='9002']").select_option
+    fill_in "Message", with: ""
+    click_button "Quick hello", match: :first
+    assert_field "Message", with: "Hello Maya, thinking of May!"
+  end
+
+  test "partial drafts save without send validation" do
+    sign_in_browser
+    page.current_window.resize_to(1400, 1000)
+    visit client_path(@client)
+    fill_in "To", with: ""
+    fill_in "Subject", with: ""
+    fill_in "Message", with: "Half written"
+    click_button "Save draft"
+    assert_text "Draft saved"
+    assert_equal "Half written", Draft.find_by!(owner: @client).body
+    fill_in "Message", with: ""
+    click_button "Save draft"
+    assert_text "Draft cleared"
+    assert_not Draft.exists?(owner: @client)
+  end
+
   private
+
+  def sign_in_browser
+    OmniAuth.config.mock_auth[:google_oauth2] = OmniAuth::AuthHash.new(
+      provider: "google_oauth2", uid: "google-captain",
+      extra: { id_token: JWT.encode(@claims, @key, "RS256") }
+    )
+    Google::Auth::IDTokens.stub(:oidc_key_source, @source) do
+      visit "/auth/google_oauth2/callback"
+      assert_selector "h1", text: "Today"
+    end
+  end
+
 
   def assert_no_overflow(context)
     width = page.evaluate_script("document.documentElement.scrollWidth")

@@ -87,7 +87,7 @@ class MessagesRequestsTest < ActionDispatch::IntegrationTest
     sign_in
     get client_path(@client)
     assert_select ".reply-box", count: 1
-    assert_select "[data-assist]", count: 1
+    assert_select "[data-assist]", count: 0
     get lead_path(lead)
     assert_select ".reply-box", count: 1
     get organization_path(org)
