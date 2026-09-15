@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
-# Nightly second-line backup: sqlite3 .backup of both databases, gzip, rclone
-# to the backup bucket under nightly/, prune older than 30 days, ping healthchecks.
-# Cron on the VPS (root): 0 3 * * * /opt/apps/perfectcrm/nightly-backup.sh
-# Requires: BACKUP_RCLONE_REMOTE (e.g. "s3-backup", an rclone S3 remote for the
-# backup bucket; see docs/operations.md), LITESTREAM_BUCKET, HEALTHCHECKS_URL.
-# Run from /opt/apps/perfectcrm.
+# Nightly second-line backup. Scope, retention, cron setup, and prerequisites:
+# docs/operations.md, "Nightly backup".
 set -euo pipefail
 
 cd "$(dirname "$0")"

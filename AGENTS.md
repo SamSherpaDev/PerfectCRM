@@ -21,10 +21,7 @@ When updating this file, preserve this bar for all agents and keep entries conci
 - `docs/DESIGN.md` is the visual contract (Washi, inherited from
   PerfectBook). Do not invent a separate visual identity.
 - Timezone `America/Los_Angeles` (`config/application.rb`).
-- Appearance rule: the Paper/Night choice applies instantly via its own
-  auto-submitting form + Stimulus controller (`appearance_controller.js`),
-  surviving Turbo navigation — never gate it behind a separate Save.
-- Google sign-in allowlist `ALLOWED_GOOGLE_EMAILS` (default
-  `info@sherpaholidays.com`); `/up` is the only public route.
-- System-test Chrome here needs nix NSS libs on `LD_LIBRARY_PATH`; see the
-  failing-driver notes if `chromedriver` cannot start.
+- Appearance behavior and authentication policy: see README.md, "Navigation"
+  and "Google sign-in". Preserve instant appearance changes.
+- System-test Chrome here needs nix NSS libs on `LD_LIBRARY_PATH`; check
+  driver startup output if `chromedriver` cannot start.

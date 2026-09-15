@@ -6,8 +6,8 @@ Target: the same OVHcloud VPS that runs PerfectBook
 `https://perfectcrm.sherpaholidays.com`. The server pulls the CI-built image
 and never builds.
 
-Shared-box facts — host prep, firewall, system Caddy, the `apps` network,
-bucket providers, DNS, healthchecks, backup philosophy — live in
+Shared-box facts - host prep, firewall, system Caddy, the `apps` network,
+bucket providers, DNS, healthchecks, backup philosophy - live in
 PerfectBook's runbook
 (`https://github.com/SamSherpaDev/BK-app/blob/main/docs/operations.md`) and
 are not repeated here. This file covers only what differs for the CRM.
@@ -23,7 +23,7 @@ are not repeated here. This file covers only what differs for the CRM.
    one for database backups (Cloudflare R2 by default; Backblaze B2 works the
    same). One key pair scoped to the attachments bucket, a separate pair
    scoped to the backup bucket. Save all four keys in the password manager.
-   Verify with `./bucket-smoke.sh` in step 5.
+   Verify with `./bucket-smoke.sh` in step 4.
 3. **DNS.** The apex and www stay on Shopify. Add one A record for host
    `perfectcrm` pointing at the VPS IPv4 (plus AAAA if IPv6), TTL 300 during
    setup. Keep port 80 reachable for the HTTP-01 challenge.
@@ -34,7 +34,7 @@ are not repeated here. This file covers only what differs for the CRM.
    `deploy/restore-drill.sh`, `deploy/bucket-smoke.sh`. Create `.env.app` and
    `.env.litestream` from `.env.app.example` and `.env.litestream.example`,
    root-owned mode 600. Then verify bucket access with
-   `./bucket-smoke.sh` — it lists both buckets with the same variables the
+   `./bucket-smoke.sh` - it lists both buckets with the same variables the
    containers read.
 5. **Compose up.** On the box, run `./deploy.sh` in `/opt/apps/perfectcrm`.
    It pulls the CI-built image, starts app and litestream, and prunes old
@@ -68,8 +68,9 @@ are not repeated here. This file covers only what differs for the CRM.
 ## Nightly backup
 
 Second-line backup behind Litestream: `deploy/nightly-backup.sh` takes a
-`sqlite3 .backup` of both databases, gzips, and `rclone`s to the backup
-bucket under `nightly/`, prunes older than 30 days, and pings healthchecks.
+`sqlite3 .backup` of the primary and queue databases (the disposable cache is
+excluded), gzips, and `rclone`s to the backup bucket under `nightly/`, prunes
+older than 30 days, and pings healthchecks.
 Cron on the VPS (root):
 
 ```cron
@@ -82,7 +83,9 @@ Requires `BACKUP_RCLONE_REMOTE` (an rclone S3 remote for the backup bucket),
 
 ## Restore drill
 
-`deploy/restore-drill.sh` restores the Litestream replica to `/tmp`,
+`deploy/restore-drill.sh` restores the primary Litestream replica to an
+isolated writable directory under `${TMPDIR:-/tmp}` (queue and cache are
+recreated by `db:prepare`),
 integrity-checks it, boots a throwaway app container against it on a random
 loopback port, and curls `/up`. On success it prints the loopback URL and an
 SSH-forward hint plus the cleanup command; the drill container stays up until
@@ -124,7 +127,7 @@ scheme and port ([Google redirect URI rules](https://developers.google.com/ident
    import the Caddy root certificate shown in the Caddy logs there too.
    See [Caddy's trust command](https://caddyserver.com/docs/command-line#caddy-trust).
 4. Open `https://localhost:8443`, sign in with the allowlisted Google account,
-   and open the dashboard and settings. Database writes go to the isolated
+   and open Today and Settings. Database writes go to the isolated
    restored copy. When attachment features exist, open a known attachment
    as well; attachment reads still use the configured production bucket.
 5. Run the cleanup command printed by the drill on the VPS, stop both laptop

@@ -14,15 +14,14 @@ task; this scaffold has no business logic yet).
 
 Stack: Rails 8.1, Hotwire (Turbo, Stimulus, importmap), Tailwind v4, three
 SQLite databases (primary, cache, queue), Solid Queue running inside Puma,
-Active Storage on an S3-compatible bucket — identical to PerfectBook so
+Active Storage on an S3-compatible bucket - identical to PerfectBook so
 runbooks and crews transfer. The look is inherited from PerfectBook's Washi
-contract in [docs/DESIGN.md](docs/DESIGN.md) pending the CRM's own design
-pass.
+contract in [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Local development
 
 ```sh
-bin/setup
+bin/setup --skip-server
 bin/dev
 ```
 
@@ -46,15 +45,16 @@ configuration lives in `config/environments/development.rb`.
 On desktop, hover or focus the icon rail to reveal navigation labels and Sign
 out. On mobile, use Open menu to show the drawer. The rail holds **Today**
 (root), **Inbox**, **Clients**, **Pipeline**, **Quotes**, **Templates**, and
-**Settings**. Each renders a branded empty state until its feature lands.
+**Settings**. Today through Templates render branded empty states until their
+features land; Settings provides the appearance control below.
 
 PerfectCRM defaults to **Paper**, the light Washi scheme. In **Settings →
 Appearance**, choose **Paper** or **Night** to apply the scheme immediately
-and save it automatically — the choice submits its own form, so there is no
+and save it automatically - the choice submits its own form, so there is no
 separate Save step. The status beneath the choice confirms when it is saved.
-The saved choice persists across navigation and later sign-ins; signed-out
-pages use Paper. Device reduced-motion preferences disable the ridge and enso
-animations.
+The choice is shared across the app and persists across navigation and later
+sign-ins; signed-out pages use Paper. Device reduced-motion preferences
+disable the ridge and enso animations.
 
 ## Google sign-in
 
@@ -98,8 +98,9 @@ bash test/deploy/test_deploy.sh
 ## Production shape
 
 The Docker image is built by GitHub Actions and published to
-`ghcr.io/samsherpadev/perfectcrm` on every `main` push. The server pulls it
-with `deploy/deploy.sh` and never builds. See
+`ghcr.io/samsherpadev/perfectcrm` after all required CI checks pass on a
+`main` push. The server pulls it with `deploy/deploy.sh` and never builds. See
 [docs/operations.md](docs/operations.md) for the deploy checklist, the
-secrets inventory, backups, and the restore drill. Every variable the app
-reads is listed in `.env.app.example` and `.env.litestream.example`.
+secrets inventory, backups, and the restore drill. Production credential and
+bucket templates are in `.env.app.example` and `.env.litestream.example`;
+backup cron variables are documented in the runbook.

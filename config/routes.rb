@@ -10,7 +10,7 @@ Rails.application.routes.draw do
   get "auth/failure", to: "sessions#failure"
   delete "sign-out", to: "sessions#destroy", as: :sign_out
 
-  # Rail entries. Each renders a branded empty state until its feature lands.
+  # Rail navigation: see README.md, "Navigation".
   get "inbox", to: "inbox#index"
   resources :clients, only: %i[index]
   get "pipeline", to: "pipeline#show"

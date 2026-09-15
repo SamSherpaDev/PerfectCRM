@@ -1,4 +1,4 @@
-> **PerfectCRM inherits this contract.** This file is copied from PerfectBook's `docs/DESIGN.md`. The Washi tokens, Paper/Night schemes, and sketch library below govern PerfectCRM until its own design pass lands — a Fable design crew is producing the CRM-specific concept in parallel. Do not restyle the app away from this contract here; do not invent a CRM visual identity.
+> **PerfectCRM inherits this contract.** Adapted from PerfectBook's `docs/DESIGN.md`, this is PerfectCRM's visual contract for Washi tokens, Paper/Night schemes, and sketches. References below to PerfectBook screens and its 2026-09-13 review describe the source design, not shipped CRM features. Do not invent a separate CRM visual identity.
 
 ---
 

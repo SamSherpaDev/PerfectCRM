@@ -2,9 +2,8 @@
 # Smoke-test the S3-compatible bucket credentials: lists the attachment bucket and
 # the backup bucket with the same variables the containers read. Run on the box
 # in /opt/apps/perfectcrm after creating the buckets and keys
-# (docs/operations.md, step 5). Uses the rclone installed by
-# deploy/bootstrap.sh with a throwaway config file, so no rclone remote setup
-# is needed for this check.
+# (docs/operations.md, Deployment checklist). Requires rclone on the host;
+# uses a throwaway config file, so no rclone remote setup is needed.
 set -euo pipefail
 
 cd "$(dirname "$0")"
