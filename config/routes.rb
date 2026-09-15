@@ -50,6 +50,7 @@ Rails.application.routes.draw do
   resources :leads, except: %i[destroy] do
     member do
       post :convert
+      post :refresh_bookings
     end
     resources :notes, only: %i[create]
   end
@@ -60,6 +61,7 @@ Rails.application.routes.draw do
     member do
       patch :archive
       patch :unarchive
+      post :refresh_bookings
     end
     resources :notes, only: %i[create]
   end
@@ -68,39 +70,14 @@ Rails.application.routes.draw do
   end
   get "pipeline", to: "pipeline#show"
   patch "pipeline/move", to: "pipeline#move", as: :pipeline_move
-  resources :quotes, only: %i[index]
-  resources :templates, except: :show do
-    collection do
-      post :preview, action: :collection_preview
-      get :picker
-      get :merge
-      post :merge, action: :merge_preview
-    end
+  resources :quotes, except: %i[destroy] do
     member do
+      post :send_quote
       post :duplicate
-      patch :archive
-      patch :unarchive
-      patch :move
-      post :use
+      post :revise
     end
   end
-  resource :settings, only: %i[edit update] do
-    post :perfectbook_test, on: :collection
-    patch :mailbox, on: :collection
-    post :mailbox_test, on: :collection
-    post :rotate_site_key, on: :collection
-    post :rotate_relay_secret, on: :collection
-  end
-  get "settings/export", to: "exports#show", as: :settings_export
-  resources :tasks, only: %i[create] do
-    member do
-      patch :complete
-      patch :snooze
-    end
-    collection do
-      post :create_review_ask
-    end
-  end
-  # Component kit preview (signed-in only, listed nowhere in the rail).
-  get "design", to: "design#show"
-end
+  # Public tap-to-accept quote page: unguessable token, no sign-in.
+  get "q/:token", to: "public_quotes#show", as: :public_quote
+  post "q/:token/accept", to: "public_quotes#accept", as: :accept_public_quote
+  post "q/:token/decline", to: "public_quotes#decline", as: :decline_public_quote

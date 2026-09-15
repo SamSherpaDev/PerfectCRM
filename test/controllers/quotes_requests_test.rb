@@ -1,0 +1,164 @@
+require "test_helper"
+require_relative "../support/google_sign_in_test_helper"
+
+class QuotesRequestsTest < ActionDispatch::IntegrationTest
+  include GoogleSignInTestHelper
+
+  setup do
+    sign_in
+    @client = Client.create!(name: "Maya Gurung", email: "maya@example.com", perfectbook_contact_id: 7)
+  end
+
+  test "index tabs carry icons and counts" do
+    Quote.create!(client: @client)
+    get quotes_path
+    assert_response :success
+    %w[Draft Sent Accepted Declined Expired].each do |tab|
+      assert_select "nav.tabs a", text: /#{tab}/
+    end
+    assert_select "nav.tabs svg", minimum: 5
+  end
+
+  test "client page renders mirrored bookings with money and deep links" do
+    PerfectBook::Booking.create!(perfectbook_id: 11, perfectbook_contact_id: 7,
+      ref: "BK-11", status: "deposit_received", trip_name: "Everest trek",
+      departure_place: "Lukla", start_date: Date.new(2027, 5, 4), end_date: Date.new(2027, 5, 18),
+      party_size: 2, total_minor: 400_000, paid_minor: 100_000, balance_due_minor: 300_000,
+      currency: "USD", invoice_badge: "sent", invoice_number: "SH-2027-0142",
+      deep_link: "https://perfectbook.example.test/bookings/11", synced_at: Time.current)
+    get client_path(@client)
+    assert_response :success
+    assert_select "h2", text: "Bookings in PerfectBook"
+    assert_includes response.body, "BK-11"
+    assert_includes response.body, "Everest trek"
+    assert_includes response.body, "$4,000.00"
+    assert_includes response.body, "$1,000.00"
+    assert_includes response.body, "$3,000.00"
+    assert_includes response.body, "SH-2027-0142"
+    assert_select "a[href='https://perfectbook.example.test/bookings/11']"
+    assert_select "form[action=?]", refresh_bookings_client_path(@client)
+  end
+
+  test "client page shows the cairn empty state without bookings" do
+    get client_path(@client)
+    assert_response :success
+    assert_includes response.body, "No bookings yet"
+    assert_select "use[href='#sk-cairn']"
+  end
+
+  test "client page lists quotes with a builder link" do
+    quote = Quote.create!(client: @client, trip_name: "Everest trek")
+    quote.lines.create!(kind: "trip", description: "Everest trek", quantity: 1, unit_dollars: "10.00")
+    get client_path(@client)
+    assert_response :success
+    assert_select "h2", text: "Quotes"
+    assert_select "a[href=?]", new_quote_path(client_id: @client.id)
+    assert_select "a", text: quote.reference
+  end
+
+  test "lead page shows booking cards when linked to PerfectBook" do
+    lead = Lead.create!(name: "Pasang", email: "pasang@example.com", perfectbook_contact_id: 9)
+    PerfectBook::Booking.create!(perfectbook_id: 12, perfectbook_contact_id: 9,
+      ref: "BK-12", status: "enquiry", trip_name: "Annapurna", total_minor: 50_000,
+      paid_minor: 0, balance_due_minor: 50_000, currency: "USD", synced_at: Time.current)
+    get lead_path(lead)
+    assert_response :success
+    assert_select "h2", text: "Bookings in PerfectBook"
+    assert_includes response.body, "BK-12"
+  end
+
+  test "lead page hides booking cards without a link" do
+    lead = Lead.create!(name: "Dawa", email: "dawa@example.com")
+    get lead_path(lead)
+    assert_response :success
+    assert_select "h2", { text: "Bookings in PerfectBook", count: 0 }
+  end
+
+  test "builder creates a draft from catalog and departure" do
+    PerfectBook::Trip.create!(perfectbook_id: 42, name: "Everest trek", active: true, synced_at: Time.current)
+    PerfectBook::Departure.create!(perfectbook_id: 43, perfectbook_trip_id: 42,
+      trip_name: "Everest trek", place: "Lukla", start_date: Date.new(2027, 5, 4),
+      end_date: Date.new(2027, 5, 18), available_seats: 6, synced_at: Time.current)
+    get new_quote_path(client_id: @client.id, trip_id: 42, departure_id: 43)
+    assert_response :success
+    assert_includes response.body, "6 seats left"
+
+    assert_difference("Quote.count", 1) do
+      post quotes_path, params: {
+        client_id: @client.id,
+        quote: {
+          perfectbook_trip_id: 42, perfectbook_departure_id: 43, trip_name: "Everest trek",
+          party_size: 2, valid_until: (Date.current + 14).to_s,
+          lines_attributes: {
+            "0" => { kind: "departure", description: "Everest trek", quantity: "2", unit_dollars: "1500.00" },
+            "1" => { kind: "custom", description: "Permits", quantity: "2", unit_dollars: "50.00" },
+            "2" => { kind: "custom", description: "", quantity: "1", unit_dollars: "" }
+          }
+        }
+      }
+    end
+    quote = Quote.order(:created_at).last
+    assert_redirected_to quote_path(quote)
+    assert_equal "draft", quote.status
+    assert_equal 2, quote.lines.count
+    assert_equal 310_000, quote.subtotal_minor
+    assert_equal "Everest trek", quote.trip_name
+    assert_equal Date.new(2027, 5, 4), quote.departure_start_on
+  end
+
+  test "send delivers email with PDF and accept link" do
+    quote = Quote.create!(client: @client, trip_name: "Everest trek")
+    quote.lines.create!(kind: "trip", description: "Everest trek", quantity: 1, unit_dollars: "10.00")
+    assert_enqueued_emails 1 do
+      post send_quote_quote_path(quote)
+    end
+    assert_redirected_to quote_path(quote)
+    follow_redirect!
+    assert_includes response.body, "Quote sent"
+    assert_equal "sent", quote.reload.status
+  end
+
+  test "send refuses quotes without lines" do
+    quote = Quote.create!(client: @client)
+    post send_quote_quote_path(quote)
+    assert_redirected_to quote_path(quote)
+    assert_equal "draft", quote.reload.status
+  end
+
+  test "duplicate and revise keep history" do
+    quote = Quote.create!(client: @client, status: "sent", sent_at: 1.hour.ago)
+    quote.lines.create!(kind: "custom", description: "Trek", quantity: 1, unit_dollars: "10.00")
+    post duplicate_quote_path(quote)
+    copy = Quote.order(:created_at).last
+    assert_redirected_to quote_path(copy)
+    assert_equal "draft", copy.status
+
+    post revise_quote_path(quote)
+    revision = Quote.order(:created_at).last
+    assert_redirected_to edit_quote_path(revision)
+    assert_equal quote, revision.parent
+  end
+
+  test "show downloads the PDF" do
+    quote = Quote.create!(client: @client, trip_name: "Everest trek")
+    quote.lines.create!(kind: "trip", description: "Everest trek", quantity: 1, unit_dollars: "10.00")
+    get quote_path(quote, format: :pdf)
+    assert_response :success
+    assert_equal "application/pdf", response.media_type
+    assert_match(/%PDF/, response.body)
+  end
+
+  test "refresh enqueues a single-contact sync" do
+    PerfectBook::Contact.create!(perfectbook_id: 7, kind: "customer", name: "Maya", synced_at: Time.current)
+    assert_enqueued_with(job: PerfectBook::SyncBookingsJob) do
+      post refresh_bookings_client_path(@client)
+    end
+    assert_redirected_to client_path(@client)
+  end
+
+  test "quotes require sign-in" do
+    delete sign_out_path
+    get quotes_path
+    assert_redirected_to sign_in_path
+  end
+end

@@ -1,17 +1,20 @@
 # Polls booking + invoice status every 15 minutes for mirrored contacts.
 #
-# NOTE: when the sibling Client/Organization models land with their
-# perfectbook_contact_id column, scope this to contacts that have a local
-# CRM record. Until then, sync bookings for all mirrored customer contacts.
-#
-# TODO: record an ActivityEvent when a mirrored booking's status or invoice
-# badge changes, once that model exists on main.
+# The full sweep covers every mirrored customer contact. The Refresh button
+# on a client or lead page calls the same job with perfectbook_contact_id
+# to re-pull just that contact.
 module PerfectBook
   class SyncBookingsJob < ApplicationJob
     queue_as :default
 
-    def perform(client: nil)
+    def perform(client: nil, perfectbook_contact_id: nil)
       client ||= Client.new(pace_requests: true)
+      if perfectbook_contact_id.present?
+        mirror = Contact.find_by(perfectbook_id: perfectbook_contact_id)
+        sync_one_contact!(client, mirror) if mirror
+        SyncState.record_success!("bookings")
+        return
+      end
       state = SyncState.for("bookings")
       contacts = Contact.where(kind: "customer").where("id > ?", state.contact_cursor || 0)
       contacts.find_each do |mirror|

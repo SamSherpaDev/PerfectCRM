@@ -68,3 +68,9 @@ When updating this file, preserve this bar for all agents and keep entries conci
   (intake, details, verdict), contract in `docs/leads-intake.md`; automation
   settings on the Settings "Automations" card; `Leads` service module holds
   the relay HMAC, source, scoring, and rate-limit rules.
+- Quotes: see README.md, "Quotes". Builder reads mirrors through
+  `PerfectBook::Catalog` (never the API from views); sending goes through
+  `QuoteMailer` plus `QuotePdf`; the public accept page is
+  `PublicQuotesController` (`/q/:token`, logged in `QuoteView`).
+- A partial's first-line `<%# locals: (...) %>` is parsed as strict locals:
+  keep it pure Ruby on one line and put prose in a separate comment.

@@ -1,7 +1,21 @@
 <% content_for :title, "Quotes · PerfectCRM" %>
 <div class="page">
-  <%= render layout: "shared/page_header", locals: { eyebrow: "Trips", title: "Quotes", subtitle: "Drafted, sent, and tracked against PerfectBook departures." } do %><% end %>
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Trips", title: "Quotes", subtitle: "Quotes built from the PerfectBook catalog. The client taps a link to accept." } do %>
+    <%= link_to "New quote", new_quote_path, class: "btn btn-ghost btn-sm" %>
+  <% end %>
   <%= render "shared/flash" %>
 
-  <%= render "shared/empty_state", title: "No quotes yet", body: "Trip quotes will be drafted, sent, and tracked here, linked to the departures they belong to.", scene: :cairn %>
+  <nav class="tabs" aria-label="Quote states">
+    <% QuotesController::TAB_ICONS.each do |tab, icon| %>
+      <%= tab_link tab.humanize, quotes_path(tab: tab), icon: icon, active: @tab == tab, count: @counts[tab] %>
+    <% end %>
+  </nav>
+
+  <section class="card card-pad" aria-labelledby="quotes-heading">
+    <div class="card-header">
+      <h2 class="card-title" id="quotes-heading"><%= @tab.humanize %></h2>
+    </div>
+    <%= card_caption "Every version stays on record. Tap a quote to send, revise, or duplicate it." %>
+    <%= render "shared/quotes_table", quotes: @quotes, show_owner: true %>
+  </section>
 </div>

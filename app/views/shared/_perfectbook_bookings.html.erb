@@ -1,0 +1,66 @@
+<%# locals: (record:, bookings:, refresh_path:) %>
+<%# The read-only PerfectBook card, shared by the client page slot and the lead page (when linked). %>
+<section class="card card-pad" aria-labelledby="perfectbook-heading">
+  <div class="card-header">
+    <h2 class="card-title" id="perfectbook-heading">Bookings in PerfectBook</h2>
+    <% if record.try(:perfectbook_contact_id).present? %>
+      <%= button_to "Refresh", refresh_path, method: :post, class: "btn btn-ghost btn-sm" %>
+    <% end %>
+  </div>
+  <%= card_caption "Live bookings, balances, and invoice status from PerfectBook, read only. Money and documents stay there." %>
+  <% if record.try(:perfectbook_contact_id).blank? %>
+    <div class="empty-inline">
+      <%= sketch :enso, class: "enso" %>
+      <p class="text-sm text-ink">Not linked yet.</p>
+      <p class="text-xs muted">Add the PerfectBook contact ID from Edit to see bookings here.</p>
+    </div>
+  <% elsif bookings.any? %>
+    <ul class="divide-y divide-rule-2">
+      <% bookings.each do |booking| %>
+        <li class="py-4 first:pt-1 last:pb-0">
+          <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <p class="font-medium text-ink">
+              <% if booking.deep_link.present? %>
+                <%= link_to booking.ref.presence || "Booking ##{booking.perfectbook_id}", booking.deep_link, class: "link", target: "_blank", rel: "noopener" %>
+              <% else %>
+                <%= booking.ref.presence || "Booking ##{booking.perfectbook_id}" %>
+              <% end %>
+            </p>
+            <%= status_badge booking.status %>
+          </div>
+          <p class="mt-0.5 text-[13px] text-ink-2">
+            <%= booking.trip_name.presence || "Trip to be confirmed" %><% if booking.departure_place.present? %> · <%= booking.departure_place %><% end %>
+          </p>
+          <p class="mt-0.5 text-xs muted">
+            <%= date_range(booking.start_date, booking.end_date) %><% if booking.party_size %> · <%= pluralize(booking.party_size, "traveler") %><% end %>
+          </p>
+          <div class="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px]">
+            <span>Total <strong class="font-display tabular-nums"><%= money_in(booking.total_minor, booking.currency) %></strong></span>
+            <span class="muted">Paid <%= money_in(booking.paid_minor, booking.currency) %></span>
+            <span>Balance due <strong class="font-display tabular-nums"><%= money_in(booking.balance_due_minor, booking.currency) %></strong></span>
+          </div>
+          <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <% if booking.invoice_badge.present? %>
+              <%= status_badge booking.invoice_badge %>
+            <% end %>
+            <% if booking.invoice_number.present? %>
+              <span class="text-xs muted"><%= booking.invoice_number %></span>
+            <% end %>
+            <% if booking.deep_link.present? %>
+              <%= link_to perfectbook_booking_url(booking), class: "link-quiet inline-flex items-center gap-1 text-xs", target: "_blank", rel: "noopener" do %>
+                <%= render "shared/icon", name: :external, class: "h-3.5 w-3.5" %>Open in PerfectBook
+              <% end %>
+            <% end %>
+            <%# TODO(pb-api-documents): PerfectBook's booking API exposes no
+                document-status or checklist fields yet, so there is no
+                received/missing line to show. When it does, render it here
+                and keep the nudge link beside it. %>
+            <%= link_to "Nudge for missing documents", document_nudge_path, class: "link-quiet text-xs", title: "Copy the document-request template" %>
+          </div>
+        </li>
+      <% end %>
+    </ul>
+  <% else %>
+    <%= render "shared/empty_state", title: "No bookings yet", scene: :cairn, body: "Trips booked in PerfectBook for this contact will show here with balances and invoice status." %>
+  <% end %>
+</section>

@@ -1,0 +1,23 @@
+<p>Hi <%= @quote.owner_name %>,</p>
+
+<p>Here is your quote <strong><%= @quote.reference %></strong> for <strong><%= @quote.subject_label %></strong><% if @quote.departure_label.present? %> (<%= @quote.departure_label %>)<% end %>.</p>
+
+<ul>
+  <% @quote.lines.each do |line| %>
+    <li><%= line.description %> × <%= line.quantity %> — <%= money_in(line.total_minor, @quote.currency) %></li>
+  <% end %>
+</ul>
+
+<p><strong>Total <%= money_in(@quote.subtotal_minor, @quote.currency) %></strong><% if @quote.party_size %> for <%= pluralize(@quote.party_size, "guest") %><% end %><% if @quote.valid_until %> · valid until <%= date_short(@quote.valid_until) %><% end %>.</p>
+
+<% if @quote.included.present? %>
+  <p><strong>What is included</strong><br><%= simple_format(@quote.included) %></p>
+<% end %>
+<% if @quote.notes.present? %>
+  <p><strong>A note from Sam</strong><br><%= simple_format(@quote.notes) %></p>
+<% end %>
+
+<p>The full quote is attached as a PDF. To accept, tap this link — no account needed:</p>
+<p><%= link_to "Accept quote #{@quote.reference}", @accept_url %></p>
+
+<p>Questions? Just reply to this email.<br>Sam<br>Sherpa Holidays</p>
