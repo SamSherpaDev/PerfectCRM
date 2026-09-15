@@ -1,0 +1,23 @@
+<%# One builder row: kind, description, quantity well, price each, live total. %>
+<div class="grid grid-cols-[minmax(0,1fr)_4.5rem_6rem_5.5rem_auto] items-end gap-2" data-line-row>
+  <div class="min-w-0">
+    <%= form.label :description, "Description", class: "label sr-only" %>
+    <%= form.text_field :description, class: "input min-w-0", placeholder: "Everest Base Camp trek, permits…", data: { description: true } %>
+  </div>
+  <div>
+    <%= form.label :quantity, "Qty", class: "label sr-only" %>
+    <%= form.number_field :quantity, min: 1, class: "input min-w-0 text-right", aria: { label: "Quantity" }, data: { qty: true, action: "input->quote-builder#recalc" } %>
+  </div>
+  <div>
+    <%= form.label :unit_dollars, "Each ($)", class: "label sr-only" %>
+    <%= form.text_field :unit_dollars, class: "input min-w-0 text-right", inputmode: "decimal", aria: { label: "Price each in dollars" }, data: { each: true, action: "input->quote-builder#recalc" } %>
+  </div>
+  <div class="pb-2.5 text-right text-sm tabular-nums text-ink" data-line-total>$0.00</div>
+  <div class="flex items-center gap-1 pb-1.5">
+    <%= form.hidden_field :kind, value: form.object.kind.presence || "custom" %>
+    <% if form.object.persisted? %>
+      <%= form.hidden_field :_destroy, value: "0", data: { destroy: true } %>
+    <% end %>
+    <button type="button" class="btn btn-ghost btn-sm" data-action="quote-builder#remove" aria-label="Remove line">×</button>
+  </div>
+</div>

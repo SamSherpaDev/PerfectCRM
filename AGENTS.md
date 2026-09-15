@@ -74,3 +74,9 @@ When updating this file, preserve this bar for all agents and keep entries conci
   calls, `Ai::Scrub` the shared text boundary, and `Ai::Guard` eligibility.
   Composer insertion lives in `ai_assist_controller.js`; the thread panel
   currently owns `data-assist`.
+- Quotes: see README.md, "Quotes". Builder reads mirrors through
+  `PerfectBook::Catalog` (never the API from views); sending goes through
+  `QuoteMailer` plus `QuotePdf`; the public accept page is
+  `PublicQuotesController` (`/q/:token`, logged in `QuoteView`).
+- A partial's first-line `<%# locals: (...) %>` is parsed as strict locals:
+  keep it pure Ruby on one line and put prose in a separate comment.

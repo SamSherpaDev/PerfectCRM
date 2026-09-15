@@ -1,0 +1,153 @@
+<% content_for :title, "#{@quote.reference} · PerfectCRM" %>
+<div class="page">
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Quote · #{@quote.status.humanize}", title: @quote.reference, subtitle: "#{@quote.owner_name} · #{@quote.subject_label}", back: ["Quotes", quotes_path] } do %>
+    <% if @quote.draft? %>
+      <%= link_to "Edit", edit_quote_path(@quote), class: "btn btn-secondary btn-sm" %>
+      <%= button_to "Send quote", send_quote_quote_path(@quote), method: :post, class: "btn btn-primary btn-sm" %>
+    <% else %>
+      <%= link_to "PDF", quote_path(@quote, format: :pdf), class: "btn btn-secondary btn-sm" %>
+      <%= button_to "Duplicate", duplicate_quote_path(@quote), method: :post, class: "btn btn-ghost btn-sm" %>
+      <% unless @quote.decided? %>
+        <%= button_to "New revision", revise_quote_path(@quote), method: :post, class: "btn btn-ghost btn-sm" %>
+      <% end %>
+    <% end %>
+  <% end %>
+  <%= render "shared/flash" %>
+
+  <% if @quote.parent %>
+    <div class="callout-neutral callout" role="note">
+      Revision <%= @quote.version %> of <%= link_to @quote.parent.reference, quote_path(@quote.parent), class: "link" %>. Earlier versions keep their history.
+    </div>
+  <% end %>
+
+  <section class="card card-pad" aria-labelledby="summary-heading">
+    <div class="card-header">
+      <h2 class="card-title" id="summary-heading">Summary</h2>
+      <%= status_badge(@quote.expired? ? "expired" : @quote.status) %>
+    </div>
+    <%= card_caption "What the client sees on the accept page, in the email, and in the PDF." %>
+    <dl class="facts mt-2">
+      <div>
+        <dt>For</dt>
+        <dd>
+          <% owner = @quote.owner %>
+          <% if owner.is_a?(Client) %>
+            <%= link_to owner.name, client_path(owner), class: "link" %>
+          <% elsif owner.is_a?(Lead) %>
+            <%= link_to owner.name, lead_path(owner), class: "link" %>
+          <% else %>
+            —
+          <% end %>
+          <%= " · #{@quote.owner_email}" if @quote.owner_email.present? %>
+        </dd>
+      </div>
+      <div>
+        <dt>Trip</dt>
+        <dd><%= @quote.trip_name.presence || "—" %></dd>
+      </div>
+      <div>
+        <dt>Departure</dt>
+        <dd><%= @quote.departure_label.presence || "—" %></dd>
+      </div>
+      <div>
+        <dt>Dates</dt>
+        <dd><%= @quote.departure_start_on ? date_range(@quote.departure_start_on, @quote.departure_end_on) : "—" %></dd>
+      </div>
+      <div>
+        <dt>Guests</dt>
+        <dd><%= @quote.party_size || "—" %></dd>
+      </div>
+      <div>
+        <dt>Valid until</dt>
+        <dd><%= date_short(@quote.valid_until) %></dd>
+      </div>
+      <% if @quote.sent_at %>
+        <div>
+          <dt>Sent</dt>
+          <dd><%= date_short(@quote.sent_at) %> · viewed <%= @quote.view_count %> <%= "time".pluralize(@quote.view_count) %></dd>
+        </div>
+      <% end %>
+      <% if @quote.accepted_at %>
+        <div>
+          <dt>Accepted</dt>
+          <dd><%= date_short(@quote.accepted_at) %></dd>
+        </div>
+      <% end %>
+      <% if @quote.declined_at %>
+        <div>
+          <dt>Declined</dt>
+          <dd><%= date_short(@quote.declined_at) %></dd>
+        </div>
+      <% end %>
+    </dl>
+    <div class="mt-4 border-t border-rule-2 pt-4">
+      <p class="text-xs muted"><%= @quote.party_size ? "Total for #{pluralize(@quote.party_size, 'guest')}" : "Total" %></p>
+      <p class="font-display text-3xl tabular-nums text-ink"><%= money_in(@quote.subtotal_minor, @quote.currency) %></p>
+      <% if @quote.deposit_minor.to_i.positive? %>
+        <p class="mt-1 text-sm muted">Deposit <%= money_in(@quote.deposit_minor, @quote.currency) %> · balance <%= money_in(@quote.balance_due_minor, @quote.currency) %><% if @quote.balance_due_on %> due <%= date_short(@quote.balance_due_on) %><% end %></p>
+      <% end %>
+    </div>
+  </section>
+
+  <section class="card card-pad" aria-labelledby="lines-heading">
+    <div class="card-header">
+      <h2 class="card-title" id="lines-heading">Lines</h2>
+    </div>
+    <%= card_caption "Priced rows as sent. Trip and departure rows snapshot the catalog at build time." %>
+    <ul class="divide-y divide-rule-2">
+      <% @quote.lines.order(:position, :id).each do |line| %>
+        <li class="flex items-baseline justify-between gap-4 py-3">
+          <div class="min-w-0">
+            <p class="text-sm font-medium text-ink"><%= line.description %></p>
+            <p class="text-xs muted"><%= line.kind.humanize %> · <%= line.quantity %> × <%= money_in(line.unit_minor, @quote.currency) %></p>
+          </div>
+          <p class="shrink-0 font-display tabular-nums text-ink"><%= money_in(line.total_minor, @quote.currency) %></p>
+        </li>
+      <% end %>
+    </ul>
+  </section>
+
+  <% if @quote.notes.present? || @quote.included.present? %>
+    <section class="card card-pad" aria-labelledby="words-heading">
+      <div class="card-header">
+        <h2 class="card-title" id="words-heading">Words</h2>
+      </div>
+      <%= card_caption "The note and inclusions travel with the quote." %>
+      <% if @quote.included.present? %>
+        <h3 class="label mt-2">What is included</h3>
+        <p class="mt-1 text-sm text-ink-2 whitespace-pre-line"><%= @quote.included %></p>
+      <% end %>
+      <% if @quote.notes.present? %>
+        <h3 class="label mt-4">Note to the client</h3>
+        <p class="mt-1 text-sm text-ink-2 whitespace-pre-line"><%= @quote.notes %></p>
+      <% end %>
+    </section>
+  <% end %>
+
+  <% if @quote.status == "accepted" %>
+    <section class="card card-pad" aria-labelledby="intake-heading">
+      <div class="card-header">
+        <h2 class="card-title" id="intake-heading">Create booking in PerfectBook</h2>
+      </div>
+      <%= card_caption "They accepted. Post the staged details into PerfectBook, where money lives." %>
+      <div class="mt-2 flex flex-wrap gap-2">
+        <%= link_to "Open PerfectBook booking page", quote_intake_url(@quote), class: "btn btn-primary btn-sm", target: "_blank", rel: "noopener" %>
+      </div>
+      <label class="label mt-4" for="intake-details">Details to copy into PerfectBook</label>
+      <textarea id="intake-details" rows="7" readonly class="textarea mono text-xs"><%=
+        @quote.intake_details.map { |key, value| "#{key}: #{value}" }.join("\n")
+      %></textarea>
+      <p class="hint mt-1">Copy these into the new booking. A direct post will replace this step once PerfectBook's enquiry endpoint ships.</p>
+    </section>
+  <% end %>
+
+  <% if @revisions.any? %>
+    <section class="card card-pad" aria-labelledby="revisions-heading">
+      <div class="card-header">
+        <h2 class="card-title" id="revisions-heading">Revisions</h2>
+      </div>
+      <%= card_caption "Newer versions of this quote. The accepted version is the one that counts." %>
+      <%= render "shared/quotes_table", quotes: @revisions %>
+    </section>
+  <% end %>
+</div>

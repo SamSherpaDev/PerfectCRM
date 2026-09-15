@@ -166,6 +166,24 @@
   </section>
 
   <%= render "shared/mail_card", record: @lead, conversations: @conversations %>
+  <% if @lead.perfectbook_contact_id.present? %>
+    <%= render "shared/perfectbook_bookings", record: @lead,
+      bookings: perfectbook_bookings_for(@lead), refresh_path: refresh_bookings_lead_path(@lead) %>
+  <% end %>
+
+  <% lead_quotes = Quote.where(lead: @lead).ordered.includes(:lines) %>
+  <% if lead_quotes.any? || !@lead.converted? %>
+    <section class="card card-pad" aria-labelledby="quotes-heading">
+      <div class="card-header">
+        <h2 class="card-title" id="quotes-heading">Quotes</h2>
+        <% unless @lead.converted? %>
+          <%= link_to "New quote", new_quote_path(lead_id: @lead.id), class: "link-quiet text-xs" %>
+        <% end %>
+      </div>
+      <%= card_caption "Trip quotes built from the PerfectBook catalog. The client taps a link to accept." %>
+      <%= render "shared/quotes_table", quotes: lead_quotes %>
+    </section>
+  <% end %>
 
   <section class="card card-pad" aria-labelledby="notes-heading">
     <div class="card-header">

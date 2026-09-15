@@ -178,10 +178,9 @@ document. The CRM mirrors contacts, the trip and departure catalog, and
 customer booking and invoice status. It never stores passport, visa,
 insurance, or date-of-birth data. Production polling is scheduled in
 [`config/recurring.yml`](config/recurring.yml); these recurring jobs are
-not scheduled in development. `PerfectBook::Catalog` and the
-`perfectbook_contact_url` and `perfectbook_booking_url` helpers support
-the future quote builder and client booking cards; those screens are not
-implemented yet.
+not scheduled in development. `PerfectBook::Catalog` feeds the quote
+builder, and the `perfectbook_contact_url` and `perfectbook_booking_url`
+helpers power the client booking cards; see "Quotes" below.
 
 Configure with `PERFECTBOOK_BASE_URL` (defaults to
 `https://perfectbook.sherpaholidays.com`) and `PERFECTBOOK_API_TOKEN`
@@ -201,6 +200,41 @@ also filter the token (`config/initializers/filter_parameter_logging.rb`).
 
 Settings → PerfectBook connection shows configured/unconfigured, the last
 successful sync, the last error, and a Test connection button.
+
+## Quotes
+
+Quotes are built from the mirrored trip catalog and sent as email plus a
+Washi-styled PDF (`QuotePdf`, via `prawn`), always from
+`info@sherpaholidays.com` through the app's Gmail SMTP settings. The
+builder (`/quotes/new?client_id=` or `?lead_id=`) picks a trip, then a
+departure with live seats; prices stay the captain's to enter because
+PerfectBook exposes no catalog price, and prefill from the newest earlier
+quote for the same trip (`Quote.last_unit_for_trip`). Trip and departure
+lines snapshot catalog names and dates at build time, so later
+PerfectBook edits never rewrite history; custom lines cover permits,
+single supplements, and extra nights. Revisions chain through
+`parent` with a bumped `version`; duplicates start fresh. Sending a quote
+moves its lead to `quoted` (`Quote#deliver!`).
+
+Each quote carries an unguessable tap-to-accept link (`/q/:token`, no
+sign-in, rate-limited and logged through `QuoteView`, dead after
+`valid_until`). Accepting records `accepted_at`, emails the captain at
+`info@`, writes the timeline, and stages an intake payload on the quote
+page behind a "Create booking in PerfectBook" button that opens
+PerfectBook's new-booking page prefilled via query params, with the
+details to copy alongside. A direct post replaces that step once
+PerfectBook ships its enquiry-creation endpoint (see
+`TODO(pb-inquiry-intake)` in `Quote#perfectbook_intake_url`).
+
+Client and lead pages (when linked to a PerfectBook contact) show
+"Bookings in PerfectBook": each mirrored booking with ref, trip, dates,
+status, total, paid, balance due, invoice badge and number, and "Open in
+PerfectBook", plus a Refresh button that re-pulls just that contact
+(`PerfectBook::SyncBookingsJob` with `perfectbook_contact_id`).
+PerfectBook's API exposes no document-status fields yet, so there is no
+received/missing line; each booking links "Nudge for missing documents"
+to the document-request template instead (see
+`TODO(pb-api-documents)` in `shared/_perfectbook_bookings`).
 
 ## Checks
 

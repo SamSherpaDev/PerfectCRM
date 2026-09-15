@@ -1,0 +1,91 @@
+<% content_for :title, "Edit #{@quote.reference} · PerfectCRM" %>
+<div class="page">
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Quote · Draft", title: @quote.reference, subtitle: "#{@quote.owner_name} · #{@quote.subject_label}", back: [@quote.reference, quote_path(@quote)] } do %><% end %>
+  <%= render "shared/flash" %>
+  <% if @quote.errors.any? %>
+    <div class="callout-danger callout" role="alert">
+      <p class="font-medium">This quote needs attention.</p>
+      <ul class="mt-1 list-disc pl-5 text-sm">
+        <% @quote.errors.full_messages.each do |message| %>
+          <li><%= message %></li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <%= form_with model: @quote, data: { controller: "quote-builder" }, class: "grid gap-6 lg:grid-cols-[3fr_2fr] lg:items-start" do |form| %>
+    <div class="space-y-6">
+      <section class="card card-pad" aria-labelledby="lines-heading">
+        <div class="card-header">
+          <h2 class="card-title" id="lines-heading">Lines</h2>
+          <button type="button" class="btn btn-ghost btn-sm" data-action="quote-builder#add">Add line</button>
+        </div>
+        <%= card_caption "The trip is fixed on a draft edit. To change trip or departure, make a revision instead." %>
+        <div class="space-y-3" data-quote-builder-target="rows">
+          <%= form.fields_for :lines, @quote.lines.order(:position, :id) do |line_form| %>
+            <%= render "line_fields", form: line_form %>
+          <% end %>
+        </div>
+        <template data-quote-builder-target="template">
+          <%= form.fields_for :lines, QuoteLine.new(quantity: 1), child_index: "__INDEX__" do |line_form| %>
+            <%= render "line_fields", form: line_form %>
+          <% end %>
+        </template>
+      </section>
+
+      <section class="card card-pad" aria-labelledby="note-heading">
+        <div class="card-header">
+          <h2 class="card-title" id="note-heading">Note to the client</h2>
+        </div>
+        <%= card_caption "One personal paragraph travels with the quote, in the email and the PDF." %>
+        <%= form.label :notes, "Note", class: "label mt-2" %>
+        <%= form.text_area :notes, rows: 3, class: "textarea" %>
+        <%= form.label :included, "What is included", class: "label mt-4" %>
+        <%= form.text_area :included, rows: 3, class: "textarea" %>
+      </section>
+    </div>
+
+    <div class="space-y-6">
+      <section class="card card-pad" aria-labelledby="summary-heading">
+        <div class="card-header">
+          <h2 class="card-title" id="summary-heading">Summary</h2>
+        </div>
+        <%= card_caption "Check the total, set the terms, then send." %>
+        <dl class="mt-2 space-y-3 text-sm">
+          <div class="flex items-center justify-between gap-3">
+            <dt class="muted">Guests</dt>
+            <dd><%= form.number_field :party_size, min: 1, class: "input w-24 text-right", data: { party_size: true, action: "input->quote-builder#recalc" } %></dd>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <dt class="muted">Deposit ($)</dt>
+            <dd><%= form.text_field :deposit_dollars, class: "input w-28 text-right", inputmode: "decimal" %></dd>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <dt class="muted">Balance due</dt>
+            <dd><%= form.date_field :balance_due_on, class: "input w-40" %></dd>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <dt class="muted">Valid until</dt>
+            <dd><%= form.date_field :valid_until, class: "input w-40" %></dd>
+          </div>
+        </dl>
+        <div class="mt-4 border-t border-rule-2 pt-4">
+          <p class="text-xs muted" data-quote-builder-target="count">Total</p>
+          <p class="font-display text-3xl tabular-nums text-ink" data-quote-builder-target="total">$0.00</p>
+        </div>
+        <div class="mt-4 flex flex-col gap-2">
+          <%= form.button "Send quote", name: "send_now", value: "1", type: "submit", class: "btn btn-primary" %>
+          <%= form.submit "Save draft", class: "btn btn-secondary" %>
+        </div>
+      </section>
+    </div>
+
+    <div class="sticky bottom-0 z-10 -mx-1 flex items-center justify-between gap-3 border-t border-rule bg-paper/95 px-4 py-3 backdrop-blur lg:hidden" style="padding-bottom: calc(0.75rem + env(safe-area-inset-bottom))">
+      <div class="min-w-0">
+        <p class="font-display text-[22px] leading-none tabular-nums text-ink" data-quote-builder-target="total">$0.00</p>
+        <p class="mt-0.5 truncate text-xs muted" data-quote-builder-target="count">Total</p>
+      </div>
+      <%= form.button "Send quote", name: "send_now", value: "1", type: "submit", class: "btn btn-primary min-h-11 min-w-24" %>
+    </div>
+  <% end %>
+</div>
