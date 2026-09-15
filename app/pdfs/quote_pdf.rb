@@ -3,8 +3,7 @@
 require "prawn"
 require "prawn/table"
 
-# Washi-styled quote PDF attached to the quote email: cream page, ink text,
-# Matches the spirit of PerfectBook's invoice PDF (same paper, same accent).
+# Quote PDF attached to the email, using Washi ink and ochre accents.
 class QuotePdf
   INK = "14110E"
   MUTED = "5A5550"

@@ -231,5 +231,4 @@ module ApplicationHelper
     PerfectBook::Booking.where(perfectbook_contact_id: contact_id)
       .order(Arel.sql("start_date IS NULL, start_date ASC"))
   end
-
 end

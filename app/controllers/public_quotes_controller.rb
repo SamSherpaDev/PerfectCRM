@@ -1,6 +1,7 @@
 # Public tap-to-accept page (/q/:token). No sign-in: the token is the key,
 # so it stays unguessable (has_secure_token) and 404s when unknown. Views
-# are logged and rate-limited; the link dies after valid_until.
+# are logged and rate-limited. See README.md, "Quotes", for public visibility
+# and acceptance behavior.
 class PublicQuotesController < ApplicationController
   skip_before_action :require_sign_in
 
