@@ -18,13 +18,12 @@
       <h2 class="card-title" id="trip-heading">Trip and departure</h2>
     </div>
     <%= card_caption "Pick the trip, then the departure. Seats are live from PerfectBook; prices stay yours to enter." %>
-    <%= form_with url: new_quote_path, method: :get, id: "catalog-picker", class: "mt-2 space-y-4" do |form| %>
-      <%= hidden_field_tag :client_id, params[:client_id] %>
-      <%= hidden_field_tag :lead_id, params[:lead_id] %>
+    <div id="catalog-picker" class="mt-2 space-y-4">
       <div>
-        <%= form.label :trip_id, "Trip", class: "label" %>
-        <%= form.select :trip_id, options_from_collection_for_select(@trips, :perfectbook_id, :name, @trip&.perfectbook_id),
-          { include_blank: "Choose a trip…" }, { class: "select", onchange: "this.form.querySelectorAll('[name=departure_id]').forEach(input => input.checked = false); this.form.requestSubmit()" } %>
+        <%= label_tag :trip_id, "Trip", class: "label" %>
+        <%= select_tag :trip_id, options_from_collection_for_select(@trips, :perfectbook_id, :name, @trip&.perfectbook_id),
+          include_blank: "Choose a trip…", class: "select", form: "quote-builder-form",
+          onchange: "document.querySelectorAll('[name=departure_id]').forEach(input => input.checked = false); this.form.requestSubmit(document.getElementById('quote-catalog-refresh'))" %>
       </div>
       <% if @trip %>
         <% if @departures.any? %>
@@ -36,7 +35,7 @@
                 <% seats = departure.available_seats %>
                 <label class="card flex cursor-pointer items-center gap-3 px-4 py-3 has-checked:bg-seal-tint has-checked:shadow-press">
                   <%= radio_button_tag :departure_id, departure.perfectbook_id, @quote.perfectbook_departure_id == departure.perfectbook_id,
-                    class: "h-4 w-4 accent-[#a85a12]", onchange: "this.form.requestSubmit()" %>
+                    class: "h-4 w-4 accent-[#a85a12]", form: "quote-builder-form", onchange: "this.form.requestSubmit(document.getElementById('quote-catalog-refresh'))" %>
                   <span class="min-w-0 flex-1">
                     <span class="block text-sm font-medium text-ink"><%= label %></span>
                     <% if departure.place.present? %><span class="block text-xs muted"><%= departure.place %></span><% end %>
@@ -61,10 +60,10 @@
           </div>
         <% end %>
       <% end %>
-    <% end %>
+    </div>
   </section>
 
-  <%= form_with model: @quote, url: quotes_path, data: { controller: "quote-builder" }, class: "grid gap-6 lg:grid-cols-[3fr_2fr] lg:items-start" do |form| %>
+  <%= form_with model: @quote, url: quotes_path, id: "quote-builder-form", data: { controller: "quote-builder", turbo: false }, class: "grid gap-6 lg:grid-cols-[3fr_2fr] lg:items-start" do |form| %>
     <%= hidden_field_tag :client_id, params[:client_id] %>
     <%= hidden_field_tag :lead_id, params[:lead_id] %>
     <%= form.hidden_field :perfectbook_trip_id %>
@@ -117,7 +116,11 @@
         <dl class="mt-2 space-y-3 text-sm">
           <div class="flex items-center justify-between gap-3">
             <dt class="muted">Guests</dt>
-            <dd><%= form.number_field :party_size, min: 1, class: "input w-24 text-right", data: { party_size: true, action: "input->quote-builder#recalc" } %></dd>
+            <dd><%= form.number_field :party_size, min: 1, class: "input w-24 text-right", data: { party_size: true, action: "input->quote-builder#recalc" } %>
+              <% @quote.errors.full_messages_for(:party_size).each do |message| %>
+                <p class="mt-1 text-xs text-danger" role="alert"><%= message %></p>
+              <% end %>
+            </dd>
           </div>
           <div class="flex items-center justify-between gap-3">
             <dt class="muted">Deposit ($)</dt>
@@ -129,7 +132,11 @@
           </div>
           <div class="flex items-center justify-between gap-3">
             <dt class="muted">Valid until</dt>
-            <dd><%= form.date_field :valid_until, class: "input w-40" %></dd>
+            <dd><%= form.date_field :valid_until, class: "input w-40" %>
+              <% @quote.errors.full_messages_for(:valid_until).each do |message| %>
+                <p class="mt-1 text-xs text-danger" role="alert"><%= message %></p>
+              <% end %>
+            </dd>
           </div>
         </dl>
         <div class="mt-4 border-t border-rule-2 pt-4">
@@ -162,5 +169,6 @@
       </div>
       <%= form.button "Send quote", name: "send_now", value: "1", type: "submit", class: "btn btn-primary min-h-11 min-w-24" %>
     </div>
+    <%= form.button "Update catalog", id: "quote-catalog-refresh", formaction: preview_quotes_path, formnovalidate: true, hidden: true %>
   <% end %>
 </div>

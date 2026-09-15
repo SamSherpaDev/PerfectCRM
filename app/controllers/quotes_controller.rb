@@ -37,13 +37,14 @@ class QuotesController < ApplicationController
     @trips = PerfectBook::Catalog.new.active_trips
     @trip = @trips.find_by(perfectbook_id: params[:trip_id]) if params[:trip_id].present?
     @departures = @trip ? PerfectBook::Catalog.new.departures_for_trip(@trip.perfectbook_id).limit(30) : []
-    @quote = Quote.new(owner_params.merge(
+    @quote = Quote.new({
       perfectbook_trip_id: @trip&.perfectbook_id,
       trip_name: @trip&.name,
       party_size: 2,
-      valid_until: 14.days.from_now.to_date,
+      valid_until: Date.current + 14,
       included: QuoteTripPreference.find_by(perfectbook_trip_id: @trip&.perfectbook_id)&.included
-    ))
+    }.merge(params[:quote].present? ? quote_params : {}).merge(owner_params))
+    @quote.perfectbook_trip_id = @trip&.perfectbook_id
     prefill_lines
     3.times { @quote.lines.build(quantity: 1) }
   end
@@ -138,12 +139,13 @@ class QuotesController < ApplicationController
   end
 
   def prefill_lines
-    return unless @trip
-
-    departure = @departures.find_by(perfectbook_id: params[:departure_id]) if params[:departure_id].present?
+    departure = @departures.find_by(perfectbook_id: params[:departure_id]) if @trip && params[:departure_id].present?
     @quote.perfectbook_departure_id = departure&.perfectbook_id
-    @prefilled_unit = Quote.last_unit_for_trip(@trip.perfectbook_id, departure_id: @quote.perfectbook_departure_id)
-    @quote.lines.build(kind: "trip", description: @trip.name, quantity: 2, unit_minor: @prefilled_unit.to_i)
+    if @trip && @quote.lines.none? { |line| %w[trip departure].include?(line.kind) }
+      @prefilled_unit = Quote.last_unit_for_trip(@trip.perfectbook_id, departure_id: @quote.perfectbook_departure_id)
+      @quote.lines.build(kind: "trip", description: @trip.name,
+        quantity: @quote.party_size.presence || 2, unit_minor: @prefilled_unit.to_i)
+    end
     apply_catalog_snapshot(replace_description: true)
   end
 
@@ -200,6 +202,10 @@ class QuotesController < ApplicationController
   def send_saved_quote
     @quote.with_lock(requires_new: true) do
       unless @quote.deliver!
+        if @quote.draft? && @quote.errors.any?
+          load_catalog_options
+          return render :edit, status: :unprocessable_entity
+        end
         return redirect_to @quote, alert: "Only drafts with a line and an email can be sent."
       end
 

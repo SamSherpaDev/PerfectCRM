@@ -38,6 +38,7 @@ class Quote < ApplicationRecord
   validates :currency, inclusion: { in: CURRENCIES }
   validates :deposit_minor, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
   validates :party_size, numericality: { only_integer: true, greater_than: 0, allow_nil: true }
+  validates :party_size, :valid_until, presence: true, on: :send
   validate :exactly_one_owner
   validate :totals_cover_deposit
 
@@ -106,7 +107,7 @@ class Quote < ApplicationRecord
   end
 
   def sendable?
-    draft? && owner_email.present? && lines.any?
+    draft? && owner_email.present? && lines.any? && valid?(:send)
   end
 
   def expired?

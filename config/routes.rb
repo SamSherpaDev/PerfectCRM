@@ -88,6 +88,7 @@ Rails.application.routes.draw do
   get "document-nudge/:booking_id", to: "templates#document_nudge", as: :document_nudge
 
   resources :quotes, except: %i[destroy] do
+    post :preview, on: :collection, action: :new
     member do
       post :send_quote
       post :duplicate

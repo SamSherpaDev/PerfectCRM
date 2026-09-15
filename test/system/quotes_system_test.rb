@@ -162,7 +162,7 @@ class QuotesSystemTest < ApplicationSystemTestCase
 
   test "revision stays private until sent and duplicate retains its deposit" do
     client = Client.create!(name: "Maya Gurung", email: "maya@example.com")
-    quote = Quote.create!(client: client, status: "sent", sent_at: Time.current,
+    quote = Quote.create!(party_size: 2, client: client, status: "sent", sent_at: Time.current,
       trip_name: "Everest trek", valid_until: Date.current + 14)
     quote.lines.create!(kind: "custom", description: "Trek", quantity: 2, unit_dollars: "1500")
     quote.update!(deposit_dollars: "500")
@@ -201,7 +201,7 @@ class QuotesSystemTest < ApplicationSystemTestCase
 
   test "invalid money and blank saved descriptions preserve edits until corrected" do
     client = Client.create!(name: "Maya Gurung", email: "maya@example.com")
-    quote = Quote.create!(client: client, trip_name: "Everest trek", valid_until: Date.current + 14)
+    quote = Quote.create!(party_size: 2, client: client, trip_name: "Everest trek", valid_until: Date.current + 14)
     line = quote.lines.create!(kind: "custom", description: "Original", quantity: 1, unit_dollars: "1500")
     visit edit_quote_path(quote)
     within(all("[data-line-row]").first) do
@@ -245,6 +245,64 @@ class QuotesSystemTest < ApplicationSystemTestCase
     assert_no_text "Everest trek"
     assert_no_button "Accept this quote"
     assert_equal "viewed", quote.reload.status
+  end
+
+  test "required terms stay optional for drafts and show errors before sending" do
+    client = Client.create!(name: "Maya", email: "maya@example.com")
+    visit new_quote_path(client_id: client.id)
+    assert_field "quote_valid_until", with: (Date.current + 14).iso8601
+    within(all("[data-line-row]").first) do
+      fill_in "Description", with: "Trek"
+      fill_in "Each ($)", with: "1500"
+    end
+    fill_in "quote_party_size", with: ""
+    fill_in "quote_valid_until", with: ""
+    click_button "Send quote", match: :first
+    assert_text "Party size can't be blank"
+    assert_text "Valid until can't be blank"
+    assert_equal "draft", Quote.order(:id).last.status
+    click_button "Save draft"
+    assert_text "Quote saved"
+  end
+
+  test "catalog changes preserve entered quote details" do
+    client = Client.create!(name: "Maya", email: "maya@example.com")
+    PerfectBook::Trip.create!(perfectbook_id: 42, name: "Everest", active: true, synced_at: Time.current)
+    PerfectBook::Trip.create!(perfectbook_id: 44, name: "Annapurna", active: true, synced_at: Time.current)
+    PerfectBook::Departure.create!(perfectbook_id: 45, perfectbook_trip_id: 44,
+      start_date: Date.new(2027, 5, 4), end_date: Date.new(2027, 5, 18), synced_at: Time.current)
+    visit new_quote_path(client_id: client.id, trip_id: 42)
+    within(all("[data-line-row]").first) do
+      fill_in "Each ($)", with: "1600"
+      fill_in "Qty", with: "3"
+    end
+    click_button "Add line"
+    within(all("[data-line-row]").last) do
+      fill_in "Description", with: "Extra nights"
+      fill_in "Each ($)", with: "75"
+    end
+    fill_in "Note", with: "Keep these details"
+    fill_in "What is included", with: "Guide only"
+    fill_in "quote_party_size", with: "3"
+    fill_in "quote_deposit_dollars", with: "200"
+    select "Annapurna", from: "Trip"
+    assert_field "Note", with: "Keep these details"
+    choose "4 May – 18 May 2027"
+    assert_field "Note", with: "Keep these details"
+    assert_field "What is included", with: "Guide only"
+    assert_field "quote_deposit_dollars", with: "200.00"
+    within(all("[data-line-row]").first) do
+      assert_field "Each ($)", with: "1600.00"
+      assert_field "Qty", with: "3"
+    end
+    assert_field "Description", with: "Extra nights"
+    assert_no_overflow("catalog changes preserve inputs")
+    click_button "Save draft"
+    assert_text "Quote saved as a draft"
+    quote = Quote.order(:id).last
+    assert_equal 45, quote.perfectbook_departure_id
+    assert_equal 487500, quote.subtotal_minor
+    assert_equal "Keep these details", quote.notes
   end
 
   private

@@ -107,7 +107,7 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
   end
 
   test "send delivers email with PDF and accept link" do
-    quote = Quote.create!(client: @client, trip_name: "Everest trek")
+    quote = Quote.create!(party_size: 2, valid_until: Date.current + 14, client: @client, trip_name: "Everest trek")
     quote.lines.create!(kind: "trip", description: "Everest trek", quantity: 1, unit_dollars: "10.00")
     assert_enqueued_emails 1 do
       post send_quote_quote_path(quote)
@@ -287,7 +287,7 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
   end
 
   test "a draft loaded before another send cannot update the published quote" do
-    quote = Quote.create!(client: @client, notes: "Original")
+    quote = Quote.create!(party_size: 2, valid_until: Date.current + 14, client: @client, notes: "Original")
     quote.lines.create!(kind: "custom", description: "Trek", quantity: 1, unit_minor: 150000)
     relation = Quote.includes(:lines, :client, :lead)
     load_then_send = ->(id) do
@@ -306,7 +306,7 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
   end
 
   test "a stale send request does not enqueue a second email" do
-    quote = Quote.create!(client: @client)
+    quote = Quote.create!(party_size: 2, valid_until: Date.current + 14, client: @client)
     quote.lines.create!(kind: "custom", description: "Trek", quantity: 1, unit_minor: 150000)
     stale = Quote.find(quote.id)
     post send_quote_quote_path(quote)
@@ -362,7 +362,7 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
 
   test "queue rejection leaves an existing draft retryable with no sent activity" do
     lead = Lead.create!(name: "Pasang", email: "pasang@example.com", status: "chatting")
-    quote = Quote.create!(lead: lead)
+    quote = Quote.create!(party_size: 2, valid_until: Date.current + 14, lead: lead)
     quote.lines.create!(kind: "custom", description: "Trek", quantity: 1, unit_minor: 150000)
     reject = ->(_job) { raise ActiveJob::EnqueueError, "Queue unavailable" }
     assert_no_enqueued_emails do
@@ -387,7 +387,7 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
   end
 
   test "queue rejection during edit and send preserves the saved edits as a draft" do
-    quote = Quote.create!(client: @client, notes: "Original")
+    quote = Quote.create!(party_size: 2, valid_until: Date.current + 14, client: @client, notes: "Original")
     quote.lines.create!(kind: "custom", description: "Trek", quantity: 1, unit_minor: 150000)
     reject = ->(_job) { raise SolidQueue::Job::EnqueueError, "Queue database unavailable" }
     QuoteMailer.delivery_job.queue_adapter.stub(:enqueue, reject) do
@@ -408,7 +408,7 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
     reject = ->(_job) { raise ActiveJob::EnqueueError, "Queue unavailable" }
     QuoteMailer.delivery_job.queue_adapter.stub(:enqueue, reject) do
       post quotes_path, params: { client_id: @client.id, send_now: "1", quote: {
-        notes: "New journey", lines_attributes: {
+        party_size: 2, valid_until: Date.current + 14, notes: "New journey", lines_attributes: {
           "0" => { kind: "custom", description: "Trek", quantity: "1", unit_dollars: "1500" }
         }
       } }
@@ -423,4 +423,36 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
     end
     assert_equal "sent", quote.reload.status
   end
+  test "sending an incomplete draft renders the missing terms beside their fields" do
+    quote = Quote.create!(client: @client)
+    quote.lines.create!(kind: "custom", description: "Trek", quantity: 1, unit_minor: 150000)
+    assert_no_enqueued_emails { post send_quote_quote_path(quote) }
+    assert_response :unprocessable_entity
+    assert_select "dd", text: /Party size can't be blank/
+    assert_select "dd", text: /Valid until can't be blank/
+    assert_equal "draft", quote.reload.status
+    assert_nil quote.sent_at
+    assert_enqueued_emails 1 do
+      patch quote_path(quote), params: { send_now: "1", quote: { party_size: 3, valid_until: Date.current + 14 } }
+    end
+    assert_redirected_to quote_path(quote)
+    assert_equal "sent", quote.reload.status
+  end
+
+  test "catalog preview retains invalid entered money and never persists a quote" do
+    PerfectBook::Trip.create!(perfectbook_id: 42, name: "Everest", active: true, synced_at: Time.current)
+    assert_no_difference "Quote.count" do
+      post preview_quotes_path, params: { client_id: @client.id, trip_id: 42, quote: {
+        party_size: "", valid_until: "", notes: "My note", included: "My inclusions", deposit_dollars: "1,500",
+        lines_attributes: { "0" => { kind: "custom", description: "Extra nights", quantity: 2, unit_dollars: "1,600" } }
+      } }
+    end
+    assert_response :success
+    assert_select "textarea[name='quote[notes]']", text: "My note"
+    assert_select "textarea[name='quote[included]']", text: "My inclusions"
+    assert_select "input[name='quote[deposit_dollars]'][value='1,500']"
+    assert_select "input[data-each][value='1,600']"
+    assert_select "input[name='quote[valid_until]'][value]", count: 0
+  end
+
 end
