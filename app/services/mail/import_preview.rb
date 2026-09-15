@@ -15,31 +15,14 @@ module Mail
       end
     end
 
-    def self.build(messages, choices: {})
-      new.build(messages, choices: choices)
-    end
-
-    def build(messages, choices: {})
-      grouped = Hash.new(0)
-      messages.each do |item|
-        parsed = item.is_a?(Mail::Ingester::Parsed) ? item : Mail::Ingester.parse_raw(item[:raw] || item["raw"].to_s)
-        next unless Mail.keeps?(parsed.headers)
-
-        Mail.counterparties(parsed).each { |email| grouped[email] += 1 }
-      end
-      build_counts(grouped, choices: choices)
-    end
-
-    def build_counts(grouped, choices: {})
+    def build_counts(grouped)
       domains = Hash.new(0)
       grouped.each_key { |email| domains[email.split("@").last] += 1 }
 
       rows = grouped.map do |email, count|
         duplicate_name = duplicate_name_for(email)
         suggested = suggest_kind(email, domains)
-        override = choices[email] || choices[email.downcase]
-        kind = override.presence || suggested
-        Row.new(email: email, count: count, suggested_kind: kind,
+        Row.new(email: email, count: count, suggested_kind: suggested,
           duplicate: duplicate_name.present?, duplicate_name: duplicate_name)
       end
       rows.sort_by { |row| [ -row.count, row.email ] }

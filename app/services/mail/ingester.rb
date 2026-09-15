@@ -140,8 +140,8 @@ module Mail
     end
 
     def participant_list(parsed)
-      (Array(parsed.from_addresses) + Array(parsed.to_addresses) + Array(parsed.cc_addresses))
-        .map { |value| value.to_s.strip.downcase }.reject(&:blank?).uniq.first(20)
+      (Array(parsed.from_addresses) + Array(parsed.to_addresses) + Array(parsed.cc_addresses) + Array(parsed.headers["bcc"]))
+        .map { |value| value.to_s.strip.downcase }.reject(&:blank?).uniq
     end
 
     def attach_files(message, attachments, uploaded)

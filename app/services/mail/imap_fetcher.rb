@@ -42,7 +42,6 @@ module Mail
       raise NotConfiguredError, "Mailbox is not configured." unless configured?
 
       state = ::MailSyncState.for(FOLDER)
-      collected = []
       with_connection do |imap|
         imap.examine(FOLDER)
         validity = imap.responses["UIDVALIDITY"]&.last || current_validity(imap)
@@ -55,17 +54,16 @@ module Mail
         uids = imap.uid_search([ "UID", "#{from_uid}:*" ]).select { |uid| uid >= from_uid }.sort.first(limit)
         uids.each do |uid|
           data = fetch_one(imap, uid)
-          collected << data if data
+          yield data if data
         end
       end
-      collected
     end
 
     # Full-folder scan for the history import preview/commit. Yields Fetched
     # structs; callers enforce the info@ rule via the ingester.
-    def fetch_all(since: nil, limit: nil, after_uid: 0, uid_validity: nil, on_mailbox: nil, &block)
+    def fetch_all(since: nil, after_uid: 0, uid_validity: nil, on_mailbox: nil, &block)
       raise NotConfiguredError, "Mailbox is not configured." unless configured?
-      return enum_for(:fetch_all, since: since, limit: limit, after_uid: after_uid, uid_validity: uid_validity, on_mailbox: on_mailbox) unless block
+      return enum_for(:fetch_all, since: since, after_uid: after_uid, uid_validity: uid_validity, on_mailbox: on_mailbox) unless block
 
       with_connection do |imap|
         imap.examine(FOLDER)
@@ -82,7 +80,6 @@ module Mail
           uids = imap.uid_search(criteria)
         end
         uids = uids.select { |uid| uid > after_uid.to_i }.sort
-        uids = uids.first(limit) if limit
         uids.each do |uid|
           data = fetch_one(imap, uid)
           block.call(data) if data

@@ -10,11 +10,9 @@ class Mail::SyncJob < ApplicationJob
     fetcher ||= Mail::ImapFetcher.new
     return false unless fetcher.configured?
 
-    fetched = fetcher.fetch_new(limit: limit)
     stored = 0
-    fetched.each do |item|
+    fetcher.fetch_new(limit: limit) do |item|
       parsed = Mail::Ingester.parse_raw(item.raw)
-      # Enrich header rule with Gmail envelope hints when present.
       result = Mail::Ingester.ingest(parsed: parsed, gmail: item.gmail)
       stored += 1 if result[:status] == :stored
       ::MailSyncState.record_success!(Mail::FOLDER, uid_validity: item.uid_validity, last_uid: item.uid)

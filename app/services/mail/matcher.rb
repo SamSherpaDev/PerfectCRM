@@ -6,15 +6,15 @@ module Mail
   class Matcher
     Result = Struct.new(:linkable, :via, keyword_init: true)
 
-    def self.call(addresses, **kwargs)
-      new.call(addresses, **kwargs)
+    def self.call(addresses)
+      new.call(addresses)
     end
 
-    def call(addresses, exclude_mailbox: true)
+    def call(addresses)
       Array(addresses).each do |address|
         normalized = ::EmailIdentity.normalized(address)
         next if normalized.blank?
-        next if exclude_mailbox && normalized == Mail.mailbox_address
+        next if normalized == Mail.mailbox_address
 
         if (identity = ::EmailIdentity.find_for(normalized))
           return Result.new(linkable: self.class.current_owner(identity.linkable), via: "identity") if identity.linkable.present?

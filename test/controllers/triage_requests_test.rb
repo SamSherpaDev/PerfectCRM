@@ -64,4 +64,16 @@ class TriageRequestsTest < ActionDispatch::IntegrationTest
     assert_equal client, EmailIdentity.find_for("another-triage@example.com").linkable
   end
 
+  test "Bcc only outbound mail can create a client from triage" do
+    parsed = Mail::Ingester.parse_raw("From: info@sherpaholidays.com\r\nBcc: hidden@example.com\r\nSubject: Private invitation\r\n\r\nHello")
+    conversation = Mail::Ingester.ingest(parsed: parsed, gmail: {})[:conversation]
+    get inbox_thread_path(conversation)
+    assert_response :success
+    assert_select "button", text: "Create client"
+    post make_client_conversation_path(conversation)
+    client = Client.find_by!(email: "hidden@example.com")
+    assert_equal client, conversation.reload.linkable
+    assert_redirected_to client_path(client)
+  end
+
 end

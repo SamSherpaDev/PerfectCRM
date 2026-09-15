@@ -51,4 +51,14 @@ class MailImportsRequestsTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "commit stores the captain choice instead of the preview suggestion" do
+    import = MailImport.create!(scope: "all", status: "preview", preview_json: {
+      "rows" => [ { "email" => "solo@example.com", "count" => 1, "suggested_kind" => "client" } ]
+    })
+    assert_enqueued_jobs 1, only: Mail::ImportJob do
+      post commit_mail_import_path(import), params: { choices: { "solo@example.com" => "organization" } }
+    end
+    assert_equal "organization", import.reload.preview_json["choices"]["solo@example.com"]
+  end
+
 end

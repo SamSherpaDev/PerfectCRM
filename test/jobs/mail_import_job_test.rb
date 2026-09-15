@@ -7,8 +7,8 @@ class FakeImportImap
     @raws = raws.each_with_index.to_h { |raw, index| [ index + 1, raw ] }
   end
 
-  def fetch_all(since: nil, limit: nil, after_uid: 0, uid_validity: nil, on_mailbox: nil)
-    return enum_for(:fetch_all, since: since, limit: limit) unless block_given?
+  def fetch_all(since: nil, after_uid: 0, uid_validity: nil, on_mailbox: nil)
+    return enum_for(:fetch_all, since: since, after_uid: after_uid, uid_validity: uid_validity, on_mailbox: on_mailbox) unless block_given?
 
     on_mailbox&.call(123)
     after_uid = 0 unless uid_validity == 123

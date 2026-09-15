@@ -145,4 +145,26 @@ class MailSyncJobTest < ActiveSupport::TestCase
     assert_raises(Mail::ImapFetcher::ConnectionError) { fetcher.fetch_all.to_a }
   end
 
+  test "sync processes and checkpoints each message before fetching the next" do
+    imap = FakeImap.new(messages: {
+      10 => { raw: sync_raw(from: "personal@example.com", to: "captain@gmail.com", message_id: "<stream-personal@test>") },
+      11 => { raw: sync_raw(from: "client@example.com", message_id: "<stream-client@test>") },
+      12 => { raw: sync_raw(from: "last@example.com", message_id: "<stream-last@test>") }
+    })
+    original_fetch = imap.method(:uid_fetch)
+    imap.define_singleton_method(:uid_fetch) do |uids, items|
+      if uids.first > 10
+        raise "previous message not checkpointed" unless MailSyncState.for(Mail::FOLDER).last_uid == uids.first - 1
+        raise "personal mail stored" if Message.exists?(message_id: "stream-personal@test")
+      end
+      if uids == [ 12 ]
+        raise "business message not stored before next fetch" unless Message.exists?(message_id: "stream-client@test")
+      end
+      original_fetch.call(uids, items)
+    end
+    count = Mail::SyncJob.new.perform(fetcher: Mail::ImapFetcher.new(login: "x", password: "y", imap: imap))
+    assert_equal 2, count
+    assert_equal 12, MailSyncState.for(Mail::FOLDER).last_uid
+  end
+
 end

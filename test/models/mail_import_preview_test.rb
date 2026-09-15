@@ -1,14 +1,10 @@
 require "test_helper"
 
 class MailImportPreviewTest < ActiveSupport::TestCase
-  test "groups senders and suggests organizations for shared domains" do
-    messages = [
-      { raw: "From: a@ops.co\r\nTo: info@sherpaholidays.com\r\nSubject: x\r\nMessage-ID: <1@t>\r\n\r\nb" },
-      { raw: "From: b@ops.co\r\nTo: info@sherpaholidays.com\r\nSubject: x\r\nMessage-ID: <2@t>\r\n\r\nb" },
-      { raw: "From: solo@example.com\r\nTo: info@sherpaholidays.com\r\nSubject: x\r\nMessage-ID: <3@t>\r\n\r\nb" }
-    ]
-    rows = Mail::ImportPreview.build(messages)
+  test "suggests organizations for shared domains" do
+    rows = Mail::ImportPreview.new.build_counts("a@ops.co" => 2, "b@ops.co" => 1, "solo@example.com" => 1)
     by_email = rows.index_by(&:email)
+    assert_equal 2, by_email["a@ops.co"].count
     assert_equal "organization", by_email["a@ops.co"].suggested_kind
     assert_equal "organization", by_email["b@ops.co"].suggested_kind
     assert_equal "client", by_email["solo@example.com"].suggested_kind
@@ -16,31 +12,9 @@ class MailImportPreviewTest < ActiveSupport::TestCase
 
   test "flags duplicates against existing records" do
     Client.create!(name: "Dup", email: "dup@example.com")
-    messages = [ { raw: "From: dup@example.com\r\nTo: info@sherpaholidays.com\r\nSubject: x\r\nMessage-ID: <d@t>\r\n\r\nb" } ]
-    rows = Mail::ImportPreview.build(messages)
+    rows = Mail::ImportPreview.new.build_counts("dup@example.com" => 1)
     assert rows.first.duplicate?
     assert_equal "Dup", rows.first.duplicate_name
-  end
-
-  test "skips personal mail in the preview" do
-    messages = [ { raw: "From: friend@gmail.com\r\nTo: captain@gmail.com\r\nSubject: x\r\nMessage-ID: <p@t>\r\n\r\nb" } ]
-    assert_empty Mail::ImportPreview.build(messages)
-  end
-
-  test "captain choices override the suggestion" do
-    messages = [ { raw: "From: solo@example.com\r\nTo: info@sherpaholidays.com\r\nSubject: x\r\nMessage-ID: <s@t>\r\n\r\nb" } ]
-    rows = Mail::ImportPreview.build(messages, choices: { "solo@example.com" => "organization" })
-    assert_equal "organization", rows.first.suggested_kind
-  end
-  test "outbound and remembered addresses share matching semantics" do
-    client = Client.create!(name: "Remembered", email: "original@example.com")
-    EmailIdentity.remember!("alternate@example.com", linkable: client)
-    messages = [ { raw: "From: info@sherpaholidays.com\r\nTo: alternate@example.com\r\n\r\nHello" } ]
-    row = Mail::ImportPreview.build(messages).first
-    assert_equal "alternate@example.com", row.email
-    assert_equal 1, row.count
-    assert row.duplicate?
-    assert_equal client.name, row.duplicate_name
   end
 
   test "public provider domains never suggest organizations" do

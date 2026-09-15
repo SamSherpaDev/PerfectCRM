@@ -30,4 +30,25 @@ class MailPreviewJobTest < ActiveSupport::TestCase
     assert_equal 2, import.total_messages
     assert_equal %w[client@example.com outbound@example.com], import.preview_rows.map { |row| row["email"] }.sort
   end
+  test "preview counts delivery headers and outbound mail but excludes personal mail" do
+    client = Client.create!(name: "Remembered", email: "original@example.com")
+    EmailIdentity.remember!("alternate@example.com", linkable: client)
+    messages = {
+      1 => { raw: sync_raw(from: "info@sherpaholidays.com", to: "alternate@example.com", message_id: "<remembered@test>") },
+      2 => { raw: sync_raw(from: "friend@example.com", to: "captain@gmail.com", message_id: "<personal@test>") }
+    }
+    %w[Bcc Delivered-To X-Original-To].each_with_index do |header, index|
+      messages[index + 3] = { raw: "#{header}: info@sherpaholidays.com\r\n" + sync_raw(from: "alias-sender@example.com", to: "captain@gmail.com", message_id: "<delivery#{index}@test>") }
+    end
+    import = MailImport.create!(scope: "all", status: "draft")
+    Mail::PreviewJob.new.perform(import.id, fetcher: Mail::ImapFetcher.new(login: "x", password: "y", imap: FakeImap.new(messages: messages)))
+    assert_equal 4, import.reload.total_messages
+    rows = import.preview_rows.index_by { |row| row["email"] }
+    assert_equal 3, rows.fetch("alias-sender@example.com")["count"]
+    assert_equal 1, rows.fetch("alternate@example.com")["count"]
+    assert rows.fetch("alternate@example.com")["duplicate"]
+    assert_equal client.name, rows.fetch("alternate@example.com")["duplicate_name"]
+    assert_not rows.key?("friend@example.com")
+  end
+
 end

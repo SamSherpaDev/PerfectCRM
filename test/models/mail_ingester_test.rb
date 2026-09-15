@@ -113,11 +113,10 @@ class MailIngesterTest < ActiveSupport::TestCase
     assert result[:message].files.attached?
     assert_equal "note.txt", result[:message].files.first.filename.to_s
   end
-  test "delivery headers retain alias mail in preview and ingestion" do
+  test "delivery headers retain alias mail in ingestion" do
     %w[Bcc Delivered-To X-Original-To].each_with_index do |header, index|
       raw = "#{header}: info@sherpaholidays.com\r\n" + mail_raw(from: "sender@example.com", to: "captain@gmail.com", message_id: "<delivery#{index}@test>")
       parsed = Mail::Ingester.parse_raw(raw)
-      assert_equal 1, Mail::ImportPreview.build([ parsed ]).first.count
       assert_equal :stored, Mail::Ingester.ingest(parsed: parsed, gmail: {})[:status]
     end
   end
@@ -179,6 +178,12 @@ class MailIngesterTest < ActiveSupport::TestCase
       assert_equal "André", body
       assert body.valid_encoding?
     end
+  end
+
+  test "matching always excludes the configured mailbox" do
+    client = Client.create!(name: "Business mailbox", email: Mail.mailbox_address)
+    EmailIdentity.remember!(Mail.mailbox_address, linkable: client)
+    assert_nil Mail::Matcher.call([ Mail.mailbox_address ]).linkable
   end
 
 end
