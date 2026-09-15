@@ -1,13 +1,11 @@
 # Mirror of one PerfectBook booking plus its invoice badge. Read-only
 # locally: replaced by PerfectBook::SyncBookingsJob, never edited here.
-# TODO: record an ActivityEvent when status or invoice_badge changes, once
-# that model lands on main (no such model yet, so syncs stay silent).
 module PerfectBook
   class Booking < ApplicationRecord
     # Tracked traveler document types, matching PerfectBook's sibling API
     # ("API for sibling apps": passport, visa, insurance, waiver).
     DOCUMENT_TYPES = %w[passport visa insurance waiver].freeze
-    # Nudge-worthy statuses: everything except received and not_required.
+    # Nudge-worthy statuses from the sibling API.
     MISSING_STATUSES = %w[missing expiring].freeze
 
     serialize :documents_json, coder: JSON
@@ -52,6 +50,5 @@ module PerfectBook
     def documents_summary_present?
       documents_json.is_a?(Hash) && documents_json.key?("travelers")
     end
-
   end
 end

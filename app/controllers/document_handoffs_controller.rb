@@ -117,7 +117,7 @@ class DocumentHandoffsController < ApplicationController
   end
 
   # Bookings the captain can file this thread under: the linked record's
-  # mirrors first, else the nearest upcoming mirrors to pick from.
+  # mirrors first, else up to 50 mirrors ordered by latest start date.
   def load_bookings
     contact_id = @message&.conversation&.linkable.try(:perfectbook_contact_id)
     @bookings = if contact_id.present?

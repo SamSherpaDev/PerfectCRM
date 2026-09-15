@@ -2,13 +2,13 @@ require "net/http"
 require "uri"
 require "json"
 
-# Read-only client for PerfectBook's sibling API
+# Client for PerfectBook's sibling API: mirror reads and document hand-off
 # (PerfectBook README, "API for sibling apps").
 #
 # Contract notes the client depends on:
 # - Bearer token in Authorization; whole API 404s when PerfectBook has no
 #   token configured; 120 requests/minute per token (429 + Retry-After).
-# - ETag on every data endpoint; If-None-Match gives 304.
+# - Collection reads use ETags; If-None-Match gives 304.
 # - Cursor pagination (limit up to 100, pagination.next_cursor/has_more).
 # - updated_since only on /contacts; money as integer minor units plus
 #   currency; price_per_person_minor always null on departures today;
@@ -88,7 +88,7 @@ module PerfectBook
 
     # Document upload handoff (the API's only write): stores a traveler
     # file in PerfectBook's encrypted record. upload_id must be stable
-    # per CRM attachment (the holding or blob id) so retries replay
+    # per CRM attachment (the holding or attachment id) so retries replay
     # instead of duplicating. Returns an UploadResult.
     def upload_traveler_document(booking_ref:, traveler_id:, file:, filename:, content_type:, document_type:, upload_id:)
       raise NotConfiguredError, "PerfectBook API token is not configured" if @api_token.blank?

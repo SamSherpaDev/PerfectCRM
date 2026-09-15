@@ -14,6 +14,10 @@ module Mail
       new.ingest(parsed: parsed, gmail: gmail, **kwargs)
     end
 
+    # Commit cleanup keys before uploads and before any caller transaction
+    # (including history import's lock), so rollback cannot orphan sensitive bytes.
+    # Callers inside a transaction must pass preparations made beforehand.
+    # Regression coverage: test/models/document_upload_orphan_test.rb.
     def self.prepare(parsed:)
       if DocumentUploadOrphan.connection.current_transaction.joinable?
         raise ActiveRecord::ActiveRecordError, "Prepare mail uploads before starting a transaction"

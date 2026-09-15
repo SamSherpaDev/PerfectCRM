@@ -1,11 +1,6 @@
 # Short-lived holding area for sensitive attachments that arrive by email.
 #
-# The ingester keeps the bytes here (Active Storage on the same private
-# bucket as every other attachment) purely so the captain can hand the
-# file to PerfectBook through DocumentHandoffs. Holdings never get a
-# timeline download link, purge on hand-off or 24 hours after arrival,
-# and are swept hourly by DocumentHoldingsPurgeJob. PerfectBook stays
-# the only long-term store for traveler documents; see README, "Mail".
+# User-facing retention and hand-off policy: README.md, "Mail".
 class DocumentHolding < ApplicationRecord
   HOLD_HOURS = 24
   # PerfectBook's upload endpoint caps files at 10 MB; larger arrivals
@@ -26,8 +21,9 @@ class DocumentHolding < ApplicationRecord
     expires_at.future?
   end
 
-  # Delete the bytes and the row. The caller's placeholder entry on the
-  # message is updated separately (hand-off removes it, expiry marks it).
+  # Delete storage bytes before database references so failures remain retryable.
+  # The caller updates the message placeholder separately:
+  # hand-off removes it, expiry marks it.
   def purge!
     blob = file.blob if file.attached?
     blob&.delete

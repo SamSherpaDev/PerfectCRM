@@ -177,7 +177,8 @@ document. The CRM mirrors contacts, the trip and departure catalog, and
 customer booking and invoice status, plus the per-traveler document-status
 summary and checklist flags. It never stores passport, visa,
 insurance, or date-of-birth data long-term: the only exception is the
-24-hour hand-off holding area described under "Mail". Production polling is scheduled in
+temporary hand-off holding area described under [Mail](#mail). Production
+polling is scheduled in
 [`config/recurring.yml`](config/recurring.yml); these recurring jobs are
 not scheduled in development. `PerfectBook::Catalog` feeds the quote
 builder, and the `perfectbook_contact_url` and `perfectbook_booking_url`
@@ -268,12 +269,17 @@ flags (`documents_json`, `missing_count`, `checklist_json` on
 `PerfectBook::Booking`, stored by `SyncBookingsJob`; the ETag flow is
 unchanged). Each booking card shows every traveler with a badge per
 document type and the missing count. While anything is outstanding the card
-links "Nudge for missing documents", which prefills the reply box with the
-document-request template naming the travelers and exactly the missing types,
-plus the booking ref and dates; the action disappears once everything is
-received. The copy page (`document-nudge/:booking_id`) still offers the same
-text to review and an "Open in reply box" shortcut. Today lists the missing
-count on departing-soon rows.
+links "Nudge for missing documents", which opens the reply box, including on
+phones, and prefills an empty draft using the active document-request template.
+The `missing_documents` placeholder names each traveler and their missing or
+expiring document types; the booking reference and dates accompany the text.
+If no active template exists, built-in copy includes that missing list.
+Existing drafts are preserved. The action disappears when no tracked documents
+are missing or expiring. The copy page (`document-nudge/:booking_id`) offers
+the same text to review and an "Open in reply box" shortcut when documents are
+outstanding. If the mirror has no document summary yet, the card links to the
+copy page with a reminder to check PerfectBook manually. Today lists the
+mirrored missing count on departing-soon rows.
 
 ## Checks
 
@@ -449,16 +455,19 @@ and PDF titles are screened for passport, visa, insurance, identity/ID,
 date-of-birth, and scan documents. Flagged attachments are held, never filed
 as ordinary attachments. On import, the bytes wait in a short-lived holding
 area (`DocumentHolding`, Active Storage on the same private bucket, expiring
-24 hours after arrival and swept hourly) purely so the captain can hand the
-file to PerfectBook; the timeline shows only a placeholder with filename,
+24 hours after ingestion and swept hourly in production) purely so the captain
+can hand the file to PerfectBook; the timeline shows only a placeholder with filename,
 size, type, and "held: send to PerfectBook", with no download link anywhere.
-From the placeholder — or from a still-stored ordinary attachment the captain
-flags — **Send to PerfectBook** asks for the booking, traveler, and document
-type, uploads the bytes to PerfectBook's traveler-document endpoint through
+From the placeholder, or a still-stored ordinary attachment the captain flags,
+**Send to PerfectBook** asks for the booking, traveler, and document type, uploads the bytes to PerfectBook's traveler-document endpoint through
 `PerfectBook::Client` (multipart, idempotent on a stable upload id per CRM
 file), then deletes every CRM copy, records an activity event with the
 PerfectBook response, and refreshes that booking's mirror. Unclaimed holdings
-purge on expiry and their placeholders are marked expired. Files over 10 MB
+become unavailable for hand-off at expiry; the next successful sweep deletes
+their bytes and marks their placeholders expired. Failed storage deletions keep
+retry references, so storage outages can delay physical deletion beyond expiry.
+Failed ingestion uploads also retain cleanup references for the sweep (see
+`Mail::Ingester.prepare` for the transaction boundary). Files over 10 MB
 stay metadata-only placeholders because PerfectBook refuses larger uploads.
 PDF metadata is parsed in memory; unreadable or encrypted PDFs
 are also held. PDF titles are not persisted. Attached emails are screened
