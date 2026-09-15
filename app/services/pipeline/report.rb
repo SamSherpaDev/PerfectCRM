@@ -46,7 +46,6 @@ class Pipeline::Report
     Lead.where("created_at >= ?", month).group(:source).count
   end
 
-  # One line for the Monday 7am digest.
   def digest_line
     counts = Lead.where(converted_client_id: nil).group(:status).count
     open = counts.except("lost").values.sum

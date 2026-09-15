@@ -1,8 +1,6 @@
 class Client < ApplicationRecord
   KINDS = %w[individual company].freeze
   SOURCES = %w[website email instagram whatsapp referral repeat other google_ads meta_ads website_form manual].freeze
-  # Clients continue the trail where leads leave off: won at conversion,
-  # post_trip once their departure ends (per the mirrored booking).
   PIPELINE_STAGES = %w[won post_trip].freeze
 
   encrypts :phone

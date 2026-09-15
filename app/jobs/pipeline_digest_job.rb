@@ -1,5 +1,5 @@
-# Monday 7am pipeline digest. Own mail until the tasks lane lands a
-# morning digest to append to; then call this line from there instead.
+# TODO(tasks): append Pipeline::Report#digest_line to the future tasks
+# digest instead of sending a separate email. Usage: README.md, "Pipeline".
 class PipelineDigestJob < ApplicationJob
   queue_as :default
 

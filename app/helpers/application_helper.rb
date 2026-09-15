@@ -24,14 +24,14 @@ module ApplicationHelper
     "#{sign}$#{number_with_delimiter(format('%.2f', minor.abs / 100.0))}"
   end
 
-  # Any supported currency from integer minor units. USD keeps the dollar sign;
-  # every other currency is prefixed with its ISO code: "NPR 140,000.00".
   def pipeline_money(totals)
     return money_in(0, "USD") if totals.empty?
 
     totals.sort_by { |currency, _| currency.to_s }.map { |currency, minor| money_in(minor, currency) }.join(" · ")
   end
 
+  # Any supported currency from integer minor units. USD keeps the dollar sign;
+  # every other currency is prefixed with its ISO code: "NPR 140,000.00".
   def money_in(minor, currency)
     return money(minor) if currency.blank? || currency == "USD"
 

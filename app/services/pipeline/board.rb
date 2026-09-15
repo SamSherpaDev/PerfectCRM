@@ -1,6 +1,3 @@
-# One board column per trail stage: leads for new..lost, clients for
-# won and post_trip. Filters narrow the lead columns (and the client
-# columns where the field exists); counts and money sums ride along.
 class Pipeline::Board
   STAGES = %w[new chatting quoted nudged won post_trip lost].freeze
   LEAD_STAGES = %w[new chatting quoted nudged lost].freeze

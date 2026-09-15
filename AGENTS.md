@@ -46,11 +46,7 @@ When updating this file, preserve this bar for all agents and keep entries conci
 - `TaggedRecord` validates pending tags before saving and assigns them in
   `after_save`; assigning through-tags before the parent saves trips
   Tagging uniqueness.
-- Pipeline: see README.md, "Pipeline"; every stage change runs through
-  `Leads::Transition` (automation boundary: new/chatting/lost only) and
-  records `stage_change` events. Board + stage list live in
-  `app/views/pipeline/` with `Pipeline::Board` queries and
-  `Pipeline::Report` numbers.
+- Pipeline usage and integration points: see README.md, "Pipeline".
 - System-test Chrome here needs nix NSS *and* NSPR libs on `LD_LIBRARY_PATH`
   (e.g. `nixpkgs#nss` + `nixpkgs#nspr` `.../lib`), plus an explicit
   `resize_to(1400, 900)` in desktop tests; check driver startup output if

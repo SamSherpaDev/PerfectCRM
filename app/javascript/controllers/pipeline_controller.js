@@ -1,7 +1,7 @@
 // Pipeline board drag and drop (HTML5) with a keyboard alternative.
 // Every card also carries a Move menu of plain links, so keyboard and
 // touch users never need to drag. Dropping a lead on Lost opens the
-// required-reason sheet; dropping on Won asks for confirmation first.
+// required-reason sheet; Won opens the lead for conversion review.
 import { Controller } from "@hotwired/stimulus"
 
 export default class extends Controller {
@@ -70,7 +70,7 @@ export default class extends Controller {
   }
 
   // Move-menu links carry data-to; the lost option opens the sheet instead.
-  // Won carries a turbo_confirm already, so it passes straight through.
+  // Won passes through to the server for conversion review.
   move(event) {
     const link = event.target.closest("[data-to]")
     if (!link) return

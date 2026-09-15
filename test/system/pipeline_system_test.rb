@@ -225,7 +225,154 @@ class PipelineSystemTest < ApplicationSystemTestCase
     end
   end
 
+  test "report displays separate booking currencies and phone stages" do
+    Lead.create!(name: "Everest inquiry", trip_interest: "Everest", source: "referral", expected_value_minor: 250_000)
+    client = Client.create!(name: "Booked traveler", perfectbook_contact_id: 903)
+    { "NPR" => 14_000_000, "USD" => 250_000 }.each_with_index do |(currency, total), index|
+      PerfectBook::Booking.create!(perfectbook_id: 900 + index, perfectbook_contact_id: 903,
+        currency: currency, total_minor: total, synced_at: Time.current, trip_name: "Everest")
+    end
+    page.current_window.resize_to(1400, 900)
+    visit pipeline_path
+    assert_selector ".col-sum", text: "NPR 140,000.00 · $2,500.00"
+    assert_text "Available once mail is connected"
+    assert_text "Asks by source this month"
+    capture_pipeline("desktop-board", ".board")
+    find("#numbers-heading").scroll_to(:top)
+    capture_pipeline("report-currencies", "#numbers-heading")
+    page.current_window.resize_to(390, 844)
+    visit pipeline_path
+    within "section[aria-label='Stages']" do
+      find("summary", text: "Move", exact_text: true).click
+      assert_selector "a", text: "Lost", exact_text: true
+      assert_selector "a", text: "Won", exact_text: true
+    end
+    assert_no_overflow("phone with full move menu")
+    capture_pipeline("phone-move-menu", "section[aria-label=Stages] article")
+  end
+
+  test "stale nudge opens a rendered email and copies to the real clipboard" do
+    Template.create!(name: "Follow-up", purpose: "itinerary_follow_up",
+      subject: "Your {{trip}}", body: "Hi {{first_name}}, checking in about {{trip}}.")
+    lead = Lead.create!(name: "Tashi Sherpa", email: "tashi@example.com", trip_interest: "Annapurna")
+    lead.update_columns(last_touch_at: 9.days.ago)
+    page.current_window.resize_to(1400, 900)
+    visit pipeline_path
+    within "article.kcard-stale", text: lead.name do
+      find("summary", text: "Move").click
+      click_link "Chatting", exact: true
+    end
+    assert_text "Moved to Chatting"
+    within "article.kcard-stale", text: lead.name do
+      click_link "Nudge"
+    end
+    assert_selector "h2", text: "Suggested message"
+    href = find_link("Open email")[:href]
+    assert_equal "mailto:tashi@example.com", href.split("?").first
+    assert_equal "Your Annapurna", URI.decode_www_form(href.split("?", 2).last).to_h.fetch("subject")
+    origin = page.evaluate_script("location.origin")
+    page.driver.browser.execute_cdp("Browser.grantPermissions", origin: origin,
+      permissions: [ "clipboardReadWrite", "clipboardSanitizedWrite" ])
+    click_button "Copy message"
+    assert_text "Message copied."
+    assert_equal "Your Annapurna\n\nHi Tashi, checking in about Annapurna.",
+      page.evaluate_async_script("navigator.clipboard.readText().then(arguments[0])")
+    assert lead.reload.stale?
+    capture_pipeline("suggested-message")
+    fill_in "Add a note", with: "Traveler replied about dates"
+    click_button "Save note"
+    visit pipeline_path
+    assert_no_selector "article.kcard-stale", text: lead.name
+  end
+
+  test "conversion review joins the named client and allows only client stages" do
+    client = Client.create!(name: "Existing traveler", email: "return@example.com")
+    lead = Lead.create!(name: "Returning inquiry", email: client.email, source: "referral", expected_value_minor: 120_000)
+    page.current_window.resize_to(1400, 900)
+    visit pipeline_path
+    within "article.kcard", text: lead.name do
+      find("summary", text: "Move").click
+      click_link "Won", exact: true
+    end
+    assert_current_path lead_path(lead)
+    accept_confirm(/Existing traveler/) { click_button "Convert to client" }
+    assert_current_path client_path(client)
+    assert_equal client.id, lead.reload.converted_client_id
+    visit pipeline_path
+    assert_no_selector "article.kcard", text: lead.name
+    within "article.kcard", text: client.name do
+      find("summary", text: "Move").click
+      assert_no_selector "a", text: "New", exact_text: true
+      click_link "Post-trip", exact: true
+    end
+    assert_text "Moved to Post-trip"
+    assert_equal "post_trip", client.reload.pipeline_stage
+    assert_text "1 of 1 converted this year"
+    capture_pipeline("converted-post-trip", ".board")
+  end
+
+  test "forged moves preserve conversion boundaries and exports retain pipeline data" do
+    client = Client.create!(name: "Existing client", email: "guard@example.com")
+    lead = Lead.create!(name: "Guarded lead", email: client.email, trip_interest: "Everest",
+      expected_value_minor: 123_00)
+    visit lead_path(lead)
+    browser_request(convert_lead_path(lead), "POST", { expected_client_id: "new" })
+    assert_not lead.reload.converted?
+    browser_request(convert_lead_path(lead), "POST", { expected_client_id: client.id })
+    assert_equal client.id, lead.reload.converted_client_id
+    browser_request(pipeline_move_path, "PATCH", { client_id: client.id, to: "chatting" })
+    assert_equal "won", client.reload.pipeline_stage
+    browser_request(pipeline_move_path, "PATCH", { lead_id: lead.id, to: "new" })
+    assert lead.reload.converted?
+    lost = Lead.create!(name: "Exported loss", status: "lost", lost_reason: "dates", lost_note: "Next year",
+      trip_interest: "Everest", expected_value_minor: 123_00)
+    encoded = page.evaluate_async_script(<<~JS, settings_export_path)
+      const done = arguments[arguments.length - 1];
+      fetch(arguments[0]).then(r => r.arrayBuffer()).then(buffer => {
+        done(btoa(Array.from(new Uint8Array(buffer), byte => String.fromCharCode(byte)).join('')))
+      });
+    JS
+    files = {}
+    Zip::InputStream.open(StringIO.new(Base64.decode64(encoded))) do |zip|
+      while (entry = zip.get_next_entry)
+        files[entry.name] = CSV.parse(zip.read.force_encoding(Encoding::UTF_8).delete_prefix("\uFEFF"), headers: true)
+      end
+    end
+    row = files.fetch("leads.csv").find { |entry| entry["id"] == lost.id.to_s }
+    assert_equal [ "Everest", "12300", "dates", "Next year" ],
+      row.values_at("trip_interest", "expected_value_minor", "lost_reason", "lost_note")
+    assert_equal "won", files.fetch("clients.csv").first["pipeline_stage"]
+    visit edit_settings_path
+    uncheck "setting_pipeline_digest"
+    click_button "Save", exact: true
+    assert_text "Settings saved."
+    assert_not Setting.current.reload.pipeline_digest
+    visit edit_settings_path
+    check "setting_pipeline_digest"
+    click_button "Save", exact: true
+    assert_text "Settings saved."
+    assert Setting.current.reload.pipeline_digest
+  end
+
   private
+
+  def browser_request(path, method, params)
+    page.evaluate_async_script(<<~JS, path, method, params)
+      const done = arguments[arguments.length - 1];
+      fetch(arguments[0], {method: arguments[1], headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-CSRF-Token': document.querySelector('meta[name=csrf-token]')?.content || ''
+      }, body: new URLSearchParams(arguments[2])}).then(r => r.text()).then(done);
+    JS
+  end
+
+  def capture_pipeline(name, selector = "h1")
+    return unless ENV["PIPELINE_EVIDENCE_DIR"].present?
+
+    page.execute_script("document.querySelector(arguments[0]).scrollIntoView({behavior: 'instant', block: 'center'})", selector)
+    page.evaluate_async_script("requestAnimationFrame(() => requestAnimationFrame(arguments[0]))")
+    page.save_screenshot(File.join(ENV.fetch("PIPELINE_EVIDENCE_DIR"), "#{name}.png"))
+  end
 
   def assert_no_overflow(context)
     width = page.evaluate_script("document.documentElement.scrollWidth")

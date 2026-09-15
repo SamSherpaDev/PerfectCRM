@@ -200,7 +200,7 @@ class Lead < ApplicationRecord
   end
 
   # The last real contact with the traveler: mail in or out, or a note.
-  # The mail task calls this on sync; notes call it on save (see Note).
+  # Future mail sync can call this; notes call it on creation (see Note).
   def record_touch!(at: Time.current)
     return unless persisted?
 
