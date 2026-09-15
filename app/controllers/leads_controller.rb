@@ -123,14 +123,14 @@ class LeadsController < ApplicationController
     last_verdict = ActivityEvent.where(kind: "automation").newest_first.first
     last_delivery = LeadWebhookDelivery.newest_first.first
     webhook_detail = if settings.webhooks_enabled?
-      last_delivery ? "#{last_delivery.event} #{last_delivery.status} #{time_ago_in_words(last_delivery.created_at)} ago" : "Configured, nothing sent yet"
+      last_delivery ? "#{last_delivery.event} #{last_delivery.status} #{helpers.time_ago_in_words(last_delivery.created_at)} ago" : "Configured, nothing sent yet"
     else
       "Disabled: add a webhook URL in Settings"
     end
     [
       {
         name: "Website form", icon: :globe,
-        detail: last_intake ? "Last inquiry #{time_ago_in_words(last_intake.received_at || last_intake.created_at)} ago" : "No inquiries yet",
+        detail: last_intake ? "Last inquiry #{helpers.time_ago_in_words(last_intake.received_at || last_intake.created_at)} ago" : "No inquiries yet",
         badge: last_intake ? [ "Automated", :info ] : [ "Manual", :neutral ]
       },
       {

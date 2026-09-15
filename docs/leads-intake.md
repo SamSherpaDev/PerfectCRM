@@ -63,7 +63,7 @@ MX/A records, `consent.contact: true`, `submission_id`); suspicion scoring
 that only flags, never rejects.
 
 Replaying the same `submission_id` returns `200` with the original
-reference and writes nothing. A second open inquiry from the same email is
+reference and re-enqueues pending notifications. A second open inquiry from the same email is
 a `400` validation with `{ "contact.email": "taken" }` — reply in the
 existing thread instead.
 
@@ -136,15 +136,23 @@ converted lead are `422`. Every call lands on the lead timeline as an
 
 ## What happens after intake
 
-- **Email copy.** A background job (5 retries over ~30 minutes) mails the
-  inquiry to the Settings copy-to address (default
-  `info@sherpaholidays.com`), Reply-To the visitor. Suspected spam prefixes
+- **Email copy.** A background job mails the inquiry to
+  `info@sherpaholidays.com`, Reply-To the visitor, From the app's `MAIL_FROM`
+  (default `info@sherpaholidays.com`). Suspected spam prefixes
   the subject with `[check]`. Click IDs never enter the body. A mail
   failure never touches the lead.
 - **Webhooks.** `lead.created` and `lead.details_added` are POSTed as
-  `{ "event", "lead": { public fields plus attribution } }` to every URL in
+  `{ "event", "lead": { public fields plus attribution } }` to the single URL in
   Settings, signed with the relay secret in the same `X-Sherpa-Signature`
-  format, retried with backoff, and logged. An empty URL list disables them.
+  format, retried with backoff, and logged. An empty URL disables them.
 - **Spam.** Fast submits, link-stuffed messages, throwaway domains, and
   name-equals-email are scored, tagged `suspected_spam`, and counted —
   never rejected.
+
+Notification intent is saved in `lead_notifications` in the same transaction
+as the inquiry or details update. Intake and details replays re-check pending
+rows. Solid Queue retries failed deliveries every five minutes, and a recurring
+minute-by-minute drain recovers lost enqueues and expired delivery claims.
+Delivery is at least once: a crash after sending but before recording completion
+can resend a notification. Each webhook attempt remains in the delivery log.
+Rate-limit admission uses a primary-database transaction shared across workers.

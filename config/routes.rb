@@ -86,5 +86,21 @@ Rails.application.routes.draw do
   end
   resource :settings, only: %i[edit update] do
     post :perfectbook_test, on: :collection
+    patch :mailbox, on: :collection
+    post :mailbox_test, on: :collection
     post :rotate_site_key, on: :collection
     post :rotate_relay_secret, on: :collection
+  end
+  get "settings/export", to: "exports#show", as: :settings_export
+  resources :tasks, only: %i[create] do
+    member do
+      patch :complete
+      patch :snooze
+    end
+    collection do
+      post :create_review_ask
+    end
+  end
+  # Component kit preview (signed-in only, listed nowhere in the rail).
+  get "design", to: "design#show"
+end

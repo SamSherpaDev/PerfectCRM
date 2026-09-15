@@ -7,7 +7,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
 
   setup do
     @settings = Setting.current
-    @settings.update!(intake_copy_to: "info@sherpaholidays.com", lead_webhooks: [])
+    @settings.update!(lead_webhook_url: nil)
     @settings.rotate_site_key!
     @relay_secret = @settings.rotate_relay_secret!
     @site_key = @settings.site_key
@@ -75,10 +75,8 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
   # -- happy path ----------------------------------------------------------
 
   test "valid browser request creates one lead and answers 202" do
-    assert_enqueued_with(job: LeadIntakeEmailJob) do
-      assert_enqueued_with(job: LeadWebhookJob) do
-        post_intake intake_body
-      end
+    assert_enqueued_jobs 2, only: LeadNotificationJob do
+      post_intake intake_body
     end
     assert_response :accepted
     json = response.parsed_body
@@ -316,8 +314,44 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
       "timing" => { "started_at" => "2026-09-14T18:06:40Z", "submitted_at" => "2026-09-14T18:06:41Z" }
     )
     post_intake body
-    perform_enqueued_jobs only: LeadIntakeEmailJob
+    perform_enqueued_jobs only: LeadNotificationJob
     mail = ActionMailer::Base.deliveries.last
     assert_match(/\A\[check\] New inquiry from/, mail.subject)
   end
+  test "malformed contact receives field validation errors" do
+    [ "invalid", [] ].each do |contact|
+      post_intake intake_body.merge("contact" => contact)
+      assert_response :bad_request
+      assert_equal "invalid", response.parsed_body["fields"]["contact.email"]
+    end
+  end
+
+  test "malformed signature receives unauthorized" do
+    post_intake intake_body, headers: { "X-Sherpa-Signature" => "invalid" }
+    assert_response :unauthorized
+  end
+
+  test "replay recovers notification enqueue failure" do
+    body = intake_body
+    LeadNotificationJob.stub(:perform_later, ->(*) { raise "queue unavailable" }) do
+      post_intake body
+      assert_response :accepted
+    end
+    assert_equal %w[email_copy lead.created], Lead.last.lead_notifications.order(:id).pluck(:event)
+    assert_no_difference("LeadNotification.count") do
+      assert_enqueued_jobs 2, only: LeadNotificationJob do
+        post_intake body
+        assert_response :ok
+      end
+    end
+  end
+
+  test "notification persistence failure rolls back the inquiry" do
+    LeadNotification.stub(:new, ->(*) { raise "outbox unavailable" }) do
+      assert_no_difference("Lead.count") do
+        assert_raises(RuntimeError) { post_intake intake_body }
+      end
+    end
+  end
+
 end

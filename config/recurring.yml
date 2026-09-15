@@ -34,3 +34,6 @@ production:
   pipeline_digest:
     class: PipelineDigestJob
     schedule: every monday at 7am
+  lead_notifications:
+    command: "LeadNotification.enqueue_pending"
+    schedule: every minute

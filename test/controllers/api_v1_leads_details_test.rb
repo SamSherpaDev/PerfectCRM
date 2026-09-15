@@ -6,7 +6,7 @@ class ApiV1LeadsDetailsTest < ActionDispatch::IntegrationTest
 
   setup do
     @settings = Setting.current
-    @settings.update!(intake_copy_to: "info@sherpaholidays.com", lead_webhooks: [])
+    @settings.update!(lead_webhook_url: nil)
     @settings.rotate_site_key!
     @relay_secret = @settings.rotate_relay_secret!
     @site_key = @settings.site_key
@@ -32,7 +32,7 @@ class ApiV1LeadsDetailsTest < ActionDispatch::IntegrationTest
   end
 
   test "valid details update only the provided fields and append a note" do
-    assert_enqueued_with(job: LeadWebhookJob) do
+    assert_enqueued_with(job: LeadNotificationJob) do
       assert_no_enqueued_jobs only: LeadIntakeEmailJob do
         post_details details_body
       end
@@ -120,4 +120,25 @@ class ApiV1LeadsDetailsTest < ActionDispatch::IntegrationTest
       headers: { "CONTENT_TYPE" => "application/json", "X-Sherpa-Signature" => "t=#{timestamp},v1=#{digest}" }
     assert_response :ok
   end
+  test "replay recovers details notification after queue failure" do
+    LeadNotificationJob.stub(:perform_later, ->(*) { raise "queue unavailable" }) do
+      post_details details_body
+      assert_response :ok
+    end
+    assert_equal [ "lead.details_added" ], @lead.lead_notifications.pluck(:event)
+    assert_no_difference([ "Note.count", "LeadNotification.count" ]) do
+      assert_enqueued_with(job: LeadNotificationJob) { post_details details_body }
+    end
+    assert_response :ok
+  end
+
+  test "outbox failure rolls back details and note" do
+    LeadNotification.stub(:new, ->(*) { raise "outbox unavailable" }) do
+      assert_no_difference("Note.count") do
+        assert_raises(RuntimeError) { post_details details_body }
+      end
+    end
+    assert_nil @lead.reload.travel_month
+  end
+
 end

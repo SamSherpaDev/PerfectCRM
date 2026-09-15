@@ -20,14 +20,17 @@ module Leads
   def verify_relay_signature(raw_body, header, secret:, now: Time.current)
     return nil if header.blank? || secret.blank?
 
-    parts = header.to_s.split(",").map(&:strip).to_h { |pair| pair.split("=", 2) }
+    pairs = header.to_s.split(",").map { |pair| pair.strip.split("=", 2) }
+    return nil unless pairs.all? { |key, value| key.present? && value.present? }
+
+    parts = pairs.to_h
     timestamp = parts["t"].to_i
     return nil if timestamp.zero? || (now.to_i - timestamp).abs > 300
 
     expected = OpenSSL::HMAC.hexdigest("SHA256", secret, "#{timestamp}.#{raw_body}")
     return nil unless Rack::Utils.secure_compare(expected, parts["v1"].to_s)
 
-    parts["kid"].presence || parts["k"].presence || "relay"
+    parts["kid"].presence || "relay"
   end
 
   def sign_relay_body(raw_body, secret, timestamp: Time.current.to_i)
@@ -63,18 +66,16 @@ module Leads
     [ [ hits.size * 25, 100 ].min, hits ]
   end
 
-  # Sliding window on the cache store. Returns nil when allowed, or the
-  # seconds until the oldest entry expires when over the limit.
   def rate_limit_exceeded?(key, limit:, window:, now: Time.current)
-    store = Rails.cache
-    entries = Array(store.read(key)).map(&:to_i)
-    cutoff = now.to_i - window
-    entries = entries.select { |time| time > cutoff }
-    if entries.size >= limit
-      return entries.min + window - now.to_i + 1
+    LeadRateLimitEntry.transaction do
+      LeadRateLimitEntry.where("expires_at <= ?", now).delete_all
+      entries = LeadRateLimitEntry.where(key: key)
+      if entries.count >= limit
+        entries.minimum(:expires_at).to_i - now.to_i + 1
+      else
+        entries.create!(expires_at: now + window)
+        nil
+      end
     end
-
-    store.write(key, entries + [ now.to_i ], expires_in: window)
-    nil
   end
 end

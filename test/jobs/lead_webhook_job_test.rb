@@ -1,7 +1,5 @@
 require "test_helper"
 
-# Outbound webhook contract: signed POSTs per URL, logged per attempt,
-# disabled when the list is empty.
 class LeadWebhookJobTest < ActiveJob::TestCase
   FakeResponse = Struct.new(:code) do
     def is_a?(klass)
@@ -45,11 +43,11 @@ class LeadWebhookJobTest < ActiveJob::TestCase
     Net::HTTP.stub(:new, ->(*_) { fake }) { yield fake }
   end
 
-  test "posts a signed lead.created to every url and logs delivery" do
-    @settings.update!(lead_webhooks: [ "https://n8n.example.com/hook-a", "https://n8n.example.com/hook-b" ])
+  test "posts a signed lead.created to the subscription and logs delivery" do
+    @settings.update!(lead_webhook_url: "https://n8n.example.com/hook")
     with_fake_http do |fake|
       LeadWebhookJob.perform_now(@lead.id, "lead.created")
-      assert_equal 2, fake.bodies.size
+      assert_equal 1, fake.bodies.size
       payload = JSON.parse(fake.bodies.first)
       assert_equal "lead.created", payload["event"]
       assert_equal @lead.reference, payload["lead"]["reference"]
@@ -60,14 +58,14 @@ class LeadWebhookJobTest < ActiveJob::TestCase
         assert_equal "relay", caller_name
       end
     end
-    deliveries = LeadWebhookDelivery.order(:id).last(2)
-    assert_equal %w[delivered delivered], deliveries.map(&:status)
-    assert_equal [ 1, 1 ], deliveries.map(&:attempts)
-    assert_equal [ 200, 200 ], deliveries.map(&:http_status)
+    deliveries = LeadWebhookDelivery.order(:id).last(1)
+    assert_equal %w[delivered], deliveries.map(&:status)
+    assert_equal [ 1 ], deliveries.map(&:attempts)
+    assert_equal [ 200 ], deliveries.map(&:http_status)
   end
 
   test "a 500 response records a failed attempt and raises for retry" do
-    @settings.update!(lead_webhooks: [ "https://n8n.example.com/hook" ])
+    @settings.update!(lead_webhook_url: "https://n8n.example.com/hook")
     with_fake_http(code: "500") do |fake|
       assert_raises(LeadWebhookJob::WebhookFailed) do
         LeadWebhookJob.new.perform(@lead.id, "lead.created")
@@ -81,8 +79,8 @@ class LeadWebhookJobTest < ActiveJob::TestCase
     assert_equal 500, delivery.http_status
   end
 
-  test "an empty webhook list is disabled: no http, no rows" do
-    @settings.update!(lead_webhooks: [])
+  test "an empty webhook URL disables delivery" do
+    @settings.update!(lead_webhook_url: nil)
     with_fake_http do |fake|
       LeadWebhookJob.perform_now(@lead.id, "lead.created")
       assert_empty fake.bodies
@@ -90,12 +88,12 @@ class LeadWebhookJobTest < ActiveJob::TestCase
     assert_equal 0, LeadWebhookDelivery.count
   end
 
-  test "a single url override posts only there" do
-    @settings.update!(lead_webhooks: [])
-    with_fake_http do |fake|
-      LeadWebhookJob.perform_now(@lead.id, "lead.details_added", url: "https://n8n.example.com/once")
-      assert_equal 1, fake.bodies.size
-      assert_equal "lead.details_added", JSON.parse(fake.bodies.first)["event"]
+  test "failed delivery schedules a retry" do
+    @settings.update!(lead_webhook_url: "https://n8n.example.com/hook")
+    with_fake_http(code: "500") do
+      assert_enqueued_with(job: LeadWebhookJob) do
+        LeadWebhookJob.perform_now(@lead.id, "lead.created")
+      end
     end
   end
 end

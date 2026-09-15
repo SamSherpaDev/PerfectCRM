@@ -58,6 +58,73 @@
     <% end %>
   </section>
 
+  <section class="card card-pad mt-6" aria-labelledby="mailbox-heading">
+    <h2 class="section-title" id="mailbox-heading">Mailbox</h2>
+    <%= card_caption "Gmail mail to and from #{@mailbox_address} lands on client timelines. Only that address is ever kept; personal mail is skipped without storing it." %>
+    <dl class="mt-4 space-y-1 text-sm">
+      <div class="flex gap-2">
+        <dt class="muted">Gmail address:</dt>
+        <dd class="font-medium text-ink"><%= @mailbox_address %></dd>
+      </div>
+      <div class="flex gap-2">
+        <dt class="muted">Last sync:</dt>
+        <dd><%= @settings.mailbox_last_sync_at ? time_24_12(@settings.mailbox_last_sync_at) : "Never" %></dd>
+      </div>
+      <div class="flex gap-2">
+        <dt class="muted">Last error:</dt>
+        <dd><%= @settings.mailbox_last_error.presence || @mail_sync&.last_error.presence || "None" %></dd>
+      </div>
+    </dl>
+    <%= form_with model: @settings, url: mailbox_settings_path, method: :patch, class: "mt-4 space-y-3" do |form| %>
+      <div>
+        <%= form.label :mailbox_login, "Google account login", class: "label" %>
+        <%= form.email_field :mailbox_login, class: "input", placeholder: "you@gmail.com", autocomplete: "username" %>
+        <p class="hint">The personal Gmail that receives the <%= @mailbox_address %> alias.</p>
+      </div>
+      <div>
+        <%= form.label :mailbox_app_password, "App password", class: "label" %>
+        <%= form.password_field :mailbox_app_password, class: "input", placeholder: @settings.mailbox_configured? ? "Saved — enter a new one to replace it" : "xxxx xxxx xxxx xxxx", autocomplete: "new-password" %>
+        <p class="hint">Google Account → Security → 2-step verification → App passwords. Name it PerfectCRM. Never use your main Google password. Stored encrypted.</p>
+      </div>
+      <% if @settings.errors[:mailbox_login].any? %>
+        <p class="text-sm text-bad"><%= @settings.errors[:mailbox_login].to_sentence %></p>
+      <% end %>
+      <div class="flex flex-wrap gap-2">
+        <%= form.submit "Save mailbox", class: "btn-primary btn btn-sm" %>
+        <%= link_to "Test connection", mailbox_test_settings_path, data: { turbo_method: :post }, class: "btn-secondary btn btn-sm" %>
+      </div>
+    <% end %>
+    <p class="hint mt-4">Setup: turn on 2-step verification on the Google account, create an app password, paste it here, then Test connection. Sync runs every 5 minutes over [Gmail]/All Mail, read-only — it never moves, deletes, or flags server mail. See README “Mail”.</p>
+  </section>
+
+  <section class="card card-pad mt-6" aria-labelledby="import-heading">
+    <h2 class="section-title" id="import-heading">Import history</h2>
+    <%= card_caption "Bring past email with clients and operators into the CRM. Preview first, flip clients and organizations per row, then import." %>
+    <div class="mt-4 flex flex-wrap gap-2">
+      <%= link_to "Import history", new_mail_import_path, class: "btn-secondary btn btn-sm" %>
+      <%= link_to "Past imports", mail_imports_path, class: "btn-ghost btn btn-sm" %>
+    </div>
+    <% if @imports.any? %>
+      <ul class="mt-3 space-y-1 text-sm">
+        <% @imports.each do |import| %>
+          <li><%= link_to "#{import.scope_label} · #{import.status}", mail_import_path(import), class: "link" %></li>
+        <% end %>
+      </ul>
+    <% end %>
+  </section>
+
+  <section class="card card-pad mt-6" aria-labelledby="pipeline-digest-heading">
+    <h2 class="section-title" id="pipeline-digest-heading">Monday pipeline note</h2>
+    <%= card_caption "One line every Monday at 7am: open leads, stale cards, and pipeline value." %>
+    <%= form_with model: @settings, url: settings_path, method: :patch, class: "mt-4" do |form| %>
+      <label class="inline-flex items-center gap-2 text-sm">
+        <%= form.check_box :pipeline_digest, class: "checkbox" %>
+        Send the Monday note to info@sherpaholidays.com
+      </label>
+      <div class="mt-3">
+        <%= form.submit "Save", class: "btn-secondary btn btn-sm" %>
+      </div>
+    <% end %>
   </section>
 
   <section class="card card-pad mt-6" aria-labelledby="automations-heading">
@@ -89,15 +156,11 @@
     </div>
 
     <%= form_with model: @settings, url: settings_path, method: :patch, class: "mt-4 space-y-4" do |form| %>
+      <p class="hint">One copy of every website inquiry goes to info@sherpaholidays.com, with Reply-To the visitor.</p>
       <div>
-        <%= form.label :intake_copy_to, "Inquiry email copy goes to", class: "label" %>
-        <%= form.email_field :intake_copy_to, class: "input", autocomplete: "email" %>
-        <p class="hint">One copy of every website inquiry, with Reply-To the visitor.</p>
-      </div>
-      <div>
-        <%= form.label :lead_webhooks_text, "n8n webhook URLs", class: "label" %>
-        <%= form.text_area :lead_webhooks_text, value: @settings.lead_webhook_urls_text, rows: 3, class: "textarea mono text-xs", placeholder: "https://n8n.example.com/webhook/lead" %>
-        <p class="hint">One URL per line. Each new lead and each details answer is posted here, signed with the relay secret. Empty means disabled.</p>
+        <%= form.label :lead_webhook_url, "n8n webhook URL", class: "label" %>
+        <%= form.url_field :lead_webhook_url, class: "input mono text-xs", placeholder: "https://n8n.example.com/webhook/lead" %>
+        <p class="hint">Each new lead and each details answer is posted here, signed with the relay secret. Empty means disabled.</p>
       </div>
       <div>
         <%= form.submit "Save automations", class: "btn-primary btn btn-sm" %>
@@ -141,3 +204,16 @@
         <p class="hint mt-3"><%= @honeypot_dropped %> spam-bot submission<%= "s" unless @honeypot_dropped.to_i == 1 %> quietly dropped at the door.</p>
       <% end %>
     </div>
+  </section>
+
+  <section class="card card-pad" aria-labelledby="export-heading">
+    <h2 class="section-title" id="export-heading">Export everything</h2>
+    <%= card_caption "A zip of leads, clients, people, organizations, notes, tags, and timeline events as CSV. Opens cleanly in Excel." %>
+    <div class="mt-4">
+      <%= link_to "Export everything", settings_export_path, class: "btn-secondary btn btn-sm" %>
+    </div>
+  </section>
+  <div class="foot-sketch" aria-hidden="true">
+    <%= sketch :wheel, class: "sk scene" %>
+  </div>
+</div>

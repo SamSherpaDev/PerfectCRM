@@ -1,22 +1,18 @@
-# Delivers signed automation webhooks (lead.created, lead.details_added)
-# to every URL in Settings. Retried with backoff; every attempt is logged
-# in LeadWebhookDelivery so the Settings automations card can show it. An
-# empty webhook list means disabled: nothing is enqueued.
 class LeadWebhookJob < ApplicationJob
   queue_as :default
 
-  retry_on StandardError, attempts: 6, wait: :exponentially_longer
+  retry_on StandardError, attempts: 6, wait: :polynomially_longer
 
   discard_on ActiveJob::DeserializationError
 
-  def perform(lead_id, event, url: nil)
+  def perform(lead_id, event)
     lead = Lead.find(lead_id)
     settings = Setting.current
-    urls = url ? [ url ] : settings.lead_webhook_urls
-    return if urls.empty?
+    url = settings.lead_webhook_url
+    return if url.blank?
 
     secret = settings.ensure_intake_credentials!.relay_secret
-    urls.each { |target| deliver_to(lead, event, target, secret) }
+    deliver_to(lead, event, url, secret)
   end
 
   private

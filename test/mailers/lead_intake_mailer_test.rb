@@ -1,10 +1,6 @@
 require "test_helper"
 
 class LeadIntakeMailerTest < ActionMailer::TestCase
-  setup do
-    Setting.current.update!(intake_copy_to: "info@sherpaholidays.com")
-  end
-
   test "inquiry copy goes to the copy-to address with reply-to the visitor" do
     lead = Lead.create!(
       name: "Anna Lindqvist", email: "anna@example.com", source: "google_ads",
@@ -20,7 +16,7 @@ class LeadIntakeMailerTest < ActionMailer::TestCase
 
     assert_equal [ "info@sherpaholidays.com" ], mail.to
     assert_equal [ "anna@example.com" ], mail.reply_to
-    assert_equal [ "info@sherpaholidays.com" ], mail.from
+    assert_equal [ ENV.fetch("MAIL_FROM", "info@sherpaholidays.com") ], mail.from
     assert_equal "New inquiry from Anna Lindqvist: Private Nepal tour", mail.subject
 
     body = mail.body.to_s

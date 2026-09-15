@@ -2,7 +2,7 @@ require "test_helper"
 
 class LeadIntakeFieldsTest < ActiveSupport::TestCase
   test "reference is assigned on create in SH-XXXX form" do
-    lead = Lead.create!(name: "Anna Lindqvist", email: "anna@example.com", source: "website_form")
+    lead = Lead.create!(id: 6, name: "Anna Lindqvist", email: "anna@example.com", source: "website_form")
     assert_match(/\ASH-[A-Z2-9]{4}\z/, lead.reload.reference)
   end
 
@@ -30,6 +30,7 @@ class LeadIntakeFieldsTest < ActiveSupport::TestCase
     )
     lead.reload
     assert_equal "+1 415 555 0134", lead.phone_raw
+    assert_not_includes lead.attributes_before_type_cast["phone_raw"], "+1 415 555 0134"
     assert_equal "google_ads", lead.source
     assert_equal({ "attribution" => { "gclid" => "x" } }, lead.metadata)
   end
@@ -55,12 +56,12 @@ class SettingIntakeCredentialsTest < ActiveSupport::TestCase
     assert settings.relay_secret.present?
   end
 
-  test "webhook urls keep http lines only" do
+  test "one configured webhook enables delivery" do
     settings = Setting.current
-    settings.lead_webhooks = [ "https://n8n.example.com/a", "ftp://nope", "", "https://n8n.example.com/a" ]
-    assert_equal [ "https://n8n.example.com/a" ], settings.lead_webhook_urls
+    settings.lead_webhook_url = "https://n8n.example.com/a"
+    assert settings.valid?
     assert settings.webhooks_enabled?
-    settings.lead_webhooks = []
+    settings.lead_webhook_url = nil
     assert_not settings.webhooks_enabled?
   end
 end

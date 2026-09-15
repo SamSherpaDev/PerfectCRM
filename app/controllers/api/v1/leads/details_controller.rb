@@ -43,14 +43,17 @@ module Api
             return render json: { error: "validation", fields: errors }, status: :bad_request
           end
 
-          lead.assign_attributes(updates)
-          if lead.changed?
-            lead.save!
-            lead.notes.create!(
-              body: "Details added by the visitor at #{Time.current.strftime('%-b %-d, %Y, %-I:%M %p')}."
-            )
-            LeadWebhookJob.perform_later(lead.id, "lead.details_added")
+          lead.with_lock do
+            lead.assign_attributes(updates)
+            if lead.changed?
+              lead.save!
+              lead.notes.create!(
+                body: "Details added by the visitor at #{Time.current.strftime('%-b %-d, %Y, %-I:%M %p')}."
+              )
+              lead.lead_notifications.create!(event: "lead.details_added")
+            end
           end
+          LeadNotification.enqueue_pending(lead.id)
           render json: { reference: lead.reload.reference }, status: :ok
         end
 

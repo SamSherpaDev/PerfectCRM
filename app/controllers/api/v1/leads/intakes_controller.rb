@@ -20,7 +20,8 @@ module Api
           caller_name = authenticate_intake!
           return if performed?
 
-          email = payload.dig("contact", "email").to_s
+          contact = payload["contact"].is_a?(Hash) ? payload["contact"] : {}
+          email = contact["email"].to_s
           return unless check_rate_limits!(email: email)
 
           if payload["honeypot"].to_s.present?
@@ -39,14 +40,21 @@ module Api
               "[intake] replay for #{external_ref} lead=#{existing.id} " \
               "body_matches=#{replay_body_matches?(existing, payload, fields)}"
             )
+            LeadNotification.enqueue_pending(existing.id)
             return render json: lead_response(existing), status: :ok
           end
 
           lead = build_lead(payload, fields, external_ref, caller_name)
-          if lead.save
+          saved = ::Lead.transaction do
+            next false unless lead.save
+
+            lead.lead_notifications.create!(event: "email_copy")
+            lead.lead_notifications.create!(event: "lead.created")
             Setting.current.update_column(:intake_last_received_at, Time.current)
-            LeadIntakeEmailJob.perform_later(lead.id)
-            LeadWebhookJob.perform_later(lead.id, "lead.created")
+            true
+          end
+          if saved
+            LeadNotification.enqueue_pending(lead.id)
             render json: lead_response(lead.reload), status: :accepted
           elsif (field_errors = mappable_field_errors(lead))
             # A second open inquiry from the same email trips the model's

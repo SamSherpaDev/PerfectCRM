@@ -49,7 +49,10 @@ module Api
           lead.fit_band = band if band.present?
           lead.fit_reason = payload["fit_reason"].to_s.strip.presence&.truncate(1000) if payload.key?("fit_reason")
           lead.status = status if status.present?
-          lead.save!
+          unless lead.save
+            fields = lead.errors.map { |error| [ error.attribute, error.type == :taken ? "taken" : "invalid" ] }.to_h
+            return render json: { error: "validation", fields: fields }, status: :unprocessable_entity
+          end
 
           record_automation_event!(lead, caller_name, from_status: from_status)
           render json: {

@@ -6,7 +6,7 @@ class SettingsAutomationsTest < ActionDispatch::IntegrationTest
 
   setup do
     sign_in
-    Setting.current.update!(intake_copy_to: "info@sherpaholidays.com", lead_webhooks: [])
+    Setting.current.update!(lead_webhook_url: nil)
   end
 
   test "edit shows the automations card with keys, rules, and the log" do
@@ -15,33 +15,24 @@ class SettingsAutomationsTest < ActionDispatch::IntegrationTest
     assert_select "h2", text: "Automations"
     assert_select "p", text: /Automations may create leads/
     assert_select "p", text: /Quoted, Nudged, conversion to client/
-    assert_select "input[name='setting[intake_copy_to]']"
-    assert_select "textarea[name='setting[lead_webhooks_text]']"
+    assert_select "input[name='setting[lead_webhook_url]']"
     assert_select "form[action=?]", rotate_site_key_settings_path
     assert_select "form[action=?]", rotate_relay_secret_settings_path
   end
 
-  test "saving copy-to and webhook urls persists them" do
-    patch settings_path, params: {
-      setting: {
-        intake_copy_to: "captain@example.com",
-        lead_webhooks_text: "https://n8n.example.com/hook-a\nhttps://n8n.example.com/hook-b\n"
-      }
-    }
+  test "saving one webhook URL persists it" do
+    patch settings_path, params: { setting: { lead_webhook_url: "https://n8n.example.com/hook" } }
     assert_redirected_to edit_settings_path
-    settings = Setting.current.reload
-    assert_equal "captain@example.com", settings.intake_copy_to
-    assert_equal [ "https://n8n.example.com/hook-a", "https://n8n.example.com/hook-b" ],
-      settings.lead_webhook_urls
+    assert_equal "https://n8n.example.com/hook", Setting.current.reload.lead_webhook_url
   end
 
-  test "non-http webhook urls are rejected" do
-    patch settings_path, params: {
-      setting: { intake_copy_to: "info@sherpaholidays.com", lead_webhooks_text: "ftp://nope.example/hook" }
-    }
-    assert_redirected_to edit_settings_path
-    assert_match(/http/, flash[:alert].to_s)
-    assert_empty Setting.current.reload.lead_webhook_urls
+  test "invalid or multiple webhook URLs are rejected" do
+    [ "ftp://nope.example/hook", "https://n8n.example.com/a\nhttps://n8n.example.com/b" ].each do |url|
+      patch settings_path, params: { setting: { lead_webhook_url: url } }
+      assert_redirected_to edit_settings_path
+      assert flash[:alert].present?
+      assert_nil Setting.current.reload.lead_webhook_url
+    end
   end
 
   test "rotating the site key changes it" do
@@ -78,6 +69,9 @@ class SettingsAutomationsTest < ActionDispatch::IntegrationTest
   end
 
   test "leads page shows the automations strip" do
+    Setting.current.update!(lead_webhook_url: "https://n8n.example.com/hook")
+    lead = Lead.create!(name: "Website visitor", source: "website_form", received_at: Time.current)
+    LeadWebhookDelivery.create!(lead: lead, event: "lead.created", url: Setting.current.lead_webhook_url)
     get leads_path
     assert_response :success
     assert_select "h2", text: "Automations"
@@ -99,4 +93,12 @@ class SettingsAutomationsTest < ActionDispatch::IntegrationTest
     assert_select "dd", text: /Two of us/
     assert_select "dd", text: /#{lead.reference}/
   end
+  test "unknown timing takes precedence over earlier dates" do
+    lead = Lead.create!(name: "Visitor", travel_month: 4, travel_year: 2027, timing_unknown: true)
+    get lead_path(lead)
+    assert_response :success
+    assert_select "dd", text: /Timing unknown/
+    assert_select "dd", text: /April|2027/, count: 0
+  end
+
 end

@@ -5,7 +5,7 @@ require "test_helper"
 class ApiV1LeadsVerdictsTest < ActionDispatch::IntegrationTest
   setup do
     @settings = Setting.current
-    @settings.update!(lead_webhooks: [])
+    @settings.update!(lead_webhook_url: nil)
     @settings.rotate_site_key!
     @relay_secret = @settings.rotate_relay_secret!
     @lead = Lead.create!(name: "Anna Lindqvist", email: "anna@example.com", source: "google_ads", status: "new")
@@ -116,4 +116,16 @@ class ApiV1LeadsVerdictsTest < ActionDispatch::IntegrationTest
     post_verdict @lead.id, { "status" => "lost" }
     assert_response :unprocessable_entity
   end
+  test "reopening an older lead with an open duplicate returns validation" do
+    @lead.update!(status: "lost")
+    Lead.create!(name: "New inquiry", email: @lead.email)
+    assert_no_difference("ActivityEvent.count") do
+      post_verdict @lead.id, { "status" => "new", "fit_score" => 80 }
+    end
+    assert_response :unprocessable_entity
+    assert_equal "taken", response.parsed_body["fields"]["email"]
+    assert_equal "lost", @lead.reload.status
+    assert_nil @lead.fit_score
+  end
+
 end
