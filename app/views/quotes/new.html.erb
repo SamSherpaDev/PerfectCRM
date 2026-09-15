@@ -70,6 +70,7 @@
     <%= form.hidden_field :perfectbook_departure_id %>
     <%= form.hidden_field :trip_name %>
     <%= form.hidden_field :departure_label %>
+    <%= hidden_field_tag :included_edited, params[:included_edited] == "1" ? "1" : "0", data: { quote_builder_target: "inclusionsEdited" } %>
 
     <div class="space-y-6">
       <section class="card card-pad" aria-labelledby="lines-heading">
@@ -100,7 +101,7 @@
         <%= form.label :notes, "Note", class: "label mt-2" %>
         <%= form.text_area :notes, rows: 3, class: "textarea", placeholder: "I held two seats on the May 4 departure for you…" %>
         <%= form.label :included, "What is included", class: "label mt-4" %>
-        <%= form.text_area :included, rows: 3, class: "textarea" %>
+        <%= form.text_area :included, rows: 3, class: "textarea", data: { action: "input->quote-builder#editInclusions" } %>
         <label class="mt-3 flex items-center gap-2 text-sm">
           <%= check_box_tag :remember_inclusions, "1", params[:remember_inclusions] == "1" %>
           Remember these inclusions for this trip

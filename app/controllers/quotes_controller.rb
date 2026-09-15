@@ -37,13 +37,17 @@ class QuotesController < ApplicationController
     @trips = PerfectBook::Catalog.new.active_trips
     @trip = @trips.find_by(perfectbook_id: params[:trip_id]) if params[:trip_id].present?
     @departures = @trip ? PerfectBook::Catalog.new.departures_for_trip(@trip.perfectbook_id).limit(30) : []
+    submitted = params[:quote].present? ? quote_params : {}
+    if @trip && submitted[:perfectbook_trip_id].blank? && submitted[:included].blank? && params[:included_edited] != "1"
+      submitted = submitted.except(:included)
+    end
     @quote = Quote.new({
       perfectbook_trip_id: @trip&.perfectbook_id,
       trip_name: @trip&.name,
       party_size: 2,
       valid_until: Date.current + 14,
       included: QuoteTripPreference.find_by(perfectbook_trip_id: @trip&.perfectbook_id)&.included
-    }.merge(params[:quote].present? ? quote_params : {}).merge(owner_params))
+    }.merge(submitted).merge(owner_params))
     @quote.perfectbook_trip_id = @trip&.perfectbook_id
     prefill_lines
     3.times { @quote.lines.build(quantity: 1) }

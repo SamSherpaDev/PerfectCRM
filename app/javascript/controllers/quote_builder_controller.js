@@ -3,10 +3,14 @@
 import { Controller } from "@hotwired/stimulus"
 
 export default class extends Controller {
-  static targets = ["rows", "template", "total", "count"]
+  static targets = ["rows", "template", "total", "count", "inclusionsEdited"]
 
   connect() {
     this.recalc()
+  }
+
+  editInclusions() {
+    this.inclusionsEditedTarget.value = "1"
   }
 
   add(event) {
