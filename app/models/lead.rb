@@ -18,6 +18,7 @@ class Lead < ApplicationRecord
     reject_if: proc { |attrs| attrs["name"].blank? && attrs["email"].blank? && attrs["phone"].blank? }
 
   include TaggedRecord
+  include NestedPeople
 
   before_save :reject_converted_write, prepend: true
 

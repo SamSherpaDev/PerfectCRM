@@ -75,4 +75,28 @@ class NestedPeopleReplacementTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "existing people can reassign emails regardless of creation order" do
+    [ Client, Lead ].each do |model|
+      [ "", "one@example.com" ].each do |second_email|
+        record = model.create!(name: "Travelers")
+        first = record.people.create!(name: "One", email: "one@example.com")
+        second = record.people.create!(name: "Two", email: "two@example.com")
+        patch polymorphic_path(record), params: { model.model_name.param_key => {
+          people_attributes: {
+            "0" => { id: first.id, name: "One", email: "two@example.com" },
+            "1" => { id: second.id, name: "Two", email: second_email }
+          }
+        } }
+        assert_response :redirect
+        assert_equal "two@example.com", first.reload.email
+        if second_email.empty?
+          assert_nil second.reload.email
+        else
+          assert_equal second_email, second.reload.email
+        end
+        assert_equal 2, record.people.count
+      end
+    end
+  end
+
 end
