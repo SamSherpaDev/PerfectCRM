@@ -16,6 +16,23 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
     page.current_window.resize_to(390, 844)
   end
 
+  test "website inquiry budget bands are readable on a phone" do
+    lead = Lead.create!(name: "Website inquiry", budget_band: "4000_7000")
+    {
+      "4000_7000" => "4,000-7,000 per person",
+      "under_2000" => "Under 2,000 per person",
+      "2000_4000" => "2,000-4,000 per person",
+      "7000_plus" => "7,000+ per person",
+      "discuss" => "To discuss"
+    }.each do |band, label|
+      lead.update!(budget_band: band)
+      visit lead_path(lead)
+      within "section[aria-labelledby='inquiry-heading']" do
+        assert_selector "dd", exact_text: label
+      end
+    end
+  end
+
   test "traveler emails can be reassigned and duplicates show errors for both owner types" do
     [ Client, Lead ].each do |model|
       record = model.create!(name: "Everest family")

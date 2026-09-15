@@ -29,7 +29,7 @@
         <div>
           <dt>Details</dt>
           <dd>
-            <%= pluralize(lead.party_size, "traveler") if lead.party_size.present? %><% if lead.timing_unknown? %><%= ", " if lead.party_size.present? %>Timing unknown<% elsif lead.travel_month.present? || lead.travel_year.present? %><%= ", " if lead.party_size.present? %><%= Date::MONTHNAMES[lead.travel_month] if lead.travel_month %><%= " #{lead.travel_year}" if lead.travel_year %><% end %><% if lead.budget_band.present? %><%= ", " if lead.timing_unknown? || lead.party_size.present? || lead.travel_month.present? || lead.travel_year.present? %><%= lead.budget_band.humanize %> per person<% end %>
+            <%= pluralize(lead.party_size, "traveler") if lead.party_size.present? %><% if lead.timing_unknown? %><%= ", " if lead.party_size.present? %>Timing unknown<% elsif lead.travel_month.present? || lead.travel_year.present? %><%= ", " if lead.party_size.present? %><%= Date::MONTHNAMES[lead.travel_month] if lead.travel_month %><%= " #{lead.travel_year}" if lead.travel_year %><% end %><% if lead.budget_band.present? %><%= ", " if lead.timing_unknown? || lead.party_size.present? || lead.travel_month.present? || lead.travel_year.present? %><%= lead_budget_label(lead.budget_band) %><% end %>
           </dd>
         </div>
       <% end %>

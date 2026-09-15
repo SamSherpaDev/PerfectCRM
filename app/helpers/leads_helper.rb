@@ -22,6 +22,16 @@ module LeadsHelper
     { "strong" => "bar-good", "possible" => "bar-warn", "weak" => "bar-bad" }.fetch(band, "")
   end
 
+  def lead_budget_label(band)
+    {
+      "discuss" => "To discuss",
+      "under_2000" => "Under 2,000 per person",
+      "2000_4000" => "2,000-4,000 per person",
+      "4000_7000" => "4,000-7,000 per person",
+      "7000_plus" => "7,000+ per person"
+    }.fetch(band)
+  end
+
   # Bolt for n8n and the website form, robot for Panda AI: the timeline
   # stone always names which machine acted.
   def automation_icon(caller_name)
