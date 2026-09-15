@@ -52,9 +52,9 @@
       <div>
         <dt>Fit</dt>
         <dd>
-          <% if @lead.fit_score.present? %>
+          <% if @lead.fit_score.present? || @lead.fit_band.present? %>
             <span class="fit inline-flex items-center gap-2">
-              <span class="bar <%= lead_fit_bar_class(@lead.fit_score) %>" aria-hidden="true"><span class="bar-fill" style="width: <%= @lead.fit_score %>%"></span></span>
+              <span class="bar <%= lead_fit_bar_class(@lead.fit_band) %>" aria-hidden="true"><span class="bar-fill" style="width: <%= @lead.fit_score.to_i %>%"></span></span>
               <span><%= @lead.fit_label %></span>
             </span>
             <% if @lead.fit_reason.present? %>

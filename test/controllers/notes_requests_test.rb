@@ -25,12 +25,14 @@ class NotesRequestsTest < ActionDispatch::IntegrationTest
     assert_redirected_to organization_path(org)
   end
 
-  test "destroy a note" do
-    client = Client.create!(name: "Tashi")
-    note = Note.create!(notable: client, body: "Temp")
-    assert_difference -> { Note.count }, -1 do
-      delete note_path(note)
+  test "destructive contact and note routes are unavailable" do
+    %w[/notes/1 /organizations/1 /clients/1 /leads/1].each do |path|
+      assert_raises(ActionController::RoutingError) do
+        Rails.application.routes.recognize_path(path, method: :delete)
+      end
     end
-    assert_redirected_to client_path(client)
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("/organizations", method: :get)
+    end
   end
 end

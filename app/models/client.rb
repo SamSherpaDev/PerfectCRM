@@ -1,11 +1,11 @@
 class Client < ApplicationRecord
   KINDS = %w[individual company].freeze
-  SOURCES = %w[website email instagram whatsapp referral repeat other].freeze
+  SOURCES = %w[website email instagram whatsapp referral repeat other google_ads meta_ads website_form manual].freeze
 
   encrypts :phone
 
   belongs_to :referred_by_organization, class_name: "Organization", optional: true
-  has_many :people, -> { order(:created_at, :id) }, dependent: :destroy
+  has_many :people, -> { order(:created_at, :id) }, dependent: :destroy, inverse_of: :client
   has_many :notes, as: :notable, dependent: :destroy
   has_many :taggings, as: :taggable, dependent: :destroy
   has_many :tags, -> { order(:name) }, through: :taggings

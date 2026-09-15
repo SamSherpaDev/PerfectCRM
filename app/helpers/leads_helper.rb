@@ -18,10 +18,7 @@ module LeadsHelper
     parts.join(" · ")
   end
 
-  def lead_fit_bar_class(score)
-    return "bar-good" if score.to_i >= 70
-    return "bar-warn" if score.to_i >= 40
-
-    "bar-bad"
+  def lead_fit_bar_class(band)
+    { "strong" => "bar-good", "possible" => "bar-warn", "weak" => "bar-bad" }.fetch(band, "")
   end
 end

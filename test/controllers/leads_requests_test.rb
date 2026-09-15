@@ -8,7 +8,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     sign_in
   end
 
-  test "index renders tiles, tabs with counts, and search" do
+  test "index renders tabs with counts and search" do
     Lead.create!(name: "Ad One", source: "google_ads", status: "new")
     Lead.create!(name: "Chatty", source: "manual", status: "chatting")
     get leads_path
@@ -125,4 +125,19 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     end
     assert_redirected_to lead_path(lead)
   end
+  test "fit labels and bars use the supplied band" do
+    lead = Lead.create!(name: "Panda", fit_score: 80, fit_band: "possible")
+    [ leads_path, lead_path(lead) ].each do |path|
+      get path
+      assert_response :success
+      assert_select ".bar-warn", count: 1
+      assert_select "span", text: "Possible · 80"
+      assert_select ".stat", count: 0
+    end
+    lead.update!(fit_score: nil, fit_band: "strong")
+    get lead_path(lead)
+    assert_select "span", text: "Strong"
+    assert_select ".bar-good", count: 1
+  end
+
 end

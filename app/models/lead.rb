@@ -4,21 +4,11 @@ class Lead < ApplicationRecord
   STATUSES = %w[new chatting quoted nudged lost].freeze
   FIT_BANDS = %w[strong possible weak].freeze
 
-  # Maps a lead source onto the client source vocabulary at conversion.
-  SOURCE_TO_CLIENT_SOURCE = {
-    "google_ads" => "website",
-    "meta_ads" => "website",
-    "website_form" => "website",
-    "email" => "email",
-    "referral" => "referral",
-    "manual" => "other"
-  }.freeze
-
   encrypts :phone
 
   belongs_to :referred_by_organization, class_name: "Organization", optional: true
   belongs_to :converted_client, class_name: "Client", optional: true
-  has_many :people, -> { order(:created_at, :id) }, dependent: :destroy
+  has_many :people, -> { order(:created_at, :id) }, dependent: :destroy, inverse_of: :lead
   has_many :notes, as: :notable, dependent: :destroy
   has_many :taggings, as: :taggable, dependent: :destroy
   has_many :tags, -> { order(:name) }, through: :taggings
@@ -122,7 +112,8 @@ class Lead < ApplicationRecord
         country: country,
         state: state,
         kind: kind,
-        source: SOURCE_TO_CLIENT_SOURCE.fetch(source, "other"),
+        source: source,
+        campaign_name: campaign_name,
         referred_by_organization: referred_by_organization,
         perfectbook_contact_id: perfectbook_contact_id
       )
@@ -177,11 +168,7 @@ class Lead < ApplicationRecord
   end
 
   def fit_label
-    return "Scoring" if fit_score.nil?
-    return "Strong · #{fit_score}" if fit_score >= 70
-    return "Possible · #{fit_score}" if fit_score >= 40
-
-    "Weak · #{fit_score}"
+    [ fit_band.presence&.humanize || "Scoring", fit_score ].compact.join(" · ")
   end
 
   def sync_fts!

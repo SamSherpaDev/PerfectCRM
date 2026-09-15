@@ -47,7 +47,8 @@ class LeadTest < ActiveSupport::TestCase
 
     client = lead.convert_to_client!
     assert_equal "Ad Lead", client.name
-    assert_equal "website", client.source
+    assert_equal "google_ads", client.source
+    assert_equal "Everest", client.campaign_name
     assert_equal [ "everest" ], client.tags.order(:name).pluck(:name)
     assert_equal [ "Maya" ], client.people.order(:id).pluck(:name)
     assert_equal 1, client.notes.where("body LIKE ?", "%Clicked ad%").count
@@ -81,4 +82,12 @@ class LeadTest < ActiveSupport::TestCase
     assert_not_includes Lead.search("everest"), second
     assert_includes Lead.search("pasang@example"), second
   end
+  test "conversion preserves every supplied source" do
+    Lead::SOURCES.each do |source|
+      client = Lead.create!(name: "Attribution", source: source, campaign_name: "Spring").convert_to_client!
+      assert_equal source, client.source
+      assert_equal "Spring", client.campaign_name
+    end
+  end
+
 end

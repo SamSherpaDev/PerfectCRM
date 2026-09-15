@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_14_202111) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_14_202112) do
   create_table "activity_events", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "kind", null: false
@@ -26,6 +26,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_202111) do
 
   create_table "clients", force: :cascade do |t|
     t.datetime "archived_at"
+    t.string "campaign_name"
     t.string "country"
     t.datetime "created_at", null: false
     t.string "email"

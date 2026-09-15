@@ -1,7 +1,7 @@
 class OrganizationsController < ApplicationController
   include RecordHistory
 
-  before_action :set_organization, only: %i[show edit update destroy]
+  before_action :set_organization, only: %i[show edit update]
 
   def show
     @note = Note.new
@@ -31,11 +31,6 @@ class OrganizationsController < ApplicationController
     else
       render :edit, status: :unprocessable_entity
     end
-  end
-
-  def destroy
-    @organization.destroy!
-    redirect_to clients_path(tab: "organizations"), notice: "Organization removed.", status: :see_other
   end
 
   private

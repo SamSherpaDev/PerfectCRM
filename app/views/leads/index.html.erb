@@ -5,26 +5,6 @@
   <% end %>
   <%= render "shared/flash" %>
 
-  <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
-    <div class="stat">
-      <p class="text-xs muted">New this week</p>
-      <p class="stat-value"><%= Lead.where("created_at >= ?", 1.week.ago).where(converted_client_id: nil).count %></p>
-    </div>
-    <div class="stat">
-      <p class="text-xs muted">With Panda AI</p>
-      <p class="stat-value"><%= Lead.where(fit_score: nil).where(converted_client_id: nil).where.not(status: "lost").count %></p>
-    </div>
-    <div class="stat">
-      <p class="text-xs muted">Strong fit unanswered</p>
-      <p class="stat-value"><%= Lead.where("fit_score >= ?", 70).where(converted_client_id: nil).where.not(status: "lost").count %></p>
-    </div>
-    <div class="stat">
-      <p class="text-xs muted">Converted this season</p>
-      <p class="stat-value"><%= Lead.converted.where("converted_at >= ?", 3.months.ago).count %></p>
-    </div>
-  </div>
-  <%= card_caption "New asks, Panda scoring, strong fits waiting, and recent conversions." %>
-
   <%= form_with url: leads_path, method: :get, data: { turbo_frame: "_top" }, class: "card card-pad" do |form| %>
     <%= hidden_field_tag :tab, @tab %>
     <label class="label" for="lead-search">Search leads</label>
@@ -64,9 +44,9 @@
                   <%= render "shared/icon", name: lead_source_icon(lead.source), class: "h-3.5 w-3.5" %>
                   <%= lead_source_label(lead) %>
                 </span>
-                <% if lead.fit_score.present? %>
+                <% if lead.fit_score.present? || lead.fit_band.present? %>
                   <span class="fit inline-flex items-center gap-2">
-                    <span class="bar <%= lead_fit_bar_class(lead.fit_score) %>" aria-hidden="true"><span class="bar-fill" style="width: <%= lead.fit_score %>%"></span></span>
+                    <span class="bar <%= lead_fit_bar_class(lead.fit_band) %>" aria-hidden="true"><span class="bar-fill" style="width: <%= lead.fit_score.to_i %>%"></span></span>
                     <span><%= lead.fit_label %></span>
                   </span>
                 <% else %>

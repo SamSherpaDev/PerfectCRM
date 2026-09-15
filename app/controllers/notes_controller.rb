@@ -15,13 +15,6 @@ class NotesController < ApplicationController
     end
   end
 
-  def destroy
-    @note = Note.find(params[:id])
-    notable = @note.notable
-    @note.destroy!
-    redirect_to notable, notice: "Note removed.", status: :see_other
-  end
-
   private
 
   def find_notable

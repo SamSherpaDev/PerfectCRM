@@ -34,6 +34,11 @@ class Person < ApplicationRecord
   def email_unique_per_owner
     return if email.blank?
 
+    if owner && owner.people.any? { |person| person != self && !person.marked_for_destruction? && person.email.to_s.strip.downcase == email }
+      errors.add(:email, "has already been taken")
+      return
+    end
+
     if client_id.present? || (client.present? && client.persisted?)
       owner_id = client_id.presence || client.id
       if Person.where("lower(email) = ?", email.downcase).where(client_id: owner_id).where.not(id: id).exists?
@@ -45,8 +50,6 @@ class Person < ApplicationRecord
         errors.add(:email, "has already been taken")
       end
     end
-    # New (unpersisted) owners skip the check; duplicates across different
-    # owners are allowed so conversions can copy people.
   end
 
   def normalize_email

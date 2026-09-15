@@ -12,13 +12,13 @@ Rails.application.routes.draw do
 
   # Rail navigation: see README.md, "Navigation".
   get "inbox", to: "inbox#index"
-  resources :leads do
+  resources :leads, except: %i[destroy] do
     member do
       post :convert
     end
     resources :notes, only: %i[create]
   end
-  resources :clients do
+  resources :clients, except: %i[destroy] do
     collection do
       get "by-perfectbook/:perfectbook_contact_id", action: :by_perfectbook, as: :by_perfectbook
     end
@@ -28,10 +28,9 @@ Rails.application.routes.draw do
     end
     resources :notes, only: %i[create]
   end
-  resources :organizations do
+  resources :organizations, except: %i[index destroy] do
     resources :notes, only: %i[create]
   end
-  resources :notes, only: %i[destroy]
   get "pipeline", to: "pipeline#show"
   resources :quotes, only: %i[index]
   resources :templates, except: :show do
