@@ -1,0 +1,7 @@
+<% content_for :title, "Templates · PerfectCRM" %>
+<div class="page">
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Reusable words", title: "Templates", subtitle: "The replies and itineraries sent most often, ready to personalize." } do %><% end %>
+  <%= render "shared/flash" %>
+
+  <%= render "shared/empty_state", title: "No templates yet", body: "Reusable replies and itineraries for the messages sent most often will live here." %>
+</div>

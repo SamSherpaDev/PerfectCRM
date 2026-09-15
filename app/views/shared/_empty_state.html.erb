@@ -1,0 +1,10 @@
+<%# locals: (title:, body: nil, scene: nil) with optional block for an action.
+    An enso marks every empty state; `scene:` adds the area's drawing (:teahouse, :stupa, :wheel, :ridge). %>
+<div class="empty">
+  <% if local_assigns[:scene] %><%= sketch local_assigns[:scene], class: "sk scene" %><% end %>
+  <%= sketch :enso, class: "enso" %>
+  <p class="relative font-display text-lg text-ink"><%= title %></p>
+  <% if local_assigns[:body] %><p class="relative max-w-md text-sm muted"><%= local_assigns[:body] %></p><% end %>
+  <% action = yield if block_given? %>
+  <% if action.present? %><div class="relative mt-2"><%= action %></div><% end %>
+</div>

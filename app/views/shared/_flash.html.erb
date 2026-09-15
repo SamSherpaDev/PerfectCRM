@@ -1,0 +1,8 @@
+<% flash.each do |kind, message| %>
+  <% next if message.blank? %>
+  <% tone = kind.to_s == "alert" ? "alert" : (kind.to_s == "notice" ? "notice" : "info") %>
+  <p role="status" class="flash-<%= tone %>">
+    <%= render "shared/icon", name: (tone == "alert" ? :alert : :check), class: "mt-0.5 h-4 w-4 shrink-0" %>
+    <span><%= message %></span>
+  </p>
+<% end %>

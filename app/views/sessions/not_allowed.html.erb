@@ -1,0 +1,9 @@
+<% content_for :title, "Not allowed · PerfectCRM" %>
+<section class="card w-full max-w-md overflow-hidden p-8 sm:p-10">
+  <%= sketch :ridge, class: "sk hdr-ridge !-top-2 !max-w-[70%]" %>
+  <%= render "shared/logo", on_paper: true %>
+  <p class="eyebrow mt-10 text-bad">Not allowed</p>
+  <h1 class="display mt-2 text-3xl">This Google account is not allowed to access PerfectCRM.</h1>
+  <p class="mt-4 text-sm leading-relaxed muted">Only addresses on the allowlist can enter. Sign in with the captain's account instead.</p>
+  <%= link_to "Back to sign in", sign_in_path, class: "btn-secondary mt-8" %>
+</section>

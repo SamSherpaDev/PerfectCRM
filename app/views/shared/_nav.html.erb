@@ -1,0 +1,9 @@
+<%= nav_link "Today", root_path, icon: :dashboard, active: controller_name == "today" %>
+<%= nav_link "Inbox", inbox_path, icon: :list, active: controller_name == "inbox" %>
+<%= nav_link "Clients", clients_path, icon: :people, active: controller_name == "clients" %>
+<%= nav_link "Pipeline", pipeline_path, icon: :repeat, active: controller_name == "pipeline" %>
+<%= nav_link "Quotes", quotes_path, icon: :receipt, active: controller_name == "quotes" %>
+<%= nav_link "Templates", templates_path, icon: :sparkle, active: controller_name == "templates" %>
+
+<p class="nav-group"><span class="rail-label">Settings</span></p>
+<%= nav_link "Settings", edit_settings_path, icon: :settings, active: controller_name == "settings" %>

@@ -1,0 +1,43 @@
+test:
+  service: Disk
+  root: <%= Rails.root.join("tmp/storage") %>
+
+local:
+  service: Disk
+  root: <%= Rails.root.join("storage") %>
+
+# Use bin/rails credentials:edit to set the AWS secrets (as aws:access_key_id|secret_access_key)
+# amazon:
+#   service: S3
+#   access_key_id: <%= Rails.application.credentials.dig(:aws, :access_key_id) %>
+#   secret_access_key: <%= Rails.application.credentials.dig(:aws, :secret_access_key) %>
+#   region: us-east-1
+#   bucket: your_own_bucket-<%= Rails.env %>
+
+# Remember not to checkin your GCS keyfile to a repository
+# google:
+#   service: GCS
+#   project: your_project
+#   credentials: <%= Rails.root.join("path/to/gcs.keyfile") %>
+#   bucket: your_own_bucket-<%= Rails.env %>
+
+# mirror:
+#   service: Mirror
+#   primary: local
+#   mirrors: [ amazon, google, microsoft ]
+
+# Environment values are optional during asset compilation and local development.
+spaces:
+  service: S3
+  access_key_id: <%= ENV["SPACES_ACCESS_KEY_ID"] %>
+  secret_access_key: <%= ENV["SPACES_SECRET_ACCESS_KEY"] %>
+  region: <%= ENV["SPACES_REGION"] %>
+  bucket: <%= ENV["SPACES_BUCKET"] %>
+  endpoint: <%= ENV["SPACES_ENDPOINT"] %>
+  # Cloudflare R2 rejects a PUT that carries more than one non-default
+  # checksum. Active Storage sends Content-MD5 itself, so stop the AWS SDK
+  # from adding its own default CRC-based checksum (and from demanding
+  # checksummed responses R2 does not send). Passed through to
+  # Aws::S3::Client; requires aws-sdk-s3 >= 1.178.
+  request_checksum_calculation: when_required
+  response_checksum_validation: when_required

@@ -1,0 +1,19 @@
+<% content_for :title, "Sign in · PerfectCRM" %>
+<section class="card w-full max-w-md overflow-hidden p-8 sm:p-10">
+  <%= sketch :ridge, class: "sk hdr-ridge !-top-2 !max-w-[70%]" %>
+  <div class="relative">
+    <span class="flex h-16 w-16 items-center justify-center rounded-[14px] bg-ochre text-cream shadow-[0_12px_28px_-10px_rgba(201,111,26,0.8)]">
+      <%= sketch :mark, class: "h-9 w-9" %>
+    </span>
+    <p class="mt-8 font-display text-[17px] text-ink">PerfectCRM</p>
+    <p class="text-[10px] font-semibold uppercase tracking-[0.2em] text-ink-4">Sherpa Holidays</p>
+    <p class="eyebrow mt-8">Client relationships</p>
+    <h1 class="display mt-2 text-3xl leading-tight">Every client conversation,<br class="hidden sm:inline">one calm desk.</h1>
+    <p class="mt-4 text-sm leading-relaxed muted">Sign in with the Google account on the allowlist to follow up with travelers, quotes, and conversations.</p>
+    <%= button_to "/auth/google_oauth2", method: :post, data: { turbo: false }, class: "btn-primary mt-8 w-full py-3" do %>
+      <svg viewBox="0 0 24 24" class="h-4 w-4" aria-hidden="true"><path fill="currentColor" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.9h5.4a4.6 4.6 0 01-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.4z"/><path fill="currentColor" opacity=".8" d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0012 22z"/><path fill="currentColor" opacity=".6" d="M6.4 14a6 6 0 010-3.9V7.5H3.1a10 10 0 000 9L6.4 14z"/><path fill="currentColor" opacity=".9" d="M12 6c1.5 0 2.8.5 3.8 1.5l2.8-2.8A10 10 0 003.1 7.5L6.4 10c.8-2.3 3-4 5.6-4z"/></svg>
+      Sign in with Google
+    <% end %>
+    <p class="mt-6 text-center text-xs muted">Single-user access · perfectcrm.sherpaholidays.com</p>
+  </div>
+</section>

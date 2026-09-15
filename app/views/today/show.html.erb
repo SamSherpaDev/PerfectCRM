@@ -1,0 +1,7 @@
+<% content_for :title, "Today · PerfectCRM" %>
+<div class="page">
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Sherpa Holidays", title: "Today", subtitle: "Welcome, #{current_user.name.presence || current_user.email}. The day's follow-ups at a glance." } do %><% end %>
+  <%= render "shared/flash" %>
+
+  <%= render "shared/empty_state", title: "A clear desk, for now", body: "Today's follow-ups, departures to watch, and open threads will gather here each morning.", scene: :ridge %>
+</div>

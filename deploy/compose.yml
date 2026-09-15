@@ -1,0 +1,44 @@
+services:
+  # Production app: image is built in CI and pulled, never built on the box.
+  # Tag is pinned per deploy with IMAGE_TAG (a commit SHA); latest = last green main.
+  # The system Caddy in /opt/apps/caddy routes to this container over the
+  # shared "apps" network, so nothing here publishes ports.
+  app:
+    image: ghcr.io/samsherpadev/perfectcrm:${IMAGE_TAG:-latest}
+    container_name: perfectcrm-app
+    restart: unless-stopped
+    env_file:
+      - .env.app
+    environment:
+      RAILS_ENV: production
+      SOLID_QUEUE_IN_PUMA: "true"
+    expose:
+      - "80"
+    volumes:
+      - storage:/rails/storage
+    networks:
+      - apps
+
+  # Litestream sees only the backup-bucket credentials, never attachments or app secrets.
+  litestream:
+    image: litestream/litestream:0.5.9
+    user: "1000:1000"
+    restart: unless-stopped
+    command: [replicate, -config, /etc/litestream.yml]
+    env_file:
+      - .env.litestream
+    volumes:
+      - storage:/rails/storage
+      - ./litestream.yml:/etc/litestream.yml:ro
+    networks:
+      - apps
+    depends_on:
+      app:
+        condition: service_healthy
+
+networks:
+  apps:
+    external: true
+
+volumes:
+  storage:

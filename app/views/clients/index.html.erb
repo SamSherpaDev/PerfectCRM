@@ -1,0 +1,7 @@
+<% content_for :title, "Clients · PerfectCRM" %>
+<div class="page">
+  <%= render layout: "shared/page_header", locals: { eyebrow: "People", title: "Clients", subtitle: "Travelers, past guests, and leads with their trips and preferences." } do %><% end %>
+  <%= render "shared/flash" %>
+
+  <%= render "shared/empty_state", title: "No clients yet", body: "Travelers, past guests, and leads will live here with their trips, preferences, and history.", scene: :stupa %>
+</div>

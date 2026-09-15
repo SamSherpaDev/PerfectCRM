@@ -1,0 +1,11 @@
+<%# locals: (compact: false, on_paper: false)
+    The prayer wheel is the mark (docs/DESIGN.md 9.9): cream line drawing on the ochre tile. %>
+<span class="flex items-center gap-3">
+  <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-ochre text-cream shadow-[0_8px_20px_-8px_rgba(201,111,26,0.8)]">
+    <%= sketch :mark, class: "h-5 w-5" %>
+  </span>
+  <span class="rail-label leading-tight">
+    <span class="block font-display text-[17px] <%= local_assigns[:on_paper] ? 'text-ink' : 'text-cream' %>">PerfectCRM</span>
+    <% unless local_assigns[:compact] %><span class="block text-[10px] font-semibold uppercase tracking-[0.2em] <%= local_assigns[:on_paper] ? 'text-ink-4' : 'text-cream/45' %>">Sherpa Holidays</span><% end %>
+  </span>
+</span>
