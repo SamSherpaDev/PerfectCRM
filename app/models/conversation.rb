@@ -86,6 +86,7 @@ class Conversation < ApplicationRecord
   # call rebuilds it.
   def expire_ai_caches!
     update_columns(ai_summary: nil, ai_summary_at: nil,
+      ai_triage: nil, ai_triage_reason: nil, ai_triage_suggested_source: nil, ai_triage_at: nil,
       ai_suggestion_title: nil, ai_suggestion_due_on: nil,
       ai_suggestion_reason: nil, ai_suggestion_at: nil)
   end

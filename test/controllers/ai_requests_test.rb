@@ -312,4 +312,65 @@ class AiRequestsTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "HTML identity blocks stay redacted in all AI thread inputs" do
+    [ "<div>Date of birth</div><div>14 May 1990</div>",
+      "<p>Date of <strong>birth</strong><br>14 May 1990</p>",
+      "<table><tr><td>Date of birth</td><td>14 May 1990</td></tr></table>",
+      "<div>Date of birth</div><div>14&nbsp;May&nbsp;1990</div>" ].each do |html|
+      @conversation.messages.delete_all
+      @conversation.messages.create!(direction: "in", html_body: html + "<p>Everest in October</p>")
+      captured = []
+      adapter = Object.new
+      adapter.define_singleton_method(:chat) do |**args|
+        captured << args[:messages].first[:content]
+        { text: '{"category":"new_inquiry","reason":"Trip request"}', input_tokens: 1, output_tokens: 1 }
+      end
+      Ai::Client.stub(:build_adapter, adapter) do
+        [ ai_conversation_draft_path(@conversation), ai_conversation_summary_path(@conversation),
+          ai_conversation_triage_path(@conversation) ].each do |path|
+          post path, headers: { "Accept" => "text/vnd.turbo-stream.html" }
+          assert_response :success
+          assert_no_match /1990/, AiCall.last.request_redacted
+        end
+      end
+      assert_equal 3, captured.size
+      captured.each do |input|
+        assert_no_match /1990/, input
+        assert_includes input, "[redacted]"
+        assert_includes input, "Everest in October"
+      end
+    end
+  end
+
+  test "new mail clears triage and offers classification again" do
+    @conversation.update!(linkable: nil)
+    stub_adapter('{"category":"other","reason":"Ambiguous","suggested_source":"email"}') do
+      post ai_conversation_triage_path(@conversation), headers: { "Accept" => "text/vnd.turbo-stream.html" }
+    end
+    assert_equal "other", @conversation.reload.ai_triage
+    @conversation.messages.create!(direction: "in", text_body: "I want an Everest trip")
+    assert_nil @conversation.reload.ai_triage
+    assert_nil @conversation.ai_triage_reason
+    assert_nil @conversation.ai_triage_suggested_source
+    assert_nil @conversation.ai_triage_at
+    get inbox_thread_path(@conversation)
+    assert_select "form[action=?]", ai_conversation_triage_path(@conversation)
+  end
+
+  test "new mail prevents in-flight triage from publishing stale classification" do
+    thread = @conversation
+    adapter = Object.new
+    adapter.define_singleton_method(:chat) do |**_args|
+      thread.messages.create!(direction: "in", text_body: "I want an Everest trip")
+      { text: '{"category":"other","reason":"Ambiguous"}', input_tokens: 1, output_tokens: 1 }
+    end
+    Ai::Client.stub(:build_adapter, adapter) do
+      post ai_conversation_triage_path(@conversation), headers: { "Accept" => "text/vnd.turbo-stream.html" }
+    end
+    assert_response :success
+    assert_nil @conversation.reload.ai_triage
+    assert_nil @conversation.ai_triage_at
+    assert_match "Classify with AI", response.body
+  end
+
 end

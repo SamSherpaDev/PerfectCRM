@@ -9,10 +9,10 @@ module Ai
     SOURCES = %w[google_ads meta_ads website_form email referral manual].freeze
 
     def self.call(conversation)
+      message_ids = conversation.messages.reorder(:id).pluck(:id)
       latest = conversation.messages.inbound.reorder(sent_at: :desc, id: :desc).limit(6).to_a.reverse
       thread = latest.map do |message|
-        body = Scrub.scrub(message.text_body.presence ||
-          ActionView::Base.full_sanitizer.sanitize(message.html_body.to_s).squish)
+        body = Context.message_body(message)
         "#{message.from_address}: #{body.truncate(800)}"
       end.join("\n\n")
       from = latest.last&.from_address.to_s
@@ -26,8 +26,12 @@ module Ai
       parsed = parse(result.text)
       return Client::Result.new(text: "", status: :error, ai_call: result.ai_call) if parsed.nil?
 
-      conversation.update_columns(ai_triage: parsed[:category], ai_triage_reason: parsed[:reason],
-        ai_triage_suggested_source: parsed[:source], ai_triage_at: Time.current)
+      conversation.with_lock do
+        if conversation.messages.reorder(:id).pluck(:id) == message_ids
+          conversation.update_columns(ai_triage: parsed[:category], ai_triage_reason: parsed[:reason],
+            ai_triage_suggested_source: parsed[:source], ai_triage_at: Time.current)
+        end
+      end
       Client::Result.new(text: parsed[:category], status: :ok, ai_call: result.ai_call)
     end
 

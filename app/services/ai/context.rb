@@ -13,10 +13,15 @@ module Ai
       conversation.messages.reorder(sent_at: :desc, id: :desc).limit(THREAD_LIMIT).to_a.reverse.map do |message|
         who = message.direction == "in" ? "Client" : "Captain"
         date = message.sent_at ? message.sent_at.strftime("%b %-d") : "undated"
-        body = Scrub.scrub(message.text_body.presence ||
-          ActionView::Base.full_sanitizer.sanitize(message.html_body.to_s).squish)
+        body = message_body(message)
         "#{who} (#{date}): #{body.truncate(BODY_LIMIT)}"
       end.join("\n\n")
+    end
+
+    def self.message_body(message)
+      text = message.text_body.presence ||
+        Loofah.html5_fragment(message.html_body.to_s).scrub!(:prune).to_text(encode_special_chars: false).squish
+      Scrub.scrub(text)
     end
 
     def self.client_facts(record)
