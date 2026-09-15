@@ -101,14 +101,22 @@ class Lead < ApplicationRecord
     converted?
   end
 
-  # One-way, manual conversion. Copies facts, people, tags, notes and
-  # activity onto a new Client, links forward, and freezes the lead.
-  # Raises when already converted. Never reverses.
-  def convert_to_client!
+  def matching_client
+    by_perfectbook = Client.find_by(perfectbook_contact_id: perfectbook_contact_id) if perfectbook_contact_id.present?
+    by_perfectbook || (Client.find_by(email: email.to_s.strip.downcase) if email.present?)
+  end
+
+  def convert_to_client!(expected_client_id: nil)
     with_lock do
       raise ActiveRecord::RecordInvalid, self if converted?
 
-      new_client = Client.create!(
+      client = matching_client
+      if expected_client_id && expected_client_id.to_s != (client&.id&.to_s || "new")
+        errors.add(:base, "The matching client changed. Review the conversion again.")
+        raise ActiveRecord::RecordInvalid, self
+      end
+      returning = client.present?
+      client ||= Client.create!(
         name: name,
         email: email,
         phone: phone,
@@ -121,16 +129,17 @@ class Lead < ApplicationRecord
         perfectbook_contact_id: perfectbook_contact_id
       )
       people.find_each do |person|
-        new_client.people.create!(
+        next if person.email.present? && client.people.exists?(email: person.email)
+
+        client.people.create!(
           name: person.name, email: person.email, phone: person.phone, role: person.role
         )
       end
-      new_client.tag_list = tag_list
-      new_client.save! if new_client.tag_list.present?
+      client.tags |= tags.to_a
       note_ids = {}
       ActivityEvent.suppress do
         notes.find_each do |note|
-          copied_note = Note.create!(notable: new_client, body: note.body, author: note.author, created_at: note.created_at)
+          copied_note = Note.create!(notable: client, body: note.body, author: note.author, created_at: note.created_at)
           note_ids[note.id] = copied_note.id
         end
       end
@@ -138,23 +147,24 @@ class Lead < ApplicationRecord
         metadata = (event.metadata || {}).merge("from_lead_id" => id)
         metadata["note_id"] = note_ids.fetch(metadata["note_id"]) if note_ids.key?(metadata["note_id"])
         ActivityEvent.create!(
-          subject: new_client, kind: event.kind, summary: event.summary,
+          subject: client, kind: event.kind, summary: event.summary,
           occurred_at: event.occurred_at, metadata: metadata
         )
       end
-      update!(converted_client: new_client, converted_at: Time.current)
+      update!(converted_client: client, converted_at: Time.current)
       ActivityEvent.create!(
         subject: self, kind: "conversion", summary: "Converted to client",
-        occurred_at: Time.current, metadata: { "client_id" => new_client.id }
+        occurred_at: Time.current, metadata: { "client_id" => client.id }
       )
       ActivityEvent.create!(
-        subject: new_client, kind: "conversion", summary: "Started as a lead",
+        subject: client, kind: "conversion",
+        summary: returning ? "Returned as a lead from #{source.humanize}" : "Started as a lead",
         occurred_at: Time.current,
         metadata: { "lead_id" => id, "source" => source, "campaign" => campaign_name }
       )
-      new_client.touch_activity!
-      new_client.sync_fts!
-      new_client
+      client.touch_activity!
+      client.sync_fts!
+      client
     end
   end
 

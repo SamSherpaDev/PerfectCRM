@@ -32,6 +32,7 @@ class LeadsController < ApplicationController
   end
 
   def show
+    @matching_client = @lead.matching_client unless @lead.converted?
     @note = Note.new
     load_record_history(@lead)
   end
@@ -68,7 +69,7 @@ class LeadsController < ApplicationController
     if @lead.converted?
       return redirect_to @lead, alert: "Already converted."
     end
-    client = @lead.convert_to_client!
+    client = @lead.convert_to_client!(expected_client_id: params[:expected_client_id])
     redirect_to client, notice: "Lead converted. Their timeline moved with them."
   rescue ActiveRecord::RecordInvalid => e
     redirect_to @lead, alert: e.record.errors.full_messages.to_sentence.presence || "Could not convert."
