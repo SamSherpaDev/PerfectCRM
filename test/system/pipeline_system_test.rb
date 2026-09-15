@@ -1,4 +1,5 @@
 require "application_system_test_case"
+require_relative "../../db/migrate/20260914211507_backfill_lead_stage_changed_at"
 require_relative "../support/google_sign_in_test_helper"
 
 # The pipeline board on desktop and the stage list on the phone: move a
@@ -143,10 +144,10 @@ class PipelineSystemTest < ApplicationSystemTestCase
   test "missing lost reason preserves the submitted form" do
     lead = Lead.create!(name: "Original traveler")
     visit edit_lead_path(lead)
-    fill_in "Name", with: "Edited traveler"
+    fill_in "lead_name", with: "Edited traveler"
     select "Lost", from: "Status"
     click_button "Save changes"
-    assert_field "Name", with: "Edited traveler"
+    assert_field "lead_name", with: "Edited traveler"
     assert_selector "select option:checked", text: "Lost"
     assert_equal "Original traveler", lead.reload.name
     assert_equal "new", lead.status
@@ -191,6 +192,37 @@ class PipelineSystemTest < ApplicationSystemTestCase
     click_button "Filter"
     assert_selector "article.kcard", text: "Website traveler"
     assert_no_selector "article.kcard", text: "Returning traveler"
+  end
+
+  test "editing a migrated lead preserves its time in stage" do
+    lead = Lead.create!(name: "Older inquiry")
+    previous_update = 8.days.ago.change(usec: 0)
+    lead.update_columns(stage_changed_at: nil, updated_at: previous_update)
+    tracked = Lead.create!(name: "Tracked inquiry", stage_changed_at: 3.days.ago.change(usec: 0))
+    tracked_stage_time = tracked.stage_changed_at
+    BackfillLeadStageChangedAt.new.migrate(:up)
+    assert_equal previous_update, lead.reload.stage_changed_at
+    assert_equal previous_update, lead.updated_at
+    assert_equal tracked_stage_time, tracked.reload.stage_changed_at
+    page.current_window.resize_to(1400, 900)
+    visit pipeline_path
+    within "article.kcard", text: lead.name do
+      assert_text "8d in stage"
+    end
+    visit edit_lead_path(lead)
+    fill_in "lead_name", with: "Renamed inquiry"
+    click_button "Save changes"
+    assert_text "Lead saved."
+    visit pipeline_path
+    within "article.kcard", text: "Renamed inquiry" do
+      assert_text "8d in stage"
+      find("summary", text: "Move").click
+      click_link "Chatting"
+    end
+    assert_text "Moved to Chatting."
+    within "article.kcard", text: "Renamed inquiry" do
+      assert_text "New in stage"
+    end
   end
 
   private
