@@ -1,0 +1,10 @@
+<% if page > 1 || older %>
+  <nav class="mt-4 flex flex-wrap gap-3" aria-label="<%= label.capitalize %> pages">
+    <% if page > 1 %>
+      <%= link_to "Newer #{label}", polymorphic_path(record, notes_page: @notes_page, events_page: @events_page, parameter => page - 1, anchor: anchor), class: "btn-ghost btn btn-sm" %>
+    <% end %>
+    <% if older %>
+      <%= link_to "Older #{label}", polymorphic_path(record, notes_page: @notes_page, events_page: @events_page, parameter => page + 1, anchor: anchor), class: "btn-ghost btn btn-sm" %>
+    <% end %>
+  </nav>
+<% end %>

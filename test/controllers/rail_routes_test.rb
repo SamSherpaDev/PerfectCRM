@@ -7,6 +7,7 @@ class RailRoutesTest < ActionDispatch::IntegrationTest
   ROUTES = {
     "/" => "Today",
     "/inbox" => "Inbox",
+    "/leads" => "Leads",
     "/clients" => "Clients",
     "/pipeline" => "Pipeline",
     "/quotes" => "Quotes",

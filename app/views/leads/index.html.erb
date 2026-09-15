@@ -1,0 +1,82 @@
+<% content_for :title, "Leads · PerfectCRM" %>
+<div class="page">
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Pipeline", title: "Leads", subtitle: "Everyone who asked and has not booked yet. Convert once, never back." } do %>
+    <%= link_to "New lead", new_lead_path, class: "btn-primary btn" %>
+  <% end %>
+  <%= render "shared/flash" %>
+
+  <%= form_with url: leads_path, method: :get, data: { turbo_frame: "_top" }, class: "card card-pad" do |form| %>
+    <%= hidden_field_tag :tab, @tab %>
+    <label class="label" for="lead-search">Search leads</label>
+    <div class="flex flex-col gap-2 sm:flex-row">
+      <div class="relative flex-1">
+        <%= render "shared/icon", name: :search, class: "pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-4" %>
+        <%= search_field_tag :q, @query, id: "lead-search", placeholder: "Search name, email, campaign, or note…", autocomplete: "off", class: "input pl-9" %>
+      </div>
+      <%= select_tag :sort, options_for_select([ [ "Last activity", "activity" ], [ "Best fit", "fit" ], [ "Name", "name" ], [ "Newest", "newest" ] ], @sort), class: "select sm:w-40", aria_label: "Sort", onchange: "this.form.requestSubmit()" %>
+      <%= submit_tag "Search", class: "btn-secondary btn" %>
+    </div>
+    <p class="hint">Searches names, emails, campaigns, tags, and note text.</p>
+  <% end %>
+
+  <nav class="tabs" aria-label="Lead stages">
+    <%= tab_link "New", leads_path(tab: "new", q: @query, sort: @sort), icon: :plus, active: @tab == "new", count: @counts["new"] %>
+    <%= tab_link "Chatting", leads_path(tab: "chatting", q: @query, sort: @sort), icon: :list, active: @tab == "chatting", count: @counts["chatting"] %>
+    <%= tab_link "Quoted", leads_path(tab: "quoted", q: @query, sort: @sort), icon: :receipt, active: @tab == "quoted", count: @counts["quoted"] %>
+    <%= tab_link "Nudged", leads_path(tab: "nudged", q: @query, sort: @sort), icon: :alert, active: @tab == "nudged", count: @counts["nudged"] %>
+    <%= tab_link "Lost", leads_path(tab: "lost", q: @query, sort: @sort), icon: :archive, active: @tab == "lost", count: @counts["lost"] %>
+    <%= tab_link "Converted", leads_path(tab: "converted", q: @query, sort: @sort), icon: :check, active: @tab == "converted", count: @counts["converted"] %>
+  </nav>
+
+  <section class="card" aria-labelledby="leads-heading">
+    <div class="card-header">
+      <h2 class="card-title" id="leads-heading"><%= @tab.humanize %></h2>
+    </div>
+    <%= card_caption(@tab == "converted" ? "Leads that became clients. Read-only, kept for memory." : "Best fit first. Tap a lead to see the full story.") %>
+    <% if @leads.any? %>
+      <ul class="divide-y divide-rule-2">
+        <% @leads.each do |lead| %>
+          <li class="flex flex-col gap-2 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-7">
+            <div class="min-w-0">
+              <%= link_to lead.name, lead_path(lead), class: "link font-medium" %>
+              <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs muted">
+                <span class="src inline-flex items-center gap-1.5">
+                  <%= render "shared/icon", name: lead_source_icon(lead.source), class: "h-3.5 w-3.5" %>
+                  <%= lead_source_label(lead) %>
+                </span>
+                <% if lead.fit_score.present? || lead.fit_band.present? %>
+                  <span class="fit inline-flex items-center gap-2">
+                    <span class="bar <%= lead_fit_bar_class(lead.fit_band) %>" aria-hidden="true"><span class="bar-fill" style="width: <%= lead.fit_score.to_i %>%"></span></span>
+                    <span><%= lead.fit_label %></span>
+                  </span>
+                <% else %>
+                  <%= badge "Scoring", :info, dot: true %>
+                <% end %>
+                <%= status_badge(lead.converted? ? "converted" : lead.status) %>
+                <% lead.tags.each do |tag| %>
+                  <%= badge tag.name, :brand %>
+                <% end %>
+              </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs muted sm:justify-end">
+              <span>Active <%= date_short(lead.last_activity) %></span>
+              <% if lead.converted_client %>
+                <%= link_to "Open client", client_path(lead.converted_client), class: "link-quiet" %>
+              <% end %>
+            </div>
+          </li>
+        <% end %>
+      </ul>
+    <% else %>
+      <% if @query.present? %>
+        <%= render "shared/empty_state", title: "No matches", body: "Nothing matches that search. Try a name fragment or a campaign.", scene: :stupa %>
+      <% elsif @tab == "converted" %>
+        <%= render "shared/empty_state", title: "No conversions yet", body: "Converted leads stay here with a link forward to their client.", scene: :stupa %>
+      <% else %>
+        <%= render "shared/empty_state", title: "No leads here", body: "New asks from ads, the website, and email will gather here for scoring.", scene: :stupa do %>
+          <%= link_to "Add your first lead", new_lead_path, class: "btn-primary btn btn-sm" %>
+        <% end %>
+      <% end %>
+    <% end %>
+  </section>
+</div>

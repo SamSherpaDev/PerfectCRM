@@ -1,0 +1,121 @@
+<% content_for :title, "#{@organization.name} · PerfectCRM" %>
+<div class="page">
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Organization", title: @organization.name, subtitle: @organization.email || @organization.kind.humanize, back: [ "Clients", clients_path(tab: "organizations") ] } do %>
+    <%= link_to "Edit", edit_organization_path(@organization), class: "btn-secondary btn btn-sm" %>
+    <% if @organization.perfectbook_contact_id.present? %>
+      <%= link_to "Open in PerfectBook", perfectbook_contact_url(@organization.perfectbook_contact_id), class: "btn-ghost btn btn-sm", target: "_blank", rel: "noopener" %>
+    <% end %>
+  <% end %>
+  <%= render "shared/flash" %>
+
+  <section class="card card-pad" aria-labelledby="facts-heading">
+    <div class="card-header">
+      <h2 class="card-title" id="facts-heading">Facts</h2>
+    </div>
+    <%= card_caption "How to reach this organization and what they do." %>
+    <dl class="facts mt-2">
+      <div>
+        <dt>Kind</dt>
+        <dd><%= @organization.kind.humanize %></dd>
+      </div>
+      <div>
+        <dt>Email</dt>
+        <dd><%= @organization.email.presence || "—" %></dd>
+      </div>
+      <div>
+        <dt>Phone</dt>
+        <dd><%= @organization.phone.presence || "—" %></dd>
+      </div>
+      <div>
+        <dt>Country</dt>
+        <dd><%= @organization.country.presence || "—" %></dd>
+      </div>
+      <div>
+        <dt>Website</dt>
+        <dd><%= external_website_link(@organization.website) %></dd>
+      </div>
+    </dl>
+    <% if @organization.tags.any? %>
+      <div class="mt-4 flex flex-wrap gap-1.5" aria-label="Tags">
+        <% @organization.tags.each do |tag| %>
+          <%= badge tag.name, :brand %>
+        <% end %>
+      </div>
+    <% end %>
+  </section>
+
+  <section class="card card-pad" aria-labelledby="referred-heading">
+    <div class="card-header">
+      <h2 class="card-title" id="referred-heading">Referred clients</h2>
+    </div>
+    <%= card_caption "Travelers this organization sent. Commissions stay in PerfectBook." %>
+    <% if @referred_clients.any? %>
+      <ul class="mt-2 divide-y divide-rule-2">
+        <% @referred_clients.each do |client| %>
+          <li class="flex items-center justify-between gap-3 py-2.5">
+            <%= link_to client.name, client_path(client), class: "link" %>
+            <span class="text-xs muted"><%= date_short(client.last_activity) %></span>
+          </li>
+        <% end %>
+      </ul>
+    <% else %>
+      <div class="empty-inline">
+        <%= sketch :enso, class: "enso" %>
+        <p class="text-sm text-ink">No referrals yet.</p>
+        <p class="text-xs muted">Clients tagged with this referrer will gather here.</p>
+      </div>
+    <% end %>
+  </section>
+
+  <section class="card card-pad" aria-labelledby="notes-heading">
+    <div class="card-header">
+      <h2 class="card-title" id="notes-heading">Notes</h2>
+    </div>
+    <%= card_caption "What you know that email does not say. Only you see these." %>
+    <%= form_with model: [ @organization, @note ], url: organization_notes_path(@organization), class: "mt-3" do |form| %>
+      <%= form.label :body, "Add a note", class: "label" %>
+      <%= form.text_area :body, rows: 3, required: true, class: "textarea", placeholder: "Met at the trade show, follows up in May…" %>
+      <div class="mt-2">
+        <%= form.submit "Save note", class: "btn-primary btn btn-sm" %>
+      </div>
+    <% end %>
+    <% if @notes.any? %>
+      <ul class="mt-4 space-y-4">
+        <% @notes.each do |note| %>
+          <li class="border-t border-rule-2 pt-3">
+            <p class="text-sm text-ink-2 whitespace-pre-line"><%= note.body %></p>
+            <p class="mt-1 text-xs muted"><%= date_short(note.created_at) %></p>
+          </li>
+        <% end %>
+      </ul>
+    <% end %>
+    <%= render "shared/history_pagination", record: @organization, page: @notes_page, older: @older_notes, parameter: :notes_page, label: "notes", anchor: "notes-heading" %>
+  </section>
+
+  <section class="card card-pad" aria-labelledby="timeline-heading">
+    <div class="card-header">
+      <h2 class="card-title" id="timeline-heading">Timeline</h2>
+    </div>
+    <%= card_caption "Every conversation, note, and change in one scroll, newest first." %>
+    <% if @events.any? %>
+      <ol class="mt-2 space-y-3">
+        <% @events.each do |event| %>
+          <li class="flex items-start gap-3">
+            <%= status_badge event.kind %>
+            <div class="min-w-0">
+              <p class="text-sm text-ink"><%= event.summary %></p>
+              <p class="text-xs muted"><%= time_ago_in_words(event.occurred_at) %> ago</p>
+            </div>
+          </li>
+        <% end %>
+      </ol>
+    <% else %>
+      <div class="empty-inline">
+        <%= sketch :enso, class: "enso" %>
+        <p class="text-sm text-ink">No activity yet.</p>
+        <p class="text-xs muted">Conversations will appear here once mail is connected.</p>
+      </div>
+    <% end %>
+    <%= render "shared/history_pagination", record: @organization, page: @events_page, older: @older_events, parameter: :events_page, label: "activity", anchor: "timeline-heading" %>
+  </section>
+</div>

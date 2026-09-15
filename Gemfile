@@ -80,3 +80,6 @@ gem "googleauth", require: "googleauth/id_tokens"
 
 # CSV imports (Ruby 3.4 no longer defaults the csv gem).
 gem "csv"
+
+# Packages CSV exports in a zip archive.
+gem "rubyzip", require: "zip"

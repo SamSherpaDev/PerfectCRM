@@ -18,9 +18,10 @@ class MobileShellTest < ApplicationSystemTestCase
     page.current_window.resize_to(390, 844)
     click_button "Open menu"
     assert_selector "nav[aria-label=Primary] a", text: "Inbox"
+    assert_selector "nav[aria-label=Primary] a", text: "Leads"
     assert_selector "nav[aria-label=Primary] a", text: "Settings"
     click_button "Close menu"
-    [ "/", "/inbox", "/clients", "/pipeline", "/quotes", "/templates", "/settings/edit" ].each do |path|
+    [ "/", "/inbox", "/leads", "/clients", "/pipeline", "/quotes", "/templates", "/settings/edit" ].each do |path|
       visit path
       width = page.evaluate_script("document.documentElement.scrollWidth")
       assert_operator width, :<=, 390, "#{path} overflows a 390px viewport (#{width}px)"

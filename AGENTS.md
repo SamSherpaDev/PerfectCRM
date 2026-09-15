@@ -23,6 +23,15 @@ When updating this file, preserve this bar for all agents and keep entries conci
 - Timezone `America/Los_Angeles` (`config/application.rb`).
 - Appearance behavior and authentication policy: see README.md, "Navigation"
   and "Google sign-in". Preserve instant appearance changes.
+- Client and lead usage: see README.md, "Clients" and "Leads"; conversion
+  lives in `Lead#convert_to_client!`, person ownership in `Person`, and
+  nested email reassignment in `NestedPeople`.
+- Search uses the models' `*.search` APIs; `ensure_fts!` recreates missing
+  FTS tables because `schema.rb` does not dump virtual tables. It does not
+  repopulate existing records; `sync_fts!` indexes each record.
+- `TaggedRecord` validates pending tags before saving and assigns them in
+  `after_save`; assigning through-tags before the parent saves trips
+  Tagging uniqueness.
 - System-test Chrome here needs nix NSS libs on `LD_LIBRARY_PATH`; check
   driver startup output if `chromedriver` cannot start.
 - PerfectBook link: `PerfectBook::Client` (`lib/perfectbook/`) + mirror tables

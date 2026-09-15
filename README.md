@@ -10,8 +10,10 @@ at `perfectcrm.sherpaholidays.com` on the same VPS.
 PerfectBook stays the system of record for bookings, invoices, and money.
 The CRM owns people, conversations, quotes, tasks, and the pipeline, and
 reads PerfectBook through a small versioned, token-authenticated API (see
-"PerfectBook connection" below). The message-template library is available now; see
-[Templates](#templates).
+"PerfectBook connection" below). The client foundation currently supports leads,
+clients, organizations, people, notes, search, and export. The message-template
+library is also available; see [Templates](#templates). Sensitive traveler
+documents and date-of-birth data belong in PerfectBook; do not put them in CRM notes.
 
 Stack: Rails 8.1, Hotwire (Turbo, Stimulus, importmap), Tailwind v4, three
 SQLite databases (primary, cache, queue), Solid Queue running inside Puma,
@@ -45,10 +47,10 @@ configuration lives in `config/environments/development.rb`.
 
 On desktop, hover or focus the icon rail to reveal navigation labels and Sign
 out. On mobile, use Open menu to show the drawer. The rail holds **Today**
-(root), **Inbox**, **Clients**, **Pipeline**, **Quotes**, **Templates**, and
-**Settings**. Inbox, Clients, Pipeline, and Quotes render branded empty
-states until their features land; Templates is live (see "Templates"
-below).
+(root), **Inbox**, **Leads**, **Clients**, **Pipeline**, **Quotes**, **Templates**, and
+**Settings**. Today, Inbox, Pipeline, and Quotes render branded empty states until
+their features land; Templates is live (see "Templates" below). Settings
+provides the appearance control and the export below.
 
 PerfectCRM defaults to **Paper**, the light Washi scheme. In **Settings →
 Appearance**, choose **Paper** or **Night** to apply the scheme immediately
@@ -155,6 +157,60 @@ bin/importmap audit
 shellcheck -S warning deploy/*.sh test/deploy/*.sh
 bash test/deploy/test_deploy.sh
 ```
+
+## Clients
+
+Clients own people, tags, notes, and the timeline later tasks fill in.
+Use New client to create a record, and Edit to update facts or add another
+person in the blank People fields. Archive moves a client to the Archived
+tab, where Restore makes it active again. The Organizations tab holds
+advisors, operators, and other companies, with their own notes and timeline.
+On client, lead, and organization pages, Older/Newer links beneath notes
+and timeline entries provide access to the full history.
+
+Search covers names, emails, phone tails, tags, and note text over SQLite
+FTS5 with an email-substring fallback; no external service. Each row links
+to PerfectBook when `perfectbook_contact_id` is set, via
+`PERFECTBOOK_BASE_URL` (default `https://perfectbook.sherpaholidays.com`).
+`/clients/by-perfectbook/:id` is PerfectBook's "Open in PerfectCRM"
+target; an unlinked contact opens a create form with its PerfectBook ID
+prefilled, without fetching contact details.
+
+Settings → Export everything downloads a zip containing leads, clients,
+people, organizations, notes, tags, tag assignments, and timeline events as
+CSV with a UTF-8 BOM. Cells beginning with `=`, `+`, `-`, or `@` receive a
+leading single quote to prevent spreadsheet formula execution, including
+phone numbers beginning with `+`.
+
+## Leads
+
+Leads are asks that have not booked yet; clients are everyone else.
+A lead carries source (`google_ads`, `meta_ads`, `website_form`, `email`,
+`referral`, `manual`), campaign, `external_ref` for n8n idempotency, Panda
+AI fit (`fit_score`, `fit_band`, `fit_reason`), and status (`new`,
+`chatting`, `quoted`, `nudged`, `lost`). Tabs are New, Chatting, Quoted,
+Nudged, Lost, and Converted. An email or PerfectBook contact ID can recur
+across lost or converted inquiries, but only one open lead (unconverted
+and not lost) can hold each identity. `external_ref` remains unique across
+all leads.
+
+Conversion is one-way and manual. Convert to client matches an existing
+client by PerfectBook contact ID first, then normalized primary email.
+The confirmation names a matched client before attaching the lead's
+people (deduplicated by email), tags, notes, and activity to them. Existing
+client facts stay intact; their timeline records Returned as a lead from
+the source, with the campaign in the event metadata. Multiple historical
+leads can link to the same client; conversion never merges two clients.
+Without a match, conversion creates a client with the lead's facts,
+including its exact source and campaign, and copies people and history.
+Only clients created by conversion show Started as a lead.
+Both paths link forward and freeze the lead read-only, with no reverse path.
+
+Fit labels and bar colors use the supplied fit band; the CRM does not
+derive a band from the numeric score. Edit lets you enter these fields
+manually and add another person in the blank People fields. The n8n/Panda
+AI integration and inbound API are future work; `external_ref` and timeline
+kind `automation` prepare for them without running automation today.
 
 ## Production shape
 

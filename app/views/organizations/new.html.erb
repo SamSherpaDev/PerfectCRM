@@ -1,0 +1,13 @@
+<% content_for :title, "New organization · PerfectCRM" %>
+<div class="page-narrow">
+  <%= render layout: "shared/page_header", locals: { eyebrow: "People", title: "New organization", subtitle: "An advisor, an operator, or another company you work with.", back: [ "Clients", clients_path(tab: "organizations") ] } do %><% end %>
+  <%= render "shared/flash" %>
+
+  <%= form_with model: @organization, class: "space-y-6" do |form| %>
+    <%= render "form", form: form %>
+    <div class="flex flex-wrap gap-2">
+      <%= form.submit "Save organization", class: "btn-primary btn" %>
+      <%= link_to "Cancel", clients_path(tab: "organizations"), class: "btn-ghost btn" %>
+    </div>
+  <% end %>
+</div>

@@ -1,0 +1,13 @@
+<% content_for :title, "New lead · PerfectCRM" %>
+<div class="page-narrow">
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Pipeline", title: "New lead", subtitle: "Start with a name and source. Scoring and campaign fill in from automation.", back: [ "Leads", leads_path ] } do %><% end %>
+  <%= render "shared/flash" %>
+
+  <%= form_with model: @lead, class: "space-y-6" do |form| %>
+    <%= render "form", form: form %>
+    <div class="flex flex-wrap gap-2">
+      <%= form.submit "Save lead", class: "btn-primary btn" %>
+      <%= link_to "Cancel", leads_path, class: "btn-ghost btn" %>
+    </div>
+  <% end %>
+</div>
