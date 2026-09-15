@@ -67,7 +67,8 @@ class QuotesController < ApplicationController
       end
     else
       @trips = PerfectBook::Catalog.new.active_trips
-      @departures = []
+      @trip = @trips.find_by(perfectbook_id: @quote.perfectbook_trip_id)
+      @departures = @trip ? PerfectBook::Catalog.new.departures_for_trip(@trip.perfectbook_id).limit(30) : []
       render :new, status: :unprocessable_entity
     end
   end
