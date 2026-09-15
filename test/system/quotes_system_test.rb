@@ -438,6 +438,21 @@ class QuotesSystemTest < ApplicationSystemTestCase
     assert_equal "captain", event.metadata["actor"]
   end
 
+  test "lost leads can open their booking document nudge" do
+    lead = Lead.create!(name: "Pasang", email: "pasang@example.com", perfectbook_contact_id: 7,
+      status: "lost", lost_reason: "other")
+    PerfectBook::Booking.create!(perfectbook_id: 11, perfectbook_contact_id: 7,
+      ref: "BK-11", status: "deposit_received", trip_name: "Everest trek",
+      start_date: Date.new(2027, 5, 4), end_date: Date.new(2027, 5, 18), synced_at: Time.current)
+
+    visit lead_path(lead)
+    click_link "Nudge for missing documents"
+    assert_field "To", with: "pasang@example.com"
+    body = find_field("Message").value
+    %w[Pasang Everest 2027 BK-11].each { |word| assert_includes body, word }
+    assert_no_selector "button", text: "Send"
+  end
+
   private
 
   def assert_no_overflow(context)
