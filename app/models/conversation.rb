@@ -120,8 +120,4 @@ class Conversation < ApplicationRecord
   def thread_parent
     messages.where.not(message_id: [ nil, "" ]).first
   end
-
-  def touch_activity!
-    update_column(:last_message_at, Time.current) if persisted?
-  end
 end

@@ -36,6 +36,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     click_button "Quick hello"
     assert_field "Subject", with: "Hi Maya"
     assert_field "Message", with: "Hello Maya, thinking of [missing: trip]!"
+    assert_equal 0, @template.reload.usage_count
     assert_includes find_field("Message").value, "[missing: trip]"
     assert_no_overflow("after insert")
     capture_outbound_evidence("mobile-template-reply")
@@ -45,6 +46,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     click_button "Save draft"
     assert_text "Draft saved", wait: 5
     assert_equal 0, Message.count
+    assert_equal 0, @template.reload.usage_count
 
     # The Send target stays thumb-sized on the phone.
     send_height = page.evaluate_script(
@@ -56,6 +58,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     click_button "Send"
     assert_text "Sending your reply", wait: 5
     assert_selector ".reply-ev", text: /Sending/
+    assert_equal 1, @template.reload.usage_count
     assert_no_overflow("after send")
     capture_outbound_evidence("mobile-reply-queued")
   end

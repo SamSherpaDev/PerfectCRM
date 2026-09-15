@@ -129,7 +129,6 @@ class Message < ApplicationRecord
     transaction do
       update!(status: "sent", sent_at: Time.current, send_error: nil)
       conversation&.refresh_counters!
-      conversation&.touch_activity!
       draft = Draft.find_by(id: submitted_draft_id)
       draft&.with_lock do
         draft.destroy! if draft.updated_at == submitted_draft_updated_at
