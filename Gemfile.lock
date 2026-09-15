@@ -499,6 +499,7 @@ DEPENDENCIES
   importmap-rails
   jbuilder
   json (< 3)
+  matrix
   minitest-mock
   omniauth-google-oauth2
   omniauth-rails_csrf_protection

@@ -82,6 +82,8 @@ gem "googleauth", require: "googleauth/id_tokens"
 gem "csv"
 
 # Quote PDFs attached to quote emails (Washi-styled, matching PerfectBook's invoice PDF).
+# Prawn 2.4 requires matrix but does not declare it as a dependency.
+gem "matrix"
 gem "prawn"
 gem "prawn-table"
 
