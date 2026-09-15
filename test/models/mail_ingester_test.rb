@@ -171,4 +171,14 @@ class MailIngesterTest < ActiveSupport::TestCase
     assert Conversation.needs_triage.exists?(result[:conversation].id)
   end
 
+  test "single part legacy charset text and HTML are converted to UTF-8" do
+    %w[plain html].each do |type|
+      raw = "From: accent@example.com\r\nTo: info@sherpaholidays.com\r\nMessage-ID: <accent-#{type}@test>\r\nContent-Type: text/#{type}; charset=ISO-8859-1\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nAndr=E9"
+      result = ingest_raw(raw)
+      body = type == "html" ? result[:message].reload.html_body : result[:message].reload.text_body
+      assert_equal "André", body
+      assert body.valid_encoding?
+    end
+  end
+
 end

@@ -11,7 +11,6 @@ class MailImportsController < ApplicationController
     @import = MailImport.new(import_params)
     @import.status = "draft"
     if @import.save
-      @import.update!(since_date: @import.cutoff_date) if @import.scope == "last_n_months"
       Mail::PreviewJob.perform_later(@import.id)
       redirect_to preview_mail_import_path(@import), status: :see_other
     else

@@ -49,4 +49,19 @@ class TriageRequestsTest < ActionDispatch::IntegrationTest
       post make_organization_conversation_path(conversation2)
     end
   end
+  test "manual lead choices resolve converted leads to their client" do
+    lead = Lead.create!(name: "Converted", email: "converted-triage@example.com", source: "email")
+    client = lead.convert_to_client!
+    conversation = triage_conversation(sender: lead.email)
+    assert_no_difference("Lead.count") { post make_lead_conversation_path(conversation) }
+    assert_equal client, conversation.reload.linkable
+    assert_equal client, EmailIdentity.find_for(lead.email).linkable
+    assert_redirected_to client_path(client)
+
+    other = triage_conversation(sender: "another-triage@example.com")
+    post link_conversation_path(other), params: { linkable_type: "Lead", linkable_id: lead.id }
+    assert_equal client, other.reload.linkable
+    assert_equal client, EmailIdentity.find_for("another-triage@example.com").linkable
+  end
+
 end

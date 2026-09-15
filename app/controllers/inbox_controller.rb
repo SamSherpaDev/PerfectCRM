@@ -4,7 +4,8 @@ class InboxController < ApplicationController
   def index
     @tab = TABS.include?(params[:tab].to_s) ? params[:tab].to_s : "waiting"
     base = Conversation.where(ignored: false).ordered.includes(:linkable, messages: { files_attachments: :blob })
-    @waiting_count = base.merge(Conversation.waiting_on_you).count
+    waiting = base.merge(Conversation.waiting_on_you).linked
+    @waiting_count = waiting.count
     @waiting_them_count = base.where.not(id: Conversation.waiting_on_you.select(:id))
       .where.not(linkable_type: nil).count
     @all_count = base.count
@@ -12,7 +13,7 @@ class InboxController < ApplicationController
 
     @conversations = case @tab
     when "waiting"
-      base.merge(Conversation.waiting_on_you).where.not(linkable_type: nil)
+      waiting
     when "waiting_them"
       base.where.not(id: Conversation.waiting_on_you.select(:id)).where.not(linkable_type: nil)
     when "triage"

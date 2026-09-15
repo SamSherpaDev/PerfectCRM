@@ -93,4 +93,13 @@ class InboxRequestsTest < ActionDispatch::IntegrationTest
     assert_select "button", text: "Remove from CRM, collect in PerfectBook"
   end
 
+  test "waiting count excludes unknown senders just like the list" do
+    conversation = Conversation.create!(subject: "Unknown waiting")
+    conversation.messages.create!(direction: "in", from_address: "unknown-count@example.com", sent_at: Time.current)
+    get inbox_path(tab: "waiting")
+    assert_response :success
+    assert_select "nav.tabs a[href=?]", inbox_path(tab: "waiting"), text: /Waiting on you.*0/m
+    assert_select "a", text: "Unknown waiting", count: 0
+  end
+
 end

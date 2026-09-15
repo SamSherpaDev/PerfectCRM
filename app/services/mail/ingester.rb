@@ -84,9 +84,9 @@ module Mail
         end
       else
         if mail.mime_type == "text/html"
-          html_body = mail.body.decoded.to_s
+          html_body = mail.decoded.to_s
         else
-          text_body = mail.body.decoded.to_s
+          text_body = mail.decoded.to_s
         end
       end
       Parsed.new(

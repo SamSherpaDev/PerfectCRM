@@ -61,4 +61,27 @@ class MailImportJobTest < ActiveSupport::TestCase
     assert_equal 3, import.reload.processed_messages
   end
 
+  test "every approved counterparty is created without replacing the thread owner" do
+    owner = Client.create!(name: "Owner", email: "owner@example.com")
+    [ false, true ].each do |linked|
+      suffix = linked ? "linked" : "new"
+      recipients = [ "first-#{suffix}@example.com", "second-#{suffix}@example.com", "operator-#{suffix}@example.com" ]
+      raw = "From: info@sherpaholidays.com\r\nTo: #{recipients.join(', ')}\r\nMessage-ID: <#{suffix}@test>\r\n\r\nHello"
+      result = Mail::Ingester.ingest(parsed: Mail::Ingester.parse_raw(raw), gmail: {})
+      result[:conversation].update!(linkable: owner) if linked
+      choices = { recipients[0] => "client", recipients[1] => "client", recipients[2] => "organization" }
+      import = MailImport.create!(scope: "all", status: "preview", preview_json: { "choices" => choices })
+      assert_difference("Client.count", 2) do
+        assert_difference("Organization.count", 1) do
+          Mail::ImportJob.new.perform(import.id, fetcher: FakeImportImap.new([ raw, raw ]))
+        end
+      end
+      assert_equal 2, import.reload.created_clients
+      assert_equal 1, import.created_organizations
+      recipients.each { |email| assert EmailIdentity.find_for(email).linkable }
+      expected = linked ? owner : Client.find_by!(email: recipients.first)
+      assert_equal expected, result[:conversation].reload.linkable
+    end
+  end
+
 end

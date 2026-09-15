@@ -33,4 +33,26 @@ class AttachmentMoveTest < ActionDispatch::IntegrationTest
     get inbox_thread_path(conversation)
     assert_select "p", text: /Collect the sensitive document/
   end
+  test "failed storage deletion keeps a visible retry path" do
+    parsed = Mail::Ingester.parse_raw("From: docs@example.com\r\nTo: info@sherpaholidays.com\r\nSubject: Review passport\r\n\r\nAttached")
+    parsed.attachments << { filename: "passport.pdf", content_type: "application/pdf", data: "document" }
+    result = Mail::Ingester.ingest(parsed: parsed, gmail: {})
+    attachment = result[:message].files.attachments.first
+    blob = attachment.blob
+    blob.service.stub(:delete, ->(*) { raise IOError, "storage unavailable" }) do
+      post move_to_perfectbook_attachment_path(attachment)
+    end
+    assert_redirected_to inbox_thread_path(result[:conversation])
+    assert ActiveStorage::Attachment.exists?(attachment.id)
+    assert ActiveStorage::Blob.exists?(blob.id)
+    assert blob.service.exist?(blob.key)
+    get inbox_path(tab: "triage")
+    assert_select "a", text: "Review passport"
+    assert_difference([ "Note.count", "ActivityEvent.count" ], 1) do
+      post move_to_perfectbook_attachment_path(attachment)
+    end
+    assert_not ActiveStorage::Attachment.exists?(attachment.id)
+    assert_not blob.service.exist?(blob.key)
+  end
+
 end

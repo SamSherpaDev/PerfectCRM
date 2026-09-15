@@ -39,17 +39,13 @@ class Mail::ImportJob < ApplicationJob
   private
 
   def apply_import_choice(conversation, parsed, choices, import)
-    return if conversation.nil? || conversation.linked? || conversation.ignored?
+    return if conversation.nil?
 
     counterparties = Mail.counterparties(parsed)
-    match = Mail::Matcher.call(counterparties)
-    if match.linkable
-      conversation.update!(linkable: match.linkable)
-      return
-    end
-    return if match.via == "ignored"
-
     counterparties.each do |sender|
+      match = Mail::Matcher.call([ sender ])
+      next if match.linkable || match.via == "ignored"
+
       kind = choices[sender]
       next unless %w[client organization lead].include?(kind)
 
@@ -64,9 +60,11 @@ class Mail::ImportJob < ApplicationJob
       when "lead"
         ::Lead.create!(name: name, email: sender, source: "email")
       end
-      conversation.update!(linkable: record)
       ::EmailIdentity.remember!(sender, linkable: record)
-      break
     end
+    return if conversation.linked? || conversation.ignored?
+
+    match = Mail::Matcher.call(counterparties)
+    conversation.update!(linkable: match.linkable) if match.linkable
   end
 end

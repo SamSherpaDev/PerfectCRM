@@ -36,4 +36,19 @@ class MailImportsRequestsTest < ActionDispatch::IntegrationTest
     end
     assert_redirected_to mail_import_path(import)
   end
+  test "selected range validates inputs and ignores stale values from other modes" do
+    [ { scope: "since_date", since_date: "" }, { scope: "last_n_months", months: "" }, { scope: "last_n_months", months: "0" } ].each do |attributes|
+      assert_no_difference("MailImport.count") { post mail_imports_path, params: { mail_import: attributes } }
+      assert_response :unprocessable_entity
+    end
+    travel_to Time.zone.local(2026, 9, 14) do
+      post mail_imports_path, params: { mail_import: { scope: "last_n_months", months: 12, since_date: "2020-01-01" } }
+      assert_response :see_other
+      import = MailImport.order(:id).last
+      assert_equal Date.new(2025, 9, 14), import.cutoff_date
+      travel 2.months
+      assert_equal Date.new(2025, 9, 14), import.reload.cutoff_date
+    end
+  end
+
 end

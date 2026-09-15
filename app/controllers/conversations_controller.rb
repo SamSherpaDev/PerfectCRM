@@ -39,9 +39,10 @@ class ConversationsController < ApplicationController
     return redirect_to inbox_thread_path(@conversation), alert: "No sender to create from." if sender.blank?
 
     lead = Lead.find_by(email: sender) || Lead.create!(name: display_name_for(sender), email: sender, source: "email")
-    @conversation.update!(linkable: lead, ignored: false)
-    EmailIdentity.remember!(sender, linkable: lead)
-    redirect_to lead_path(lead), notice: "Lead created and thread linked."
+    target = Mail::Matcher.current_owner(lead)
+    @conversation.update!(linkable: target, ignored: false)
+    EmailIdentity.remember!(sender, linkable: target)
+    redirect_to polymorphic_path(target), notice: "Linked to #{target.name}."
   end
 
   def make_organization
@@ -67,7 +68,7 @@ class ConversationsController < ApplicationController
 
     case type
     when "Client" then Client.find_by(id: id)
-    when "Lead" then Lead.find_by(id: id)
+    when "Lead" then Mail::Matcher.current_owner(Lead.find_by(id: id))
     when "Organization" then Organization.find_by(id: id)
     end
   end

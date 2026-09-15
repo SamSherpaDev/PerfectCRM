@@ -6,7 +6,10 @@ class MailImport < ApplicationRecord
 
   validates :status, inclusion: { in: STATUSES }
   validates :scope, inclusion: { in: SCOPES }
-  validates :months, numericality: { only_integer: true, greater_than: 0, allow_nil: true }
+  validates :months, presence: true, numericality: { only_integer: true, greater_than: 0 }, if: -> { scope == "last_n_months" }
+  validates :since_date, presence: true, if: -> { scope == "since_date" }
+
+  before_create :freeze_cutoff
 
   scope :ordered, -> { order(created_at: :desc) }
 
@@ -32,7 +35,7 @@ class MailImport < ApplicationRecord
   def cutoff_date
     case scope
     when "since_date" then since_date
-    when "last_n_months" then since_date || months.to_i.months.ago.to_date
+    when "last_n_months" then new_record? ? months.to_i.months.ago.to_date : since_date
     else nil
     end
   end
@@ -44,4 +47,11 @@ class MailImport < ApplicationRecord
     else "All history"
     end
   end
+
+  private
+
+  def freeze_cutoff
+    self.since_date = cutoff_date
+  end
+
 end
