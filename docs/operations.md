@@ -64,6 +64,12 @@ are not repeated here. This file covers only what differs for the CRM.
 | `SPACES_*` (attachments bucket + keys) | Step 2 | `.env.app`, password manager |
 | `LITESTREAM_*`, backup-bucket `SPACES_ENDPOINT`/`SPACES_REGION` | Step 2 | `.env.litestream`, password manager |
 | `SMTP_USERNAME`, `SMTP_PASSWORD` | Gmail app password | `.env.app`, password manager |
+| `PERFECTBOOK_BASE_URL`, `PERFECTBOOK_API_TOKEN` | [PerfectBook connection setup](../README.md#perfectbook-connection) | CRM `.env.app`; token also in PerfectBook's `.env.app` and password manager |
+
+## PerfectBook connection
+
+For configuration, sync behavior, and the Settings connection check, see
+[PerfectBook connection](../README.md#perfectbook-connection).
 
 ## Nightly backup
 

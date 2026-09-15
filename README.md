@@ -9,8 +9,8 @@ at `perfectcrm.sherpaholidays.com` on the same VPS.
 
 PerfectBook stays the system of record for bookings, invoices, and money.
 The CRM owns people, conversations, quotes, tasks, and the pipeline, and
-reads PerfectBook through a small versioned, token-authenticated API (a later
-task; this scaffold has no business logic yet).
+reads PerfectBook through a small versioned, token-authenticated API (see
+"PerfectBook connection" below).
 
 Stack: Rails 8.1, Hotwire (Turbo, Stimulus, importmap), Tailwind v4, three
 SQLite databases (primary, cache, queue), Solid Queue running inside Puma,
@@ -81,6 +81,38 @@ expire after 12 hours of inactivity, and Sign out (`DELETE /sign-out`) clears
 the cookie session. After an updated allowlist takes effect in the running
 app, removing an email also denies its existing session on its next request;
 `/up` stays public.
+
+## PerfectBook connection
+
+PerfectBook (live at `perfectbook.sherpaholidays.com`) stays the system
+of record for bookings, invoices, money, and every sensitive traveler
+document. The CRM mirrors contacts, the trip and departure catalog, and
+customer booking and invoice status. It never stores passport, visa,
+insurance, or date-of-birth data. Production polling is scheduled in
+[`config/recurring.yml`](config/recurring.yml); these recurring jobs are
+not scheduled in development. `PerfectBook::Catalog` and the
+`perfectbook_contact_url` and `perfectbook_booking_url` helpers support
+the future quote builder and client booking cards; those screens are not
+implemented yet.
+
+Configure with `PERFECTBOOK_BASE_URL` (defaults to
+`https://perfectbook.sherpaholidays.com`) and `PERFECTBOOK_API_TOKEN`
+(see `.env.app.example`). Generate the token with `bin/rails secret` and
+set the same value in PerfectBook's `.env.app`, then recreate both app
+containers so the environment changes take effect. A collection read
+returning 404 is treated as an unconfigured PerfectBook API. The client
+(`PerfectBook::Client` in `lib/perfectbook/`) uses conditional ETag requests
+and cursor pagination. Booking polling paces requests, pauses on 429 using
+`Retry-After` (60 seconds when absent), and persists its contact position
+so a later run resumes after an interruption. Catalog and contact polling
+record and raise rate-limit errors; they do not pause and retry within the
+run. Timeouts fail fast, and repeated connection or server failures open
+a per-process circuit for a cooldown (see `lib/perfectbook/circuit.rb`).
+Request logs omit the token and Authorization header; Rails parameters
+also filter the token (`config/initializers/filter_parameter_logging.rb`).
+
+Settings → PerfectBook connection shows configured/unconfigured, the last
+successful sync, the last error, and a Test connection button.
 
 ## Checks
 

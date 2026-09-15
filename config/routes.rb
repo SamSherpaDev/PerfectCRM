@@ -16,5 +16,7 @@ Rails.application.routes.draw do
   get "pipeline", to: "pipeline#show"
   resources :quotes, only: %i[index]
   resources :templates, only: %i[index]
-  resource :settings, only: %i[edit update]
+  resource :settings, only: %i[edit update] do
+    post :perfectbook_test, on: :collection
+  end
 end

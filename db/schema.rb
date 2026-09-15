@@ -10,7 +10,115 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_14_183002) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_14_202007) do
+  create_table "perfectbook_bookings", force: :cascade do |t|
+    t.integer "balance_due_minor"
+    t.datetime "created_at", null: false
+    t.string "currency", default: "USD"
+    t.string "deep_link"
+    t.integer "departure_id"
+    t.string "departure_place"
+    t.date "end_date"
+    t.string "invoice_badge"
+    t.string "invoice_number"
+    t.integer "paid_minor"
+    t.integer "party_size"
+    t.string "payment_reference"
+    t.integer "perfectbook_contact_id", null: false
+    t.integer "perfectbook_id", null: false
+    t.integer "price_per_person_minor"
+    t.string "ref"
+    t.date "start_date"
+    t.string "status"
+    t.datetime "synced_at", null: false
+    t.integer "total_minor"
+    t.integer "trip_id"
+    t.string "trip_name"
+    t.datetime "updated_at", null: false
+    t.index ["perfectbook_contact_id"], name: "index_perfectbook_bookings_on_perfectbook_contact_id"
+    t.index ["perfectbook_id"], name: "index_perfectbook_bookings_on_perfectbook_id", unique: true
+  end
+
+  create_table "perfectbook_contacts", force: :cascade do |t|
+    t.boolean "archived", default: false, null: false
+    t.string "country"
+    t.datetime "created_at", null: false
+    t.string "email"
+    t.string "kind"
+    t.string "name"
+    t.datetime "pb_created_at"
+    t.datetime "pb_updated_at"
+    t.integer "perfectbook_id", null: false
+    t.string "phone"
+    t.string "state"
+    t.datetime "synced_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["kind"], name: "index_perfectbook_contacts_on_kind"
+    t.index ["perfectbook_id"], name: "index_perfectbook_contacts_on_perfectbook_id", unique: true
+  end
+
+  create_table "perfectbook_departures", force: :cascade do |t|
+    t.integer "available_seats"
+    t.integer "booked_seats"
+    t.text "country_codes"
+    t.datetime "created_at", null: false
+    t.string "currency", default: "USD"
+    t.integer "duration_days"
+    t.date "end_date"
+    t.string "label"
+    t.datetime "pb_created_at"
+    t.datetime "pb_updated_at"
+    t.integer "perfectbook_id", null: false
+    t.integer "perfectbook_trip_id"
+    t.string "place"
+    t.integer "price_per_person_minor"
+    t.integer "seats"
+    t.date "start_date"
+    t.string "status"
+    t.datetime "synced_at", null: false
+    t.string "trip_name"
+    t.datetime "updated_at", null: false
+    t.index ["perfectbook_id"], name: "index_perfectbook_departures_on_perfectbook_id", unique: true
+    t.index ["perfectbook_trip_id"], name: "index_perfectbook_departures_on_perfectbook_trip_id"
+  end
+
+  create_table "perfectbook_etag_stores", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "etag", null: false
+    t.string "key", null: false
+    t.datetime "updated_at", null: false
+    t.index ["key"], name: "index_perfectbook_etag_stores_on_key", unique: true
+  end
+
+  create_table "perfectbook_sync_states", force: :cascade do |t|
+    t.bigint "contact_cursor"
+    t.datetime "created_at", null: false
+    t.string "job_name", null: false
+    t.text "last_error"
+    t.datetime "last_error_at"
+    t.datetime "last_success_at"
+    t.datetime "updated_at", null: false
+    t.index ["job_name"], name: "index_perfectbook_sync_states_on_job_name", unique: true
+  end
+
+  create_table "perfectbook_trips", force: :cascade do |t|
+    t.boolean "active", default: false, null: false
+    t.datetime "created_at", null: false
+    t.text "departure_ids"
+    t.integer "departures_count", default: 0
+    t.date "first_start_date"
+    t.date "last_end_date"
+    t.string "name", null: false
+    t.datetime "pb_created_at"
+    t.datetime "pb_updated_at"
+    t.integer "perfectbook_id", null: false
+    t.string "shopify_product_id"
+    t.string "status"
+    t.datetime "synced_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["perfectbook_id"], name: "index_perfectbook_trips_on_perfectbook_id", unique: true
+  end
+
   create_table "settings", force: :cascade do |t|
     t.string "appearance", default: "paper", null: false
     t.datetime "created_at", null: false

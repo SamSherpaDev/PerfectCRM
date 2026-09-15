@@ -25,3 +25,6 @@ When updating this file, preserve this bar for all agents and keep entries conci
   and "Google sign-in". Preserve instant appearance changes.
 - System-test Chrome here needs nix NSS libs on `LD_LIBRARY_PATH`; check
   driver startup output if `chromedriver` cannot start.
+- PerfectBook link: `PerfectBook::Client` (`lib/perfectbook/`) + mirror tables
+  (`app/models/perfectbook/`) + `config/recurring.yml` jobs; contract in
+  README.md, "PerfectBook connection". Mirrors only, never money truth.
