@@ -418,6 +418,26 @@ class QuotesSystemTest < ApplicationSystemTestCase
     assert_equal 0, Quote.order(:id).last.lines.find_by!(kind: "departure").unit_minor
   end
 
+  test "sending a quote starts the leads quoted stage today" do
+    lead = Lead.create!(name: "Pasang", email: "pasang@example.com", status: "chatting", stage_changed_at: 10.days.ago)
+    quote = Quote.create!(lead: lead, party_size: 2, valid_until: Date.current + 14)
+    quote.lines.create!(kind: "custom", description: "Trek", quantity: 2, unit_minor: 150000)
+
+    visit quote_path(quote)
+    click_button "Send quote"
+    assert_text "Quote sent"
+    visit pipeline_path
+    find("summary", text: "Quoted", match: :first).click
+    assert_text "Pasang"
+    assert_text "New in stage"
+    assert_no_text "10d in stage"
+    assert_equal 0, lead.reload.stage_age_days
+    event = lead.activity_events.find_by!(kind: "stage_change")
+    assert_equal "chatting", event.metadata["from"]
+    assert_equal "quoted", event.metadata["to"]
+    assert_equal "captain", event.metadata["actor"]
+  end
+
   private
 
   def assert_no_overflow(context)

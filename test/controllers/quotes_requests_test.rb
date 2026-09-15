@@ -361,7 +361,8 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
   end
 
   test "queue rejection leaves an existing draft retryable with no sent activity" do
-    lead = Lead.create!(name: "Pasang", email: "pasang@example.com", status: "chatting")
+    lead = Lead.create!(name: "Pasang", email: "pasang@example.com", status: "chatting", stage_changed_at: 10.days.ago)
+    previous_stage_changed_at = lead.reload.stage_changed_at
     quote = Quote.create!(party_size: 2, valid_until: Date.current + 14, lead: lead)
     quote.lines.create!(kind: "custom", description: "Trek", quantity: 1, unit_minor: 150000)
     reject = ->(_job) { raise ActiveJob::EnqueueError, "Queue unavailable" }
@@ -375,6 +376,8 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
     assert_nil quote.sent_at
     assert_nil quote.sent_by_email
     assert_equal "chatting", lead.reload.status
+    assert_equal previous_stage_changed_at, lead.stage_changed_at
+    assert_equal 0, lead.activity_events.where(kind: "stage_change").count
     assert_equal 0, lead.activity_events.where(kind: "quote").count
     follow_redirect!
     assert_includes response.body, "Please try sending again"
@@ -383,6 +386,8 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
     end
     assert_equal "sent", quote.reload.status
     assert_equal "quoted", lead.reload.status
+    assert_equal 0, lead.stage_age_days
+    assert_equal 1, lead.activity_events.where(kind: "stage_change").count
     assert_equal 1, lead.activity_events.where(kind: "quote").count
   end
 

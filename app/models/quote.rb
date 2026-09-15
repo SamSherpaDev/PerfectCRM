@@ -120,15 +120,13 @@ class Quote < ApplicationRecord
 
   # Sending moves a lead-owned quote's lead to quoted (manual captain action;
   # automations may only move between new, chatting and lost).
-  # TODO(crm-pipeline): route this through Leads::Transition once that
-  # service exists on main instead of setting status directly.
   def deliver!
     with_lock do
       return false unless sendable?
 
       update!(status: "sent", sent_at: Time.current, sent_by_email: Current.user_email)
       if lead && !lead.converted? && %w[new chatting].include?(lead.status)
-        lead.update!(status: "quoted")
+        Leads::Transition.call(lead, to: "quoted", actor: :captain)
       end
       ActivityEvent.create!(
         subject: owner, kind: "quote",
