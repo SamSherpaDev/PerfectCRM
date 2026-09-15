@@ -54,5 +54,4 @@ class AttachmentMoveTest < ActionDispatch::IntegrationTest
     assert_not ActiveStorage::Attachment.exists?(attachment.id)
     assert_not blob.service.exist?(blob.key)
   end
-
 end

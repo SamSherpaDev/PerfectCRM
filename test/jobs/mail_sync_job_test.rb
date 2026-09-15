@@ -166,5 +166,4 @@ class MailSyncJobTest < ActiveSupport::TestCase
     assert_equal 2, count
     assert_equal 12, MailSyncState.for(Mail::FOLDER).last_uid
   end
-
 end

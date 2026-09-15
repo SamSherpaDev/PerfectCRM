@@ -60,5 +60,4 @@ class MailImportsRequestsTest < ActionDispatch::IntegrationTest
     end
     assert_equal "organization", import.reload.preview_json["choices"]["solo@example.com"]
   end
-
 end

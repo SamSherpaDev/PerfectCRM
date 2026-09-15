@@ -100,5 +100,4 @@ class MailImportJobTest < ActiveSupport::TestCase
     assert_equal 1, import.reload.processed_messages
     assert_equal 100, import.progress_pct
   end
-
 end

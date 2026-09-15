@@ -75,5 +75,4 @@ class TriageRequestsTest < ActionDispatch::IntegrationTest
     assert_equal client, conversation.reload.linkable
     assert_redirected_to client_path(client)
   end
-
 end

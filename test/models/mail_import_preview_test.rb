@@ -24,5 +24,4 @@ class MailImportPreviewTest < ActiveSupport::TestCase
     rows = Mail::ImportPreview.new.build_counts(counts)
     assert rows.all? { |row| row.suggested_kind == "client" }
   end
-
 end

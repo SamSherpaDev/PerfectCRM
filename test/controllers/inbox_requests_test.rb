@@ -152,5 +152,4 @@ class InboxRequestsTest < ActionDispatch::IntegrationTest
     assert_select "#message-#{long.id} details strong", text: "Unique ending", count: 1
     assert_equal 1, css_select("#message-#{long.id}").first.text.scan("Unique ending").length
   end
-
 end

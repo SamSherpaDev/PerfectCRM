@@ -50,5 +50,4 @@ class MailPreviewJobTest < ActiveSupport::TestCase
     assert_equal client.name, rows.fetch("alternate@example.com")["duplicate_name"]
     assert_not rows.key?("friend@example.com")
   end
-
 end
