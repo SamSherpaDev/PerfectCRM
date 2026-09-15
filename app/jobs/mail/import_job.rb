@@ -23,11 +23,12 @@ class Mail::ImportJob < ApplicationJob
         conversation = result[:conversation]
         apply_import_choice(conversation, parsed, choices, mail_import)
         linked = conversation&.linked?
+        kept = result[:status] != :filtered
         progress = progress.merge("import_uid" => item.uid, "import_validity" => item.uid_validity)
         mail_import.update!(preview_json: progress,
-          processed_messages: mail_import.processed_messages + 1,
+          processed_messages: mail_import.processed_messages + (kept ? 1 : 0),
           linked_messages: mail_import.linked_messages + (linked ? 1 : 0),
-          skipped_messages: mail_import.skipped_messages + (linked ? 0 : 1))
+          skipped_messages: mail_import.skipped_messages + (kept && !linked ? 1 : 0))
       end
     end
     mail_import.update!(status: "done", finished_at: Time.current)

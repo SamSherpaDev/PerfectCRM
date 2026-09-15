@@ -90,7 +90,9 @@ class InboxRequestsTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "a", text: "Passport review"
     get inbox_thread_path(result[:conversation])
-    assert_select "button", text: "Remove from CRM, collect in PerfectBook"
+    assert_select "span", text: "held: collect in PerfectBook"
+    assert_select "p", text: /Collect the held documents/
+    assert_select "a", text: "Download", count: 0
   end
 
   test "waiting count excludes unknown senders just like the list" do

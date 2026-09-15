@@ -40,6 +40,13 @@
           <% end %>
         </ul>
       <% end %>
+      <% Array(message.held_attachments).each do |file| %>
+        <div class="attachment-row mt-2" role="note">
+          <span><%= file["filename"] %> · <%= number_to_human_size(file["byte_size"]) %> · <%= file["content_type"] %></span>
+          <span><%= file["status"] %></span>
+          <p>Collect this document in PerfectBook. Its file was not stored in CRM.</p>
+        </div>
+      <% end %>
       <% Array(message.attachment_notices).each do |notice| %>
         <p class="mt-2 text-sm muted"><%= notice %></p>
       <% end %>

@@ -13,7 +13,8 @@ class Conversation < ApplicationRecord
     where(id: joins(messages: { files_attachments: :blob })
       .where("json_extract(active_storage_blobs.metadata, '$.sensitive') = 1").select(:id))
   }
-  scope :needs_triage, -> { triage.or(sensitive_documents) }
+  scope :held_documents, -> { where(id: ::Message.where("json_array_length(held_attachments) > 0").select(:conversation_id)) }
+  scope :needs_triage, -> { triage.or(sensitive_documents).or(held_documents) }
   scope :ignored_scope, -> { where(ignored: true) }
 
   # Inbox triage buckets. "Waiting on you" means the newest message is

@@ -164,8 +164,8 @@ class MailIngesterTest < ActiveSupport::TestCase
     parsed.attachments << { filename: "passport.pdf", content_type: "application/pdf", data: "passport" }
     parsed.attachments << { filename: "large.txt", content_type: "text/plain", data: "a" * (25.megabytes + 1) }
     result = Mail::Ingester.ingest(parsed: parsed, gmail: {})
-    assert_equal 12, result[:message].files.count
-    assert result[:message].files.find { |file| file.filename.to_s == "passport.pdf" }.blob.metadata["sensitive"]
+    assert_equal 11, result[:message].files.count
+    assert_equal "passport.pdf", result[:message].held_attachments.first["filename"]
     assert_includes result[:message].attachment_notices.first, "25 MB"
     assert Conversation.needs_triage.exists?(result[:conversation].id)
   end
@@ -186,4 +186,55 @@ class MailIngesterTest < ActiveSupport::TestCase
     assert_nil Mail::Matcher.call([ Mail.mailbox_address ]).linkable
   end
 
+  test "sensitive documents never create blobs or upload bytes" do
+    files = [
+      { filename: "passport.pdf", content_type: "application/pdf", data: "passport bytes" },
+      { filename: "visa.png", content_type: "image/png", data: "visa bytes" },
+      { filename: "insurance.txt", content_type: "text/plain", data: "insurance bytes" },
+      { filename: "traveler-ID.txt", content_type: "text/plain", data: "ID bytes" },
+      { filename: "date_of_birth.txt", content_type: "text/plain", data: "birth bytes" },
+      { filename: "document.txt", content_type: "application/x-passport", data: "typed bytes" },
+      { filename: "document.pdf", content_type: "application/pdf", data: pdf_with_title("Passport copy") },
+      { filename: "unreadable.pdf", content_type: "application/pdf", data: "unreadable" }
+    ]
+    parsed = Mail::Ingester.parse_raw(mail_raw(from: "held@example.com", message_id: "<held@test>"))
+    parsed.attachments = files
+    result = nil
+    assert_no_difference("ActiveStorage::Blob.count") do
+      ActiveStorage::Blob.service.stub(:upload, ->(*) { flunk "sensitive bytes uploaded" }) do
+        result = Mail::Ingester.ingest(parsed: parsed, gmail: {})
+      end
+    end
+    message = result[:message].reload
+    assert_empty message.files
+    assert_equal files.map { |file| { "filename" => file[:filename], "byte_size" => file[:data].bytesize,
+      "content_type" => file[:content_type], "status" => "held: collect in PerfectBook" } }, message.held_attachments
+    assert_match(/Collect the held documents/, Note.find_by!(notable: result[:conversation]).body)
+  end
+
+  test "ordinary PDF with a nonsensitive title remains downloadable" do
+    data = pdf_with_title("Trip itinerary")
+    parsed = Mail::Ingester.parse_raw(mail_raw(from: "route@example.com", message_id: "<ordinary-pdf@test>"))
+    parsed.attachments << { filename: "itinerary.pdf", content_type: "application/pdf", data: data }
+    result = Mail::Ingester.ingest(parsed: parsed, gmail: {})
+    assert_empty result[:message].held_attachments
+    assert_equal data, result[:message].files.first.download
+  end
+
+  private
+
+  def pdf_with_title(title)
+    encoded_title = "FEFF" + title.encode("UTF-16BE").unpack1("H*")
+    objects = [ "<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [] /Count 0 >>", "<< /Title <#{encoded_title}> >>" ]
+    pdf = +"%PDF-1.4\n"
+    offsets = objects.each_with_index.map do |object, index|
+      offset = pdf.bytesize
+      pdf << "#{index + 1} 0 obj\n#{object}\nendobj\n"
+      offset
+    end
+    xref = pdf.bytesize
+    pdf << "xref\n0 4\n0000000000 65535 f \n"
+    offsets.each { |offset| pdf << format("%010d 00000 n \n", offset) }
+    pdf << "trailer\n<< /Size 4 /Root 1 0 R /Info 3 0 R >>\nstartxref\n#{xref}\n%%EOF\n"
+  end
 end

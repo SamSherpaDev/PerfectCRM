@@ -146,24 +146,33 @@ module Mail
 
     def attach_files(message, attachments, uploaded)
       skipped = []
+      held = []
       Array(attachments).each do |file|
         filename = file[:filename].to_s.presence || "attachment"
         content_type = file[:content_type].to_s.presence || "application/octet-stream"
         data = file[:data].to_s
         next if data.blank?
+        if ::Message.sensitive_attachment?(filename, content_type, data: data)
+          held << { "filename" => filename, "byte_size" => data.bytesize, "content_type" => content_type,
+            "status" => "held: collect in PerfectBook" }
+          next
+        end
         if data.bytesize > 25.megabytes
           skipped << "#{filename}: skipped because it exceeds 25 MB."
           next
         end
 
-        blob = ActiveStorage::Blob.build_after_unfurling(io: StringIO.new(data), filename: filename, content_type: content_type,
-          metadata: { sensitive: ::Message.sensitive_attachment?(filename, content_type) })
+        blob = ActiveStorage::Blob.build_after_unfurling(io: StringIO.new(data), filename: filename, content_type: content_type)
         uploaded << blob
         blob.save!
         blob.upload_without_unfurling(StringIO.new(data))
         message.files.attach(blob)
       end
-      message.update!(attachment_notices: skipped)
+      message.update!(attachment_notices: skipped, held_attachments: held)
+      if held.any?
+        ::Note.create!(notable: message.conversation,
+          body: "Collect the held documents from message #{message.id} in PerfectBook. Their files were not stored in CRM.")
+      end
     end
 
     def link_conversation(conversation, parsed)

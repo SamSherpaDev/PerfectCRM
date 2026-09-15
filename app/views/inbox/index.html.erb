@@ -27,7 +27,7 @@
               <p class="mt-1 truncate text-sm muted"><%= conversation.other_participants.first(3).join(", ") %></p>
               <p class="mt-1 text-sm text-ink-2"><%= last&.preview_text(120) %></p>
               <div class="mt-2 flex flex-wrap items-center gap-2">
-                <% if conversation.messages.any? { |message| message.files.any? { |file| file.blob.metadata["sensitive"] } } %>
+                <% if conversation.messages.any? { |message| Array(message.held_attachments).any? || message.files.any? { |file| file.blob.metadata["sensitive"] } } %>
                   <%= badge "Review sensitive document", :warning %>
                 <% end %>
                 <% if conversation.linkable %>

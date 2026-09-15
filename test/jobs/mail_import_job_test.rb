@@ -32,8 +32,8 @@ class MailImportJobTest < ActiveSupport::TestCase
     import.reload
     assert_equal "done", import.status
     assert_equal 0, import.linked_messages
-    assert_equal 3, import.skipped_messages
-    assert_equal 3, import.processed_messages
+    assert_equal 2, import.skipped_messages
+    assert_equal 2, import.processed_messages
   end
   test "choices link already ingested outbound conversations" do
     raw = "From: info@sherpaholidays.com\r\nTo: outbound@example.com\r\nMessage-ID: <outbound-import@test>\r\n\r\nHi"
@@ -82,6 +82,23 @@ class MailImportJobTest < ActiveSupport::TestCase
       expected = linked ? owner : Client.find_by!(email: recipients.first)
       assert_equal expected, result[:conversation].reload.linkable
     end
+  end
+
+  test "filtered history advances checkpoints without advancing preview progress" do
+    raws = 100.times.map { |n| "From: friend@example.com\r\nTo: captain@gmail.com\r\nMessage-ID: <filtered#{n}@test>\r\n\r\nPersonal" }
+    raws << "From: business@example.com\r\nTo: info@sherpaholidays.com\r\nMessage-ID: <business-progress@test>\r\n\r\nBusiness"
+    import = MailImport.create!(scope: "all", status: "preview", total_messages: 1, preview_json: {})
+    fetcher = FakeImportImap.new(raws)
+    original = Mail::Ingester.method(:ingest)
+    Mail::Ingester.stub(:ingest, ->(**args) { args[:parsed].message_id == "business-progress@test" ? raise("interrupted") : original.call(**args) }) do
+      assert_raises(RuntimeError) { Mail::ImportJob.new.perform(import.id, fetcher: fetcher) }
+    end
+    assert_equal 100, import.reload.preview_json["import_uid"]
+    assert_equal 0, import.processed_messages
+    assert_equal 0, import.progress_pct
+    Mail::ImportJob.new.perform(import.id, fetcher: fetcher)
+    assert_equal 1, import.reload.processed_messages
+    assert_equal 100, import.progress_pct
   end
 
 end

@@ -8,6 +8,7 @@ class Message < ApplicationRecord
   serialize :cc_addresses, coder: JSON
   serialize :gmail_labels, coder: JSON
   serialize :attachment_notices, coder: JSON
+  serialize :held_attachments, coder: JSON
 
   validates :direction, inclusion: { in: DIRECTIONS }
   validates :gm_message_id, uniqueness: { allow_nil: true }
@@ -21,8 +22,14 @@ class Message < ApplicationRecord
   after_create :bump_conversation
   after_destroy :rebalance_conversation
 
-  def self.sensitive_attachment?(filename, content_type)
-    "#{filename} #{content_type}".match?(/passport|visa|insurance|identity|(?:\A|[^a-z])id(?:[^a-z]|\z)|scan/i)
+  def self.sensitive_attachment?(filename, content_type, data: nil)
+    pattern = /passport|visa|insurance|identity|(?:\A|[^a-z])(?:id|dob)(?:[^a-z]|\z)|birth|scan/i
+    return true if "#{filename} #{content_type}".match?(pattern)
+    return false unless data && (content_type == "application/pdf" || filename.downcase.end_with?(".pdf") || data.start_with?("%PDF-"))
+
+    PDF::Reader.new(StringIO.new(data)).info[:Title].to_s.match?(pattern)
+  rescue PDF::Reader::MalformedPDFError, PDF::Reader::UnsupportedFeatureError
+    true
   end
 
   def inbound?

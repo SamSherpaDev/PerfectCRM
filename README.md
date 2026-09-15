@@ -302,14 +302,19 @@ history is reachable, and expanded messages show their full body.
 
 Ordinary email attachments are part of the conversation and stay in CRM storage.
 There is no attachment-count cap. Files over 25 MB are skipped with a visible
-message notice. Filenames or types suggesting passport, visa, insurance,
-identity/ID, or scans are flagged in Triage, even on linked conversations.
-Every attachment offers **Remove from CRM, collect in PerfectBook**: one tap
-purges the file from CRM storage, records an activity event, and leaves a
-follow-up note in the thread to collect the document in PerfectBook. It does
-not change Gmail or claim that the file was uploaded to PerfectBook.
-`PerfectBook::DocumentUploader` remains the future upload interface; no file
-marked sensitive by the captain waits in CRM storage for that endpoint.
+message notice. Before any blob is created or uploaded, filenames, content types,
+and PDF titles are screened for passport, visa, insurance, identity/ID,
+date-of-birth, and scan documents. Flagged attachments are never uploaded:
+only a placeholder with filename, size, type, and "held: collect in PerfectBook"
+remains on the timeline, with a follow-up note to collect the document in
+PerfectBook. PDF metadata is parsed in memory; unreadable or encrypted PDFs
+are also held. Document bytes and PDF titles are not persisted. Held documents
+appear in Triage even on linked conversations.
+Every stored ordinary attachment still offers **Remove from CRM, collect in
+PerfectBook** if the captain identifies a sensitive file that screening missed.
+This deletes its stored file, records an activity event, and leaves a follow-up
+note. Storage failures preserve the reference and triage retry path. Neither
+holding nor removing a file changes Gmail or uploads it to PerfectBook.
 
 Settings → Import history backfills past mail: all, since a date, or last
 N months (no 90-day cap), as requested by the captain. Preview scans the whole
@@ -317,7 +322,8 @@ selected range in a background job, using server-side address SEARCH where
 supported and a resumable scan otherwise. Progress and failures are visible;
 commit is available only after the preview completes. Preview and import
 persist UID and UIDVALIDITY checkpoints and reset the scan if the folder is
-rebuilt. Preview counts inbound and outbound mail and shows counterparties,
+rebuilt. Import progress counts the same in-scope messages as preview; filtered
+personal mail advances only the UID checkpoint. Preview counts inbound and outbound mail and shows counterparties,
 remembered matches, duplicates, and editable creation choices. Shared domains
 suggest organizations only with two or more distinct addresses on a non-public
 domain or a PerfectBook partner match. Public email providers (Gmail,

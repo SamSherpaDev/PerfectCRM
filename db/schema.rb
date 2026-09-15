@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_14_211507) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_14_211508) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -175,6 +175,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_211507) do
     t.string "from_address"
     t.string "gm_message_id"
     t.text "gmail_labels", default: "[]", null: false
+    t.text "held_attachments", default: "[]", null: false
     t.text "html_body"
     t.string "in_reply_to"
     t.string "message_id"

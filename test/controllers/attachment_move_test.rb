@@ -35,7 +35,7 @@ class AttachmentMoveTest < ActionDispatch::IntegrationTest
   end
   test "failed storage deletion keeps a visible retry path" do
     parsed = Mail::Ingester.parse_raw("From: docs@example.com\r\nTo: info@sherpaholidays.com\r\nSubject: Review passport\r\n\r\nAttached")
-    parsed.attachments << { filename: "passport.pdf", content_type: "application/pdf", data: "document" }
+    parsed.attachments << { filename: "travel.txt", content_type: "text/plain", data: "document" }
     result = Mail::Ingester.ingest(parsed: parsed, gmail: {})
     attachment = result[:message].files.attachments.first
     blob = attachment.blob
