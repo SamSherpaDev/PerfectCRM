@@ -225,6 +225,45 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
     assert_select "a[href=?]", quote_path(quote), text: quote.reference
   end
 
+  test "converted lead quote sends to the current client and records client activity" do
+    lead = Lead.create!(name: "Pasang", email: "pasang@example.com")
+    quote = Quote.create!(lead: lead, party_size: 2, valid_until: Date.current + 14)
+    quote.lines.create!(kind: "custom", description: "Trek", quantity: 1, unit_minor: 150000)
+    client = lead.convert_to_client!
+    client.update!(email: "current@example.com")
+
+    get client_path(client)
+    assert_select "a[href=?]", quote_path(quote)
+    assert_emails 1 do
+      perform_enqueued_jobs { post send_quote_quote_path(quote) }
+    end
+    assert_equal [ "current@example.com" ], ActionMailer::Base.deliveries.last.to
+    assert_equal 1, client.activity_events.where(kind: "quote").count
+    assert_equal 0, lead.activity_events.where(kind: "quote").count
+
+    post accept_public_quote_path(quote.accept_token)
+    assert_equal "accepted", quote.reload.status
+    assert_equal 2, client.activity_events.where(kind: "quote").count
+    assert_equal 0, lead.activity_events.where(kind: "quote").count
+    assert_equal "current@example.com", quote.intake_details["email"]
+  end
+
+  test "accepted intake panel and link preserve the accepted client details" do
+    quote = Quote.create!(client: @client, status: "sent", trip_name: "Everest", party_size: 2)
+    quote.accept!
+    @client.update!(name: "Changed name", email: "changed@example.com")
+
+    get quote_path(quote)
+    assert_response :success
+    assert_select "textarea#intake-details", text: /client: Maya Gurung/
+    assert_select "textarea#intake-details", text: /email: maya@example.com/
+    intake_link = css_select("a").find { |link| link.text == "Open PerfectBook booking page" }
+    params = Rack::Utils.parse_query(URI.parse(intake_link["href"]).query)
+    assert_equal "Maya Gurung", params["name"]
+    assert_equal "maya@example.com", params["email"]
+    assert_equal JSON.parse(quote.reload.intake_payload), quote.intake_details
+  end
+
   test "new quote index action opens client selection" do
     get quotes_path
     assert_select "a[href=?]", clients_path, text: "New quote"

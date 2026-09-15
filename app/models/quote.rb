@@ -77,7 +77,7 @@ class Quote < ApplicationRecord
   end
 
   def owner
-    client || lead
+    client || lead&.converted_client || lead
   end
 
   def owner_name
@@ -199,6 +199,8 @@ class Quote < ApplicationRecord
 
   # Intake details staged on acceptance for manual entry in PerfectBook.
   def intake_details
+    return JSON.parse(intake_payload) if intake_payload.present?
+
     {
       "trip" => trip_name, "departure" => departure_label,
       "departure_start" => departure_start_on&.iso8601,
@@ -214,11 +216,12 @@ class Quote < ApplicationRecord
   # POST enquiry-creation endpoint once it exists, and post the staged
   # intake payload directly instead of opening the page.
   def perfectbook_intake_url
+    details = intake_details
     params = {
-      trip: trip_name, departure: departure_label,
-      start_date: departure_start_on&.iso8601, end_date: departure_end_on&.iso8601,
-      party_size: party_size, name: owner_name, email: owner_email,
-      quote: reference
+      trip: details["trip"], departure: details["departure"],
+      start_date: details["departure_start"], end_date: details["departure_end"],
+      party_size: details["party_size"], name: details["client"], email: details["email"],
+      quote: details["quote_reference"]
     }.compact_blank
     "#{PerfectBook.base_url}/bookings/new?#{params.to_query}"
   end

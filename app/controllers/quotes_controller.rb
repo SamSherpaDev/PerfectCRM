@@ -79,6 +79,7 @@ class QuotesController < ApplicationController
   end
 
   def update
+    send_after_update = false
     @quote.with_lock do
       unless @quote.draft?
         redirect_to @quote, alert: "Only drafts can be edited. Make a revision instead."
@@ -90,7 +91,7 @@ class QuotesController < ApplicationController
       if (!catalog_changed || apply_catalog_snapshot(replace_description: true)) && @quote.save
         remember_inclusions
         if params[:send_now].present?
-          send_saved_quote
+          send_after_update = true
         else
           redirect_to @quote, notice: "Quote saved."
         end
@@ -99,6 +100,7 @@ class QuotesController < ApplicationController
         render :edit, status: :unprocessable_entity
       end
     end
+    send_saved_quote if send_after_update
   end
 
   def send_quote
