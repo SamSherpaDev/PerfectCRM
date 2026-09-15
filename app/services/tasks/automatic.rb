@@ -69,9 +69,10 @@ module Tasks
     end
 
     def subject_for(booking)
-      Client.find_by(perfectbook_contact_id: booking.perfectbook_contact_id) ||
+      subject = Client.find_by(perfectbook_contact_id: booking.perfectbook_contact_id) ||
         Organization.find_by(perfectbook_contact_id: booking.perfectbook_contact_id) ||
         Lead.find_by(perfectbook_contact_id: booking.perfectbook_contact_id)
+      subject.is_a?(Lead) && subject.converted? ? subject.converted_client : subject
     end
 
     def create_once!(key:, **attrs)

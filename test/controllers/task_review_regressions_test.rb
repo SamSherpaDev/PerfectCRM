@@ -74,6 +74,35 @@ class TaskReviewRegressionsTest < ActionDispatch::IntegrationTest
     assert_not lead.activity_events.exists?(kind: "task", summary: "Completed: Review")
   end
 
+  test "booking follow-ups after conversion belong to the existing client" do
+    client = Client.create!(name: "Tashi", email: "tashi@example.com")
+    lead = Lead.create!(name: "Tashi", email: client.email, perfectbook_contact_id: 998)
+    post convert_lead_path(lead), params: { expected_client_id: client.id }
+    assert_equal client, lead.reload.converted_client
+    assert_nil client.reload.perfectbook_contact_id
+
+    automatic_booking = PerfectBook::Booking.create!(perfectbook_id: 998, perfectbook_contact_id: 998,
+      end_date: Date.current - 3, synced_at: Time.current)
+    Tasks::Automatic.run!
+    automatic_task = Task.find_by!(idempotency_key: "review-ask:#{automatic_booking.perfectbook_id}")
+    assert_equal client, automatic_task.subject
+
+    manual_booking = PerfectBook::Booking.create!(perfectbook_id: 999, perfectbook_contact_id: 998,
+      end_date: Date.current - 1, synced_at: Time.current)
+    post create_review_ask_tasks_path, params: { booking_id: manual_booking.id }
+    assert_redirected_to root_path
+    manual_task = Task.find_by!(idempotency_key: "review-ask:#{manual_booking.perfectbook_id}")
+    assert_equal client, manual_task.subject
+    get client_path(client)
+    assert_select "form[action=?]", complete_task_path(automatic_task)
+    assert_select "form[action=?]", complete_task_path(manual_task)
+    [ automatic_task, manual_task ].each do |task|
+      patch complete_task_path(task)
+      assert client.activity_events.exists?(kind: "task", metadata: { "task_id" => task.id, "kind" => task.kind })
+    end
+    assert_not lead.activity_events.exists?(kind: "task")
+  end
+
   test "automatic proposals catch late contacts and month end returns once" do
     booking = PerfectBook::Booking.create!(perfectbook_id: 998, perfectbook_contact_id: 998,
       end_date: Date.new(2026, 1, 31), synced_at: Time.current)

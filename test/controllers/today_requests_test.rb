@@ -31,7 +31,7 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     assert_select "h2", text: "Follow-ups"
     assert_select "li", text: /Nudge Maya/
     assert_select "form[action=?]", complete_task_path(task)
-    assert_select "a[href=?]", client_path(@client, template: template.id), text: "Nudge"
+    assert_select "a[href=?]", client_path(@client, template: template.id, task: task.id), text: "Nudge"
     assert_select "li", text: /Snoozed away/, count: 0
   end
 
