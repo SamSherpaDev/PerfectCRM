@@ -342,7 +342,7 @@ an app password. It keeps only messages with an exact parsed mailbox address
 in From, To, Cc, Bcc, Delivered-To, or X-Original-To; personal mail is skipped
 without storing it. This release reads received and sent Gmail history;
 see [Replying](#replying) for composing and sending from CRM.
-[AI assistance](#ai-assistance) can prepare a draft to copy.
+[AI assistance](#ai-assistance) can prepare a draft for review.
 
 Setup (captain, about 10 minutes): Google Account → Security → turn on
 2-step verification → App passwords → create one named PerfectCRM → paste
@@ -482,10 +482,10 @@ AI assistance is on by default. In Settings → AI assistance, enter an
 OpenAI-compatible base URL (OpenAI or OpenRouter), model name, provider key,
 and short voice guide (templates are the style examples). Without a key,
 threads show "Add a provider key in Settings to enable drafts".
-Drafts appear in an editable dashed-edge block. Use this draft targets the
-outbound mail reply box for editing and Send. This checkout does not yet
-include that composer: the action reports that it is unavailable, and Copy
-draft lets the captain use the text in Gmail. Leaving the key blank when
+Drafts appear in an editable dashed-edge block. Use this draft replaces the
+body in the [reply box](#replying), opening it on phones, for editing and
+review before Send. Copy draft lets the captain use the text in Gmail.
+Leaving the key blank when
 saving preserves the saved key. For encrypted key storage and recovery, see
 the [Secrets inventory](docs/operations.md#secrets-inventory).
 
