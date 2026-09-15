@@ -470,6 +470,32 @@ class QuotesSystemTest < ApplicationSystemTestCase
     assert_includes body, "BK-11"
   end
 
+  test "invalid new quote retains the selected trip and departure" do
+    client = Client.create!(name: "Maya", email: "maya@example.com")
+    PerfectBook::Trip.create!(perfectbook_id: 42, name: "Everest", active: true, synced_at: Time.current)
+    PerfectBook::Departure.create!(perfectbook_id: 43, perfectbook_trip_id: 42,
+      start_date: Date.new(2027, 5, 4), end_date: Date.new(2027, 5, 18), synced_at: Time.current)
+    visit new_quote_path(client_id: client.id)
+    select "Everest", from: "Trip"
+    choose "4 May – 18 May 2027"
+    assert_selector "input[data-description][value='Everest - 4 May – 18 May 2027']"
+    within(all("[data-line-row]").first) { fill_in "Each ($)", with: "1,500" }
+    click_button "Save draft"
+    assert_text "is not a number"
+    assert_select "Trip", selected: "Everest"
+    assert_checked_field "4 May – 18 May 2027"
+    within(all("[data-line-row]").first) do
+      assert_field "Each ($)", with: "1,500"
+      fill_in "Each ($)", with: "1500"
+    end
+    click_button "Save draft"
+    assert_text "Quote saved as a draft"
+    quote = Quote.order(:id).last
+    assert_equal 42, quote.perfectbook_trip_id
+    assert_equal 43, quote.perfectbook_departure_id
+    assert_equal 150000, quote.lines.find_by!(kind: "departure").unit_minor
+  end
+
   private
 
   def assert_no_overflow(context)
