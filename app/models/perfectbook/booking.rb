@@ -22,14 +22,8 @@ module PerfectBook
       Array(documents_json.is_a?(Hash) ? documents_json["travelers"] : nil)
     end
 
-    # Outstanding documents across all travelers (missing + expiring),
-    # excluding received and not_required. Stored at sync; falls back to
-    # a live count when the mirror predates the documents summary.
     def outstanding_count
-      count = self[:missing_count].to_i
-      return count if documents_summary_present? || count.positive?
-
-      live_missing_count
+      self[:missing_count].to_i
     end
 
     # "Ama: passport, insurance; Tashi: waiver" for nudge copy, or nil
@@ -63,12 +57,5 @@ module PerfectBook
       documents_json.is_a?(Hash) && documents_json.key?("travelers")
     end
 
-    def live_missing_count
-      travelers.sum do |traveler|
-        Array(traveler["documents"]).count do |doc|
-          MISSING_STATUSES.include?(doc["status"].to_s)
-        end
-      end
-    end
   end
 end

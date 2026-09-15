@@ -27,10 +27,8 @@ module Mail
       return { status: :duplicate, conversation: existing.conversation, message: existing } if existing
 
       uploaded = []
-      holdings = []
       ::Message.transaction(requires_new: true) do |transaction|
         transaction.after_rollback { uploaded.each(&:delete) }
-        transaction.after_rollback { holdings.each { |holding| holding.destroy! if holding.persisted? } }
         conversation = find_conversation(gm_thread_id: gm_thread_id, parsed: parsed)
         direction = Mail.direction_for(parsed.from_addresses)
 
@@ -50,7 +48,7 @@ module Mail
           raw_size: parsed.raw_size.to_i,
           gmail_labels: labels
         )
-        attach_files(message, parsed.attachments, uploaded, holdings)
+        attach_files(message, parsed.attachments, uploaded)
         link_conversation(conversation, parsed)
         conversation.update!(
           subject: parsed.subject.presence || conversation.subject.presence || "(no subject)",
@@ -171,7 +169,7 @@ module Mail
       [ ordinary, held ]
     end
 
-    def attach_files(message, attachments, uploaded, holdings = [])
+    def attach_files(message, attachments, uploaded)
       skipped = []
       ordinary, held = self.class.partition_attachments(attachments)
       ordinary.each do |file|
@@ -198,10 +196,12 @@ module Mail
           holding = DocumentHolding.create!(message: message, filename: entry["filename"],
             content_type: entry["content_type"], byte_size: data.bytesize,
             expires_at: DocumentHolding::HOLD_HOURS.hours.from_now)
-          holding.file.attach(io: StringIO.new(data),
+          blob = ActiveStorage::Blob.build_after_unfurling(io: StringIO.new(data),
             filename: entry["filename"], content_type: entry["content_type"])
-          uploaded << holding.file.blob
-          holdings << holding
+          uploaded << blob
+          blob.save!
+          blob.upload_without_unfurling(StringIO.new(data))
+          holding.file.attach(blob)
           entry.merge("holding_id" => holding.id)
         end
       end

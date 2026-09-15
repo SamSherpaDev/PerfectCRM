@@ -137,6 +137,42 @@ class MailIngesterTest < ActiveSupport::TestCase
     assert_equal "route", result[:message].files.first.download
   end
 
+  test "failed holding upload rolls back all arrivals and allows the same message to retry" do
+    parsed = Mail::Ingester.parse_raw(mail_raw(from: "held-retry@example.com", message_id: "<held-retry@test>"))
+    parsed.attachments = [
+      { filename: "route.txt", content_type: "text/plain", data: "route bytes" },
+      { filename: "passport.pdf", content_type: "application/pdf", data: "passport bytes" },
+      { filename: "visa.png", content_type: "image/png", data: "visa bytes" }
+    ]
+    service = ActiveStorage::Blob.service
+    upload = service.method(:upload)
+    keys = []
+    failing_upload = lambda do |key, io, **options|
+      keys << key
+      upload.call(key, io, **options)
+      raise IOError, "holding upload failed" if keys.size == 3
+    end
+    assert_no_difference([ "Message.count", "Conversation.count", "DocumentHolding.count",
+      "ActiveStorage::Blob.count", "ActiveStorage::Attachment.count", "Note.count" ]) do
+      service.stub(:upload, failing_upload) do
+        assert_raises(IOError) do
+          Mail::Ingester.ingest(parsed: parsed, gmail: { gm_msgid: "held-retry" })
+        end
+      end
+    end
+    assert_equal 3, keys.size
+    keys.each { |key| assert_not service.exist?(key) }
+
+    result = Mail::Ingester.ingest(parsed: parsed, gmail: { gm_msgid: "held-retry" })
+    assert_equal :stored, result[:status]
+    message = result[:message].reload
+    assert_equal "route bytes", message.files.first.download
+    assert_equal [ "passport bytes", "visa bytes" ],
+      DocumentHolding.where(message: message).order(:id).map { |holding| holding.file.download }
+    assert_equal 2, message.held_attachments.size
+    assert_equal :duplicate, Mail::Ingester.ingest(parsed: parsed, gmail: { gm_msgid: "held-retry" })[:status]
+  end
+
   test "ignored identities skip triage on new threads" do
     EmailIdentity.remember!("ignored@example.com", ignored: true)
     result = ingest_raw(mail_raw(from: "ignored@example.com", message_id: "<ignored@test>"))
