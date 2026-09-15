@@ -49,10 +49,14 @@ class ApiV1LeadsVerdictsTest < ActionDispatch::IntegrationTest
   end
 
   test "a score-only verdict keeps the stage" do
+    @lead.update!(stage_changed_at: 10.days.ago)
+    stage_changed_at = @lead.reload.stage_changed_at
     post_verdict @lead.id, { "fit_score" => 34, "fit_band" => "weak" }
     assert_response :ok
     assert_equal "new", @lead.reload.status
     assert_equal "weak", @lead.fit_band
+    assert_equal stage_changed_at, @lead.stage_changed_at
+    assert_empty @lead.activity_events.where(kind: "stage_change")
   end
 
   test "quoted is rejected" do
@@ -74,7 +78,7 @@ class ApiV1LeadsVerdictsTest < ActionDispatch::IntegrationTest
   end
 
   test "lost is allowed" do
-    post_verdict @lead.id, { "status" => "lost" }
+    post_verdict @lead.id, { "status" => "lost", "lost_reason" => "not_a_fit" }
     assert_response :ok
     assert_equal "lost", @lead.reload.status
   end
@@ -113,11 +117,11 @@ class ApiV1LeadsVerdictsTest < ActionDispatch::IntegrationTest
 
   test "a converted lead is rejected" do
     @lead.convert_to_client!
-    post_verdict @lead.id, { "status" => "lost" }
+    post_verdict @lead.id, { "status" => "lost", "lost_reason" => "not_a_fit" }
     assert_response :unprocessable_entity
   end
   test "reopening an older lead with an open duplicate returns validation" do
-    @lead.update!(status: "lost")
+    @lead.update!(status: "lost", lost_reason: "no_reply")
     Lead.create!(name: "New inquiry", email: @lead.email)
     assert_no_difference("ActivityEvent.count") do
       post_verdict @lead.id, { "status" => "new", "fit_score" => 80 }
@@ -145,7 +149,7 @@ class ApiV1LeadsVerdictsTest < ActionDispatch::IntegrationTest
     stale = Lead.find(@lead.id)
     @lead.update!(status: "chatting")
     Lead.stub(:find_by, stale) do
-      post_verdict @lead.id, { "status" => "lost", "fit_score" => 82 }
+      post_verdict @lead.id, { "status" => "lost", "lost_reason" => "no_reply", "fit_score" => 82 }
     end
     assert_response :ok
     event = @lead.activity_events.where(kind: "automation").last
@@ -165,4 +169,78 @@ class ApiV1LeadsVerdictsTest < ActionDispatch::IntegrationTest
     assert_nil @lead.fit_score
     assert_empty @lead.activity_events.where(kind: "automation")
   end
+
+  test "lost requires a valid reason without changing scores or events" do
+    [ nil, "", "unknown" ].each do |reason|
+      assert_no_difference("ActivityEvent.count") do
+        post_verdict @lead.id, { "status" => "lost", "lost_reason" => reason, "fit_score" => 20 }
+      end
+      assert_response :bad_request
+      assert_equal reason.blank? ? "required" : "invalid", response.parsed_body["fields"]["lost_reason"]
+      assert_includes response.parsed_body["message"], "lost_reason"
+      assert_equal "new", @lead.reload.status
+      assert_nil @lead.fit_score
+    end
+  end
+
+  test "automated loss records reason default note timing and stage event" do
+    @lead.update!(stage_changed_at: 10.days.ago)
+    freeze_time do
+      post_verdict @lead.id, { "status" => "lost", "lost_reason" => "price" }, headers: { kid: "panda-ai" }
+      assert_response :ok
+      assert_equal "price", @lead.reload.lost_reason
+      assert_equal "Set by automation panda-ai", @lead.lost_note
+      assert_equal Time.current, @lead.stage_changed_at
+      event = @lead.activity_events.find_by!(kind: "stage_change")
+      assert_equal({ "from" => "new", "to" => "lost", "actor" => "automation" }, event.metadata)
+    end
+  end
+
+  test "loss note can be supplied explicitly" do
+    post_verdict @lead.id, { "status" => "lost", "lost_reason" => "dates", "lost_note" => "Dates unavailable" }
+    assert_response :ok
+    assert_equal "Dates unavailable", @lead.reload.lost_note
+  end
+
+  test "reopening clears loss details and resets stage timing" do
+    @lead.update!(status: "lost", lost_reason: "dates", lost_note: "Old dates", stage_changed_at: 10.days.ago)
+    freeze_time do
+      post_verdict @lead.id, { "status" => "chatting", "fit_score" => 90 }
+      assert_response :ok
+      assert_nil @lead.reload.lost_reason
+      assert_nil @lead.lost_note
+      assert_equal Time.current, @lead.stage_changed_at
+      assert_equal 90, @lead.fit_score
+      assert_equal "lost", @lead.activity_events.find_by!(kind: "stage_change").metadata["from"]
+    end
+  end
+
+  test "repeated status does not reset stage timing or add a stage event" do
+    @lead.update!(stage_changed_at: 10.days.ago)
+    before = @lead.reload.stage_changed_at
+    post_verdict @lead.id, { "status" => "new", "fit_score" => 75 }
+    assert_response :ok
+    assert_equal before, @lead.reload.stage_changed_at
+    assert_empty @lead.activity_events.where(kind: "stage_change")
+  end
+
+  test "automation event failure rolls back the transition and its event" do
+    before = @lead.stage_changed_at
+    constructor = ActivityEvent.method(:new)
+    ActivityEvent.stub(:new, ->(*args, **kwargs, &block) {
+      event = constructor.call(*args, **kwargs, &block)
+      raise "automation timeline unavailable" if event.kind == "automation"
+      event
+    }) do
+      assert_no_difference("ActivityEvent.count") do
+        assert_raises(RuntimeError) do
+          post_verdict @lead.id, { "status" => "chatting", "fit_score" => 80 }
+        end
+      end
+    end
+    assert_equal "new", @lead.reload.status
+    assert_equal before, @lead.stage_changed_at
+    assert_nil @lead.fit_score
+  end
+
 end

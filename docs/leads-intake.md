@@ -152,6 +152,24 @@ email or PerfectBook identity belongs to another open lead. Every successful
 call saves its changes and an `automation` timeline event naming the caller
 in one transaction. Failed calls do not add events.
 
+A verdict with `"status":"lost"` must include `lost_reason`, using the same
+values as the captain's loss form: `no_reply`, `price`, `dates`, `chose_another`,
+`not_a_fit`, or `other`. Missing or invalid reasons return `400`, with
+`error: "validation"`, `fields.lost_reason: "required"` or `"invalid"`, and an
+explanatory `message`. For example:
+
+```json
+{ "status": "lost", "lost_reason": "not_a_fit", "fit_score": 20 }
+```
+
+Optional `lost_note` supplies the loss note. When omitted or blank, it defaults
+to `Set by automation <kid>` (or `Set by automation relay` without a `kid`).
+Actual status changes use the same transition rules as manual changes: they
+reset `stage_changed_at`, record a `stage_change` event with actor `automation`,
+and clear the loss reason and note when reopening a lead. The transition and
+caller-specific automation event share one locked transaction. Score-only
+verdicts and repeated statuses leave stage timing unchanged.
+
 ## What happens after intake
 
 - **Email copy.** A background job mails the inquiry to

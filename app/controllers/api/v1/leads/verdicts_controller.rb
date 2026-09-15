@@ -40,6 +40,21 @@ module Api
               status: :unprocessable_entity
           end
 
+          lost_reason = payload["lost_reason"].to_s.strip.presence
+          if status == "lost" && !lost_reason.in?(::Lead::LOST_REASONS)
+            return render json: {
+              error: "validation",
+              fields: { lost_reason: lost_reason.nil? ? "required" : "invalid" },
+              message: "lost_reason is required when status is lost and must be one of: #{::Lead::LOST_REASONS.join(', ')}"
+            }, status: :bad_request
+          end
+
+          attributes = {}
+          attributes[:fit_score] = score unless score.nil?
+          attributes[:fit_band] = band if band.present?
+          attributes[:fit_reason] = payload["fit_reason"].to_s.strip.presence&.truncate(1000) if payload.key?("fit_reason")
+          lost_note = payload["lost_note"].to_s.strip.presence || "Set by automation #{caller_name}"
+
           lead.with_lock do
             if lead.converted?
               return render json: { error: "validation", fields: { "base" => "converted" } },
@@ -47,13 +62,12 @@ module Api
             end
 
             from_status = lead.status
-            lead.fit_score = score unless score.nil?
-            lead.fit_band = band if band.present?
-            lead.fit_reason = payload["fit_reason"].to_s.strip.presence&.truncate(1000) if payload.key?("fit_reason")
-            lead.status = status if status.present?
-            unless lead.save
-              fields = lead.errors.map { |error| [ error.attribute, error.type == :taken ? "taken" : "invalid" ] }.to_h
-              return render json: { error: "validation", fields: fields }, status: :unprocessable_entity
+            if status.present? && status != from_status
+              ::Leads::Transition.call(lead, to: status, actor: :automation,
+                lost_reason: lost_reason, lost_note: lost_note, attributes: attributes)
+            else
+              attributes.merge!(lost_reason: lost_reason, lost_note: lost_note) if status == "lost"
+              lead.update!(attributes)
             end
 
             record_automation_event!(lead, caller_name, from_status: from_status)
@@ -64,6 +78,9 @@ module Api
               fit_band: lead.fit_band
             }, status: :ok
           end
+        rescue ActiveRecord::RecordInvalid => error
+          fields = error.record.errors.map { |item| [ item.attribute, item.type == :taken ? "taken" : "invalid" ] }.to_h
+          render json: { error: "validation", fields: fields }, status: :unprocessable_entity
         end
 
         private
