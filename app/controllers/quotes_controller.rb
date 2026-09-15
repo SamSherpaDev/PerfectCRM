@@ -146,9 +146,14 @@ class QuotesController < ApplicationController
     departure = @departures.find_by(perfectbook_id: params[:departure_id]) if @trip && params[:departure_id].present?
     @quote.perfectbook_departure_id = departure&.perfectbook_id
     if @trip && @quote.lines.none? { |line| %w[trip departure].include?(line.kind) }
-      @prefilled_unit = Quote.last_unit_for_trip(@trip.perfectbook_id, departure_id: @quote.perfectbook_departure_id)
       @quote.lines.build(kind: "trip", description: [ @trip.name, departure && departure_label(departure) ].compact.join(" - "),
-        quantity: @quote.party_size.presence || 2, unit_minor: @prefilled_unit.to_i)
+        quantity: @quote.party_size.presence || 2, price_edited: "0")
+    end
+    if @trip
+      @quote.lines.select { |line| %w[trip departure].include?(line.kind) && line.price_edited == "0" }.each do |line|
+        @prefilled_unit = Quote.last_unit_for_trip(@trip.perfectbook_id, departure_id: @quote.perfectbook_departure_id)
+        line.unit_minor = @prefilled_unit.to_i
+      end
     end
     apply_catalog_snapshot(replace_description: true)
   end
@@ -228,7 +233,7 @@ class QuotesController < ApplicationController
       :party_size, :trip_name, :departure_label, :departure_start_on, :departure_end_on,
       :perfectbook_trip_id, :perfectbook_departure_id, :notes, :included,
       :deposit_dollars, :balance_due_on, :valid_until,
-      lines_attributes: %i[id kind description quantity unit_dollars _destroy]
+      lines_attributes: %i[id kind description quantity unit_dollars price_edited _destroy]
     )
   end
 end

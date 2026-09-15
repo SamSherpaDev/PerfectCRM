@@ -13,6 +13,11 @@ export default class extends Controller {
     this.inclusionsEditedTarget.value = "1"
   }
 
+  editPrice(event) {
+    event.target.closest("[data-line-row]").querySelector("[data-price-edited]").value = "1"
+    this.recalc()
+  }
+
   add(event) {
     event.preventDefault()
     const html = this.templateTarget.innerHTML.replaceAll("__INDEX__", Date.now())

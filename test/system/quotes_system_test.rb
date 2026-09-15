@@ -346,6 +346,50 @@ class QuotesSystemTest < ApplicationSystemTestCase
     assert_field "What is included", with: ""
   end
 
+  test "departure selection refreshes untouched prices and preserves edited prices" do
+    client = Client.create!(name: "Maya", email: "maya@example.com")
+    PerfectBook::Trip.create!(perfectbook_id: 42, name: "Everest", active: true, synced_at: Time.current)
+    PerfectBook::Departure.create!(perfectbook_id: 43, perfectbook_trip_id: 42,
+      start_date: Date.new(2027, 5, 4), end_date: Date.new(2027, 5, 18), synced_at: Time.current)
+    PerfectBook::Departure.create!(perfectbook_id: 44, perfectbook_trip_id: 42,
+      start_date: Date.new(2027, 6, 4), end_date: Date.new(2027, 6, 18), synced_at: Time.current)
+    previous = Quote.create!(client: client, status: "accepted", sent_at: 2.days.ago, sent_by_email: User.find_by!(google_sub: "google-captain").email)
+    previous.lines.create!(kind: "departure", description: "Everest", quantity: 1, unit_minor: 200_000,
+      perfectbook_trip_id: 42, perfectbook_departure_id: 43)
+    recent = Quote.create!(client: client, status: "sent", sent_at: 1.day.ago, sent_by_email: User.find_by!(google_sub: "google-captain").email)
+    recent.lines.create!(kind: "trip", description: "Everest", quantity: 1, unit_minor: 300_000, perfectbook_trip_id: 42)
+
+    visit new_quote_path(client_id: client.id)
+    select "Everest", from: "Trip"
+    assert_text "Prefilled from your last quote"
+    assert_selector "[data-line-row]:first-child input[data-each][value='3000.00']"
+    choose "4 May – 18 May 2027"
+    assert_selector "[data-line-row]:first-child input[data-each][value='2000.00']"
+
+    choose "4 Jun – 18 Jun 2027"
+    assert_selector "input[name='departure_id'][value='44']:checked"
+    assert_selector "input[data-description][value='Everest - 4 Jun – 18 Jun 2027']"
+    within(all("[data-line-row]").first) do
+      assert_field "Each ($)", with: "3000.00"
+      fill_in "Each ($)", with: "2500"
+    end
+    choose "4 May – 18 May 2027"
+    assert_selector "[data-line-row]:first-child input[data-each][value='2500.00']"
+    choose "4 Jun – 18 Jun 2027"
+    assert_selector "input[name='departure_id'][value='44']:checked"
+    assert_selector "input[data-description][value='Everest - 4 Jun – 18 Jun 2027']"
+    within(all("[data-line-row]").first) do
+      assert_field "Each ($)", with: "2500.00"
+      fill_in "Each ($)", with: ""
+    end
+    choose "4 May – 18 May 2027"
+    assert_selector "input[data-description][value='Everest - 4 May – 18 May 2027']"
+    assert_selector "[data-line-row]:first-child input[data-each][value='0.00']"
+    click_button "Save draft"
+    assert_text "Quote saved as a draft"
+    assert_equal 0, Quote.order(:id).last.lines.find_by!(kind: "departure").unit_minor
+  end
+
   private
 
   def assert_no_overflow(context)
