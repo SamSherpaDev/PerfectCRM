@@ -26,6 +26,12 @@ module ApplicationHelper
 
   # Any supported currency from integer minor units. USD keeps the dollar sign;
   # every other currency is prefixed with its ISO code: "NPR 140,000.00".
+  def pipeline_money(totals)
+    return money_in(0, "USD") if totals.empty?
+
+    totals.sort_by { |currency, _| currency.to_s }.map { |currency, minor| money_in(minor, currency) }.join(" · ")
+  end
+
   def money_in(minor, currency)
     return money(minor) if currency.blank? || currency == "USD"
 

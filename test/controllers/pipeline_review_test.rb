@@ -87,7 +87,7 @@ class PipelineReviewTest < ActionDispatch::IntegrationTest
   test "lost value remains a subtotal but leaves the active digest" do
     Lead.create!(name: "Lost inquiry", status: "lost", lost_reason: "price", expected_value_minor: 250_000)
     report = Pipeline::Report.new
-    assert_equal 250_000, report.value_by_stage["lost"]
+    assert_equal({ "USD" => 250_000 }, report.value_by_stage["lost"])
     assert_equal 0, report.pipeline_total
     assert_match "0 open", report.digest_line
     assert_match "$0.00 in the pipeline", report.digest_line
@@ -99,18 +99,18 @@ class PipelineReviewTest < ActionDispatch::IntegrationTest
     client = lead.convert_to_client!
     Client.create!(name: "Unrelated traveler")
     report = Pipeline::Report.new
-    assert_equal 250_000, report.value_by_stage["won"]
+    assert_equal({ "USD" => 250_000 }, report.value_by_stage["won"])
     PerfectBook::Booking.create!(perfectbook_id: 801, perfectbook_contact_id: 901, synced_at: Time.current, total_minor: 300_000, trip_name: "Everest")
     PerfectBook::Booking.create!(perfectbook_id: 802, perfectbook_contact_id: 901, synced_at: Time.current, total_minor: 100_000, trip_name: "Everest")
-    assert_equal 400_000, report.value_by_stage["won"]
+    assert_equal({ "USD" => 400_000 }, report.value_by_stage["won"])
     %w[Everest Annapurna].each do |trip|
       column = Pipeline::Board.new(trip: trip).columns.find { |entry| entry.stage == "won" }
       assert_equal [ client.id ], column.records.map(&:id)
-      assert_equal 400_000, column.value_minor
+      assert_equal({ "USD" => 400_000 }, column.values_by_currency)
     end
     assert_includes Pipeline::Board.new.trip_options, "Everest"
     client.update!(pipeline_stage: "post_trip")
-    assert_equal 400_000, report.value_by_stage["post_trip"]
+    assert_equal({ "USD" => 400_000 }, report.value_by_stage["post_trip"])
     get pipeline_path(trip: "Everest")
     assert_select ".col-sum", text: "$4,000.00"
     assert_select "a", { text: "Unrelated traveler", count: 0 }
@@ -136,6 +136,29 @@ class PipelineReviewTest < ActionDispatch::IntegrationTest
     assert_equal lead.stage_changed_at.iso8601, row["stage_changed_at"]
     assert_equal lead.last_touch_at.iso8601, row["last_touch_at"]
     assert_equal "post_trip", files.fetch("clients.csv").first["pipeline_stage"]
+  end
+
+
+  test "mixed booking currencies stay separate on the board and report" do
+    client = Client.create!(name: "Mixed currency traveler", perfectbook_contact_id: 903)
+    { "NPR" => 14_000_000, "USD" => 250_000 }.each_with_index do |(currency, total), index|
+      PerfectBook::Booking.create!(perfectbook_id: 900 + index, perfectbook_contact_id: 903,
+        currency: currency, total_minor: total, synced_at: Time.current)
+    end
+    other = Client.create!(name: "Another traveler", perfectbook_contact_id: 904)
+    PerfectBook::Booking.create!(perfectbook_id: 902, perfectbook_contact_id: other.perfectbook_contact_id,
+      currency: "NPR", total_minor: 100_000, synced_at: Time.current)
+    totals = { "NPR" => 14_100_000, "USD" => 250_000 }
+    column = Pipeline::Board.new.columns.find { |entry| entry.stage == "won" }
+    assert_equal totals, column.values_by_currency
+    assert_equal totals, Pipeline::Report.new.value_by_stage.fetch("won")
+    get pipeline_path
+    assert_response :success
+    assert_select ".col-sum", text: "NPR 141,000.00 · $2,500.00"
+    assert_select "#numbers-heading", text: "Numbers"
+    assert_select "span", text: "NPR 141,000.00 · $2,500.00", minimum: 2
+    client.update!(pipeline_stage: "post_trip")
+    assert_equal({ "NPR" => 14_000_000, "USD" => 250_000 }, Pipeline::Report.new.value_by_stage.fetch("post_trip"))
   end
 
 end

@@ -13,7 +13,7 @@
     <%= link_to record.name, kind == "lead" ? lead_path(record) : client_path(record), class: "link-quiet kcard-name" %>
     <details class="relative shrink-0">
       <summary class="link-quiet cursor-pointer list-none text-[12px]" aria-label="Move <%= record.name %> to another stage">Move</summary>
-      <div class="absolute right-0 z-10 mt-1 flex min-w-36 flex-col rounded-control border border-edge bg-paper-2 py-1 shadow-raise">
+      <div class="pipeline-move-menu right-0 z-10 mt-1 flex min-w-36 flex-col rounded-control border border-edge bg-paper-2 py-1 shadow-raise">
         <% move_targets.each do |target, label| %>
           <% link_data = { turbo_method: :patch, action: "click->pipeline#move", record_type: kind, record_id: record.id, record_name: record.name, to: target } %>
           <%= link_to label, pipeline_move_path(**filters, kind == "lead" ? :lead_id : :client_id => record.id, to: target),

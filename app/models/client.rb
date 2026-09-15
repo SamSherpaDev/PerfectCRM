@@ -98,11 +98,13 @@ class Client < ApplicationRecord
     update!(archived_at: nil)
   end
 
-  def pipeline_value_minor
+  def pipeline_values_by_currency
     if perfectbook_bookings.any?
-      perfectbook_bookings.sum { |booking| booking.total_minor.to_i }
+      perfectbook_bookings.group_by(&:currency).transform_values do |bookings|
+        bookings.sum { |booking| booking.total_minor.to_i }
+      end
     else
-      converted_leads.sum { |lead| lead.expected_value_minor.to_i }
+      { "USD" => converted_leads.sum { |lead| lead.expected_value_minor.to_i } }
     end
   end
 

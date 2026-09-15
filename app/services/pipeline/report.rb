@@ -4,15 +4,20 @@
 class Pipeline::Report
   def value_by_stage
     sums = Lead.where(converted_client_id: nil).group(:status).sum(:expected_value_minor)
-    values = Pipeline::Board::STAGES.index_with { |stage| sums.fetch(stage, 0).to_i }
+    values = Pipeline::Board::STAGES.index_with do |stage|
+      Pipeline::Board::LEAD_STAGES.include?(stage) ? { "USD" => sums.fetch(stage, 0).to_i } : {}
+    end
     Client.active.includes(:perfectbook_bookings, :converted_leads).each do |client|
-      values[client.pipeline_stage] += client.pipeline_value_minor
+      client.pipeline_values_by_currency.each do |currency, minor|
+        stage = values.fetch(client.pipeline_stage)
+        stage[currency] = stage.fetch(currency, 0) + minor
+      end
     end
     values
   end
 
   def pipeline_total
-    value_by_stage.slice(*Lead::STATUSES.excluding("lost")).values.sum
+    Lead.open.sum(:expected_value_minor).to_i
   end
 
   # First outbound after first inbound per thread; nil until mail lands.

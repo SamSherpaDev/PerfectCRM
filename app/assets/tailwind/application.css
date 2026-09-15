@@ -2091,3 +2091,9 @@
     animation: none;
   }
 }
+
+.pipeline-move-menu { position: static; }
+
+@media (min-width: 768px) {
+  .pipeline-move-menu { position: absolute; }
+}

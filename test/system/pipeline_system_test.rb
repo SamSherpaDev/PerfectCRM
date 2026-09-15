@@ -123,6 +123,36 @@ class PipelineSystemTest < ApplicationSystemTestCase
     assert_equal "Your Annapurna\n\nHi Tashi", page.evaluate_script("window.copiedMessage")
   end
 
+  test "phone move menu reaches Lost and Won for a single card" do
+    lead = Lead.create!(name: "Phone move traveler")
+    page.current_window.resize_to(390, 844)
+    visit pipeline_path
+    within "section[aria-label='Stages']" do
+      find("summary", text: "Move", exact_text: true).click
+      click_link "Lost", exact: true
+    end
+    assert_selector "dialog[open]"
+    visit pipeline_path
+    within "section[aria-label='Stages']" do
+      find("summary", text: "Move", exact_text: true).click
+      click_link "Won", exact: true
+    end
+    assert_current_path lead_path(lead)
+  end
+
+  test "missing lost reason preserves the submitted form" do
+    lead = Lead.create!(name: "Original traveler")
+    visit edit_lead_path(lead)
+    fill_in "Name", with: "Edited traveler"
+    select "Lost", from: "Status"
+    click_button "Save changes"
+    assert_field "Name", with: "Edited traveler"
+    assert_selector "select option:checked", text: "Lost"
+    assert_equal "Original traveler", lead.reload.name
+    assert_equal "new", lead.status
+    assert_not lead.activity_events.exists?(kind: "stage_change")
+  end
+
   private
 
   def assert_no_overflow(context)

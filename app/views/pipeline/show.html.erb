@@ -63,7 +63,7 @@
             <span class="col-name"><%= PipelineController::STAGE_LABELS.fetch(column.stage) %></span>
             <span class="col-count"><%= pluralize(column.count, "card") %></span>
           </div>
-          <p class="col-sum"><%= money(column.value_minor) %></p>
+          <p class="col-sum"><%= pipeline_money(column.values_by_currency) %></p>
           <div class="col-cards">
             <% column.records.each do |record| %>
               <% kind = Pipeline::Board::LEAD_STAGES.include?(column.stage) ? "lead" : "client" %>
@@ -92,7 +92,7 @@
           <span>
             <span class="block text-[14.5px] font-medium text-ink"><%= PipelineController::STAGE_LABELS.fetch(column.stage) %></span>
             <span class="block text-[12px] muted">
-              <%= money(column.value_minor) %>
+              <%= pipeline_money(column.values_by_currency) %>
             </span>
           </span>
           <span class="stage-count"><%= column.count %></span>

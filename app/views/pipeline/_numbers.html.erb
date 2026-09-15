@@ -12,7 +12,7 @@
         <% Pipeline::Board::STAGES.each do |stage| %>
           <div class="flex items-baseline justify-between gap-3">
             <span class="muted"><%= PipelineController::STAGE_LABELS.fetch(stage) %></span>
-            <span class="num font-display text-[17px] text-ink"><%= money(values.fetch(stage, 0).to_i) %></span>
+            <span class="num font-display text-[17px] text-ink text-right"><%= pipeline_money(values.fetch(stage)) %></span>
           </div>
         <% end %>
         <div class="flex items-baseline justify-between gap-3 border-t border-rule-2 pt-1">

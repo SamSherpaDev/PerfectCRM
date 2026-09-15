@@ -6,7 +6,7 @@ class Pipeline::Board
   LEAD_STAGES = %w[new chatting quoted nudged lost].freeze
   CLIENT_STAGES = %w[won post_trip].freeze
 
-  Column = Data.define(:stage, :records, :count, :value_minor)
+  Column = Data.define(:stage, :records, :count, :values_by_currency)
 
   attr_reader :filters
 
@@ -23,12 +23,15 @@ class Pipeline::Board
       if LEAD_STAGES.include?(stage)
         scope = filtered_leads(Lead.by_status(stage))
         Column.new(stage: stage, records: scope.ordered.includes(:tags, :people).to_a,
-          count: scope.count, value_minor: scope.sum(:expected_value_minor).to_i)
+          count: scope.count, values_by_currency: { "USD" => scope.sum(:expected_value_minor).to_i })
       else
         scope = filtered_clients(Client.in_stage(stage))
         records = scope.ordered.includes(:tags, :people, :perfectbook_bookings, :converted_leads).to_a
+        totals = records.each_with_object(Hash.new(0)) do |record, sums|
+          record.pipeline_values_by_currency.each { |currency, minor| sums[currency] += minor }
+        end
         Column.new(stage: stage, records: records,
-          count: records.size, value_minor: records.sum(&:pipeline_value_minor))
+          count: records.size, values_by_currency: totals)
       end
     end
   end

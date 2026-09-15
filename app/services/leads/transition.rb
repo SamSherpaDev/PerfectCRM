@@ -7,7 +7,6 @@ class Leads::Transition
   Result = Data.define(:record, :from, :to, :converted_client)
 
   AUTOMATION_ONLY_ERROR = "Automations may only set new, chatting, or lost. Quoted, nudged, and won stay yours."
-  LOST_REASON_ERROR = "Pick a reason. Every lost lead needs one."
 
   def self.call(lead, to:, actor: :captain, lost_reason: nil, lost_note: nil, attributes: {}, expected_client_id: "new")
     new(lead, to.to_s, actor.to_sym, lost_reason, lost_note, attributes, expected_client_id).call
@@ -46,15 +45,6 @@ class Leads::Transition
 
     unless Lead::STATUSES.include?(@to)
       @lead.errors.add(:status, "is not a lead stage")
-      raise ActiveRecord::RecordInvalid, @lead
-    end
-
-    if @to == "lost" && @lost_reason.blank?
-      @lead.errors.add(:lost_reason, LOST_REASON_ERROR)
-      raise ActiveRecord::RecordInvalid, @lead
-    end
-    if @to == "lost" && !Lead::LOST_REASONS.include?(@lost_reason)
-      @lead.errors.add(:lost_reason, "is not a known reason")
       raise ActiveRecord::RecordInvalid, @lead
     end
 

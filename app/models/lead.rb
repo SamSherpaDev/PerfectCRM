@@ -227,10 +227,6 @@ class Lead < ApplicationRecord
     last_activity_at || updated_at
   end
 
-  def expected_value_money
-    expected_value_minor
-  end
-
   def fit_label
     [ fit_band.presence&.humanize || "Scoring", fit_score ].compact.join(" · ")
   end

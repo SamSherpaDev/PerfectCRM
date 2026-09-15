@@ -1,4 +1,5 @@
 require "test_helper"
+require_relative "../../db/migrate/20260914211506_backfill_lead_last_touch"
 
 class LeadPipelineTest < ActiveSupport::TestCase
   test "lost requires a reason" do
@@ -78,4 +79,29 @@ class LeadPipelineTest < ActiveSupport::TestCase
     lead = Lead.create!(name: "Trip", source: "manual", trip_interest: "  ")
     assert_nil lead.reload.trip_interest
   end
+
+  test "backfill uses contact history and stage changes do not clear old staleness" do
+    old = 20.days.ago.change(usec: 0)
+    quiet = Lead.create!(name: "Existing quiet lead")
+    quiet.update_columns(created_at: old, last_activity_at: 1.day.ago, last_touch_at: nil)
+    noted = Lead.create!(name: "Existing noted lead")
+    noted.notes.create!(body: "Traveler asked about dates", created_at: 9.days.ago)
+    latest = noted.notes.create!(body: "Traveler confirmed dates", created_at: 8.days.ago.change(usec: 0))
+    noted.update_columns(created_at: old, last_activity_at: Time.current, last_touch_at: nil)
+    touched = Lead.create!(name: "Already tracked")
+    touch = touched.last_touch_at
+
+    BackfillLeadLastTouch.new.migrate(:up)
+
+    assert_equal old, quiet.reload.last_touch_at
+    assert_equal latest.created_at, noted.reload.last_touch_at
+    assert_equal touch, touched.reload.last_touch_at
+    assert quiet.stale?
+    assert noted.stale?
+    Leads::Transition.call(quiet, to: "chatting")
+    assert quiet.reload.stale?
+    assert_includes Lead.stale, quiet
+    assert_equal old, quiet.last_touch_at
+  end
+
 end

@@ -10,9 +10,9 @@ class PipelineReportTest < ActiveSupport::TestCase
 
     report = Pipeline::Report.new
     values = report.value_by_stage
-    assert_equal 100_00, values["new"]
-    assert_equal 250_00, values["chatting"]
-    assert_equal 0, values["quoted"]
+    assert_equal({ "USD" => 100_00 }, values["new"])
+    assert_equal({ "USD" => 250_00 }, values["chatting"])
+    assert_equal({ "USD" => 0 }, values["quoted"])
     assert_equal 350_00, report.pipeline_total
   end
 

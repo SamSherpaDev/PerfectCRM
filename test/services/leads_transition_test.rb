@@ -54,17 +54,17 @@ class LeadsTransitionTest < ActiveSupport::TestCase
     assert_match(/reason/i, error.record.errors.full_messages.to_sentence)
 
     error = assert_raises(ActiveRecord::RecordInvalid) do
-      Leads::Transition.call(@lead, to: "lost", actor: :captain, lost_reason: "aliens")
+      Leads::Transition.call(@lead.reload, to: "lost", actor: :captain, lost_reason: "aliens")
     end
     assert error.record.errors[:lost_reason].any?
 
-    Leads::Transition.call(@lead, to: "lost", actor: :captain, lost_reason: "dates", lost_note: "July only")
+    Leads::Transition.call(@lead.reload, to: "lost", actor: :captain, lost_reason: "dates", lost_note: "July only")
     assert_equal "dates", @lead.reload.lost_reason
     assert_equal "July only", @lead.reload.lost_note
   end
 
   test "leaving lost clears the reason" do
-    Leads::Transition.call(@lead, to: "lost", actor: :captain, lost_reason: "price")
+    Leads::Transition.call(@lead.reload, to: "lost", actor: :captain, lost_reason: "price")
     Leads::Transition.call(@lead, to: "new", actor: :captain)
     assert_nil @lead.reload.lost_reason
     assert_nil @lead.reload.lost_note
