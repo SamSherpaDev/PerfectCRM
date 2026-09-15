@@ -143,7 +143,7 @@ class QuotesController < ApplicationController
     @quote.perfectbook_departure_id = departure&.perfectbook_id
     if @trip && @quote.lines.none? { |line| %w[trip departure].include?(line.kind) }
       @prefilled_unit = Quote.last_unit_for_trip(@trip.perfectbook_id, departure_id: @quote.perfectbook_departure_id)
-      @quote.lines.build(kind: "trip", description: @trip.name,
+      @quote.lines.build(kind: "trip", description: [ @trip.name, departure && departure_label(departure) ].compact.join(" - "),
         quantity: @quote.party_size.presence || 2, unit_minor: @prefilled_unit.to_i)
     end
     apply_catalog_snapshot(replace_description: true)
@@ -158,6 +158,7 @@ class QuotesController < ApplicationController
       return false
     end
 
+    previous_catalog_description = [ @quote.trip_name, @quote.departure_label ].compact_blank.join(" - ")
     @quote.trip_name = trip&.name if trip || replace_description
     @quote.departure_label = departure && departure_label(departure)
     @quote.departure_start_on = departure&.start_date
@@ -172,7 +173,7 @@ class QuotesController < ApplicationController
       line.snapshot_departure_label = @quote.departure_label
       line.snapshot_start_on = departure&.start_date
       line.snapshot_end_on = departure&.end_date
-      if replace_description && trip
+      if replace_description && trip && line.description == previous_catalog_description
         line.description = [ trip.name, @quote.departure_label ].compact.join(" - ")
       end
     end

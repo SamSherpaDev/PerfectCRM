@@ -455,4 +455,24 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
     assert_select "input[name='quote[valid_until]'][value]", count: 0
   end
 
+  test "changing a saved catalog selection preserves edited line descriptions" do
+    PerfectBook::Trip.create!(perfectbook_id: 42, name: "Annapurna", active: true, synced_at: Time.current)
+    [ "Everest", "Everest trek with private guide", "" ].each do |description|
+      quote = Quote.create!(client: @client, perfectbook_trip_id: 7, trip_name: "Everest")
+      line = quote.lines.create!(kind: "trip", description: "Everest", quantity: 1, unit_minor: 150000,
+        perfectbook_trip_id: 7, snapshot_trip_name: "Everest")
+      patch quote_path(quote), params: { quote: {
+        perfectbook_trip_id: 42, lines_attributes: { "0" => { id: line.id, description: description } }
+      } }
+      if description.empty?
+        assert_response :unprocessable_entity
+        assert_equal "Everest", line.reload.description
+      else
+        assert_redirected_to quote_path(quote)
+        assert_equal description == "Everest" ? "Annapurna" : description, line.reload.description
+        assert_equal "Annapurna", line.snapshot_trip_name
+      end
+    end
+  end
+
 end
