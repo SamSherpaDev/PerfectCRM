@@ -241,6 +241,7 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
       click_button "Save lead"
       assert_selector "[role=alert]", text: "has already been taken"
       select "Lost", from: "Status"
+      select "Dates", from: "Lost reason"
       click_button "Save lead"
       assert_selector "h1", text: "Next inquiry"
       lost = Lead.order(:id).last
@@ -251,6 +252,7 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
       capture("lead-#{identity.keys.first}-open-guard")
       visit edit_lead_path(active)
       select "Lost", from: "Status"
+      select "Dates", from: "Lost reason"
       click_button "Save changes"
       assert_selector "h1", text: "Active inquiry"
       visit edit_lead_path(lost)
@@ -259,7 +261,7 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
       assert_selector "h1", text: "Next inquiry"
       assert_equal "chatting", lost.reload.status
     end
-    Lead.create!(name: "Historical import", status: "lost", external_ref: "import-123")
+    Lead.create!(name: "Historical import", status: "lost", lost_reason: "dates", external_ref: "import-123")
     visit new_lead_path
     fill_in "Display name", with: "Duplicate import"
     fill_in "External reference", with: "import-123"
