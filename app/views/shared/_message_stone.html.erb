@@ -15,17 +15,21 @@
         <p class="mt-1 font-semibold text-ink text-[13px]"><%= message.subject %></p>
       <% end %>
       <% body = message.text_body.presence || ActionView::Base.full_sanitizer.sanitize(message.html_body.to_s).squish %>
+      <% body_content = capture do %>
+        <% if message.html_body.present? && message.text_body.blank? %>
+          <div class="mt-2 text-ink-2 prose-sm"><%= sanitize(message.html_body, tags: Mail::Sanitizer::ALLOWED_TAGS, attributes: Mail::Sanitizer::ALLOWED_ATTRIBUTES) %></div>
+        <% else %>
+          <div class="mt-2 whitespace-pre-line text-ink-2"><%= body.presence || "No text in this message." %></div>
+        <% end %>
+      <% end %>
       <% if body.length > 600 %>
         <details>
           <summary class="link-quiet cursor-pointer text-[12.5px]">Read message</summary>
-          <div class="mt-2 whitespace-pre-line text-ink-2"><%= body %></div>
+          <%= body_content %>
         </details>
         <p class="mt-1 text-ink-2 whitespace-pre-line"><%= truncate(body, length: 280) %></p>
       <% else %>
-        <div class="mt-1 whitespace-pre-line text-ink-2"><%= body.presence || "No text in this message." %></div>
-      <% end %>
-      <% if message.html_body.present? && message.text_body.blank? %>
-        <div class="mt-2 text-ink-2 prose-sm"><%= sanitize(message.html_body, tags: Mail::Sanitizer::ALLOWED_TAGS, attributes: Mail::Sanitizer::ALLOWED_ATTRIBUTES) %></div>
+        <%= body_content %>
       <% end %>
       <% if message.files.attached? %>
         <ul class="thread-attachments" aria-label="Attachments">

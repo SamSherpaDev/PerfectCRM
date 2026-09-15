@@ -308,7 +308,9 @@ date-of-birth, and scan documents. Flagged attachments are never uploaded:
 only a placeholder with filename, size, type, and "held: collect in PerfectBook"
 remains on the timeline, with a follow-up note to collect the document in
 PerfectBook. PDF metadata is parsed in memory; unreadable or encrypted PDFs
-are also held. Document bytes and PDF titles are not persisted. Held documents
+are also held. Document bytes and PDF titles are not persisted. Attached emails are screened
+recursively: sensitive enclosures become placeholders, safe enclosures remain
+available, and an enclosing .eml containing a sensitive file is never uploaded. Held documents
 appear in Triage even on linked conversations.
 Every stored ordinary attachment still offers **Remove from CRM, collect in
 PerfectBook** if the captain identifies a sensitive file that screening missed.

@@ -72,7 +72,7 @@ module Mail
       attachments = []
       read_part = lambda do |part|
         disposition = part.content_disposition.to_s.split(";").first.to_s.strip
-        if part.attachment? || disposition.casecmp?("attachment")
+        if part.attachment? || disposition.casecmp?("attachment") || part.mime_type == "message/rfc822"
           attachments << {
             filename: part.filename.to_s.presence || "attachment",
             content_type: part.mime_type.to_s.presence || "application/octet-stream",
@@ -142,19 +142,40 @@ module Mail
         .map { |value| value.to_s.strip.downcase }.reject(&:blank?).uniq
     end
 
-    def attach_files(message, attachments, uploaded)
-      skipped = []
+    def partition_attachments(attachments)
+      ordinary = []
       held = []
       Array(attachments).each do |file|
         filename = file[:filename].to_s.presence || "attachment"
         content_type = file[:content_type].to_s.presence || "application/octet-stream"
         data = file[:data].to_s
         next if data.blank?
+
         if ::Message.sensitive_attachment?(filename, content_type, data: data)
           held << { "filename" => filename, "byte_size" => data.bytesize, "content_type" => content_type,
             "status" => "held: collect in PerfectBook" }
-          next
+        elsif content_type == "message/rfc822" || filename.downcase.end_with?(".eml")
+          enclosed, sensitive = partition_attachments(self.class.parse_raw(data).attachments)
+          if sensitive.any?
+            ordinary.concat(enclosed)
+            held.concat(sensitive)
+          else
+            ordinary << { filename: filename, content_type: content_type, data: data }
+          end
+        else
+          ordinary << { filename: filename, content_type: content_type, data: data }
         end
+      end
+      [ ordinary, held ]
+    end
+
+    def attach_files(message, attachments, uploaded)
+      skipped = []
+      ordinary, held = partition_attachments(attachments)
+      ordinary.each do |file|
+        filename = file[:filename]
+        content_type = file[:content_type]
+        data = file[:data]
         if data.bytesize > 25.megabytes
           skipped << "#{filename}: skipped because it exceeds 25 MB."
           next

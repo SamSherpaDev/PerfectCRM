@@ -140,4 +140,17 @@ class InboxRequestsTest < ActionDispatch::IntegrationTest
     assert_equal 0, instantiated["ActiveStorage::Blob"]
   end
 
+  test "HTML bodies render once and long HTML stays inside expansion" do
+    conversation = Conversation.create!(subject: "HTML conversation")
+    short = conversation.messages.create!(direction: "in", sent_at: Time.current, html_body: "<strong>Short HTML content</strong>")
+    long = conversation.messages.create!(direction: "in", sent_at: Time.current, html_body: "<p>#{'Long content ' * 70}</p><strong>Unique ending</strong>")
+    get inbox_thread_path(conversation)
+    assert_response :success
+    short_article = css_select("#message-#{short.id}").first
+    assert_equal 1, short_article.text.scan("Short HTML content").length
+    assert_select "#message-#{short.id} strong", text: "Short HTML content", count: 1
+    assert_select "#message-#{long.id} details strong", text: "Unique ending", count: 1
+    assert_equal 1, css_select("#message-#{long.id}").first.text.scan("Unique ending").length
+  end
+
 end

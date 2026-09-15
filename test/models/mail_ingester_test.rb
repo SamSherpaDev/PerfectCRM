@@ -240,6 +240,43 @@ class MailIngesterTest < ActiveSupport::TestCase
     assert_equal "Ordinary itinerary", result[:message].files.first.download
   end
 
+  test "forwarded emails cannot upload enclosed sensitive attachments" do
+    enclosed = "From: traveler@example.com\r\nContent-Type: multipart/mixed; boundary=inside\r\n\r\n--inside\r\nContent-Type: text/plain\r\n\r\nForwarded note\r\n--inside\r\nContent-Type: application/pdf\r\nContent-Disposition: attachment; filename=passport.pdf\r\n\r\nPRIVATE PASSPORT BYTES\r\n--inside--\r\n"
+    2.times do |index|
+      enclosed = "Content-Type: message/rfc822\r\nContent-Disposition: attachment; filename=trip.eml\r\nContent-Transfer-Encoding: base64\r\n\r\n#{Base64.strict_encode64(enclosed)}"
+      raw = "From: forwarder@example.com\r\nTo: info@sherpaholidays.com\r\nMessage-ID: <forwarded#{index}@test>\r\n#{enclosed}"
+      result = nil
+      assert_no_difference("ActiveStorage::Blob.count") do
+        ActiveStorage::Blob.service.stub(:upload, ->(*) { flunk "enclosed sensitive bytes uploaded" }) do
+          result = ingest_raw(raw)
+        end
+      end
+      assert_equal [ "passport.pdf" ], result[:message].held_attachments.map { |file| file["filename"] }
+      assert_nil result[:message].text_body
+      assert_nil result[:message].html_body
+    end
+  end
+
+  test "forwarded mail without sensitive enclosures remains downloadable" do
+    enclosed = "From: traveler@example.com\r\nSubject: Trip dates\r\n\r\nOrdinary forwarded note"
+    raw = "From: forwarder@example.com\r\nTo: info@sherpaholidays.com\r\nContent-Type: message/rfc822\r\nContent-Disposition: attachment; filename=trip.eml\r\n\r\n#{enclosed}"
+    result = ingest_raw(raw)
+    assert_empty result[:message].held_attachments
+    downloaded = ::Mail.read_from_string(result[:message].files.first.download)
+    assert_equal [ "traveler@example.com" ], downloaded.from
+    assert_equal "Trip dates", downloaded.subject
+    assert_equal "Ordinary forwarded note", downloaded.body.decoded
+  end
+
+  test "safe enclosures survive a forwarded email with a sensitive enclosure" do
+    enclosed = "Content-Type: multipart/mixed; boundary=inside\r\n\r\n--inside\r\nContent-Type: text/plain\r\nContent-Disposition: attachment; filename=insurance.txt\r\n\r\nPRIVATE\r\n--inside\r\nContent-Type: text/plain\r\nContent-Disposition: attachment; filename=itinerary.txt\r\n\r\nOrdinary itinerary\r\n--inside--\r\n"
+    raw = "From: forwarder@example.com\r\nTo: info@sherpaholidays.com\r\nContent-Type: message/rfc822\r\nContent-Disposition: attachment; filename=trip.eml\r\n\r\n#{enclosed}"
+    result = ingest_raw(raw)
+    assert_equal [ "insurance.txt" ], result[:message].held_attachments.map { |file| file["filename"] }
+    assert_equal [ "itinerary.txt" ], result[:message].files.map { |file| file.filename.to_s }
+    assert_equal "Ordinary itinerary", result[:message].files.first.download
+  end
+
   private
 
   def pdf_with_title(title)
