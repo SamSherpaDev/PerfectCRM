@@ -198,7 +198,7 @@ class Quote < ApplicationRecord
     end
   end
 
-  # Payload staged for PerfectBook once its enquiry-creation endpoint ships.
+  # Intake details staged on acceptance for manual entry in PerfectBook.
   def intake_details
     {
       "trip" => trip_name, "departure" => departure_label,
