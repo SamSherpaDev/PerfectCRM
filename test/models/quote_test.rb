@@ -215,5 +215,4 @@ class QuoteTest < ActiveSupport::TestCase
       assert quote.valid?
     end
   end
-
 end

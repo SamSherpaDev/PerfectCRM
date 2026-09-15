@@ -162,7 +162,11 @@ departure with seats from the latest PerfectBook sync. Prices stay the
 captain's to enter because PerfectBook exposes no catalog price, and prefill
 from the newest earlier
 sent or accepted quote by the same captain, preferring the same departure
-and falling back to the same trip (`Quote.last_unit_for_trip`). Trip and departure
+and falling back to the same trip (`Quote.last_unit_for_trip`). In the new
+builder, changing the trip or departure preserves entered lines, edited
+descriptions and prices, and notes; untouched catalog labels and prefilled
+prices refresh for the selection. Enter prices and deposits without commas
+(for example, `1500.00`). Trip and departure
 lines snapshot catalog names and dates at build time, so later
 PerfectBook edits never rewrite history; custom lines cover permits,
 single supplements, and extra nights. Revisions chain through
@@ -172,7 +176,11 @@ Drafts are private: the old public page says a newer quote is on its way,
 and links to the revision only once it has been sent. Accepted quotes
 cannot be revised. Inclusions are entered per quote; “Remember these
 inclusions for this trip” saves CRM-owned preferences separately from the
-trip mirror. Sending a quote
+trip mirror. Remembered inclusions load on the initial trip selection when
+the field is untouched. New quotes default to two guests and a valid-until
+date 14 days from today. Drafts may omit these fields; sending requires a
+positive party size and a valid-until date, with missing fields shown in
+the builder. Sending a quote
 moves a lead from New or Chatting to Quoted (`Quote#deliver!`). If the
 email cannot be queued, the quote remains a draft and shows a retry message.
 
@@ -226,8 +234,9 @@ Today (the root route) is the captain's morning screen: four tiles
 waiting, Follow-ups as one-tap check rows, Departing soon (trips leaving
 in the next 14 days), and Back from the mountains (returned in the last
 7 days). Returned bookings linked to a local record offer Create review
-ask. Waiting-on-you threads and the quotes count read zero until the
-mail and quotes tasks land (marked TODO in `app/services/today/summary.rb`).
+ask. Waiting-on-you threads and the quotes count still read zero pending
+their Today integration (marked TODO in `app/services/today/summary.rb`);
+use [Quotes](#quotes) to track sent quotes.
 
 Tasks belong to clients, leads, or organizations. Today lists overdue tasks
 and those due through the next 7 days, using the Pacific date. Tap the

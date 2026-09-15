@@ -322,6 +322,7 @@ class QuotesSystemTest < ApplicationSystemTestCase
       fill_in "Description", with: "Annapurna with private guide"
     end
     choose "4 May – 18 May 2027"
+    assert_selector "input[name='quote[perfectbook_departure_id]'][value='45']", visible: :all
     within(all("[data-line-row]").first) do
       assert_field "Description", with: "Annapurna with private guide"
     end
