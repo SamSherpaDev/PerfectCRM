@@ -1,0 +1,50 @@
+<%# Organization form. Sentence case throughout. %>
+<% if @organization.errors.any? %>
+  <div class="form-errors" role="alert">
+    <p class="font-medium">Could not save this organization.</p>
+    <ul>
+      <% @organization.errors.full_messages.each do |message| %>
+        <li><%= message %></li>
+      <% end %>
+    </ul>
+  </div>
+<% end %>
+
+<section class="card card-pad" aria-labelledby="org-facts-heading">
+  <h2 class="section-title" id="org-facts-heading">Facts</h2>
+  <%= card_caption "Advisors refer travelers. Operators run trips on the ground." %>
+  <div class="mt-4 grid gap-4 sm:grid-cols-2">
+    <div class="sm:col-span-2">
+      <%= form.label :name, class: "label" %>
+      <%= form.text_field :name, required: true, autocomplete: "off", class: "input" %>
+    </div>
+    <div>
+      <%= form.label :kind, class: "label" %>
+      <%= form.select :kind, Organization::KINDS.map { |kind| [ kind.humanize, kind ] }, {}, class: "select" %>
+    </div>
+    <div>
+      <%= form.label :email, class: "label" %>
+      <%= form.email_field :email, class: "input" %>
+    </div>
+    <div>
+      <%= form.label :phone, class: "label" %>
+      <%= form.telephone_field :phone, class: "input" %>
+    </div>
+    <div>
+      <%= form.label :country, class: "label" %>
+      <%= form.text_field :country, class: "input" %>
+    </div>
+    <div class="sm:col-span-2">
+      <%= form.label :website, class: "label" %>
+      <%= form.url_field :website, class: "input", placeholder: "https://" %>
+    </div>
+    <div>
+      <%= form.label :perfectbook_contact_id, "PerfectBook contact id", class: "label" %>
+      <%= form.number_field :perfectbook_contact_id, min: 1, class: "input" %>
+    </div>
+    <div>
+      <%= form.label :tag_list, "Tags", class: "label" %>
+      <%= form.text_field :tag_list, class: "input", placeholder: "advisor, everest" %>
+    </div>
+  </div>
+</section>

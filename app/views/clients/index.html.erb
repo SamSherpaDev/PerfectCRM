@@ -1,7 +1,115 @@
 <% content_for :title, "Clients · PerfectCRM" %>
 <div class="page">
-  <%= render layout: "shared/page_header", locals: { eyebrow: "People", title: "Clients", subtitle: "Travelers, past guests, and leads with their trips and preferences." } do %><% end %>
+  <%= render layout: "shared/page_header", locals: { eyebrow: "People", title: "Clients", subtitle: "Travelers, past guests, and leads with their trips and preferences." } do %>
+    <%= link_to "New client", new_client_path, class: "btn-primary btn" %>
+    <%= link_to "New organization", new_organization_path, class: "btn-secondary btn" %>
+  <% end %>
   <%= render "shared/flash" %>
 
-  <%= render "shared/empty_state", title: "No clients yet", body: "Travelers, past guests, and leads will live here with their trips, preferences, and history.", scene: :stupa %>
+  <%= form_with url: clients_path, method: :get, data: { turbo_frame: "_top" }, class: "card card-pad" do |form| %>
+    <%= hidden_field_tag :tab, @tab %>
+    <label class="label" for="client-search">Search clients</label>
+    <div class="flex flex-col gap-2 sm:flex-row">
+      <div class="relative flex-1">
+        <%= render "shared/icon", name: :search, class: "pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-4" %>
+        <%= search_field_tag :q, @query, id: "client-search", placeholder: "Search name, email, tag, or note…", autocomplete: "off", class: "input pl-9" %>
+      </div>
+      <%= select_tag :sort, options_for_select([ [ "Last activity", "activity" ], [ "Name", "name" ], [ "Newest", "newest" ] ], @sort), class: "select sm:w-40", aria_label: "Sort", onchange: "this.form.requestSubmit()" %>
+      <%= submit_tag "Search", class: "btn-secondary btn" %>
+    </div>
+    <p class="hint">Searches names, emails, phone tails, tags, and note text. Email matches work even on a fragment.</p>
+  <% end %>
+
+  <nav class="tabs" aria-label="Client lists">
+    <%= tab_link "Clients", clients_path(tab: "clients", q: @query, sort: @sort), icon: :people, active: @tab == "clients", count: @clients_count %>
+    <%= tab_link "Organizations", clients_path(tab: "organizations", q: @query, sort: @sort), icon: :building, active: @tab == "organizations", count: @organizations_count %>
+    <%= tab_link "Archived", clients_path(tab: "archived", q: @query, sort: @sort), icon: :archive, active: @tab == "archived", count: @archived_count %>
+  </nav>
+
+  <% if @tab == "organizations" %>
+    <section class="card" aria-labelledby="organizations-heading">
+      <div class="card-header">
+        <h2 class="card-title" id="organizations-heading">Organizations</h2>
+      </div>
+      <%= card_caption "Advisors who refer travelers and operators who run trips on the ground." %>
+      <% if @organizations.any? %>
+        <ul class="divide-y divide-rule-2">
+          <% @organizations.each do |organization| %>
+            <li class="flex flex-col gap-2 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-7">
+              <div class="min-w-0">
+                <%= link_to organization.name, organization_path(organization), class: "link font-medium" %>
+                <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  <%= badge organization.kind.humanize.downcase, :neutral %>
+                  <% organization.tags.order(:name).each do |tag| %>
+                    <%= badge tag.name, :brand %>
+                  <% end %>
+                  <% if organization.email.present? %>
+                    <span class="text-xs muted truncate"><%= organization.email %></span>
+                  <% end %>
+                </div>
+              </div>
+              <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs muted sm:justify-end">
+                <span>Active <%= date_short(organization.last_activity_at || organization.updated_at) %></span>
+                <% if organization.perfectbook_contact_id.present? %>
+                  <%= link_to "Open in PerfectBook", perfectbook_contact_url(organization.perfectbook_contact_id), class: "link-quiet inline-flex items-center gap-1", target: "_blank", rel: "noopener" do %>
+                    <%= render "shared/icon", name: :external, class: "h-3.5 w-3.5" %>Open in PerfectBook
+                  <% end %>
+                <% end %>
+              </div>
+            </li>
+          <% end %>
+        </ul>
+      <% else %>
+        <%= render "shared/empty_state", title: "No organizations yet", body: "Advisors and ground operators will live here once added.", scene: :stupa %>
+      <% end %>
+    </section>
+  <% else %>
+    <section class="card" aria-labelledby="clients-heading">
+      <div class="card-header">
+        <h2 class="card-title" id="clients-heading"><%= @tab == "archived" ? "Archived" : "Clients" %></h2>
+      </div>
+      <%= card_caption(@tab == "archived" ? "Past clients kept for memory. Restore any time." : "Everyone you talk to, sorted by most recent activity.") %>
+      <% if @clients.any? %>
+        <ul class="divide-y divide-rule-2">
+          <% @clients.each do |client| %>
+            <li class="flex flex-col gap-2 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-7">
+              <div class="min-w-0">
+                <%= link_to client.name, client_path(client), class: "link font-medium" %>
+                <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  <% if client.source.present? %>
+                    <%= badge client.source.humanize.downcase, :neutral %>
+                  <% end %>
+                  <%= badge client.kind.humanize.downcase, :info %>
+                  <% client.tags.order(:name).each do |tag| %>
+                    <%= badge tag.name, :brand %>
+                  <% end %>
+                  <% if client.display_email.present? %>
+                    <span class="text-xs muted truncate"><%= client.display_email %></span>
+                  <% end %>
+                </div>
+              </div>
+              <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs muted sm:justify-end">
+                <span>Active <%= date_short(client.last_activity) %></span>
+                <% if client.perfectbook_contact_id.present? %>
+                  <%= link_to "Open in PerfectBook", perfectbook_contact_url(client.perfectbook_contact_id), class: "link-quiet inline-flex items-center gap-1", target: "_blank", rel: "noopener" do %>
+                    <%= render "shared/icon", name: :external, class: "h-3.5 w-3.5" %>Open in PerfectBook
+                  <% end %>
+                <% end %>
+              </div>
+            </li>
+          <% end %>
+        </ul>
+      <% else %>
+        <% if @query.present? %>
+          <%= render "shared/empty_state", title: "No matches", body: "Nothing matches that search. Try a name fragment or an email piece.", scene: :stupa %>
+        <% elsif @tab == "archived" %>
+          <%= render "shared/empty_state", title: "Nothing archived", body: "Archived clients rest here when they no longer need follow-up.", scene: :stupa %>
+        <% else %>
+          <%= render "shared/empty_state", title: "No clients yet", body: "Travelers, past guests, and leads will live here with their trips, preferences, and history.", scene: :stupa do %>
+            <%= link_to "Add your first client", new_client_path, class: "btn-primary btn btn-sm" %>
+          <% end %>
+        <% end %>
+      <% end %>
+    </section>
+  <% end %>
 </div>

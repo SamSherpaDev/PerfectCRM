@@ -10,7 +10,116 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_14_202008) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_14_202111) do
+  create_table "activity_events", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "kind", null: false
+    t.text "metadata"
+    t.datetime "occurred_at", null: false
+    t.integer "subject_id", null: false
+    t.string "subject_type", null: false
+    t.string "summary", null: false
+    t.datetime "updated_at", null: false
+    t.index ["occurred_at"], name: "index_activity_events_on_occurred_at"
+    t.index ["subject_type", "subject_id"], name: "index_activity_events_on_subject_type_and_subject_id"
+  end
+
+  create_table "clients", force: :cascade do |t|
+    t.datetime "archived_at"
+    t.string "country"
+    t.datetime "created_at", null: false
+    t.string "email"
+    t.string "kind", default: "individual", null: false
+    t.datetime "last_activity_at"
+    t.string "name", null: false
+    t.integer "notes_count", default: 0, null: false
+    t.integer "perfectbook_contact_id"
+    t.string "phone"
+    t.integer "referred_by_organization_id"
+    t.string "source"
+    t.string "state"
+    t.datetime "updated_at", null: false
+    t.index ["archived_at"], name: "index_clients_on_archived_at"
+    t.index ["email"], name: "index_clients_on_email", unique: true, where: "email IS NOT NULL AND email != ''"
+    t.index ["last_activity_at"], name: "index_clients_on_last_activity_at"
+    t.index ["perfectbook_contact_id"], name: "index_clients_on_perfectbook_contact_id", unique: true, where: "perfectbook_contact_id IS NOT NULL"
+    t.index ["referred_by_organization_id"], name: "index_clients_on_referred_by_organization_id"
+  end
+
+  create_table "leads", force: :cascade do |t|
+    t.string "campaign_name"
+    t.datetime "converted_at"
+    t.integer "converted_client_id"
+    t.string "country"
+    t.datetime "created_at", null: false
+    t.string "email"
+    t.string "external_ref"
+    t.string "fit_band"
+    t.text "fit_reason"
+    t.integer "fit_score"
+    t.string "kind", default: "individual", null: false
+    t.datetime "last_activity_at"
+    t.string "name", null: false
+    t.integer "notes_count", default: 0, null: false
+    t.integer "perfectbook_contact_id"
+    t.string "phone"
+    t.integer "referred_by_organization_id"
+    t.string "source", default: "manual", null: false
+    t.string "state"
+    t.string "status", default: "new", null: false
+    t.datetime "updated_at", null: false
+    t.index ["converted_client_id"], name: "index_leads_on_converted_client_id", unique: true, where: "converted_client_id IS NOT NULL"
+    t.index ["email"], name: "index_leads_on_email", unique: true, where: "email IS NOT NULL AND email != ''"
+    t.index ["external_ref"], name: "index_leads_on_external_ref", unique: true, where: "external_ref IS NOT NULL AND external_ref != ''"
+    t.index ["last_activity_at"], name: "index_leads_on_last_activity_at"
+    t.index ["perfectbook_contact_id"], name: "index_leads_on_perfectbook_contact_id", unique: true, where: "perfectbook_contact_id IS NOT NULL"
+    t.index ["referred_by_organization_id"], name: "index_leads_on_referred_by_organization_id"
+    t.index ["status"], name: "index_leads_on_status"
+  end
+
+  create_table "notes", force: :cascade do |t|
+    t.integer "author_id"
+    t.text "body", null: false
+    t.datetime "created_at", null: false
+    t.integer "notable_id", null: false
+    t.string "notable_type", null: false
+    t.datetime "updated_at", null: false
+    t.index ["author_id"], name: "index_notes_on_author_id"
+    t.index ["notable_type", "notable_id"], name: "index_notes_on_notable_type_and_notable_id"
+  end
+
+  create_table "organizations", force: :cascade do |t|
+    t.string "country"
+    t.datetime "created_at", null: false
+    t.string "email"
+    t.string "kind", default: "other", null: false
+    t.datetime "last_activity_at"
+    t.string "name", null: false
+    t.integer "perfectbook_contact_id"
+    t.string "phone"
+    t.datetime "updated_at", null: false
+    t.string "website"
+    t.index ["email"], name: "index_organizations_on_email", unique: true, where: "email IS NOT NULL AND email != ''"
+    t.index ["last_activity_at"], name: "index_organizations_on_last_activity_at"
+    t.index ["perfectbook_contact_id"], name: "index_organizations_on_perfectbook_contact_id", unique: true, where: "perfectbook_contact_id IS NOT NULL"
+  end
+
+  create_table "people", force: :cascade do |t|
+    t.integer "client_id"
+    t.datetime "created_at", null: false
+    t.string "email"
+    t.integer "lead_id"
+    t.string "name", null: false
+    t.string "phone"
+    t.string "role"
+    t.datetime "updated_at", null: false
+    t.index ["client_id", "email"], name: "index_people_on_client_and_email", unique: true, where: "client_id IS NOT NULL AND email IS NOT NULL AND email != ''"
+    t.index ["client_id"], name: "index_people_on_client_id"
+    t.index ["email"], name: "index_people_on_email"
+    t.index ["lead_id", "email"], name: "index_people_on_lead_and_email", unique: true, where: "lead_id IS NOT NULL AND email IS NOT NULL AND email != ''"
+    t.index ["lead_id"], name: "index_people_on_lead_id"
+  end
+
   create_table "perfectbook_bookings", force: :cascade do |t|
     t.integer "balance_due_minor"
     t.datetime "created_at", null: false
@@ -128,6 +237,24 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_202008) do
     t.check_constraint "singleton_key = 1", name: "settings_singleton"
   end
 
+  create_table "taggings", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "tag_id", null: false
+    t.integer "taggable_id", null: false
+    t.string "taggable_type", null: false
+    t.datetime "updated_at", null: false
+    t.index ["tag_id", "taggable_type", "taggable_id"], name: "index_taggings_on_tag_and_taggable", unique: true
+    t.index ["tag_id"], name: "index_taggings_on_tag_id"
+    t.index ["taggable_type", "taggable_id"], name: "index_taggings_on_taggable_type_and_taggable_id"
+  end
+
+  create_table "tags", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "name", null: false
+    t.datetime "updated_at", null: false
+    t.index ["name"], name: "index_tags_on_name", unique: true
+  end
+
   create_table "templates", force: :cascade do |t|
     t.datetime "archived_at"
     t.text "body", default: "", null: false
@@ -154,4 +281,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_202008) do
     t.datetime "updated_at", null: false
     t.index ["google_sub"], name: "index_users_on_google_sub", unique: true
   end
+
+  add_foreign_key "clients", "organizations", column: "referred_by_organization_id"
+  add_foreign_key "leads", "clients", column: "converted_client_id"
+  add_foreign_key "leads", "organizations", column: "referred_by_organization_id"
+  add_foreign_key "notes", "users", column: "author_id"
+  add_foreign_key "people", "clients"
+  add_foreign_key "people", "leads"
+  add_foreign_key "taggings", "tags"
+
+  # Virtual tables defined in this database.
+  # Note that virtual tables may not work with other database engines. Be careful if changing database.
+  create_virtual_table "clients_fts", "fts5", ["name", "email", "phone_tail", "tags", "notes", "tokenize='porter unicode61'"]
+  create_virtual_table "leads_fts", "fts5", ["name", "email", "phone_tail", "tags", "notes", "tokenize='porter unicode61'"]
+  create_virtual_table "organizations_fts", "fts5", ["name", "email", "phone_tail", "tags", "notes", "tokenize='porter unicode61'"]
 end

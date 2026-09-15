@@ -11,7 +11,9 @@ module ApplicationHelper
     "pending" => :warning, "planned" => :neutral, "skipped" => :neutral, "inactive" => :neutral,
     "cancelled" => :danger, "refunded" => :warning, "voided" => :danger, "overdue" => :danger,
     "soft-deleted" => :danger,
-    "connected" => :success, "pulling" => :info, "error" => :danger, "disconnected" => :neutral
+    "connected" => :success, "pulling" => :info, "error" => :danger, "disconnected" => :neutral,
+    "new" => :info, "chatting" => :neutral, "nudged" => :warning, "lost" => :neutral,
+    "converted" => :success, "conversion" => :success, "automation" => :info
   }.freeze
 
   # USD amounts from integer cents: "$1,234.56", "-$12.00".
@@ -112,6 +114,23 @@ module ApplicationHelper
 
   def date_short(date)
     date&.strftime("%b %-d, %Y")
+  end
+
+  def perfectbook_base_url
+    ENV.fetch("PERFECTBOOK_BASE_URL", "https://perfectbook.sherpaholidays.com").chomp("/")
+  end
+
+  def perfectbook_contact_url(perfectbook_contact_id)
+    "#{perfectbook_base_url}/contacts/#{perfectbook_contact_id}"
+  end
+
+  # Organization websites are user-entered. Only link http(s); otherwise text.
+  def external_website_link(url)
+    href = url.to_s.strip
+    return "—" if href.blank?
+    return href unless href.match?(%r{\Ahttps?://[^\s]+\z})
+
+    link_to href, href, class: "link", target: "_blank", rel: "noopener"
   end
 
   def date_range(from, to)

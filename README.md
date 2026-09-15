@@ -45,10 +45,10 @@ configuration lives in `config/environments/development.rb`.
 
 On desktop, hover or focus the icon rail to reveal navigation labels and Sign
 out. On mobile, use Open menu to show the drawer. The rail holds **Today**
-(root), **Inbox**, **Clients**, **Pipeline**, **Quotes**, **Templates**, and
-**Settings**. Inbox, Clients, Pipeline, and Quotes render branded empty
-states until their features land; Templates is live (see "Templates"
-below).
+(root), **Inbox**, **Leads**, **Clients**, **Pipeline**, **Quotes**, **Templates**, and
+**Settings**. Inbox, Pipeline, and Quotes render branded empty states until
+their features land; Templates is live (see "Templates" below). Settings
+provides the appearance control and the export below.
 
 PerfectCRM defaults to **Paper**, the light Washi scheme. In **Settings →
 Appearance**, choose **Paper** or **Night** to apply the scheme immediately
@@ -155,6 +155,30 @@ bin/importmap audit
 shellcheck -S warning deploy/*.sh test/deploy/*.sh
 bash test/deploy/test_deploy.sh
 ```
+
+## Clients
+
+Clients own people, tags, notes, and the timeline later tasks fill in.
+Search covers names, emails, phone tails, tags, and note text over SQLite
+FTS5 with an email-substring fallback; no external service. Each row links
+to PerfectBook when `perfectbook_contact_id` is set, via
+`PERFECTBOOK_BASE_URL` (default `https://perfectbook.sherpaholidays.com`).
+`/clients/by-perfectbook/:id` is PerfectBook's "Open in PerfectCRM"
+target. Settings → Export everything streams a zip of leads, clients,
+people, organizations, and notes as CSV with a UTF-8 BOM.
+
+## Leads
+
+Leads are asks that have not booked yet; clients are everyone else.
+A lead carries source (`google_ads`, `meta_ads`, `website_form`, `email`,
+`referral`, `manual`), campaign, `external_ref` for n8n idempotency, Panda
+AI fit (`fit_score`, `fit_band`, `fit_reason`), and status (`new`,
+`chatting`, `quoted`, `nudged`, `lost`). Tabs are New, Chatting, Quoted,
+Nudged, Lost, and Converted. Conversion is one-way and manual: Convert to
+client copies facts, people, tags, notes, and activity, links forward, and
+freezes the lead read-only in the model (no reverse, no automation may
+reverse it). The client shows Started as a lead with source and campaign.
+Timeline kind `automation` is reserved for n8n and Panda AI events.
 
 ## Production shape
 

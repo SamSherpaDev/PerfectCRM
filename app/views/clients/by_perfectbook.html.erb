@@ -1,0 +1,23 @@
+<% content_for :title, "Link PerfectBook contact · PerfectCRM" %>
+<div class="page-narrow">
+  <%= render layout: "shared/page_header", locals: { eyebrow: "People", title: "Link PerfectBook contact", subtitle: "No client is linked to PerfectBook contact ##{@client.perfectbook_contact_id} yet.", back: [ "Clients", clients_path ] } do %><% end %>
+  <%= render "shared/flash" %>
+
+  <section class="card card-pad" aria-labelledby="create-heading">
+    <h2 class="section-title" id="create-heading">Create from PerfectBook</h2>
+    <%= card_caption "Creates a client linked to this PerfectBook contact. Details can be filled in after." %>
+    <%# TODO: when PerfectBook::Client lands, fetch the contact here for a true one-tap build. %>
+    <%= form_with model: @client, class: "mt-4 space-y-4" do |form| %>
+      <%= form.hidden_field :perfectbook_contact_id %>
+      <div>
+        <%= form.label :name, "Display name", class: "label" %>
+        <%= form.text_field :name, required: true, class: "input", placeholder: "Traveler name from PerfectBook" %>
+      </div>
+      <div>
+        <%= form.label :email, "Primary email", class: "label" %>
+        <%= form.email_field :email, class: "input" %>
+      </div>
+      <%= form.submit "Create from PerfectBook", class: "btn-primary btn" %>
+    <% end %>
+  </section>
+</div>

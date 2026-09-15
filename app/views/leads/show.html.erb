@@ -1,0 +1,179 @@
+<% content_for :title, "#{@lead.name} · PerfectCRM" %>
+<div class="page">
+  <%= render layout: "shared/page_header", locals: { eyebrow: @lead.converted? ? "Lead · Converted" : "Lead · #{@lead.status.humanize}", title: @lead.name, subtitle: lead_source_label(@lead), back: [ "Leads", leads_path ] } do %>
+    <% if @lead.converted? && @lead.converted_client %>
+      <%= link_to "Open client", client_path(@lead.converted_client), class: "btn-primary btn btn-sm" %>
+    <% else %>
+      <%= link_to "Edit", edit_lead_path(@lead), class: "btn-secondary btn btn-sm" %>
+      <%= button_to "Convert to client", convert_lead_path(@lead), method: :post, class: "btn-primary btn btn-sm", form: { data: { turbo_confirm: "Convert #{@lead.name} to a client? Their whole timeline moves with them. This cannot be undone." } } %>
+    <% end %>
+  <% end %>
+  <%= render "shared/flash" %>
+
+  <% if @lead.converted? %>
+    <div class="callout-neutral callout" role="note">
+      Became a client on <%= date_short(@lead.converted_at) %>.
+      <%= link_to "Open the client", client_path(@lead.converted_client), class: "link" if @lead.converted_client %>
+      Converted leads stay read-only.
+    </div>
+  <% end %>
+
+  <section class="card card-pad" aria-labelledby="facts-heading">
+    <div class="card-header">
+      <h2 class="card-title" id="facts-heading">Facts</h2>
+    </div>
+    <%= card_caption "Where this ask came from and how Panda AI scored it." %>
+    <dl class="facts mt-2">
+      <div>
+        <dt>Source</dt>
+        <dd>
+          <span class="src inline-flex items-center gap-1.5">
+            <%= render "shared/icon", name: lead_source_icon(@lead.source), class: "h-3.5 w-3.5" %>
+            <%= lead_source_label(@lead) %>
+          </span>
+        </dd>
+      </div>
+      <div>
+        <dt>Stage</dt>
+        <dd><%= status_badge(@lead.converted? ? "converted" : @lead.status) %></dd>
+      </div>
+      <div>
+        <dt>Email</dt>
+        <dd><%= @lead.email.presence || "—" %></dd>
+      </div>
+      <div>
+        <dt>Phone</dt>
+        <dd><%= @lead.phone.presence || "—" %></dd>
+      </div>
+      <div>
+        <dt>Place</dt>
+        <dd><%= [ @lead.state, @lead.country ].compact_blank.join(", ").presence || "—" %></dd>
+      </div>
+      <div>
+        <dt>Fit</dt>
+        <dd>
+          <% if @lead.fit_score.present? %>
+            <span class="fit inline-flex items-center gap-2">
+              <span class="bar <%= lead_fit_bar_class(@lead.fit_score) %>" aria-hidden="true"><span class="bar-fill" style="width: <%= @lead.fit_score %>%"></span></span>
+              <span><%= @lead.fit_label %></span>
+            </span>
+            <% if @lead.fit_reason.present? %>
+              <p class="mt-1 text-xs muted"><%= @lead.fit_reason %></p>
+            <% end %>
+          <% else %>
+            <%= badge "Scoring", :info, dot: true %>
+          <% end %>
+        </dd>
+      </div>
+      <div>
+        <dt>Referred by</dt>
+        <dd>
+          <% if @lead.referred_by_organization %>
+            <%= link_to @lead.referred_by_organization.name, organization_path(@lead.referred_by_organization), class: "link" %>
+          <% else %>
+            —
+          <% end %>
+        </dd>
+      </div>
+      <div>
+        <dt>External reference</dt>
+        <dd class="mono text-xs"><%= @lead.external_ref.presence || "—" %></dd>
+      </div>
+    </dl>
+    <% if @lead.tags.any? %>
+      <div class="mt-4 flex flex-wrap gap-1.5" aria-label="Tags">
+        <% @lead.tags.order(:name).each do |tag| %>
+          <%= badge tag.name, :brand %>
+        <% end %>
+      </div>
+    <% end %>
+  </section>
+
+  <section class="card card-pad" aria-labelledby="people-heading">
+    <div class="card-header">
+      <h2 class="card-title" id="people-heading">People</h2>
+      <% unless @lead.converted? %>
+        <%= link_to "Manage", edit_lead_path(@lead), class: "link-quiet text-xs" %>
+      <% end %>
+    </div>
+    <%= card_caption "Everyone on this ask." %>
+    <% if @lead.people.any? %>
+      <ul class="mt-2 divide-y divide-rule-2">
+        <% @lead.people.each do |person| %>
+          <li class="flex flex-col gap-1 py-3 sm:flex-row sm:items-baseline sm:justify-between">
+            <div class="min-w-0">
+              <p class="font-medium text-ink"><%= person.name %></p>
+              <% if person.role.present? %>
+                <p class="text-xs muted"><%= person.role %></p>
+              <% end %>
+            </div>
+            <div class="text-sm muted">
+              <%= person.email.presence || "No email" %><% if person.phone.present? %> · <%= person.phone %><% end %>
+            </div>
+          </li>
+        <% end %>
+      </ul>
+    <% else %>
+      <div class="empty-inline">
+        <%= sketch :enso, class: "enso" %>
+        <p class="text-sm text-ink">No people yet.</p>
+        <p class="text-xs muted">Add a spouse or fellow traveler from Edit.</p>
+      </div>
+    <% end %>
+  </section>
+
+  <section class="card card-pad" aria-labelledby="notes-heading">
+    <div class="card-header">
+      <h2 class="card-title" id="notes-heading">Notes</h2>
+    </div>
+    <%= card_caption "What you know that the ask did not say. Only you see these." %>
+    <% unless @lead.converted? %>
+      <%= form_with model: [ @lead, @note ], url: lead_notes_path(@lead), class: "mt-3" do |form| %>
+        <%= form.label :body, "Add a note", class: "label" %>
+        <%= form.text_area :body, rows: 3, required: true, class: "textarea", placeholder: "Asked about Everest in May…" %>
+        <div class="mt-2">
+          <%= form.submit "Save note", class: "btn-primary btn btn-sm" %>
+        </div>
+      <% end %>
+    <% end %>
+    <% if @notes.any? %>
+      <ul class="mt-4 space-y-4">
+        <% @notes.each do |note| %>
+          <li class="border-t border-rule-2 pt-3">
+            <p class="text-sm text-ink-2 whitespace-pre-line"><%= note.body %></p>
+            <p class="mt-1 text-xs muted"><%= date_short(note.created_at) %> · <%= note.author&.email || "Captain" %></p>
+          </li>
+        <% end %>
+      </ul>
+    <% end %>
+  </section>
+
+  <section class="card card-pad" aria-labelledby="timeline-heading">
+    <div class="card-header">
+      <h2 class="card-title" id="timeline-heading">Timeline</h2>
+    </div>
+    <%= card_caption "Every ask, score, note, and automation in one scroll, newest first." %>
+    <% if @events.any? %>
+      <ol class="mt-2 space-y-3">
+        <% @events.each do |event| %>
+          <li class="flex items-start gap-3">
+            <% if event.kind == "automation" %>
+              <%= render "shared/icon", name: :bolt, class: "h-4 w-4 mt-0.5 text-info" %>
+            <% end %>
+            <%= status_badge event.kind %>
+            <div class="min-w-0">
+              <p class="text-sm text-ink"><%= event.summary %></p>
+              <p class="text-xs muted"><%= time_ago_in_words(event.occurred_at) %> ago · <%= date_short(event.occurred_at) %></p>
+            </div>
+          </li>
+        <% end %>
+      </ol>
+    <% else %>
+      <div class="empty-inline">
+        <%= sketch :enso, class: "enso" %>
+        <p class="text-sm text-ink">No activity yet.</p>
+        <p class="text-xs muted">Conversations will appear here once mail is connected.</p>
+      </div>
+    <% end %>
+  </section>
+</div>

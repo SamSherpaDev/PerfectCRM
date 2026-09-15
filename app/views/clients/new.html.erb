@@ -1,0 +1,13 @@
+<% content_for :title, "New client · PerfectCRM" %>
+<div class="page-narrow">
+  <%= render layout: "shared/page_header", locals: { eyebrow: "People", title: "New client", subtitle: "Start with a name. Add the rest as the conversation grows.", back: [ "Clients", clients_path ] } do %><% end %>
+  <%= render "shared/flash" %>
+
+  <%= form_with model: @client, class: "space-y-6" do |form| %>
+    <%= render "form", form: form %>
+    <div class="flex flex-wrap gap-2">
+      <%= form.submit "Save client", class: "btn-primary btn" %>
+      <%= link_to "Cancel", clients_path, class: "btn-ghost btn" %>
+    </div>
+  <% end %>
+</div>

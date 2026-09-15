@@ -1,0 +1,96 @@
+<%# Client form: facts, inline people, comma-separated tags. Sentence case throughout. %>
+<% if @client.errors.any? %>
+  <div class="form-errors" role="alert">
+    <p class="font-medium">Could not save this client.</p>
+    <ul>
+      <% @client.errors.full_messages.each do |message| %>
+        <li><%= message %></li>
+      <% end %>
+    </ul>
+  </div>
+<% end %>
+
+<div class="grid gap-6">
+  <section class="card card-pad" aria-labelledby="client-facts-heading">
+    <h2 class="section-title" id="client-facts-heading">Facts</h2>
+    <%= card_caption "Name and email identify the client. Everything else helps the next reply." %>
+    <div class="mt-4 grid gap-4 sm:grid-cols-2">
+      <div class="sm:col-span-2">
+        <%= form.label :name, "Display name", class: "label" %>
+        <%= form.text_field :name, required: true, autocomplete: "off", class: "input" %>
+      </div>
+      <div>
+        <%= form.label :email, "Primary email", class: "label" %>
+        <%= form.email_field :email, autocomplete: "off", class: "input", placeholder: "traveler@example.com" %>
+      </div>
+      <div>
+        <%= form.label :phone, "Phone", class: "label" %>
+        <%= form.telephone_field :phone, autocomplete: "off", class: "input", placeholder: "+1 415 555 0134" %>
+      </div>
+      <div>
+        <%= form.label :country, class: "label" %>
+        <%= form.text_field :country, autocomplete: "off", class: "input" %>
+      </div>
+      <div>
+        <%= form.label :state, "State or region", class: "label" %>
+        <%= form.text_field :state, autocomplete: "off", class: "input" %>
+      </div>
+      <div>
+        <%= form.label :kind, class: "label" %>
+        <%= form.select :kind, Client::KINDS.map { |kind| [ kind.humanize, kind ] }, {}, class: "select" %>
+      </div>
+      <div>
+        <%= form.label :source, "Source of inquiry", class: "label" %>
+        <%= form.select :source, [ [ "Choose…", "" ] ] + Client::SOURCES.map { |source| [ source.humanize, source ] }, {}, class: "select" %>
+      </div>
+      <div>
+        <%= form.label :referred_by_organization_id, "Referred by", class: "label" %>
+        <%= form.collection_select :referred_by_organization_id, Organization.order(:name), :id, :name, { include_blank: "No referrer" }, class: "select" %>
+        <p class="hint">Advisors who sent this traveler. Commissions stay in PerfectBook.</p>
+      </div>
+      <div>
+        <%= form.label :perfectbook_contact_id, "PerfectBook contact id", class: "label" %>
+        <%= form.number_field :perfectbook_contact_id, min: 1, class: "input", placeholder: "Links to PerfectBook" %>
+      </div>
+      <div class="sm:col-span-2">
+        <%= form.label :tag_list, "Tags", class: "label" %>
+        <%= form.text_field :tag_list, autocomplete: "off", class: "input", placeholder: "everest-interested, honeymoon" %>
+        <p class="hint">Comma-separated. Keeps search sharp.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="card card-pad" aria-labelledby="client-people-heading">
+    <h2 class="section-title" id="client-people-heading">People</h2>
+    <%= card_caption "Spouses, fellow travelers, and decision-makers on this record." %>
+    <div class="mt-4 space-y-4">
+      <%= form.fields_for :people do |person_form| %>
+        <fieldset class="rounded-control border border-rule bg-paper-3/40 p-4">
+          <div class="grid gap-3 sm:grid-cols-2">
+            <div>
+              <%= person_form.label :name, class: "label" %>
+              <%= person_form.text_field :name, class: "input", placeholder: "Full name" %>
+            </div>
+            <div>
+              <%= person_form.label :role, "Role", class: "label" %>
+              <%= person_form.text_field :role, class: "input", placeholder: "Spouse, traveler, decision-maker" %>
+            </div>
+            <div>
+              <%= person_form.label :email, class: "label" %>
+              <%= person_form.email_field :email, class: "input", placeholder: "person@example.com" %>
+            </div>
+            <div>
+              <%= person_form.label :phone, class: "label" %>
+              <%= person_form.telephone_field :phone, class: "input" %>
+            </div>
+          </div>
+          <% if person_form.object.persisted? %>
+            <label class="mt-3 inline-flex items-center gap-2 text-xs muted">
+              <%= person_form.check_box :_destroy, class: "checkbox" %> Remove this person
+            </label>
+          <% end %>
+        </fieldset>
+      <% end %>
+    </div>
+  </section>
+</div>

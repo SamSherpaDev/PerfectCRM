@@ -12,7 +12,26 @@ Rails.application.routes.draw do
 
   # Rail navigation: see README.md, "Navigation".
   get "inbox", to: "inbox#index"
-  resources :clients, only: %i[index]
+  resources :leads do
+    member do
+      post :convert
+    end
+    resources :notes, only: %i[create]
+  end
+  resources :clients do
+    collection do
+      get "by-perfectbook/:perfectbook_contact_id", action: :by_perfectbook, as: :by_perfectbook
+    end
+    member do
+      patch :archive
+      patch :unarchive
+    end
+    resources :notes, only: %i[create]
+  end
+  resources :organizations do
+    resources :notes, only: %i[create]
+  end
+  resources :notes, only: %i[destroy]
   get "pipeline", to: "pipeline#show"
   resources :quotes, only: %i[index]
   resources :templates, except: :show do
@@ -33,4 +52,5 @@ Rails.application.routes.draw do
   resource :settings, only: %i[edit update] do
     post :perfectbook_test, on: :collection
   end
+  get "settings/export", to: "exports#show", as: :settings_export
 end

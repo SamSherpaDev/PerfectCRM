@@ -23,6 +23,15 @@ When updating this file, preserve this bar for all agents and keep entries conci
 - Timezone `America/Los_Angeles` (`config/application.rb`).
 - Appearance behavior and authentication policy: see README.md, "Navigation"
   and "Google sign-in". Preserve instant appearance changes.
+- Clients and leads: see README.md, "Clients" and "Leads". Leads convert
+  one-way to clients (`Lead#convert_to_client!`); converted leads are
+  read-only in the model. People belong to exactly one owner (client or
+  lead); person emails are unique per owner so conversions can copy.
+  Search is SQLite FTS5 (`clients_fts`, `organizations_fts`, `leads_fts`)
+  with `*.search` APIs; FTS tables self-heal via `ensure_fts!` because
+  `schema.rb` does not dump virtual tables.
+- Tags on new records defer to `after_save` (`@pending_tag_list`); assigning
+  `has_many :through` tags before the parent saves trips Tagging uniqueness.
 - System-test Chrome here needs nix NSS libs on `LD_LIBRARY_PATH`; check
   driver startup output if `chromedriver` cannot start.
 - PerfectBook link: `PerfectBook::Client` (`lib/perfectbook/`) + mirror tables

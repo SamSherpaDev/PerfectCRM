@@ -1,0 +1,12 @@
+<%# Slot for follow-up tasks. Filled by the later crm-tasks task. %>
+<section class="card card-pad" aria-labelledby="tasks-heading">
+  <div class="card-header">
+    <h2 class="card-title" id="tasks-heading">Follow-ups</h2>
+  </div>
+  <%= card_caption "Nudges and to-dos for this client. The Today view will gather them each morning." %>
+  <div class="empty-inline">
+    <%= sketch :enso, class: "enso" %>
+    <p class="text-sm text-ink">No follow-ups yet.</p>
+    <p class="text-xs muted">Tasks for this client will appear here once follow-ups land.</p>
+  </div>
+</section>
