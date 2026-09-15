@@ -177,7 +177,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     assert_current_path %r{/group_sends/\d+}
     assert_selector "h1", text: "Send summary"
     assert_equal 3, Message.count
-    assert_equal ["Hi Maya", "Hi Pemba", "Hi [missing: first_name]"], Message.order(:id).pluck(:subject)
+    assert_equal [ "Hi Maya", "Hi Pemba", "Hi [missing: first_name]" ], Message.order(:id).pluck(:subject)
     capture_outbound_evidence("group-summary-mobile")
     message = Message.last
     message.mark_failed!("SMTP unavailable")
@@ -194,7 +194,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     newer.create_draft!(owner: @client, subject: "Other subject", body: "Other words")
     sign_in_browser
     page.current_window.resize_to(1400, 1000)
-    [inbox_thread_path(older), client_path(@client, new_thread: 1)].each_with_index do |path, index|
+    [ inbox_thread_path(older), client_path(@client, new_thread: 1) ].each_with_index do |path, index|
       visit path
       fill_in "To", with: "secondary@example.com"
       fill_in "Subject", with: "Correct this reply"
