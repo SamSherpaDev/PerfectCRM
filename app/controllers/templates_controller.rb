@@ -4,7 +4,7 @@ class TemplatesController < ApplicationController
   def document_nudge
     @booking = PerfectBook::Booking.find(params[:booking_id])
     @recipient = Client.find_by(perfectbook_contact_id: @booking.perfectbook_contact_id) ||
-      Lead.open.find_by(perfectbook_contact_id: @booking.perfectbook_contact_id)
+      Lead.where(converted_client_id: nil).find_by(perfectbook_contact_id: @booking.perfectbook_contact_id)
     raise ActiveRecord::RecordNotFound unless @recipient
 
     template = Template.active.for_purpose(:document_request).ordered.first
