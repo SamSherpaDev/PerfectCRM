@@ -9,11 +9,8 @@ module Ai
       return true unless limit.positive?
 
       key = "ai:rate:#{Time.current.strftime('%Y%m%d%H%M')}"
-      count = Rails.cache.read(key).to_i
-      return false if count >= limit
-
-      Rails.cache.write(key, count + 1, expires_in: 70.seconds)
-      true
+      count = Rails.cache.increment(key, 1, expires_in: 70.seconds)
+      count.present? && count <= limit
     end
   end
 end

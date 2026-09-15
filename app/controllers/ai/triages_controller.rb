@@ -17,7 +17,7 @@ module Ai
 
       @result = Ai::Triage.call(@conversation)
       @conversation.reload
-      @fallback = :error if @conversation.ai_triage.blank?
+      @fallback = :error if @result.status != :ok || @conversation.ai_triage.blank?
       respond_to do |format|
         format.turbo_stream
         format.html { redirect_to inbox_thread_path(@conversation) }

@@ -32,8 +32,11 @@ module Ai
     end
 
     def self.parse(text)
-      json = text.to_s[/\{.*\}/m] || text.to_s
-      data = JSON.parse(json)
+      data = JSON.parse(text.to_s)
+      return nil unless data.is_a?(Hash)
+      return nil unless data["category"].is_a?(String)
+      return nil unless data["reason"].nil? || data["reason"].is_a?(String)
+      return nil unless data["suggested_source"].nil? || data["suggested_source"].is_a?(String)
       category = data["category"].to_s
       category = "other" unless CATEGORIES.include?(category)
       reason = data["reason"].to_s.strip.truncate(140).presence || "Classified by AI."

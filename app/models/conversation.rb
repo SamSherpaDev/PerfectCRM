@@ -90,6 +90,10 @@ class Conversation < ApplicationRecord
       ai_suggestion_reason: nil, ai_suggestion_at: nil)
   end
 
+  def ai_suggestion_version
+    ai_suggestion_at&.iso8601(6)
+  end
+
   def ai_enabled_for_linkable?
     linkable.nil? || !linkable.respond_to?(:ai_opt_out?) || !linkable.ai_opt_out?
   end

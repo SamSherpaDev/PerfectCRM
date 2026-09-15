@@ -34,11 +34,11 @@ class AiCallTest < ActiveSupport::TestCase
 
   test "stale conversation cannot accept a suggestion twice" do
     client = Client.create!(name: "Traveler")
-    conversation = Conversation.create!(linkable: client, ai_suggestion_title: "Call traveler")
+    conversation = Conversation.create!(linkable: client, ai_suggestion_title: "Call traveler", ai_suggestion_at: Time.current)
     stale = Conversation.find(conversation.id)
     assert_difference "Task.count", 1 do
-      assert Ai::Suggest.accept!(conversation)
-      assert_nil Ai::Suggest.accept!(stale)
+      assert Ai::Suggest.accept!(conversation, version: stale.ai_suggestion_version)
+      assert_nil Ai::Suggest.accept!(stale, version: stale.ai_suggestion_version)
     end
     assert_equal 1, client.activity_events.where("summary LIKE ?", "Accepted AI suggestion:%").count
   end

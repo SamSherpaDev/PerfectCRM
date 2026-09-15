@@ -5,6 +5,8 @@ class AiRequestsTest < ActionDispatch::IntegrationTest
   include GoogleSignInTestHelper
 
   setup do
+    @previous_cache = Rails.cache
+    Rails.cache = ActiveSupport::Cache::MemoryStore.new
     sign_in
     @client = Client.create!(name: "Tashi", email: "tashi-ai@example.com")
     @conversation = Conversation.create!(subject: "Everest dates", linkable: @client,
@@ -14,6 +16,8 @@ class AiRequestsTest < ActionDispatch::IntegrationTest
       sent_at: Time.current, text_body: "Namaste, we want Everest in May for 4 guests.")
     enable_ai!
   end
+
+  teardown { Rails.cache = @previous_cache }
 
   FakeAdapter = Struct.new(:text) do
     def chat(system:, messages:, max_tokens: 10, json_mode: false)
@@ -81,7 +85,7 @@ class AiRequestsTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "Call Tashi about May dates", @conversation.reload.ai_suggestion_title
     assert_equal 0, @client.tasks.count, "suggesting must not create the task"
-    post ai_accept_conversation_suggestion_path(@conversation)
+    post ai_accept_conversation_suggestion_path(@conversation), params: { suggestion_version: @conversation.ai_suggestion_version }
     assert_redirected_to inbox_thread_path(@conversation)
     assert_equal 1, @client.tasks.count
     assert_nil @conversation.reload.ai_suggestion_title
@@ -252,6 +256,59 @@ class AiRequestsTest < ActionDispatch::IntegrationTest
         post ai_conversation_draft_path(@conversation), headers: { "Accept" => "text/vnd.turbo-stream.html" }
       end
       assert_match "cost cap", response.body
+    end
+  end
+
+  test "review multiline identity values never reach provider or logs" do
+    body = "Date of birth:\n14 May 1990\nPassport:\nX1234567"
+    @conversation.messages.create!(direction: "in", text_body: body)
+    captured = []
+    adapter = Object.new
+    adapter.define_singleton_method(:chat) do |**args|
+      captured << args[:messages].first[:content]
+      { text: body, input_tokens: 1, output_tokens: 1 }
+    end
+    Ai::Client.stub(:build_adapter, adapter) do
+      post ai_conversation_draft_path(@conversation), headers: { "Accept" => "text/vnd.turbo-stream.html" }
+    end
+    assert_response :success
+    [ captured.first, response.body, AiCall.last.request_redacted, AiCall.last.response_redacted ].each do |text|
+      assert_no_match /14 May 1990|X1234567/, text
+    end
+  end
+
+  test "review stale acceptance cannot create an unseen suggestion" do
+    stub_adapter('{"title":"Call about May","due_in_days":3,"reason":"Review dates"}') do
+      post ai_conversation_suggestion_path(@conversation), headers: { "Accept" => "text/vnd.turbo-stream.html" }
+    end
+    displayed_version = Nokogiri::HTML(response.body).at_css('input[name="suggestion_version"]')&.[]("value")
+    travel 1.second do
+      stub_adapter('{"title":"Call about October","due_in_days":4,"reason":"Changed dates"}') do
+        post ai_conversation_suggestion_path(@conversation), headers: { "Accept" => "text/vnd.turbo-stream.html" }
+      end
+    end
+    current_version = Nokogiri::HTML(response.body).at_css('input[name="suggestion_version"]')&.[]("value")
+    assert_no_difference "Task.count" do
+      post ai_accept_conversation_suggestion_path(@conversation), params: { suggestion_version: displayed_version }
+    end
+    assert_equal "Call about October", @conversation.reload.ai_suggestion_title
+    assert_difference "Task.count", 1 do
+      post ai_accept_conversation_suggestion_path(@conversation), params: { suggestion_version: current_version }
+    end
+    assert_equal "Call about October", @client.tasks.last.title
+  end
+
+  test "review unexpected provider JSON renders fallback" do
+    [ "null", "[]", '[{"title":"Call client"}]', '{"title":"Call client","due_in_days":{}}',
+      '{"title":[],"due_in_days":3}', '{"category":{},"reason":[]}' ].each do |payload|
+      [ ai_conversation_suggestion_path(@conversation), ai_conversation_triage_path(@conversation) ].each do |path|
+        Rails.cache.clear
+        stub_adapter(payload) do
+          post path, headers: { "Accept" => "text/vnd.turbo-stream.html" }
+        end
+        assert_response :success
+        assert_match "AI could not finish", response.body
+      end
     end
   end
 

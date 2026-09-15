@@ -5,6 +5,8 @@ class AiAssistSystemTest < ApplicationSystemTestCase
   include GoogleSignInTestHelper
 
   setup do
+    @previous_cache = Rails.cache
+    Rails.cache = ActiveSupport::Cache::MemoryStore.new
     @client = Client.create!(name: "Tashi", email: "tashi-ai-sys@example.com")
     @conversation = Conversation.create!(subject: "Everest dates", linkable: @client,
       last_message_at: Time.current)
@@ -25,6 +27,8 @@ class AiAssistSystemTest < ApplicationSystemTestCase
     end
     page.current_window.resize_to(390, 844)
   end
+
+  teardown { Rails.cache = @previous_cache }
 
   test "draft flow shows the AI panel and fallback at 390px" do
     visit inbox_thread_path(@conversation)

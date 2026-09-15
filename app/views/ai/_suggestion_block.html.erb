@@ -10,8 +10,9 @@
         <p class="text-sm font-medium text-ink"><%= conversation.ai_suggestion_title %></p>
         <p class="hint mt-1">Due <%= date_short(conversation.ai_suggestion_due_on) %><% if conversation.ai_suggestion_reason.present? %> · <%= conversation.ai_suggestion_reason %><% end %></p>
         <div class="mt-2">
-          <%= button_to "Accept — create follow-up", ai_accept_conversation_suggestion_path(conversation),
-                method: :post, class: "btn-primary btn btn-sm" %>
+          <%= button_to "Accept - create follow-up", ai_accept_conversation_suggestion_path(conversation),
+                method: :post, params: { suggestion_version: conversation.ai_suggestion_version },
+                class: "btn-primary btn btn-sm" %>
         </div>
       </div>
     <% end %>

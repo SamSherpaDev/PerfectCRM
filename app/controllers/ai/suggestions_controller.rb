@@ -16,7 +16,7 @@ module Ai
 
       @result = Ai::Suggest.call(@conversation)
       @conversation.reload
-      @fallback = :error if @conversation.ai_suggestion_title.blank?
+      @fallback = :error if @result.status != :ok || @conversation.ai_suggestion_title.blank?
       respond_to do |format|
         format.turbo_stream
         format.html { redirect_to inbox_thread_path(@conversation) }
@@ -25,11 +25,11 @@ module Ai
 
     def accept
       find_conversation
-      task = Ai::Suggest.accept!(@conversation)
+      task = Ai::Suggest.accept!(@conversation, version: params[:suggestion_version])
       if task
         redirect_to inbox_thread_path(@conversation), notice: "Follow-up added for #{task.due_on.strftime('%b %-d')}.", status: :see_other
       else
-        redirect_to inbox_thread_path(@conversation), alert: "There is no suggestion to accept.", status: :see_other
+        redirect_to inbox_thread_path(@conversation), alert: "The suggestion changed or is no longer available. Review the current suggestion.", status: :see_other
       end
     end
   end

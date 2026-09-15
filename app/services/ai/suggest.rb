@@ -31,17 +31,21 @@ module Ai
     end
 
     def self.parse(text)
-      json = text.to_s[/\{.*\}/m] || text.to_s
-      data = JSON.parse(json)
-      return nil if data["title"].to_s.strip.blank?
+      data = JSON.parse(text.to_s)
+      return nil unless data.is_a?(Hash)
+      return nil unless data["title"].is_a?(String) && data["title"].strip.present?
+      return nil unless data["due_in_days"].is_a?(Integer)
+      return nil unless data["reason"].nil? || data["reason"].is_a?(String)
 
       data
     rescue JSON::ParserError
       nil
     end
 
-    def self.accept!(conversation, user: nil)
+    def self.accept!(conversation, version:)
       conversation.with_lock do
+        return nil if version.blank? || version != conversation.ai_suggestion_version
+
         title = conversation.ai_suggestion_title.to_s.strip
         return nil if title.blank? || conversation.linkable.nil?
 

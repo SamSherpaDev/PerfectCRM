@@ -12,16 +12,6 @@ module Ai
   class Client
     Result = Struct.new(:text, :status, :ai_call, keyword_init: true)
 
-    def self.available?(record = nil)
-      settings = Setting.current
-      return false unless settings.ai_enabled?
-      return false if settings.ai_api_key.blank? || settings.ai_model.blank?
-      return false if record&.respond_to?(:ai_opt_out?) && record.ai_opt_out?
-      return false if over_daily_cap?(settings)
-
-      true
-    end
-
     def self.over_daily_cap?(settings = Setting.current)
       cap = settings.ai_daily_cost_cap_cents.to_i
       cap.positive? && AiCall.daily_cost_cents >= cap
