@@ -198,11 +198,18 @@ class QuotesController < ApplicationController
   end
 
   def send_saved_quote
-    unless @quote.deliver!
-      return redirect_to @quote, alert: "Only drafts with a line and an email can be sent."
+    @quote.with_lock(requires_new: true) do
+      unless @quote.deliver!
+        return redirect_to @quote, alert: "Only drafts with a line and an email can be sent."
+      end
+
+      job = QuoteMailer.quote_email(@quote).deliver_later
+      raise ActiveJob::EnqueueError, "Quote email was not queued" unless job
     end
-    QuoteMailer.quote_email(@quote).deliver_later
     redirect_to @quote, notice: "Quote sent with PDF and accept link."
+  rescue ActiveJob::EnqueueError, SolidQueue::Job::EnqueueError => error
+    Rails.logger.error("Quote #{@quote.reference} email enqueue failed: #{error.class}")
+    redirect_to @quote, alert: "Quote saved as a draft. The email could not be queued. Please try sending again."
   end
 
   def quote_params
