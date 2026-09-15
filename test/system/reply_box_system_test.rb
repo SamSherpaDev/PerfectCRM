@@ -19,6 +19,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     visit client_path(@client)
     assert_selector ".reply-box", visible: false
     assert_no_overflow("client thread")
+    capture_outbound_evidence("mobile-reply-pill")
 
     # The composer hides behind the Reply pill until the captain opens it.
     click_button "Reply"
@@ -56,6 +57,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     assert_text "Sending your reply", wait: 5
     assert_selector ".reply-ev", text: /Sending/
     assert_no_overflow("after send")
+    capture_outbound_evidence("mobile-reply-queued")
   end
 
   test "searched picker uses the resumed draft booking in the inbox" do

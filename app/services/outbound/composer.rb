@@ -1,12 +1,7 @@
 # frozen_string_literal: true
 
-# Builds an unsent outbound Message for the mail-in task's Message shape
-# (direction out, threading headers, template link, attachments) without
-# delivering it. OutboundDeliveryJob delivers; ClientMailer renders.
-#
-# The mail-in sibling owns Conversation/Message/Attachment long-term: when
-# this rebases onto their models, this service keeps its interface
-# (.call returning a queued Message) and adapts to their columns.
+# Queues correspondence without delivering inside the request transaction.
+# OutboundDeliveryJob delivers the persisted message; ClientMailer renders it.
 module Outbound
   class Composer
     def self.call(owner:, params:, conversation: nil, group_send: nil)

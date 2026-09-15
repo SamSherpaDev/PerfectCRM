@@ -1,12 +1,11 @@
 # frozen_string_literal: true
 
-# Live values for {{placeholders}}: the deferred half of the templates
-# task. Built from the CRM record plus the mirrored PerfectBook booking,
-# so a template inserted in the reply box arrives already filled.
+# Recipient and booking context for operational template rendering.
+# Resolution policy: see README.md, "Replying".
 #
 # Values that are unknown or empty are left OUT on purpose: the renderer
 # turns them into the visible [missing: name] marker instead of a silent
-# blank (correction A from the templates review).
+# blank.
 class TemplateContext
   INACTIVE_BOOKING_STATUSES = %w[cancelled voided refunded].freeze
 

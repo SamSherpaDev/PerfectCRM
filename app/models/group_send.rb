@@ -1,6 +1,5 @@
-# Per-batch summary for a group departure send. Each recipient becomes its
-# own Message (delivered individually, logged on its own timeline); this
-# row only counts them.
+# Per-batch delivery summary. Recipient logging rules: see README.md,
+# "Replying".
 class GroupSend < ApplicationRecord
   STATUSES = %w[sending complete].freeze
 

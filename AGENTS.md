@@ -59,8 +59,6 @@ When updating this file, preserve this bar for all agents and keep entries conci
   `::Conversation` because `Mail::Message` is the mail gem.
 - Outbound email: see README.md, "Replying"; recipient context is shared
   through `TemplateContext.resolve_recipient` for reply and group rendering.
-- Dev SQLite here was once schema-loaded out of band, leaving `db:migrate`
-  behind the tables; a clean `db:drop db:create db:migrate` replays fully.
 - Views cannot name the `Template` model bare: the
   constant resolves to `ActionView::Template`. Expose what views need
   through helpers with explicit `::Template` references instead.

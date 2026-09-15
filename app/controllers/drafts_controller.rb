@@ -1,6 +1,5 @@
 # Persists the reply box without sending. "Save draft" posts the same
-# fields as Send (via the submit button's formaction) so the two never
-# drift; drafts are also the only place AI text will appear later.
+# fields as Send (via the submit button's formaction).
 class DraftsController < ApplicationController
   include DraftParameters
 
