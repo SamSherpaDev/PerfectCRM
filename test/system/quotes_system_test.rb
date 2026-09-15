@@ -316,6 +316,36 @@ class QuotesSystemTest < ApplicationSystemTestCase
     assert_equal "Keep these details", quote.notes
   end
 
+  test "remembered inclusions load on first selection and preserve later edits" do
+    client = Client.create!(name: "Maya", email: "maya@example.com")
+    PerfectBook::Trip.create!(perfectbook_id: 42, name: "Everest", active: true, synced_at: Time.current)
+    PerfectBook::Trip.create!(perfectbook_id: 44, name: "Annapurna", active: true, synced_at: Time.current)
+    QuoteTripPreference.create!(perfectbook_trip_id: 42, included: "Everest guide and permits")
+    QuoteTripPreference.create!(perfectbook_trip_id: 44, included: "Annapurna lodges")
+    visit new_quote_path(client_id: client.id)
+    select "Everest", from: "Trip"
+    assert_field "What is included", with: "Everest guide and permits"
+    select "Annapurna", from: "Trip"
+    assert_field "What is included", with: "Everest guide and permits"
+    fill_in "What is included", with: "Private guide only"
+    select "Everest", from: "Trip"
+    assert_field "What is included", with: "Private guide only"
+    fill_in "What is included", with: ""
+    select "Annapurna", from: "Trip"
+    assert_field "What is included", with: ""
+
+    visit new_quote_path(client_id: client.id)
+    fill_in "What is included", with: "Custom inclusions before choosing"
+    select "Everest", from: "Trip"
+    assert_field "What is included", with: "Custom inclusions before choosing"
+
+    visit new_quote_path(client_id: client.id)
+    fill_in "What is included", with: "Changed my mind"
+    fill_in "What is included", with: ""
+    select "Everest", from: "Trip"
+    assert_field "What is included", with: ""
+  end
+
   private
 
   def assert_no_overflow(context)
