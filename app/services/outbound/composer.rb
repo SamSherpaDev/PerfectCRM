@@ -17,9 +17,9 @@ module Outbound
     end
 
     def self.from_display
-      name = Setting.current.sender_name.presence
-      address = from_address
-      name ? "#{name} <#{address}>" : address
+      address = ::Mail::Address.new(from_address)
+      address.display_name = Setting.current.sender_name.presence
+      address.format
     end
 
     def initialize(owner, params, conversation, group_send)

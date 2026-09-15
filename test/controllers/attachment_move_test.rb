@@ -8,6 +8,37 @@ class AttachmentMoveTest < ActionDispatch::IntegrationTest
     sign_in
   end
 
+  test "removal deletes all references to a sent draft attachment" do
+    client = Client.create!(name: "Maya", email: "maya@example.com")
+    post client_draft_path(client), params: { message: { body: "See attached",
+      files: [ fixture_file_upload("test/fixtures/files/sample.txt", "text/plain") ] } }
+    draft = Draft.find_by!(owner: client, conversation_id: nil)
+    blob = draft.files.first.blob
+    post client_messages_path(client), params: { message: { body: "See attached" } }
+    message = Message.order(:id).last
+    attachment = message.files.first
+    assert_equal blob.id, attachment.blob_id
+    travel 1.second do
+      post client_draft_path(client), params: { message: { body: "Follow up later" } }
+    end
+    OutboundDeliveryJob.perform_now(message.id)
+    assert message.reload.sent?
+    assert Draft.exists?(draft.id)
+
+    assert_difference([ "ActivityEvent.count", "Note.count" ], 1) do
+      post move_to_perfectbook_attachment_path(attachment)
+    end
+    assert_redirected_to inbox_thread_path(message.conversation)
+    assert_empty draft.reload.files
+    assert_empty message.reload.files
+    assert_not ActiveStorage::Attachment.exists?(blob_id: blob.id)
+    assert_not ActiveStorage::Blob.exists?(blob.id)
+    assert_not blob.service.exist?(blob.key)
+    assert_equal "Follow up later", draft.body
+    follow_redirect!
+    assert_select "p", text: /Collect the sensitive document/
+  end
+
   test "successful move deletes the file and records an activity event" do
     client = Client.create!(name: "Doc2", email: "doc2@example.com")
     conversation = Conversation.create!(subject: "Docs", linkable: client, last_message_at: Time.current)

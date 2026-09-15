@@ -29,6 +29,15 @@ class ClientMailerTest < ActionMailer::TestCase
     assert_includes mail.header["References"].value, @message.message_id
   end
 
+  test "sender punctuation survives delivery as one mailbox" do
+    name = 'Sam, "Sherpa Holidays"'
+    Setting.current.update!(sender_name: name)
+    delivered = ClientMailer.outbound(@message).deliver_now
+    parsed = Mail.read_from_string(delivered.encoded)
+    assert_equal [ "info@sherpaholidays.com" ], parsed.from
+    assert_equal name, parsed[:from].addrs.first.display_name
+  end
+
   test "plain text escapes HTML and preserves line breaks" do
     @message.update!(text_body: "<script>alert(1)</script>\n*literal*\n\nNext")
     html = ClientMailer.outbound(@message).html_part.body.to_s
