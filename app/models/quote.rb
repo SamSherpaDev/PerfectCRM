@@ -21,7 +21,12 @@ class Quote < ApplicationRecord
   has_many :views, class_name: "QuoteView", dependent: :destroy
 
   accepts_nested_attributes_for :lines, allow_destroy: true,
-    reject_if: proc { |attrs| attrs["description"].blank? }
+    reject_if: proc { |attrs|
+      attrs["id"].blank? && attrs["description"].blank? &&
+        [ nil, "", "custom" ].include?(attrs["kind"]) &&
+        [ "", "1" ].include?(attrs["quantity"].to_s) &&
+        QuoteMoney.parse(attrs["unit_dollars"].to_s.strip) == 0
+    }
 
   has_secure_token :accept_token
 
@@ -117,9 +122,9 @@ class Quote < ApplicationRecord
   # TODO(crm-pipeline): route this through Leads::Transition once that
   # service exists on main instead of setting status directly.
   def deliver!
-    raise ActiveRecord::RecordInvalid, self unless sendable?
+    with_lock do
+      return false unless sendable?
 
-    transaction do
       update!(status: "sent", sent_at: Time.current, sent_by_email: Current.user_email)
       if lead && !lead.converted? && %w[new chatting].include?(lead.status)
         lead.update!(status: "quoted")
@@ -130,6 +135,7 @@ class Quote < ApplicationRecord
         occurred_at: Time.current, metadata: { "quote_id" => id }
       )
     end
+    true
   end
 
   def mark_viewed!

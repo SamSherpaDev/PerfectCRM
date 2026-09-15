@@ -24,7 +24,7 @@
       <div>
         <%= form.label :trip_id, "Trip", class: "label" %>
         <%= form.select :trip_id, options_from_collection_for_select(@trips, :perfectbook_id, :name, @trip&.perfectbook_id),
-          { include_blank: "Choose a trip…" }, { class: "select", onchange: "this.form.requestSubmit()" } %>
+          { include_blank: "Choose a trip…" }, { class: "select", onchange: "this.form.querySelectorAll('[name=departure_id]').forEach(input => input.checked = false); this.form.requestSubmit()" } %>
       </div>
       <% if @trip %>
         <% if @departures.any? %>
@@ -35,7 +35,7 @@
                 <% label = departure.start_date && departure.end_date ? "#{departure.start_date.strftime('%-d %b')} – #{departure.end_date.strftime('%-d %b %Y')}" : (departure.label.presence || departure.place.presence || "Flexible dates") %>
                 <% seats = departure.available_seats %>
                 <label class="card flex cursor-pointer items-center gap-3 px-4 py-3 has-checked:bg-seal-tint has-checked:shadow-press">
-                  <%= radio_button_tag :departure_id, departure.perfectbook_id, params[:departure_id].to_s == departure.perfectbook_id.to_s,
+                  <%= radio_button_tag :departure_id, departure.perfectbook_id, @quote.perfectbook_departure_id == departure.perfectbook_id,
                     class: "h-4 w-4 accent-[#a85a12]", onchange: "this.form.requestSubmit()" %>
                   <span class="min-w-0 flex-1">
                     <span class="block text-sm font-medium text-ink"><%= label %></span>

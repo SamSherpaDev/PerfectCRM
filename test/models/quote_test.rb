@@ -183,4 +183,25 @@ class QuoteTest < ActiveSupport::TestCase
     assert_equal 200050, quote.lines.first.unit_minor
   end
 
+  test "only untouched new placeholder lines are rejected" do
+    quote = Quote.new(client: @client, lines_attributes: {
+      "0" => { kind: "custom", description: "", quantity: "1", unit_dollars: "0.00" },
+      "1" => { kind: "custom", description: "", quantity: "1", unit_dollars: "1600" },
+      "2" => { kind: "custom", description: "", quantity: "2", unit_dollars: "0.00" }
+    })
+    assert_equal 2, quote.lines.size
+    assert_not quote.valid?
+    assert quote.lines.all? { |line| line.errors[:description].present? }
+  end
+
+  test "delivery reloads line totals before sending a stale draft" do
+    quote = Quote.create!(client: @client)
+    line = quote.lines.create!(kind: "custom", description: "Trek", quantity: 1, unit_minor: 150000)
+    stale = Quote.includes(:lines).find(quote.id)
+    line.update!(unit_minor: 160000)
+    assert stale.deliver!
+    assert_equal 160000, stale.subtotal_minor
+    assert_not quote.deliver!
+  end
+
 end

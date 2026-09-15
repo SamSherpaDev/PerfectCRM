@@ -286,4 +286,78 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
     assert_equal 2, quote.lines.count
   end
 
+  test "a draft loaded before another send cannot update the published quote" do
+    quote = Quote.create!(client: @client, notes: "Original")
+    quote.lines.create!(kind: "custom", description: "Trek", quantity: 1, unit_minor: 150000)
+    relation = Quote.includes(:lines, :client, :lead)
+    load_then_send = ->(id) do
+      loaded = Quote.find(id)
+      Quote.find(id).deliver!
+      loaded
+    end
+    relation.stub(:find, load_then_send) do
+      Quote.stub(:includes, relation) do
+        patch quote_path(quote), params: { quote: { notes: "Unsent change" } }
+      end
+    end
+    assert_redirected_to quote_path(quote)
+    assert_equal "sent", quote.reload.status
+    assert_equal "Original", quote.notes
+  end
+
+  test "a stale send request does not enqueue a second email" do
+    quote = Quote.create!(client: @client)
+    quote.lines.create!(kind: "custom", description: "Trek", quantity: 1, unit_minor: 150000)
+    stale = Quote.find(quote.id)
+    post send_quote_quote_path(quote)
+    relation = Quote.includes(:lines, :client, :lead)
+    assert_no_enqueued_emails do
+      relation.stub(:find, stale) do
+        Quote.stub(:includes, relation) { post send_quote_quote_path(quote) }
+      end
+    end
+    assert_redirected_to quote_path(quote)
+    assert_equal 1, @client.activity_events.where(kind: "quote").count
+  end
+
+  test "clearing a saved description validates the changed price instead of sending the old price" do
+    quote = Quote.create!(client: @client)
+    line = quote.lines.create!(kind: "custom", description: "Trek", quantity: 1, unit_minor: 150000)
+    assert_no_enqueued_emails do
+      patch quote_path(quote), params: { send_now: "1", quote: {
+        lines_attributes: { "0" => { id: line.id, description: "", unit_dollars: "1600" } }
+      } }
+    end
+    assert_response :unprocessable_entity
+    assert_equal "draft", quote.reload.status
+    assert_equal 150000, line.reload.unit_minor
+    assert_select "input[name='quote[lines_attributes][0][unit_dollars]'][value='1600.00']"
+  end
+
+  test "switching trips ignores the previous trip departure" do
+    PerfectBook::Trip.create!(perfectbook_id: 42, name: "Everest", active: true, synced_at: Time.current)
+    PerfectBook::Trip.create!(perfectbook_id: 44, name: "Annapurna", active: true, synced_at: Time.current)
+    PerfectBook::Departure.create!(perfectbook_id: 43, perfectbook_trip_id: 42,
+      start_date: Date.current + 30, synced_at: Time.current)
+    get new_quote_path(client_id: @client.id, trip_id: 44, departure_id: 43)
+    assert_response :success
+    assert_select "input[name='quote[perfectbook_departure_id]'][value]", count: 0
+    assert_select "input[name='quote[trip_name]'][value='Annapurna']"
+    assert_select "input[name='quote[lines_attributes][0][description]'][value='Annapurna']"
+  end
+
+  test "inactive selected trips survive an unrelated draft edit" do
+    trip = PerfectBook::Trip.create!(perfectbook_id: 42, name: "Everest", active: false, synced_at: Time.current)
+    quote = Quote.create!(client: @client, perfectbook_trip_id: trip.perfectbook_id, trip_name: trip.name)
+    quote.lines.create!(kind: "trip", description: "Everest", quantity: 1, unit_minor: 150000,
+      perfectbook_trip_id: 42, snapshot_trip_name: "Everest")
+    get edit_quote_path(quote)
+    assert_select "select[name='quote[perfectbook_trip_id]'] option[selected][value='42']", text: "Everest"
+    patch quote_path(quote), params: { quote: { perfectbook_trip_id: "42", perfectbook_departure_id: "", notes: "Updated note" } }
+    assert_redirected_to quote_path(quote)
+    assert_equal 42, quote.reload.perfectbook_trip_id
+    assert_equal "trip", quote.lines.first.kind
+    assert_equal "Everest", quote.lines.first.snapshot_trip_name
+  end
+
 end
