@@ -272,6 +272,43 @@ manually and add another person in the blank People fields. The n8n/Panda
 AI integration and inbound API are future work; `external_ref` and timeline
 kind `automation` prepare for them without running automation today.
 
+## Mail
+
+Email only, from `info@sherpaholidays.com` (fixed to `MAILBOX_ADDRESS`,
+default `info@sherpaholidays.com`, plus optional `MAILBOX_ALIASES`). The CRM
+connects to that Google account by IMAP with an app password and syncs ONLY
+mail to or from the mailbox; personal mail is skipped without storing it.
+
+Setup (captain, about 10 minutes): Google Account → Security → turn on
+2-step verification → App passwords → create one named PerfectCRM → paste
+it in Settings → Mailbox with the Google account login → Test connection.
+Sync runs every 5 minutes (`Mail::SyncJob` in `config/recurring.yml`) over
+`[Gmail]/All Mail` so sent mail is included, incremental by
+UIDVALIDITY/UID, threaded on `X-GM-THRID`/`X-GM-MSGID` with a
+Message-ID/In-Reply-To/References fallback. Read-only IMAP: it examines
+the folder and never moves, deletes, or flags server mail. Gmail labels
+mirror read-only on each message.
+
+Every kept message lands on the right client, lead, or organization
+timeline (`Conversation` + `Message`, attachments via Active Storage on
+the R2 bucket), threaded, newest first, with the unread mark clearing when
+the thread opens. Exact email matches first; remembered `EmailIdentity`
+choices win next. Unknown senders sit in triage as suggested clients —
+Link to existing, Create client, Create lead, Create organization, or
+Ignore sender — and the choice is remembered. Nothing is ever created
+silently. Inbox tabs are Waiting on you, Waiting on them, All, and Triage,
+with icons and counts. Sensitive files move via Move to PerfectBook, which
+hands the file to PerfectBook (`PerfectBook::DocumentUploader`; needs
+PerfectBook task pb-document-intake for the upload endpoint) and deletes
+it here with an activity event.
+
+Settings → Import history backfills past mail: all, since a date, or last
+N months (no 90-day cap). Preview shows the message count and distinct
+senders as clients versus organizations (shared domains or PerfectBook
+partner contacts suggest organizations), with duplicates shown before
+commit and per-row flips, then a resumable background job (`Mail::ImportJob`)
+with progress and a summary. Import respects the same info@ rule.
+
 ## Production shape
 
 The Docker image is built by GitHub Actions and published to

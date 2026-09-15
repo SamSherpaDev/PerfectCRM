@@ -6,6 +6,7 @@ class OrganizationsController < ApplicationController
   def show
     @note = Note.new
     load_record_history(@organization)
+    @conversations = Conversation.where(linkable: @organization).ordered.limit(20).includes(messages: { files_attachments: :blob })
     @referred_clients = @organization.referred_clients.active.ordered.limit(20).includes(:tags)
   end
 

@@ -1,0 +1,33 @@
+<% content_for :title, "Import preview · PerfectCRM" %>
+<div class="page">
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Mailbox", title: "Import preview", subtitle: "#{@import.scope_label} · #{@import.total_messages} messages in scope.", back: [ "Import", new_mail_import_path ] } do %><% end %>
+  <%= render "shared/flash" %>
+
+  <section class="card card-pad" aria-labelledby="senders-heading">
+    <h2 class="card-title" id="senders-heading">Senders</h2>
+    <%= card_caption "Who this would create as clients versus organizations. Flip any row; duplicates against existing records show before you commit." %>
+    <%= form_with url: commit_mail_import_path(@import), method: :post do %>
+      <div class="table-wrap mt-3">
+        <table class="table">
+          <thead><tr><th>Sender</th><th class="num">Messages</th><th>Suggested</th><th>Duplicate?</th><th>Import as</th></tr></thead>
+          <tbody>
+            <% @rows.each do |row| %>
+              <tr>
+                <td class="mono text-xs"><%= row["email"] %></td>
+                <td class="num"><%= row["count"] %></td>
+                <td><%= badge row["suggested_kind"].to_s.humanize, row["suggested_kind"] == "organization" ? :info : :brand %></td>
+                <td class="text-xs"><% if row["duplicate"] %><%= badge "Duplicate", :warning %> <span class="muted"><%= row["duplicate_name"] %></span><% else %><span class="muted">New</span><% end %></td>
+                <td>
+                  <%= select_tag "choices[#{row["email"]}]", options_for_select([ [ "Client", "client" ], [ "Organization", "organization" ], [ "Lead", "lead" ], [ "Skip", "skip" ] ], row["suggested_kind"]), class: "select" %>
+                </td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+      <div class="mt-4">
+        <%= submit_tag "Commit import", class: "btn-primary btn btn-sm", data: { turbo_confirm: "Import #{@import.total_messages} messages? This enqueues a background job." } %>
+      </div>
+    <% end %>
+  </section>
+</div>

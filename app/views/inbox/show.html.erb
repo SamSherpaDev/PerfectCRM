@@ -1,0 +1,45 @@
+<% content_for :title, "#{@conversation.display_subject} · Inbox · PerfectCRM" %>
+<div class="page">
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Thread", title: @conversation.display_subject, subtitle: @conversation.other_participants.join(", "), back: [ "Inbox", inbox_path ] } do %>
+    <% if @linkable %>
+      <% path = @linkable.is_a?(Client) ? client_path(@linkable) : @linkable.is_a?(Lead) ? lead_path(@linkable) : organization_path(@linkable) %>
+      <%= link_to "Open #{@linkable.class.name.downcase}", path, class: "btn-secondary btn btn-sm" %>
+    <% end %>
+  <% end %>
+  <%= render "shared/flash" %>
+
+  <% if @conversation.triage? %>
+    <% sender = @conversation.messages.inbound.order(sent_at: :desc).first&.from_address.presence || @conversation.other_participants.reject { |value| Mail.mailbox_aliases.include?(value) }.first %>
+    <div class="triage-card" role="note" aria-label="Suggested client">
+      <p class="font-semibold text-ink">Suggested client · <%= sender %></p>
+      <p class="mt-1 text-[13px]">No record matches this sender yet. Link it, create it, or ignore it — the choice is remembered for later mail.</p>
+      <div class="mt-3 flex flex-wrap gap-2">
+        <%= form_with url: link_conversation_path(@conversation), method: :post, class: "flex flex-wrap items-end gap-2" do |form| %>
+          <%= form.label :linkable_id, "Link to existing", class: "label" %>
+          <%= form.select :linkable_type, [ [ "Client", "Client" ], [ "Lead", "Lead" ], [ "Organization", "Organization" ] ], {}, class: "select" %>
+          <%= form.text_field :linkable_id, placeholder: "Record ID", class: "input", inputmode: "numeric" %>
+          <%= form.submit "Link", class: "btn-secondary btn btn-sm" %>
+        <% end %>
+        <%= button_to "Create client", make_client_conversation_path(@conversation), method: :post, class: "btn-secondary btn btn-sm" %>
+        <%= button_to "Create lead", make_lead_conversation_path(@conversation), method: :post, class: "btn-secondary btn btn-sm" %>
+        <%= button_to "Create organization", make_organization_conversation_path(@conversation), method: :post, class: "btn-secondary btn btn-sm" %>
+        <%= button_to "Ignore sender", ignore_conversation_path(@conversation), method: :post, class: "btn-ghost btn btn-sm" %>
+      </div>
+    </div>
+  <% end %>
+
+  <div id="thread-newest"></div>
+  <div class="stream mt-4" role="log" aria-label="Thread messages, newest first">
+    <% @messages.each do |message| %>
+      <%= render "shared/message_stone", message: message %>
+    <% end %>
+  </div>
+  <% if @messages.empty? %>
+    <%= render "shared/empty_state", title: "No messages in this thread", body: "Messages will appear here once mail is connected.", scene: :teahouse %>
+  <% end %>
+
+  <nav class="mobile-tabbar" aria-label="Thread shortcuts">
+    <%= link_to inbox_path do %><%= render "shared/icon", name: :arrow_left, class: "h-4 w-4" %>Inbox<% end %>
+    <a href="#thread-newest">Jump to newest ↑</a>
+  </nav>
+</div>

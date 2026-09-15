@@ -107,6 +107,8 @@
   <%# Slot: quotes. Later task (crm-quotes) fills this partial. %>
   <%= render "clients/quotes_card", client: @client %>
 
+  <%= render "shared/mail_card", record: @client, conversations: @conversations %>
+
   <section class="card card-pad" aria-labelledby="notes-heading">
     <div class="card-header">
       <h2 class="card-title" id="notes-heading">Notes</h2>

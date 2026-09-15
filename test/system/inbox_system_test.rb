@@ -1,0 +1,70 @@
+require "application_system_test_case"
+require_relative "../support/google_sign_in_test_helper"
+
+# Inbox and thread must work one-handed at 390px: bottom tab bar with the
+# Inbox count, a back link, and a jump-to-newest anchor.
+class InboxSystemTest < ApplicationSystemTestCase
+  include GoogleSignInTestHelper
+
+  setup do
+    @client = Client.create!(name: "Tashi", email: "tashi@example.com")
+    @conversation = Conversation.create!(subject: "Everest dates", linkable: @client, last_message_at: Time.current)
+    @conversation.messages.create!(direction: "out", from_address: "info@sherpaholidays.com",
+      to_addresses: [ "tashi@example.com" ], subject: "Re: Everest dates",
+      sent_at: 1.hour.ago, text_body: "Tashi, May works — sending options.")
+    @conversation.messages.create!(direction: "in", from_address: "tashi@example.com",
+      to_addresses: [ "info@sherpaholidays.com" ], subject: "Everest dates",
+      sent_at: Time.current, text_body: "Namaste, we want Everest in May.")
+  end
+
+  test "inbox tabs and thread view fit a 390px phone" do
+    OmniAuth.config.mock_auth[:google_oauth2] = OmniAuth::AuthHash.new(
+      provider: "google_oauth2", uid: "google-captain",
+      extra: { id_token: JWT.encode(@claims, @key, "RS256") }
+    )
+    Google::Auth::IDTokens.stub(:oidc_key_source, @source) do
+      visit "/auth/google_oauth2/callback"
+      assert_selector "h1", text: "Today"
+    end
+    page.current_window.resize_to(390, 844)
+
+    visit inbox_path
+    assert_selector "h1", text: "Inbox"
+    assert_selector "nav.tabs a", text: /Waiting on you/
+    assert_selector "nav.tabs a", text: /Triage/
+    assert_selector "nav.mobile-tabbar a", text: /Inbox/
+    assert_selector "a", text: /Everest dates/
+    width = page.evaluate_script("document.documentElement.scrollWidth")
+    assert_operator width, :<=, 390, "inbox overflows 390px (#{width}px)"
+
+    click_link "Everest dates", match: :first
+    assert_selector "h1", text: "Everest dates"
+    assert_selector "a", text: "Inbox"
+    assert_selector "a[href='#thread-newest']", text: /Jump to newest/
+    assert_selector "article.stone-in", minimum: 1
+    assert_selector "article.stone-out", minimum: 1
+    assert_selector "nav.mobile-tabbar a", text: /Inbox/
+    width = page.evaluate_script("document.documentElement.scrollWidth")
+    assert_operator width, :<=, 390, "thread overflows 390px (#{width}px)"
+  end
+
+  test "triage thread offers link, create, and ignore" do
+    triage = Conversation.create!(subject: "New ask", last_message_at: Time.current)
+    triage.messages.create!(direction: "in", from_address: "newbie@example.com",
+      to_addresses: [ "info@sherpaholidays.com" ], subject: "New ask",
+      sent_at: Time.current, text_body: "Hello")
+    OmniAuth.config.mock_auth[:google_oauth2] = OmniAuth::AuthHash.new(
+      provider: "google_oauth2", uid: "google-captain",
+      extra: { id_token: JWT.encode(@claims, @key, "RS256") }
+    )
+    Google::Auth::IDTokens.stub(:oidc_key_source, @source) do
+      visit "/auth/google_oauth2/callback"
+    end
+    visit "/inbox/#{triage.id}"
+    assert_text "Suggested client"
+    assert_button "Create client"
+    assert_button "Create lead"
+    assert_button "Create organization"
+    assert_button "Ignore sender"
+  end
+end

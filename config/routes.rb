@@ -12,6 +12,27 @@ Rails.application.routes.draw do
 
   # Rail navigation: see README.md, "Navigation".
   get "inbox", to: "inbox#index"
+  get "inbox/:id", to: "inbox#show", as: :inbox_thread
+  resources :conversations, only: %i[show] do
+    member do
+      post :link
+      post :ignore
+      post :make_client
+      post :make_lead
+      post :make_organization
+    end
+  end
+  resources :attachments, only: %i[show] do
+    member do
+      post :move_to_perfectbook
+    end
+  end
+  resources :mail_imports, only: %i[index new create show] do
+    member do
+      post :preview
+      post :commit
+    end
+  end
   resources :leads, except: %i[destroy] do
     member do
       post :convert
@@ -50,6 +71,8 @@ Rails.application.routes.draw do
   end
   resource :settings, only: %i[edit update] do
     post :perfectbook_test, on: :collection
+    patch :mailbox, on: :collection
+    post :mailbox_test, on: :collection
   end
   get "settings/export", to: "exports#show", as: :settings_export
   resources :tasks, only: %i[create] do

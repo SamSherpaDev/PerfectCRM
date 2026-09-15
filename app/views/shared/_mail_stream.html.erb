@@ -1,0 +1,15 @@
+<%# locals: (messages:) %>
+<%# The stream timeline: newest first, stones left and right. %>
+<% if messages.any? %>
+  <div class="stream mt-3" role="log" aria-label="Email messages">
+    <% messages.each do |message| %>
+      <%= render "shared/message_stone", message: message %>
+    <% end %>
+  </div>
+<% else %>
+  <div class="empty-inline">
+    <%= sketch :enso, class: "enso" %>
+    <p class="text-sm text-ink">No email yet.</p>
+    <p class="text-xs muted">Messages to and from <%= Mail.mailbox_address %> will appear here, newest first.</p>
+  </div>
+<% end %>

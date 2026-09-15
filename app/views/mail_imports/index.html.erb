@@ -1,0 +1,19 @@
+<% content_for :title, "Past imports · PerfectCRM" %>
+<div class="page-narrow">
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Mailbox", title: "Past imports", subtitle: "Every history import and its summary.", back: [ "Settings", edit_settings_path ] } do %>
+    <%= link_to "New import", new_mail_import_path, class: "btn-primary btn btn-sm" %>
+  <% end %>
+  <%= render "shared/flash" %>
+  <% if @imports.any? %>
+    <ul class="space-y-3">
+      <% @imports.each do |import| %>
+        <li class="card card-pad">
+          <%= link_to import.scope_label, mail_import_path(import), class: "link font-medium" %>
+          <p class="mt-1 text-xs muted"><%= import.status.humanize %> · <%= import.linked_messages %> linked · <%= import.skipped_messages %> skipped · <%= date_short(import.created_at) %></p>
+        </li>
+      <% end %>
+    </ul>
+  <% else %>
+    <%= render "shared/empty_state", title: "No imports yet", body: "Preview how far back to bring, then commit.", scene: :teahouse %>
+  <% end %>
+</div>

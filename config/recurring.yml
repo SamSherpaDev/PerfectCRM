@@ -28,3 +28,6 @@ production:
   today_digest:
     class: TodayDigestJob
     schedule: every day at 7am
+  mail_sync:
+    class: Mail::SyncJob
+    schedule: every 5 minutes
