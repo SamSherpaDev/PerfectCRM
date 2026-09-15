@@ -208,9 +208,10 @@ nudges fire once per booking and invoice number. A matching local client,
 organization, or lead is required; converted leads resolve to their client.
 Everything is a task the captain acts on, never sent mail.
 
-`Tasks::OnStageChange.call(subject:, from:, to:)` is the integration hook
-for the pipeline task. Its `STAGE_TASK_TEMPLATES` mapping is currently empty,
-so stage changes propose no tasks until that integration supplies the mapping.
+`Leads::Transition` calls `Tasks::OnStageChange` after lead stage changes
+and conversion. Its task mapping is owned by
+[`app/services/tasks/on_stage_change.rb`](app/services/tasks/on_stage_change.rb);
+the empty mapping currently proposes no tasks.
 
 The production 7am Pacific digest (`TodayDigestJob` + `CaptainDigestMailer`,
 same schedule file) emails today's follow-ups, overdue items, replies
@@ -376,8 +377,8 @@ Templates. Copying or opening email does not clear staleness; record the
 contact with a note for now. TODO perfectcrm-mail-out-65: connect suggested
 messages to the reply box and sending.
 
-Lead transitions use `Leads::Transition`; its automation policy and future
-`Tasks::OnStageChange` hook are documented in that service. Stage moves
+Lead transitions use `Leads::Transition`; its automation policy is documented
+in that service. For the tasks hook, see [Today and follow-ups](#today-and-follow-ups). Stage moves
 record `stage_change` events; conversion records `conversion` events.
 `Lead#record_touch!` is the integration point for future mail sync.
 
@@ -391,7 +392,8 @@ conversion once, including returns to existing clients and referral leads.
 The one-line digest reports open and stale leads, wins this month, and open
 lead value. Its production schedule is in [`config/recurring.yml`](config/recurring.yml).
 Settings → Monday pipeline note controls delivery to info@sherpaholidays.com;
-it is enabled by default. Integration with the future tasks digest is pending.
+it is enabled by default. It is separate from the morning digest described
+in [Today and follow-ups](#today-and-follow-ups); combining them is pending.
 
 ## Production shape
 

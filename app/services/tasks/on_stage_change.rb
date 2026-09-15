@@ -1,6 +1,6 @@
-# Hook the pipeline board calls when a lead or client changes stage.
+# Hook Leads::Transition calls after a lead changes stage or converts.
 #
-# The pipeline task owns stages and calls
+# The caller supplies stages through
 # `Tasks::OnStageChange.call(subject:, from:, to:)`. Each stage maps to an
 # optional task template: when the stage names a template purpose, a
 # follow-up task is proposed for the captain (never sent, never automatic

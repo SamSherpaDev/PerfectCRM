@@ -1,8 +1,8 @@
 # Every lead stage change goes through here so the automation boundary
 # holds in one place: automations (n8n, Panda AI) may only set new,
 # chatting, or lost. Quoted, nudged, and conversion to won stay manual.
-# Stage changes record ActivityEvents and notify the tasks lane when it
-# lands (Tasks::OnStageChange); until then the hook is a no-op.
+# Stage changes record ActivityEvents and notify Tasks::OnStageChange.
+# That service owns which stages propose follow-up tasks.
 class Leads::Transition
   Result = Data.define(:record, :from, :to, :converted_client)
 
@@ -74,11 +74,9 @@ class Leads::Transition
 
   private
 
-  # TODO(tasks): replace with a real call once the tasks lane lands
-  # Tasks::OnStageChange. Until then this is intentionally a no-op.
   def notify_tasks(record, from:, to:)
     return unless defined?(Tasks::OnStageChange)
 
-    Tasks::OnStageChange.call(record, from: from, to: to)
+    Tasks::OnStageChange.call(subject: record, from: from, to: to)
   end
 end

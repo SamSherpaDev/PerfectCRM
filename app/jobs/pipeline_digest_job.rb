@@ -1,5 +1,4 @@
-# TODO(tasks): append Pipeline::Report#digest_line to the future tasks
-# digest instead of sending a separate email. Usage: README.md, "Pipeline".
+# Delivery and pending digest integration: README.md, "Pipeline".
 class PipelineDigestJob < ApplicationJob
   queue_as :default
 

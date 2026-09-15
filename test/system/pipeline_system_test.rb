@@ -344,14 +344,32 @@ class PipelineSystemTest < ApplicationSystemTestCase
     assert_equal "won", files.fetch("clients.csv").first["pipeline_stage"]
     visit edit_settings_path
     uncheck "setting_pipeline_digest"
-    click_button "Save", exact: true
+    find("#setting_pipeline_digest").ancestor("form").click_button "Save", exact: true
     assert_text "Settings saved."
     assert_not Setting.current.reload.pipeline_digest
     visit edit_settings_path
     check "setting_pipeline_digest"
-    click_button "Save", exact: true
+    find("#setting_pipeline_digest").ancestor("form").click_button "Save", exact: true
     assert_text "Settings saved."
     assert Setting.current.reload.pipeline_digest
+  end
+
+  test "trip filter matches mirrored bookings and converted lead interests" do
+    lead = Lead.create!(name: "Annapurna traveler", trip_interest: "Annapurna",
+      expected_value_minor: 250_000, perfectbook_contact_id: 901)
+    client = lead.convert_to_client!
+    Client.create!(name: "Unrelated traveler")
+    PerfectBook::Booking.create!(perfectbook_id: 801, perfectbook_contact_id: 901,
+      synced_at: Time.current, total_minor: 300_000, trip_name: "Everest")
+    page.current_window.resize_to(1400, 900)
+    visit pipeline_path
+    %w[Everest Annapurna].each do |trip|
+      select trip, from: "Trip"
+      click_button "Filter"
+      assert_selector "article.kcard", text: client.name
+      assert_no_selector "article.kcard", text: "Unrelated traveler"
+      assert_selector ".col-sum", text: "$3,000.00"
+    end
   end
 
   private

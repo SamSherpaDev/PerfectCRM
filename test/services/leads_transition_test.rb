@@ -83,24 +83,11 @@ class LeadsTransitionTest < ActiveSupport::TestCase
     end
   end
 
-  test "stage changes work with no tasks lane, and notify it once landed" do
-    assert_not defined?(Tasks::OnStageChange)
-    assert_equal "chatting", Leads::Transition.call(@lead, to: "chatting", actor: :captain).to
-
-    calls = []
-    tasks_module = Module.new
-    hook = Class.new do
-      define_method(:call) { |*args, **kwargs| calls << [ args, kwargs ] }
-      define_singleton_method(:call) { |*args, **kwargs| calls << [ args, kwargs ] }
+  test "stage changes call the landed tasks integration" do
+    assert_no_difference "Task.count" do
+      assert_equal "chatting", Leads::Transition.call(@lead, to: "chatting", actor: :captain).to
+      assert_equal "quoted", Leads::Transition.call(@lead, to: "quoted", actor: :captain).to
     end
-    tasks_module.const_set(:OnStageChange, hook)
-    Object.const_set(:Tasks, tasks_module)
-    begin
-      Leads::Transition.call(@lead, to: "quoted", actor: :captain)
-      assert_equal 1, calls.length
-      assert_equal({ from: "chatting", to: "quoted" }, calls.first.last)
-    ensure
-      Object.send(:remove_const, :Tasks)
-    end
+    assert_equal "quoted", @lead.reload.status
   end
 end

@@ -17,8 +17,8 @@ class PipelineController < ApplicationController
 
   # Drag-drop and Move-menu target. Leads move through Transition (which
   # enforces the automation boundary); clients move between won and
-  # post_trip. Moving a lead to won converts it; moving to lost needs a
-  # reason, collected by the lost sheet.
+  # post_trip. Moving a lead to won opens conversion review; moving to
+  # lost needs a reason, collected by the lost sheet.
   def move
     if params[:client_id].present?
       move_client
