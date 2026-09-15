@@ -56,7 +56,7 @@ class QuotesController < ApplicationController
     if apply_catalog_snapshot && @quote.save
       remember_inclusions
       if params[:send_now].present?
-        send_and_redirect
+        send_saved_quote
       else
         redirect_to @quote, notice: "Quote saved as a draft."
       end
@@ -73,31 +73,30 @@ class QuotesController < ApplicationController
   end
 
   def update
-    redirect_to(@quote, alert: "Only drafts can be edited. Make a revision instead.") and return unless @quote.draft?
-
-    @quote.assign_attributes(quote_params)
-    catalog_changed = @quote.perfectbook_trip_id_changed? || @quote.perfectbook_departure_id_changed?
-    if (!catalog_changed || apply_catalog_snapshot(replace_description: true)) && @quote.save
-      remember_inclusions
-      if params[:send_now].present?
-        send_saved_quote
-      else
-        redirect_to @quote, notice: "Quote saved."
+    @quote.with_lock do
+      unless @quote.draft?
+        redirect_to @quote, alert: "Only drafts can be edited. Make a revision instead."
+        next
       end
-    else
-      load_catalog_options
-      render :edit, status: :unprocessable_entity
+
+      @quote.assign_attributes(quote_params)
+      catalog_changed = @quote.perfectbook_trip_id_changed? || @quote.perfectbook_departure_id_changed?
+      if (!catalog_changed || apply_catalog_snapshot(replace_description: true)) && @quote.save
+        remember_inclusions
+        if params[:send_now].present?
+          send_saved_quote
+        else
+          redirect_to @quote, notice: "Quote saved."
+        end
+      else
+        load_catalog_options
+        render :edit, status: :unprocessable_entity
+      end
     end
   end
 
   def send_quote
-    unless @quote.sendable?
-      return redirect_to @quote, alert: "Add at least one line and make sure they have an email first."
-    end
-
-    @quote.deliver!
-    QuoteMailer.quote_email(@quote).deliver_later
-    redirect_to @quote, notice: "Quote sent with PDF and accept link."
+    send_saved_quote
   end
 
   def duplicate
@@ -141,7 +140,8 @@ class QuotesController < ApplicationController
   def prefill_lines
     return unless @trip
 
-    @quote.perfectbook_departure_id = params[:departure_id].presence
+    departure = @departures.find_by(perfectbook_id: params[:departure_id]) if params[:departure_id].present?
+    @quote.perfectbook_departure_id = departure&.perfectbook_id
     @prefilled_unit = Quote.last_unit_for_trip(@trip.perfectbook_id, departure_id: @quote.perfectbook_departure_id)
     @quote.lines.build(kind: "trip", description: @trip.name, quantity: 2, unit_minor: @prefilled_unit.to_i)
     apply_catalog_snapshot(replace_description: true)
@@ -178,7 +178,7 @@ class QuotesController < ApplicationController
   end
 
   def load_catalog_options
-    @trips = PerfectBook::Catalog.new.active_trips
+    @trips = PerfectBook::Catalog.new.active_trips.or(PerfectBook::Trip.where(perfectbook_id: @quote.perfectbook_trip_id))
     @departures = PerfectBook::Departure.order(:start_date)
   end
 
@@ -197,16 +197,10 @@ class QuotesController < ApplicationController
     end
   end
 
-  def send_and_redirect
-    send_saved_quote
-  end
-
   def send_saved_quote
-    unless @quote.sendable?
-      return redirect_to @quote, alert: "Quote saved as a draft. Add a line and an email to send it."
+    unless @quote.deliver!
+      return redirect_to @quote, alert: "Only drafts with a line and an email can be sent."
     end
-
-    @quote.deliver!
     QuoteMailer.quote_email(@quote).deliver_later
     redirect_to @quote, notice: "Quote sent with PDF and accept link."
   end

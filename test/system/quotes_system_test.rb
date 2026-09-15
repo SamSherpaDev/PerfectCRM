@@ -97,6 +97,24 @@ class QuotesSystemTest < ApplicationSystemTestCase
     assert_no_overflow("intake panel")
   end
 
+  test "switching to a trip without departures clears the old departure" do
+    client = Client.create!(name: "Maya", email: "maya@example.com")
+    PerfectBook::Trip.create!(perfectbook_id: 42, name: "Everest", active: true, synced_at: Time.current)
+    PerfectBook::Trip.create!(perfectbook_id: 44, name: "Annapurna", active: true, synced_at: Time.current)
+    PerfectBook::Departure.create!(perfectbook_id: 43, perfectbook_trip_id: 42,
+      start_date: Date.new(2027, 5, 4), end_date: Date.new(2027, 5, 18), synced_at: Time.current)
+    visit new_quote_path(client_id: client.id, trip_id: 42, departure_id: 43)
+    select "Annapurna", from: "Trip"
+    assert_text "No upcoming departures"
+    within(all("[data-line-row]").first) { fill_in "Each ($)", with: "1500" }
+    click_button "Save draft"
+    assert_text "Quote saved as a draft"
+    quote = Quote.order(:id).last
+    assert_equal 44, quote.perfectbook_trip_id
+    assert_nil quote.perfectbook_departure_id
+    assert_equal "Annapurna", quote.lines.first.snapshot_trip_name
+  end
+
   private
 
   def assert_no_overflow(context)
