@@ -38,6 +38,7 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
     visit edit_settings_path
     fill_in "n8n webhook URL", with: "https://n8n.example.com/webhook/leads"
     click_button "Save automations"
+    assert_text "Automations saved."
     assert_field "n8n webhook URL", with: "https://n8n.example.com/webhook/leads"
     old_key = Setting.current.site_key
     within "section[aria-labelledby='automations-heading']" do
@@ -57,6 +58,7 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
     assert_text Setting.current.masked_relay_secret
     fill_in "n8n webhook URL", with: ""
     click_button "Save automations"
+    assert_text "Automations saved."
     assert_field "n8n webhook URL", with: ""
     assert_not Setting.current.webhooks_enabled?
     capture("automation-disabled-phone")
