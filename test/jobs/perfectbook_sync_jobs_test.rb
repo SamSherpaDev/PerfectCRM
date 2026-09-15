@@ -1,4 +1,5 @@
 require "test_helper"
+require_relative "../../db/seeds/demo_seed"
 
 FakePbPage = Struct.new(:data, keyword_init: true)
 
@@ -246,5 +247,94 @@ class PerfectBookSyncJobsTest < ActiveSupport::TestCase
     assert_equal "bad token", state.last_error
     assert_not_nil state.last_error_at
     assert_not_nil state.last_success_at
+  end
+
+  test "synced demo trips survive reseeding and wiping" do
+    assert_synced_demo_survives(PerfectBook::Trip, 9001) do
+      PerfectBook::SyncCatalogJob.perform_now(client: FakePbCatalogClient.new(trips: [ pb_trip(id: 9001, name: "Real trip") ]))
+    end
+  end
+
+  test "synced demo departures survive reseeding and wiping" do
+    assert_synced_demo_survives(PerfectBook::Departure, 9101) do
+      PerfectBook::SyncCatalogJob.perform_now(client: FakePbCatalogClient.new(departures: [ pb_departure(id: 9101) ]))
+    end
+  end
+
+  test "synced demo contacts survive reseeding and wiping" do
+    assert_synced_demo_survives(PerfectBook::Contact, 9501) do
+      PerfectBook::SyncContactsJob.perform_now(client: FakePbCatalogClient.new(contacts: [ pb_contact(id: 9501) ]))
+    end
+  end
+
+  test "synced demo bookings survive reseeding and wiping" do
+    assert_synced_demo_survives(PerfectBook::Booking, 18_701) do
+      PerfectBook::SyncBookingsJob.perform_now(perfectbook_contact_id: 9501,
+        client: FakePbCatalogClient.new(bookings_by_contact: { 9501 => [ pb_booking(id: 18_701) ] }))
+    end
+  end
+
+  test "sync rolls back mirror writes if demo ownership cannot be released" do
+    DemoSeed.load!
+    connection = ActiveRecord::Base.connection
+    connection.execute(<<~SQL)
+      CREATE TEMP TRIGGER reject_demo_release BEFORE DELETE ON demo_records
+      BEGIN
+        SELECT RAISE(ABORT, 'ownership release failed');
+      END;
+    SQL
+    operations = [
+      [ PerfectBook::Trip, 9001, -> {
+        PerfectBook::SyncCatalogJob.perform_now(client: FakePbCatalogClient.new(trips: [ pb_trip(id: 9001) ]))
+      } ],
+      [ PerfectBook::Departure, 9101, -> {
+        PerfectBook::SyncCatalogJob.perform_now(client: FakePbCatalogClient.new(departures: [ pb_departure(id: 9101) ]))
+      } ],
+      [ PerfectBook::Contact, 9501, -> {
+        PerfectBook::SyncContactsJob.perform_now(client: FakePbCatalogClient.new(contacts: [ pb_contact(id: 9501) ]))
+      } ],
+      [ PerfectBook::Booking, 18_701, -> {
+        PerfectBook::SyncBookingsJob.perform_now(perfectbook_contact_id: 9501,
+          client: FakePbCatalogClient.new(bookings_by_contact: { 9501 => [ pb_booking(id: 18_701) ] }))
+      } ]
+    ]
+    operations.each do |model, id, sync|
+      mirror = model.find_by!(perfectbook_id: id)
+      original = mirror.attributes
+      assert_raises(ActiveRecord::StatementInvalid, &sync)
+      assert_equal original, mirror.reload.attributes
+      assert DemoRecord.exists?(record_type: model.name, record_id: mirror.id)
+    end
+  ensure
+    connection&.execute("DROP TRIGGER IF EXISTS reject_demo_release")
+  end
+
+  test "not modified sync responses preserve demo ownership" do
+    DemoSeed.load!
+    markers = DemoRecord.order(:id).pluck(:record_type, :record_id)
+    client = FakePbCatalogClient.new(not_modified: {
+      trips: true, departures: true, contacts: true, bookings_9501: true
+    })
+    PerfectBook::SyncCatalogJob.perform_now(client: client)
+    PerfectBook::SyncContactsJob.perform_now(client: client)
+    PerfectBook::SyncBookingsJob.perform_now(client: client, perfectbook_contact_id: 9501)
+    assert_equal markers, DemoRecord.order(:id).pluck(:record_type, :record_id)
+    DemoSeed.wipe!
+    assert_empty DemoRecord.all
+  end
+
+  private
+
+  def assert_synced_demo_survives(model, perfectbook_id)
+    DemoSeed.load!
+    mirror = model.find_by!(perfectbook_id: perfectbook_id)
+    yield
+    synced = mirror.reload.attributes
+    assert_not DemoRecord.exists?(record_type: model.name, record_id: mirror.id)
+    error = assert_raises(RuntimeError) { DemoSeed.load! }
+    assert_match "Demo seed collision", error.message
+    assert_equal synced, mirror.reload.attributes
+    DemoSeed.wipe!
+    assert_equal synced, mirror.reload.attributes
   end
 end

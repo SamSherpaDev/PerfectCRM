@@ -9,3 +9,4 @@
 #   end
 
 require_relative "seeds/templates"
+require_relative "seeds/demo"

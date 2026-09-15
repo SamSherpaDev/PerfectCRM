@@ -124,6 +124,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_030003) do
     t.index ["linkable_type", "linkable_id"], name: "index_conversations_on_linkable_type_and_linkable_id"
   end
 
+  create_table "demo_records", force: :cascade do |t|
+    t.bigint "record_id", null: false
+    t.string "record_type", null: false
+    t.index ["record_type", "record_id"], name: "index_demo_records_on_record_type_and_record_id", unique: true
+  end
+
   create_table "document_holdings", force: :cascade do |t|
     t.integer "byte_size", default: 0, null: false
     t.string "content_type"

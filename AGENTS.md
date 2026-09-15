@@ -80,5 +80,7 @@ When updating this file, preserve this bar for all agents and keep entries conci
   `PerfectBook::Catalog` (never the API from views); sending goes through
   `QuoteMailer` plus `QuotePdf`; the public accept page is
   `PublicQuotesController` (`/q/:token`, logged in `QuoteView`).
+- Demo data: see `docs/getting-started.md`, "Demo data", for loading,
+  cleanup, and ownership rules; implementation is `db/seeds/demo_seed.rb`.
 - A partial's first-line `<%# locals: (...) %>` is parsed as strict locals:
   keep it pure Ruby on one line and put prose in a separate comment.

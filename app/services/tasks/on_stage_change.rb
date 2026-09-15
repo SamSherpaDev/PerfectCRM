@@ -20,7 +20,7 @@ module Tasks
 
       template = ::Template.active.for_purpose(plan.fetch(:purpose)).ordered.first
       subject.tasks.create!(
-        title: "Follow up on #{to.to_s.humanize.downcase} (#{subject.name})",
+        title: "Follow up on #{to.to_s.humanize} (#{subject.name})",
         kind: "follow_up", due_on: Date.current + plan.fetch(:days, 3).days,
         created_by: "automation", template: template
       )

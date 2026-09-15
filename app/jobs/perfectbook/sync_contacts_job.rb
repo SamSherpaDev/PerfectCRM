@@ -23,12 +23,16 @@ module PerfectBook
     private
 
     def upsert_contact!(contact, now)
-      Contact.find_or_initialize_by(perfectbook_id: contact.id).update!(
-        kind: contact.kind, name: contact.name, email: contact.email, phone: contact.phone,
-        country: contact.country, state: contact.state, archived: contact.archived,
-        pb_created_at: parse_time(contact.created_at), pb_updated_at: parse_time(contact.updated_at),
-        synced_at: now
-      )
+      Contact.transaction(requires_new: true) do
+        mirror = Contact.find_or_initialize_by(perfectbook_id: contact.id)
+        mirror.update!(
+          kind: contact.kind, name: contact.name, email: contact.email, phone: contact.phone,
+          country: contact.country, state: contact.state, archived: contact.archived,
+          pb_created_at: parse_time(contact.created_at), pb_updated_at: parse_time(contact.updated_at),
+          synced_at: now
+        )
+        DemoRecord.where(record_type: Contact.name, record_id: mirror.id).delete_all
+      end
     end
 
     def parse_time(value)

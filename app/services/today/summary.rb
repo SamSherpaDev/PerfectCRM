@@ -1,7 +1,8 @@
 # Everything the Today view and the morning digest need, in one place.
 #
-# Waiting-on-you threads and quotes-out counts await their Today integration
-# (marked TODO below); see README.md, "Today and follow-ups".
+# Waiting-on-you threads mirror the Inbox "Waiting on you" tab (linked
+# owners only; unknown senders wait in triage). Quotes-out counts live
+# sent and viewed quotes whose valid-until has not passed.
 # Departure windows read the mirrored PerfectBook bookings.
 module Today
   class Summary
@@ -12,19 +13,17 @@ module Today
       @today = today
     end
     # Inbound threads newer than the last outbound.
-    # TODO(mail-in): read from the Conversation/Message models once they land.
     def waiting_on_you
-      0
+      waiting_threads.count
     end
 
-    # TODO(mail-in): the actual threads waiting for a reply.
     def replies_waiting
-      []
+      waiting_threads.limit(5).to_a
     end
 
-    # TODO(quotes): wire the existing Quote model into this count.
+    # Sent or viewed quotes whose valid-until has not passed.
     def quotes_out
-      0
+      Quote.live.where.not(id: Quote.expired.select(:id)).count
     end
 
     def overdue
@@ -54,6 +53,13 @@ module Today
 
     def subject_for(booking)
       Tasks::Automatic.subject_for(booking)
+    end
+
+    private
+
+    def waiting_threads
+      Conversation.where(ignored: false).ordered.preload(:linkable, :messages)
+        .merge(Conversation.waiting_on_you).linked
     end
   end
 end

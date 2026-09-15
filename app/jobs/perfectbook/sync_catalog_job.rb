@@ -26,15 +26,19 @@ module PerfectBook
 
       now = Time.current
       result[:data].each do |trip|
-        Trip.find_or_initialize_by(perfectbook_id: trip.id).update!(
-          name: trip.name, active: trip.active, status: trip.status,
-          shopify_product_id: trip.shopify_product_id,
-          departures_count: trip.departures_count, departure_ids: trip.departure_ids,
-          first_start_date: parse_date(trip.first_start_date),
-          last_end_date: parse_date(trip.last_end_date),
-          pb_created_at: parse_time(trip.created_at), pb_updated_at: parse_time(trip.updated_at),
-          synced_at: now
-        )
+        Trip.transaction(requires_new: true) do
+          mirror = Trip.find_or_initialize_by(perfectbook_id: trip.id)
+          mirror.update!(
+            name: trip.name, active: trip.active, status: trip.status,
+            shopify_product_id: trip.shopify_product_id,
+            departures_count: trip.departures_count, departure_ids: trip.departure_ids,
+            first_start_date: parse_date(trip.first_start_date),
+            last_end_date: parse_date(trip.last_end_date),
+            pb_created_at: parse_time(trip.created_at), pb_updated_at: parse_time(trip.updated_at),
+            synced_at: now
+          )
+          DemoRecord.where(record_type: Trip.name, record_id: mirror.id).delete_all
+        end
       end
       result[:commit_etags]&.call
     end
@@ -45,15 +49,19 @@ module PerfectBook
 
       now = Time.current
       result[:data].each do |dep|
-        Departure.find_or_initialize_by(perfectbook_id: dep.id).update!(
-          perfectbook_trip_id: dep.trip_id, trip_name: dep.trip_name, label: dep.label,
-          start_date: parse_date(dep.start_date), end_date: parse_date(dep.end_date),
-          duration_days: dep.duration_days, place: dep.place, country_codes: dep.country_codes,
-          status: dep.status, seats: dep.seats, booked_seats: dep.booked_seats,
-          available_seats: dep.available_seats, price_per_person_minor: dep.price_per_person_minor,
-          currency: dep.currency, pb_created_at: parse_time(dep.created_at),
-          pb_updated_at: parse_time(dep.updated_at), synced_at: now
-        )
+        Departure.transaction(requires_new: true) do
+          mirror = Departure.find_or_initialize_by(perfectbook_id: dep.id)
+          mirror.update!(
+            perfectbook_trip_id: dep.trip_id, trip_name: dep.trip_name, label: dep.label,
+            start_date: parse_date(dep.start_date), end_date: parse_date(dep.end_date),
+            duration_days: dep.duration_days, place: dep.place, country_codes: dep.country_codes,
+            status: dep.status, seats: dep.seats, booked_seats: dep.booked_seats,
+            available_seats: dep.available_seats, price_per_person_minor: dep.price_per_person_minor,
+            currency: dep.currency, pb_created_at: parse_time(dep.created_at),
+            pb_updated_at: parse_time(dep.updated_at), synced_at: now
+          )
+          DemoRecord.where(record_type: Departure.name, record_id: mirror.id).delete_all
+        end
       end
       result[:commit_etags]&.call
     end

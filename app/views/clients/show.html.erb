@@ -1,6 +1,6 @@
 <% content_for :title, "#{@client.name} · PerfectCRM" %>
 <div class="page">
-  <%= render layout: "shared/page_header", locals: { eyebrow: "Client", title: @client.name, subtitle: @client.display_email || "No email on file yet.", back: [ "Clients", clients_path ] } do %>
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Client · #{@client.pipeline_stage.humanize}", title: @client.name, subtitle: @client.display_email || "No email on file yet.", back: [ "Clients", clients_path ] } do %>
     <%= link_to "Edit", edit_client_path(@client), class: "btn-secondary btn btn-sm" %>
     <% if @client.perfectbook_contact_id.present? %>
       <%= link_to "Open in PerfectBook", perfectbook_contact_url(@client.perfectbook_contact_id), class: "btn-ghost btn btn-sm", target: "_blank", rel: "noopener" %>
