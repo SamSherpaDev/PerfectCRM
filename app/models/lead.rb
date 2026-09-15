@@ -218,9 +218,8 @@ class Lead < ApplicationRecord
     self.external_ref = normalized.presence
   end
 
-  # A converted lead is read-only. No edit, no status move, no automation
-  # may change it. The only write allowed post-conversion is the conversion
-  # itself (setting converted_client_id once).
+  # Validate the loaded state for form errors; reject_converted_write checks
+  # persisted state under the write lock so a concurrent conversion wins.
   def no_changes_when_converted
     return unless converted_client_id_was.present?
     return if errors.any?

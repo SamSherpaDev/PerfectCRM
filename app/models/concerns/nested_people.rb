@@ -7,6 +7,8 @@ module NestedPeople
 
   private
 
+  # Release old emails inside the owner's save transaction before autosave
+  # assigns replacements, so the unique index is safe in any person order.
   def release_reassigned_person_emails
     return unless persisted?
 

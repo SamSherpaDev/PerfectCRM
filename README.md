@@ -10,8 +10,10 @@ at `perfectcrm.sherpaholidays.com` on the same VPS.
 PerfectBook stays the system of record for bookings, invoices, and money.
 The CRM owns people, conversations, quotes, tasks, and the pipeline, and
 reads PerfectBook through a small versioned, token-authenticated API (see
-"PerfectBook connection" below). The message-template library is available now; see
-[Templates](#templates).
+"PerfectBook connection" below). The client foundation currently supports leads,
+clients, organizations, people, notes, search, and export. The message-template
+library is also available; see [Templates](#templates). Sensitive traveler
+documents and date-of-birth data belong in PerfectBook; do not put them in CRM notes.
 
 Stack: Rails 8.1, Hotwire (Turbo, Stimulus, importmap), Tailwind v4, three
 SQLite databases (primary, cache, queue), Solid Queue running inside Puma,
@@ -46,7 +48,7 @@ configuration lives in `config/environments/development.rb`.
 On desktop, hover or focus the icon rail to reveal navigation labels and Sign
 out. On mobile, use Open menu to show the drawer. The rail holds **Today**
 (root), **Inbox**, **Leads**, **Clients**, **Pipeline**, **Quotes**, **Templates**, and
-**Settings**. Inbox, Pipeline, and Quotes render branded empty states until
+**Settings**. Today, Inbox, Pipeline, and Quotes render branded empty states until
 their features land; Templates is live (see "Templates" below). Settings
 provides the appearance control and the export below.
 
@@ -159,13 +161,26 @@ bash test/deploy/test_deploy.sh
 ## Clients
 
 Clients own people, tags, notes, and the timeline later tasks fill in.
+Use New client to create a record, and Edit to update facts or add another
+person in the blank People fields. Archive moves a client to the Archived
+tab, where Restore makes it active again. The Organizations tab holds
+advisors, operators, and other companies, with their own notes and timeline.
+On client, lead, and organization pages, Older/Newer links beneath notes
+and timeline entries provide access to the full history.
+
 Search covers names, emails, phone tails, tags, and note text over SQLite
 FTS5 with an email-substring fallback; no external service. Each row links
 to PerfectBook when `perfectbook_contact_id` is set, via
 `PERFECTBOOK_BASE_URL` (default `https://perfectbook.sherpaholidays.com`).
 `/clients/by-perfectbook/:id` is PerfectBook's "Open in PerfectCRM"
-target. Settings → Export everything streams a zip of leads, clients,
-people, organizations, and notes as CSV with a UTF-8 BOM.
+target; an unlinked contact opens a create form with its PerfectBook ID
+prefilled, without fetching contact details.
+
+Settings → Export everything downloads a zip containing leads, clients,
+people, organizations, notes, tags, tag assignments, and timeline events as
+CSV with a UTF-8 BOM. Cells beginning with `=`, `+`, `-`, or `@` receive a
+leading single quote to prevent spreadsheet formula execution, including
+phone numbers beginning with `+`.
 
 ## Leads
 
@@ -177,8 +192,13 @@ AI fit (`fit_score`, `fit_band`, `fit_reason`), and status (`new`,
 Nudged, Lost, and Converted. Conversion is one-way and manual: Convert to
 client copies facts, people, tags, notes, and activity, links forward, and
 freezes the lead read-only in the model (no reverse, no automation may
-reverse it). The client shows Started as a lead with source and campaign.
-Timeline kind `automation` is reserved for n8n and Panda AI events.
+reverse it). Conversion preserves the exact source and campaign on the
+client, which also shows Started as a lead with that attribution.
+Fit labels and bar colors use the supplied fit band; the CRM does not
+derive a band from the numeric score. Edit lets you enter these fields
+manually and add another person in the blank People fields. The n8n/Panda
+AI integration and inbound API are future work; `external_ref` and timeline
+kind `automation` prepare for them without running automation today.
 
 ## Production shape
 

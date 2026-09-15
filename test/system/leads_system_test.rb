@@ -24,7 +24,7 @@ class LeadsSystemTest < ApplicationSystemTestCase
     assert_selector "h1", text: "New lead"
 
     fill_in "Display name", with: "Ad Tashi"
-    select "Google Ads", from: "Source"
+    select "Google ads", from: "Source"
     fill_in "Campaign", with: "Everest Spring"
     click_button "Save lead"
     assert_selector "h1", text: "Ad Tashi"
