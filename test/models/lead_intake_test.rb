@@ -6,6 +6,14 @@ class LeadIntakeFieldsTest < ActiveSupport::TestCase
     assert_match(/\ASH-[A-Z2-9]{4}\z/, lead.reload.reference)
   end
 
+  test "reference collisions do not prevent lead creation" do
+    first = Lead.create!(name: "First visitor", reference: Lead.build_reference(823))
+    second = Lead.create!(id: 823, name: "Second visitor")
+    assert_not_equal first.reload.reference, second.reload.reference
+    assert_match(/\ASH-[A-Z2-9]{4}\z/, second.reference)
+    assert Lead.create!(name: "Next visitor").persisted?
+  end
+
   test "build_reference is stable per id" do
     assert_equal Lead.build_reference(1), Lead.build_reference(1)
     assert_match(/\ASH-[A-Z2-9]{4}\z/, Lead.build_reference(42))

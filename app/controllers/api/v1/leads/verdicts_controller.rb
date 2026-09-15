@@ -18,10 +18,6 @@ module Api
 
           lead = ::Lead.find_by(id: params[:id])
           return render json: { error: "not_found" }, status: :not_found unless lead
-          if lead.converted?
-            return render json: { error: "validation", fields: { "base" => "converted" } },
-              status: :unprocessable_entity
-          end
 
           errors = {}
           score = payload["fit_score"]
@@ -44,23 +40,30 @@ module Api
               status: :unprocessable_entity
           end
 
-          from_status = lead.status
-          lead.fit_score = score unless score.nil?
-          lead.fit_band = band if band.present?
-          lead.fit_reason = payload["fit_reason"].to_s.strip.presence&.truncate(1000) if payload.key?("fit_reason")
-          lead.status = status if status.present?
-          unless lead.save
-            fields = lead.errors.map { |error| [ error.attribute, error.type == :taken ? "taken" : "invalid" ] }.to_h
-            return render json: { error: "validation", fields: fields }, status: :unprocessable_entity
-          end
+          lead.with_lock do
+            if lead.converted?
+              return render json: { error: "validation", fields: { "base" => "converted" } },
+                status: :unprocessable_entity
+            end
 
-          record_automation_event!(lead, caller_name, from_status: from_status)
-          render json: {
-            reference: lead.reload.reference,
-            status: lead.status,
-            fit_score: lead.fit_score,
-            fit_band: lead.fit_band
-          }, status: :ok
+            from_status = lead.status
+            lead.fit_score = score unless score.nil?
+            lead.fit_band = band if band.present?
+            lead.fit_reason = payload["fit_reason"].to_s.strip.presence&.truncate(1000) if payload.key?("fit_reason")
+            lead.status = status if status.present?
+            unless lead.save
+              fields = lead.errors.map { |error| [ error.attribute, error.type == :taken ? "taken" : "invalid" ] }.to_h
+              return render json: { error: "validation", fields: fields }, status: :unprocessable_entity
+            end
+
+            record_automation_event!(lead, caller_name, from_status: from_status)
+            render json: {
+              reference: lead.reference,
+              status: lead.status,
+              fit_score: lead.fit_score,
+              fit_band: lead.fit_band
+            }, status: :ok
+          end
         end
 
         private

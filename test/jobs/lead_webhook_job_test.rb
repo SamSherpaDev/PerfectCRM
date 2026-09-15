@@ -88,12 +88,4 @@ class LeadWebhookJobTest < ActiveJob::TestCase
     assert_equal 0, LeadWebhookDelivery.count
   end
 
-  test "failed delivery schedules a retry" do
-    @settings.update!(lead_webhook_url: "https://n8n.example.com/hook")
-    with_fake_http(code: "500") do
-      assert_enqueued_with(job: LeadWebhookJob) do
-        LeadWebhookJob.perform_now(@lead.id, "lead.created")
-      end
-    end
-  end
 end

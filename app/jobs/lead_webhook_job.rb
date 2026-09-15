@@ -1,10 +1,6 @@
 class LeadWebhookJob < ApplicationJob
   queue_as :default
 
-  retry_on StandardError, attempts: 6, wait: :polynomially_longer
-
-  discard_on ActiveJob::DeserializationError
-
   def perform(lead_id, event)
     lead = Lead.find(lead_id)
     settings = Setting.current

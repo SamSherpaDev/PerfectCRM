@@ -352,7 +352,18 @@ class Lead < ApplicationRecord
   end
 
   def assign_reference
-    update_column(:reference, self.class.build_reference(id)) if reference.blank?
+    return if reference.present?
+
+    attempt = 0
+    loop do
+      candidate = self.class.build_reference(attempt.zero? ? id : "#{id}:#{attempt}")
+      begin
+        self.class.transaction(requires_new: true) { update_column(:reference, candidate) }
+        break
+      rescue ActiveRecord::RecordNotUnique
+        attempt += 1
+      end
+    end
   end
 
   def sync_fts_later

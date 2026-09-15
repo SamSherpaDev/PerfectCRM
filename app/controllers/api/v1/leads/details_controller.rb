@@ -34,19 +34,22 @@ module Api
           if received && received < 24.hours.ago
             return render json: { error: "expired" }, status: :gone
           end
-          if lead.converted?
-            return render json: { error: "converted" }, status: :unprocessable_entity
-          end
-
           updates, errors = extract_updates(payload)
           if errors.any?
             return render json: { error: "validation", fields: errors }, status: :bad_request
           end
 
           lead.with_lock do
+            if lead.converted?
+              return render json: { error: "converted" }, status: :unprocessable_entity
+            end
+
             lead.assign_attributes(updates)
             if lead.changed?
-              lead.save!
+              unless lead.save
+                fields = lead.errors.map { |error| [ error.attribute, "invalid" ] }.to_h
+                return render json: { error: "validation", fields: fields }, status: :unprocessable_entity
+              end
               lead.notes.create!(
                 body: "Details added by the visitor at #{Time.current.strftime('%-b %-d, %Y, %-I:%M %p')}."
               )

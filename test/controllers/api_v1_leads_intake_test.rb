@@ -354,4 +354,46 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "a replay missed by the lookup recovers from validation conflict" do
+    body = intake_body
+    post_intake body
+    assert_response :accepted
+    original = response.parsed_body
+    lookup = Lead.method(:find_by)
+    calls = 0
+    Lead.stub(:find_by, ->(*args) { calls += 1; calls == 1 ? nil : lookup.call(*args) }) do
+      assert_no_difference([ "Lead.count", "LeadNotification.count" ]) do
+        assert_enqueued_jobs 2, only: LeadNotificationJob do
+          post_intake body
+        end
+      end
+    end
+    assert_response :ok
+    assert_equal original, response.parsed_body
+  end
+
+  test "a uniqueness conflict recovers the original submission and notifications" do
+    body = intake_body
+    post_intake body
+    assert_response :accepted
+    original = response.parsed_body
+    lookup = Lead.method(:find_by)
+    calls = 0
+    conflicting = Lead.new
+    def conflicting.save
+      raise ActiveRecord::RecordNotUnique, "submission already exists"
+    end
+    Lead.stub(:find_by, ->(*args) { calls += 1; calls == 1 ? nil : lookup.call(*args) }) do
+      Lead.stub(:new, conflicting) do
+        assert_no_difference([ "Lead.count", "LeadNotification.count" ]) do
+          assert_enqueued_jobs 2, only: LeadNotificationJob do
+            post_intake body
+          end
+        end
+      end
+    end
+    assert_response :ok
+    assert_equal original, response.parsed_body
+  end
+
 end

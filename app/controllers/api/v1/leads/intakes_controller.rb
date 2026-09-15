@@ -35,7 +35,25 @@ module Api
           end
 
           external_ref = "website_form:#{payload['submission_id']}"
-          if (existing = ::Lead.find_by(external_ref: external_ref))
+          lead = build_lead(payload, fields, external_ref, caller_name)
+          existing = nil
+          begin
+            saved = ::Lead.transaction do
+              existing = ::Lead.find_by(external_ref: external_ref)
+              next false if existing
+              next false unless lead.save
+
+              lead.lead_notifications.create!(event: "email_copy")
+              lead.lead_notifications.create!(event: "lead.created")
+              Setting.current.update_column(:intake_last_received_at, Time.current)
+              true
+            end
+          rescue ActiveRecord::RecordNotUnique
+            existing = ::Lead.find_by(external_ref: external_ref)
+            raise unless existing
+          end
+          existing ||= ::Lead.find_by(external_ref: external_ref) unless saved
+          if existing
             Rails.logger.warn(
               "[intake] replay for #{external_ref} lead=#{existing.id} " \
               "body_matches=#{replay_body_matches?(existing, payload, fields)}"
@@ -44,15 +62,6 @@ module Api
             return render json: lead_response(existing), status: :ok
           end
 
-          lead = build_lead(payload, fields, external_ref, caller_name)
-          saved = ::Lead.transaction do
-            next false unless lead.save
-
-            lead.lead_notifications.create!(event: "email_copy")
-            lead.lead_notifications.create!(event: "lead.created")
-            Setting.current.update_column(:intake_last_received_at, Time.current)
-            true
-          end
           if saved
             LeadNotification.enqueue_pending(lead.id)
             render json: lead_response(lead.reload), status: :accepted

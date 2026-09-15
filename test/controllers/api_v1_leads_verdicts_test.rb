@@ -128,4 +128,42 @@ class ApiV1LeadsVerdictsTest < ActionDispatch::IntegrationTest
     assert_nil @lead.fit_score
   end
 
+  test "conversion before lock rejects a stale verdict" do
+    stale = Lead.find(@lead.id)
+    @lead.convert_to_client!
+    Lead.stub(:find_by, stale) do
+      assert_no_difference("ActivityEvent.count") do
+        post_verdict @lead.id, { "status" => "chatting", "fit_score" => 82 }
+      end
+    end
+    assert_response :unprocessable_entity
+    assert_equal "converted", response.parsed_body["fields"]["base"]
+    assert_nil @lead.reload.fit_score
+  end
+
+  test "verdict uses the locked status and conversion copies its event" do
+    stale = Lead.find(@lead.id)
+    @lead.update!(status: "chatting")
+    Lead.stub(:find_by, stale) do
+      post_verdict @lead.id, { "status" => "lost", "fit_score" => 82 }
+    end
+    assert_response :ok
+    event = @lead.activity_events.where(kind: "automation").last
+    assert_equal "chatting", event.metadata["from_status"]
+    assert_equal "lost", event.metadata["to_status"]
+    client = @lead.reload.convert_to_client!
+    assert_equal event.summary, client.activity_events.where(kind: "automation").last.summary
+  end
+
+  test "timeline failure rolls back verdict changes" do
+    ActivityEvent.stub(:new, ->(*) { raise "timeline unavailable" }) do
+      assert_raises(RuntimeError) do
+        post_verdict @lead.id, { "status" => "chatting", "fit_score" => 82 }
+      end
+    end
+    assert_equal "new", @lead.reload.status
+    assert_nil @lead.fit_score
+    assert_empty @lead.activity_events.where(kind: "automation")
+  end
+
 end

@@ -141,4 +141,28 @@ class ApiV1LeadsDetailsTest < ActionDispatch::IntegrationTest
     assert_nil @lead.reload.travel_month
   end
 
+  test "conversion before lock rejects stale details without writing" do
+    stale = Lead.find(@lead.id)
+    @lead.convert_to_client!
+    Lead.stub(:find_by, stale) do
+      assert_no_difference([ "Note.count", "LeadNotification.count" ]) do
+        post_details details_body
+      end
+    end
+    assert_response :unprocessable_entity
+    assert_equal "converted", response.parsed_body["error"]
+    assert_nil @lead.reload.travel_month
+  end
+
+  test "model validation failure returns a structured response" do
+    @lead.update_column(:name, "")
+    assert_no_difference([ "Note.count", "LeadNotification.count" ]) do
+      post_details details_body
+    end
+    assert_response :unprocessable_entity
+    assert_equal "validation", response.parsed_body["error"]
+    assert_equal "invalid", response.parsed_body["fields"]["name"]
+    assert_nil @lead.reload.travel_month
+  end
+
 end
