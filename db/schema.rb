@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_15_030002) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_15_030003) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -131,10 +131,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_030002) do
     t.datetime "expires_at", null: false
     t.string "filename", null: false
     t.integer "message_id", null: false
-    t.string "status", default: "held", null: false
     t.datetime "updated_at", null: false
     t.index ["expires_at"], name: "index_document_holdings_on_expires_at"
     t.index ["message_id"], name: "index_document_holdings_on_message_id"
+  end
+
+  create_table "document_upload_orphans", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "key", null: false
+    t.string "service_name", null: false
+    t.datetime "updated_at", null: false
+    t.index ["key"], name: "index_document_upload_orphans_on_key", unique: true
   end
 
   create_table "drafts", force: :cascade do |t|

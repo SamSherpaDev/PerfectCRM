@@ -4,6 +4,7 @@ class DocumentHoldingsPurgeJob < ApplicationJob
   queue_as :default
 
   def perform
+    DocumentUploadOrphan.purge!
     DocumentHolding.purge_expired!
   end
 end

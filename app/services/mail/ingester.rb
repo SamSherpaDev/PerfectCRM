@@ -26,8 +26,22 @@ module Mail
       existing ||= ::Message.find_by(message_id: parsed.message_id) if parsed.message_id.present?
       return { status: :duplicate, conversation: existing.conversation, message: existing } if existing
 
+      ordinary, held = self.class.partition_attachments(parsed.attachments)
+      orphans = []
+      DocumentUploadOrphan.transaction do
+        held.each do |entry|
+          next if entry["data"].bytesize > DocumentHolding::MAX_BYTES
+
+          blob = ActiveStorage::Blob.build_after_unfurling(io: StringIO.new(entry["data"]),
+            filename: entry["filename"], content_type: entry["content_type"])
+          orphans << DocumentUploadOrphan.create!(key: blob.key, service_name: blob.service_name)
+          entry["blob"] = blob
+        end
+      end
       uploaded = []
       ::Message.transaction(requires_new: true) do |transaction|
+        orphans.each(&:claim!)
+        transaction.after_commit { DocumentUploadOrphan.where(id: orphans.map(&:id)).delete_all }
         transaction.after_rollback { uploaded.each(&:delete) }
         conversation = find_conversation(gm_thread_id: gm_thread_id, parsed: parsed)
         direction = Mail.direction_for(parsed.from_addresses)
@@ -48,7 +62,7 @@ module Mail
           raw_size: parsed.raw_size.to_i,
           gmail_labels: labels
         )
-        attach_files(message, parsed.attachments, uploaded)
+        attach_files(message, ordinary, held, uploaded)
         link_conversation(conversation, parsed)
         conversation.update!(
           subject: parsed.subject.presence || conversation.subject.presence || "(no subject)",
@@ -169,9 +183,8 @@ module Mail
       [ ordinary, held ]
     end
 
-    def attach_files(message, attachments, uploaded)
+    def attach_files(message, ordinary, held, uploaded)
       skipped = []
-      ordinary, held = self.class.partition_attachments(attachments)
       ordinary.each do |file|
         filename = file[:filename]
         content_type = file[:content_type]
@@ -190,14 +203,13 @@ module Mail
       placeholders = held.map do |entry|
         # In-memory bytes only: stripped before the JSON column is saved.
         data = entry.delete("data").to_s
+        blob = entry.delete("blob")
         if data.bytesize > DocumentHolding::MAX_BYTES
           entry.merge("status" => "held: too large for the PerfectBook hand-off (10 MB max)")
         else
           holding = DocumentHolding.create!(message: message, filename: entry["filename"],
             content_type: entry["content_type"], byte_size: data.bytesize,
             expires_at: DocumentHolding::HOLD_HOURS.hours.from_now)
-          blob = ActiveStorage::Blob.build_after_unfurling(io: StringIO.new(data),
-            filename: entry["filename"], content_type: entry["content_type"])
           uploaded << blob
           blob.save!
           blob.upload_without_unfurling(StringIO.new(data))

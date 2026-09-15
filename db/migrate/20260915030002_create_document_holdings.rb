@@ -5,7 +5,6 @@ class CreateDocumentHoldings < ActiveRecord::Migration[8.1]
       t.string :filename, null: false
       t.string :content_type
       t.integer :byte_size, null: false, default: 0
-      t.string :status, null: false, default: "held"
       t.datetime :expires_at, null: false
       t.timestamps
     end
