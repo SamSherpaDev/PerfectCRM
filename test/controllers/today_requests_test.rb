@@ -51,6 +51,25 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     assert_select "form input[name=booking_id][value='#{home.id}']"
   end
 
+  test "today counts waiting replies and live quotes" do
+    convo = @client.conversations.create!(subject: "Re: Everest dates")
+    convo.messages.create!(direction: "in", from_address: "maya@example.com",
+      subject: "Re: Everest dates", text_body: "Can we add a night?",
+      status: "received", sent_at: 1.hour.ago)
+    quote = Quote.new(client: @client, trip_name: "Everest Base Camp trek",
+      party_size: 2, valid_until: Date.current + 7)
+    quote.lines.build(description: "Everest Base Camp trek, 14 days",
+      quantity: 1, unit_minor: 100_000, total_minor: 100_000)
+    quote.save!
+    quote.deliver!
+
+    get root_path
+    assert_response :success
+    assert_select "a[href=?]", inbox_thread_path(convo), text: "Maya"
+    assert_select ".stat-value", text: "1", count: 2
+    assert_select "p", text: /No replies waiting/, count: 0
+  end
+
   test "today with nothing to do shows the empty states" do
     get root_path
     assert_response :success

@@ -1,6 +1,6 @@
 <% content_for :title, "Inbox · PerfectCRM" %>
 <div class="page">
-  <%= render layout: "shared/page_header", locals: { eyebrow: "Conversations", title: "Inbox", subtitle: "Every message to and from #{Mail.mailbox_address}, oldest waiting reply first." } do %><% end %>
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Conversations", title: "Inbox", subtitle: "Every message to and from #{Mail.mailbox_address}, newest waiting reply first." } do %><% end %>
   <%= render "shared/flash" %>
 
   <nav class="tabs" aria-label="Inbox">

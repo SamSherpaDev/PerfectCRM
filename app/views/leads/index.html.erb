@@ -1,6 +1,6 @@
 <% content_for :title, "Leads · PerfectCRM" %>
 <div class="page">
-  <%= render layout: "shared/page_header", locals: { eyebrow: "Pipeline", title: "Leads", subtitle: "Everyone who asked and has not booked yet. Convert once, never back." } do %>
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Leads", title: "Leads", subtitle: "Everyone who asked and has not booked yet. Convert once, never back." } do %>
     <%= link_to "New lead", new_lead_path, class: "btn-primary btn" %>
   <% end %>
   <%= render "shared/flash" %>

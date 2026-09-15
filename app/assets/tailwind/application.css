@@ -903,7 +903,9 @@
   @apply mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-ink-3;
 }
 .unread-dot {
-  @apply inline-block h-2 w-2 rounded-full bg-seal shrink-0;
+  @apply inline-block h-2 w-2 bg-seal shrink-0;
+  border-radius: 2px;
+  box-shadow: 0 0 0 3px var(--pb-seal-tint);
 }
 .thread-attachments {
   @apply mt-3 flex flex-col gap-2;
@@ -1097,6 +1099,9 @@
      the row also names the client and carries an "Unread" badge/count. */
   .unread {
     position: relative;
+    padding-left: 34px;
+  }
+  .rowlist > li.unread {
     padding-left: 34px;
   }
   .unread::before {
@@ -1958,6 +1963,10 @@
 @media (max-width: 749px) {
   main.shell-main {
     padding-bottom: 96px;
+  }
+  /* One-handed tab rows: full 44px targets while tabs scroll in one row. */
+  .tab {
+    min-height: 44px;
   }
   .tabbar {
     display: grid;

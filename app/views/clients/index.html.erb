@@ -1,6 +1,6 @@
 <% content_for :title, "Clients · PerfectCRM" %>
 <div class="page">
-  <%= render layout: "shared/page_header", locals: { eyebrow: "People", title: "Clients", subtitle: "Travelers, past guests, and leads with their trips and preferences." } do %>
+  <%= render layout: "shared/page_header", locals: { eyebrow: "People", title: "Clients", subtitle: "Travelers and past guests, with their trips and preferences." } do %>
     <%= link_to "New client", new_client_path, class: "btn-primary btn" %>
     <%= link_to "New organization", new_organization_path, class: "btn-secondary btn" %>
   <% end %>
@@ -39,7 +39,7 @@
               <div class="min-w-0">
                 <%= link_to organization.name, organization_path(organization), class: "link font-medium" %>
                 <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
-                  <%= badge organization.kind.humanize.downcase, :neutral %>
+                  <%= badge organization.kind.humanize, :neutral %>
                   <% organization.tags.each do |tag| %>
                     <%= badge tag.name, :brand %>
                   <% end %>
@@ -77,9 +77,9 @@
                 <%= link_to client.name, client_path(client), class: "link font-medium" %>
                 <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
                   <% if client.source.present? %>
-                    <%= badge client.source.humanize.downcase, :neutral %>
+                    <%= badge client.source.humanize, :neutral %>
                   <% end %>
-                  <%= badge client.kind.humanize.downcase, :info %>
+                  <%= badge client.kind.humanize, :info %>
                   <% client.tags.each do |tag| %>
                     <%= badge tag.name, :brand %>
                   <% end %>

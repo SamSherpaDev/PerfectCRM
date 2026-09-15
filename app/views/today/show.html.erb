@@ -6,7 +6,6 @@
   <section aria-label="Counts">
     <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
       <div class="stat">
-        <%# TODO(mail-in): inbound threads newer than the last outbound, once mail lands. %>
         <p class="stat-value"><%= @summary.waiting_on_you %></p>
         <p class="text-sm text-ink-2">Waiting on you</p>
         <p class="hint">Replies owed, newest first.</p>
@@ -17,7 +16,6 @@
         <p class="hint">Owed today, not yet done.</p>
       </div>
       <div class="stat">
-        <%# TODO(quotes): open quotes, once the quotes task lands. %>
         <p class="stat-value"><%= @summary.quotes_out %></p>
         <p class="text-sm text-ink-2">Quotes out</p>
         <p class="hint">Sent, waiting on the client.</p>
@@ -35,12 +33,35 @@
       <h2 class="card-title" id="replies-heading">Replies waiting</h2>
     </div>
     <%= card_caption "Threads where the client wrote last. Answer these first." %>
-    <%# TODO(mail-in): list inbound-newer threads with a reply link, once mail lands. %>
-    <div class="empty-inline">
-      <%= sketch :enso, class: "enso" %>
-      <p class="text-sm text-ink">No replies waiting.</p>
-      <p class="text-xs muted">New client mail will queue here once the inbox connects.</p>
-    </div>
+    <% replies = @summary.replies_waiting %>
+    <% if replies.any? %>
+      <ul class="rowlist">
+        <% replies.each do |conversation| %>
+          <% last = conversation.messages.first %>
+          <li class="<%= "unread" if conversation.unread_count.to_i > 0 %>">
+            <div class="who">
+              <%= link_to conversation.linkable_name || conversation.display_subject, inbox_thread_path(conversation), class: "n link" %>
+              <span class="s"><%= last&.preview_text(120) %></span>
+            </div>
+            <div class="meta">
+              <span><%= conversation.last_message_at ? time_ago_in_words(conversation.last_message_at) + " ago" : "" %></span>
+              <% if conversation.unread_count.to_i > 0 %>
+                <%= badge "Unread", :brand, dot: true %>
+              <% end %>
+            </div>
+          </li>
+        <% end %>
+      </ul>
+      <% if @summary.waiting_on_you > replies.size %>
+        <p class="mt-3"><%= link_to "Open the inbox", inbox_path(tab: "waiting"), class: "link" %></p>
+      <% end %>
+    <% else %>
+      <div class="empty-inline">
+        <%= sketch :enso, class: "enso" %>
+        <p class="text-sm text-ink">No replies waiting.</p>
+        <p class="text-xs muted">New client mail will queue here once the inbox connects.</p>
+      </div>
+    <% end %>
   </section>
 
   <section class="card card-pad" aria-labelledby="followups-heading">

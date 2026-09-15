@@ -79,7 +79,7 @@ module ApplicationHelper
 
   def status_badge(status, label: nil)
     tone = STATUS_TONES.fetch(status.to_s, :neutral)
-    badge(label || status.to_s.humanize.downcase, tone, dot: true)
+    badge(label || status.to_s.humanize, tone, dot: true)
   end
 
   # Delivery states for outbound messages: sending is in flight, sent is
@@ -91,7 +91,7 @@ module ApplicationHelper
 
   def delivery_badge(status)
     tone = DELIVERY_TONES.fetch(status.to_s, :neutral)
-    badge(status.to_s.humanize.downcase, tone, dot: true)
+    badge(status.to_s.humanize, tone, dot: true)
   end
 
   # One plain-language line under a card or table title: what it shows and what to do with it.
@@ -102,13 +102,13 @@ module ApplicationHelper
   # Pipeline stage tones (docs/DESIGN.md 2.2): one badge per stage, always with the word.
   STAGE_TONES = {
     "new" => :info, "chatting" => :neutral, "quoted" => :brand,
-    "nudged" => :warning, "won" => :success, "post-trip" => :info,
+    "nudged" => :warning, "won" => :success, "post_trip" => :info,
     "lost" => :quiet
   }.freeze
 
   def stage_badge(stage)
     tone = STAGE_TONES.fetch(stage.to_s, :neutral)
-    badge(stage.to_s.humanize.downcase, tone, dot: true)
+    badge(stage.to_s.humanize, tone, dot: true)
   end
 
   # A drawing from the sketch library (shared/_sketches): shared drawings plus
@@ -227,11 +227,13 @@ module ApplicationHelper
   end
 
   # Times read 24-hour with the 12-hour equivalent in parentheses: "14:30 (2:30 PM)".
+  # Pacific 24-hour clock, as in PerfectBook (docs/DESIGN.md: dates and
+  # times render Pacific, 24-hour). The name is historical.
   def time_24_12(value)
     return "—" if value.blank?
 
     moment = value.is_a?(String) ? Time.zone.parse(value) : value
-    "#{moment.strftime('%H:%M')} (#{moment.strftime('%-I:%M %p')})"
+    moment.strftime("%H:%M")
   end
 
   # Deep links into PerfectBook, the system of record for bookings.

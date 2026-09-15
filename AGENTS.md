@@ -80,5 +80,15 @@ When updating this file, preserve this bar for all agents and keep entries conci
   `PerfectBook::Catalog` (never the API from views); sending goes through
   `QuoteMailer` plus `QuotePdf`; the public accept page is
   `PublicQuotesController` (`/q/:token`, logged in `QuoteView`).
+- Demo data: `db/seeds/demo.rb` + `DemoSeed` (`db/seeds/demo_seed.rb`)
+  behind a `DEMO_SEED=1` guard (refuses production); load with
+  `DEMO_SEED=1 bin/rails db:seed` (idempotent, never clobbers earned
+  stages), wipe demo-only rows with
+  `bin/rails runner 'require "./db/seeds/demo_seed"; DemoSeed.wipe!'`.
+  `DemoSeed` is not autoloaded, so the runner needs the explicit require.
+  Wipe deletes demo quotes first (`delete_all` would orphan quote lines
+  past the FK), clears append-only `ActivityEvent`s with `delete_all`
+  (they are readonly), and destroys leads before clients (converted leads
+  still point at their client).
 - A partial's first-line `<%# locals: (...) %>` is parsed as strict locals:
   keep it pure Ruby on one line and put prose in a separate comment.

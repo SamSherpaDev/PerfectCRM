@@ -301,9 +301,10 @@ Today (the root route) is the captain's morning screen: four tiles
 waiting, Follow-ups as one-tap check rows, Departing soon (trips leaving
 in the next 14 days), and Back from the mountains (returned in the last
 7 days). Returned bookings linked to a local record offer Create review
-ask. Waiting-on-you threads and the quotes count still read zero pending
-their Today integration (marked TODO in `app/services/today/summary.rb`);
-use [Quotes](#quotes) to track sent quotes.
+ask. Waiting on you counts linked threads where the client wrote last
+(same rule as the Inbox tab; unknown senders wait in triage), Replies
+waiting lists the newest five with reply links, and Quotes out counts live
+sent and viewed quotes whose valid-until has not passed.
 
 Tasks belong to clients, leads, or organizations. Today lists overdue tasks
 and those due through the next 7 days, using the Pacific date. Tap the

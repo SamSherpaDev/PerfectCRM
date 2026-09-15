@@ -5,12 +5,12 @@ class ApplicationHelperTest < ActionView::TestCase
     tones = {
       "new" => "badge-info", "chatting" => "badge-neutral", "quoted" => "badge-brand",
       "nudged" => "badge-warning", "won" => "badge-success",
-      "post-trip" => "badge-info", "lost" => "badge-quiet"
+      "post_trip" => "badge-info", "lost" => "badge-quiet"
     }
     tones.each do |stage, css|
       html = stage_badge(stage)
       assert_includes html, css, "expected #{stage} to use #{css}"
-      assert_includes html, stage.humanize.downcase
+      assert_includes html, stage.humanize
     end
   end
 

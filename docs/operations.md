@@ -39,8 +39,16 @@ are not repeated here. This file covers only what differs for the CRM.
 5. **Compose up.** On the box, run `./deploy.sh` in `/opt/apps/perfectcrm`.
    It pulls the CI-built image, starts app and litestream, and prunes old
    images. The entrypoint runs the idempotent `db:prepare`, so migrations
-   apply on every deploy. Open `https://perfectcrm.sherpaholidays.com` and
-   sign in.
+   apply on every deploy. Confirm both containers are up and Litestream is
+   replicating before moving on:
+
+   ```sh
+   docker compose -f compose.yml ps
+   docker compose -f compose.yml logs litestream --tail 20  # expect "replicating"
+   curl -s -o /dev/null -w "%{http_code}\n" https://perfectcrm.sherpaholidays.com/up
+   ```
+
+   Open `https://perfectcrm.sherpaholidays.com` and sign in.
    While this repository is public the GHCR image needs no login. When the
    repo goes private, log the box in once with a token that has
    `read:packages` before pulling:
@@ -78,6 +86,52 @@ secret. For relay credential setup and rotation, see the
 
 For configuration, sync behavior, and the Settings connection check, see
 [PerfectBook connection](../README.md#perfectbook-connection).
+
+## First sign-in setup (captain, Settings only)
+
+Everything after the first sign-in lives in Settings - no box access
+needed. Work top to bottom; each card saves itself.
+
+1. **Appearance.** Pick Paper or Night. It applies the moment you choose
+   it.
+2. **Mailbox.** Settings → Mailbox: the Gmail address receiving the
+   `info@sherpaholidays.com` alias plus its app password (Google Account →
+   Security → 2-step verification → App passwords, named PerfectCRM),
+   then Test connection. Sync runs every 5 minutes over `[Gmail]/All Mail`,
+   read-only. Then Settings → Import history → Preview to backfill recent
+   mail before triaging. See [Mail](../README.md#mail).
+3. **Email replies.** Your name and signature. Every reply sends as
+   `info@sherpaholidays.com` with these attached. See
+   [Replying](../README.md#replying).
+4. **AI drafts.** The provider key, then Edit voice to set the voice guide
+   the drafts are written in. Nothing sends without Send. See
+   [AI assistance](../README.md#ai-assistance).
+5. **Automations.** The public site key for the storefront form; the relay
+   secret and webhook URL for n8n and Panda AI. Rotate either credential
+   from the same card after pasting the new value at the other end. See the
+   [website intake contract](leads-intake.md).
+6. **PerfectBook.** Host plus API token, then Test connection. The token
+   also lives in PerfectBook's `.env.app`. See
+   [PerfectBook connection](../README.md#perfectbook-connection).
+7. **Digests.** The 7am Today mail and the Monday pipeline note are on by
+   default; turn either off from its card.
+
+## Daily operations
+
+All from `/opt/apps/perfectcrm` on the box.
+
+- **Logs.** `docker compose -f compose.yml logs -f app` (add
+  `litestream` for the replicator).
+- **Restart.** `docker compose -f compose.yml up -d` recreates anything
+  stopped; `./deploy.sh` also pulls the newest green image first.
+- **Deploy a version.** `./deploy.sh` pulls and runs `:latest` (last green
+  `main`). To pin one: `IMAGE_TAG=<commit-sha> ./deploy.sh`.
+- **Rollback.** `IMAGE_TAG=<previous-sha> ./deploy.sh`, then confirm
+  `/up` and sign in. The entrypoint's `db:prepare` only migrates forward,
+  so roll back data from the nightly backup first if the bad deploy
+  migrated the schema.
+- **Health.** `https://perfectcrm.sherpaholidays.com/up` (uptime check)
+  plus the healthchecks.io nightly-backup ping (backup check).
 
 ## Nightly backup
 
