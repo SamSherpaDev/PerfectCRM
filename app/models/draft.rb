@@ -1,6 +1,5 @@
 # The captain's unsent reply: one per conversation (a reply) or per owner
-# (a new message). Sending never auto-fires from here; the draft survives a
-# failed delivery so no words are ever lost.
+# (a new message). Delivery and retention: see README.md, "Replying".
 class Draft < ApplicationRecord
   belongs_to :owner, polymorphic: true
   belongs_to :conversation, optional: true

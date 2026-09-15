@@ -217,7 +217,7 @@ class TemplatesTest < ApplicationSystemTestCase
     fill_in "Recipients", with: "Maya Gurung <maya@example.com>\nPemba Sherpa <pemba@example.com>"
     before_deliveries = ActionMailer::Base.deliveries.size
     click_button "Preview merge"
-    assert_text "2 messages ready"
+    assert_selector "[aria-label='Merged messages'] h2", text: "2 messages ready"
     assert_text "Dear Maya Gurung, welcome aboard."
     assert_text "Dear Pemba Sherpa, welcome aboard."
     assert_text "Nothing sent"

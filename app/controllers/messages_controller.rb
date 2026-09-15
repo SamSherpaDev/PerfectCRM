@@ -1,7 +1,5 @@
-# Sends a reply (or a new message) from the docked reply box. The composer
-# builds a queued Message; delivery runs on Solid Queue so the request
-# returns instantly. A failure marks the message failed and keeps the
-# draft — the captain's words are never lost.
+# Queues replies and new messages from the reply box.
+# Delivery and draft retention: see README.md, "Replying".
 class MessagesController < ApplicationController
   include DraftParameters
 

@@ -1,14 +1,12 @@
-# Delivers one outbound Message on Solid Queue with retries. The timeline
-# shows queued → sending → sent; a failure marks the message failed but
-# keeps the conversation draft, so the captain's words are never lost.
-# A failed message can be retried from the timeline (Messages#retry).
+# Delivers a persisted outbound Message on Solid Queue.
+# Delivery and draft retention: see README.md, "Replying".
 require "net/smtp"
 
 class OutboundDeliveryJob < ApplicationJob
   queue_as :default
 
-  # Transient transport failures retry with backoff; anything else
-  # (bad address, oversized attachment) fails fast into the failed state.
+  # SMTP and connection errors retry with backoff; errors outside this
+  # list fail immediately into the failed state.
   TRANSIENT_ERRORS = [
     Net::SMTPError, SocketError, IOError, Timeout::Error,
     OpenSSL::SSL::SSLError, Errno::ECONNRESET, Errno::EPIPE, Errno::ETIMEDOUT

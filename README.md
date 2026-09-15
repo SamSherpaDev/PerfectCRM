@@ -105,8 +105,9 @@ thread, a generated `Message-ID` that is kept, the signature from Settings → E
 and uploaded attachments, subject to the [mail document restrictions](#mail).
 Delivery runs on Solid Queue
 (`OutboundDeliveryJob`, retries with backoff); the timeline shows each
-message as sending, sent, or failed, and a failure keeps the draft so no
-words are lost. Failed messages retry from their timeline row.
+message as queued, sending, sent, or failed. A failure retains the queued
+message and any saved draft. Retry on the timeline resends that message;
+it does not pick up later draft edits.
 
 The reply box docks at the bottom of the client, lead, organization, and
 inbox thread views: recipient chips prefilled from the thread, `Re:`
@@ -388,8 +389,9 @@ saving retains the text and allowed attachments.
 
 Every stored ordinary attachment still offers **Remove from CRM, collect in
 PerfectBook** if the captain identifies a sensitive file that screening missed.
-This deletes its stored file, records an activity event, and leaves a follow-up
-note. Storage failures preserve the reference and triage retry path. Neither
+This deletes its stored file and removes every message or draft attachment
+sharing that file, records an activity event, and leaves a follow-up note.
+Storage failures preserve the reference and triage retry path. Neither
 holding nor removing a file changes Gmail or uploads it to PerfectBook.
 
 Settings → Import history backfills past mail: all, since a date, or last

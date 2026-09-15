@@ -308,6 +308,61 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     end
   end
 
+  test "sender settings fill replies and preserve punctuation" do
+    sign_in_browser
+    page.current_window.resize_to(390, 844)
+    visit edit_settings_path
+    fill_in "Your name", with: 'Sam, "Sherpa Holidays"'
+    fill_in "Signature", with: "Sam Sherpa Holidays"
+    click_button "Save email settings"
+    visit edit_settings_path
+    assert_field "Your name", with: 'Sam, "Sherpa Holidays"'
+    assert_field "Signature", with: "Sam Sherpa Holidays"
+    page.execute_script("document.querySelector('#sender-heading').scrollIntoView({behavior: 'instant', block: 'start'})")
+    capture_outbound_evidence("sender-settings-mobile")
+    @template.update!(body: "{{my_name}} says hello. {{ signature }}")
+    visit client_path(@client)
+    click_button "Reply"
+    click_button "Quick hello"
+    assert_field "Message", with: 'Sam, "Sherpa Holidays" says hello. Sam Sherpa Holidays'
+    click_button "Send"
+    assert_text "Sending your reply"
+    assert_equal 1, Message.last.text_body.scan("Sam Sherpa Holidays").size
+  end
+
+  test "removing a sent attachment clears its surviving draft reference" do
+    sign_in_browser
+    page.current_window.resize_to(1400, 1000)
+    visit client_path(@client)
+    fill_in "Subject", with: "Attachment removal"
+    fill_in "Message", with: "See attached"
+    attach_file "Attachments", Rails.root.join("test/fixtures/files/sample.txt")
+    click_button "Save draft"
+    assert_text "Draft saved"
+    draft = Draft.find_by!(owner: @client)
+    blob = draft.files.first.blob
+    click_button "Send"
+    assert_text "Sending your reply"
+    message = Message.last
+    draft.update!(body: "Keep this follow-up", updated_at: 1.minute.from_now)
+    visit inbox_thread_path(message.conversation)
+    download = find_link("Download")[:href]
+    bytes = page.evaluate_async_script(<<~JS, download)
+      const done = arguments[arguments.length - 1]
+      fetch(arguments[0]).then(response => response.text()).then(done)
+    JS
+    assert_equal File.read(Rails.root.join("test/fixtures/files/sample.txt")), bytes
+    click_button "Remove from CRM, collect in PerfectBook"
+    assert_text "Removed from CRM. Collect the document in PerfectBook."
+    assert_text "Collect the sensitive document"
+    assert_empty draft.reload.files
+    assert_empty message.reload.files
+    assert_not ActiveStorage::Blob.exists?(blob.id)
+    assert_not blob.service.exist?(blob.key)
+    assert_equal "Keep this follow-up", draft.body
+    capture_outbound_evidence("shared-attachment-removed")
+  end
+
   private
 
   def sign_in_browser
