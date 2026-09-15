@@ -229,7 +229,8 @@ class TemplatesTest < ApplicationSystemTestCase
     capture_evidence("merge-mobile")
     fill_in "Recipients", with: ""
     click_button "Preview merge"
-    assert_text "Add at least one recipient email."
+    # Wait for the response's flash instead of reading the outgoing document.
+    assert_selector "[role='status']", text: "Add at least one recipient email."
     assert_text "0 messages ready"
   end
 
