@@ -73,12 +73,6 @@
           <dd><%= date_short(@quote.accepted_at) %></dd>
         </div>
       <% end %>
-      <% if @quote.declined_at %>
-        <div>
-          <dt>Declined</dt>
-          <dd><%= date_short(@quote.declined_at) %></dd>
-        </div>
-      <% end %>
     </dl>
     <div class="mt-4 border-t border-rule-2 pt-4">
       <p class="text-xs muted"><%= @quote.party_size ? "Total for #{pluralize(@quote.party_size, 'guest')}" : "Total" %></p>

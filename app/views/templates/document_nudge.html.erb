@@ -1,0 +1,15 @@
+<% content_for :title, "Document request · PerfectCRM" %>
+<div class="page">
+  <%= render layout: "shared/page_header", locals: { title: "Document request", subtitle: "#{@recipient.name} · #{@booking.ref}", back: ["Client", polymorphic_path(@recipient)] } do %><% end %>
+  <section class="card card-pad">
+    <div class="card-header"><h2 class="card-title">Message to copy</h2></div>
+    <%= card_caption "Review the missing documents in PerfectBook, then copy this email. Nothing sends automatically." %>
+    <p class="hint">Document status arrives with the PerfectBook update</p>
+    <%= label_tag :recipient, "To", class: "label mt-4" %>
+    <%= text_field_tag :recipient, @recipient.display_email, class: "input" %>
+    <%= label_tag :subject, "Subject", class: "label mt-4" %>
+    <%= text_field_tag :subject, @subject, class: "input" %>
+    <%= label_tag :body, "Message", class: "label mt-4" %>
+    <%= text_area_tag :body, @body, rows: 12, class: "textarea" %>
+  </section>
+</div>

@@ -51,11 +51,8 @@
                 <%= render "shared/icon", name: :external, class: "h-3.5 w-3.5" %>Open in PerfectBook
               <% end %>
             <% end %>
-            <%# TODO(pb-api-documents): PerfectBook's booking API exposes no
-                document-status or checklist fields yet, so there is no
-                received/missing line to show. When it does, render it here
-                and keep the nudge link beside it. %>
-            <%= link_to "Nudge for missing documents", document_nudge_path, class: "link-quiet text-xs", title: "Copy the document-request template" %>
+            <span class="text-xs muted">Document status arrives with the PerfectBook update</span>
+            <%= link_to "Nudge for missing documents", document_nudge_path(booking_id: booking.id), class: "link-quiet text-xs", title: "Open the document-request template for this booking" %>
           </div>
         </li>
       <% end %>

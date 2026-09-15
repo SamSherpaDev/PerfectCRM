@@ -1,6 +1,25 @@
 class TemplatesController < ApplicationController
   before_action :set_template, only: %i[edit update destroy duplicate archive unarchive move use]
 
+  def document_nudge
+    @booking = PerfectBook::Booking.find(params[:booking_id])
+    @recipient = Client.find_by(perfectbook_contact_id: @booking.perfectbook_contact_id) ||
+      Lead.open.find_by(perfectbook_contact_id: @booking.perfectbook_contact_id)
+    raise ActiveRecord::RecordNotFound unless @recipient
+
+    template = Template.active.for_purpose(:document_request).ordered.first
+    context = {
+      "full_name" => @recipient.name, "first_name" => @recipient.name.split.first,
+      "trip" => @booking.trip_name, "departure_dates" => helpers.date_range(@booking.start_date, @booking.end_date),
+      "booking_reference" => @booking.ref, "payment_reference" => @booking.ref,
+      "missing_documents" => "[Check missing documents in PerfectBook]",
+      "my_name" => "Sam", "signature" => "Sam"
+    }
+    @subject = TemplateRenderer.render(template&.subject.presence || "Documents for {{trip}}", context)
+    body = template&.body.presence || "Hi {{first_name}},\n\nPlease send the documents we discussed through PerfectBook.\n\n{{signature}}"
+    @body = TemplateRenderer.render(body, context) + "\n\n#{@recipient.name} · #{@booking.trip_name}\n#{context['departure_dates']}\nBooking: #{@booking.ref}"
+  end
+
   def index
     @tab = params[:tab] == "archived" ? "archived" : "active"
     @active_count = Template.active.count

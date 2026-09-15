@@ -11,13 +11,15 @@
 
     <% if @quote.status == "accepted" %>
       <div class="callout-neutral callout mt-4" role="status">
-        <p class="font-medium">Accepted — thank you!</p>
+        <p class="font-medium">Accepted - thank you!</p>
         <p class="text-sm">Sam will be in touch shortly to confirm your booking.</p>
       </div>
-    <% elsif @quote.status == "declined" %>
+    <% elsif @quote.status == "superseded" %>
       <div class="callout-neutral callout mt-4" role="status">
-        <p class="font-medium">Declined.</p>
-        <p class="text-sm">Thanks for letting us know — reply any time if plans change.</p>
+        <p class="font-medium">A newer quote exists.</p>
+        <% if (revision = @quote.revisions.ordered.first) %>
+          <%= link_to "View the newer quote", public_quote_path(revision.accept_token), class: "link" %>
+        <% end %>
       </div>
     <% elsif @quote.expired? %>
       <div class="callout-warning callout mt-4" role="status">
@@ -72,11 +74,10 @@
       </div>
     <% end %>
 
-    <% unless @quote.decided? || @quote.expired? %>
+    <% if @quote.acceptable? %>
       <div class="mt-6 flex flex-col gap-2">
         <%= button_to "Accept this quote", accept_public_quote_path(@quote.accept_token), method: :post, class: "btn btn-primary min-h-11 w-full" %>
         <%= link_to "Ask a question", "mailto:info@sherpaholidays.com?subject=#{CGI.escape("Question about quote #{@quote.reference}")}", class: "btn btn-secondary w-full" %>
-        <%= button_to "Decline", decline_public_quote_path(@quote.accept_token), method: :post, class: "btn btn-ghost btn-sm mx-auto", form: { data: { turbo_confirm: "Decline this quote?" } } %>
       </div>
       <p class="mt-2 text-center text-xs muted">Accepting tells Sam to hold your seats. The booking is confirmed together.</p>
     <% end %>

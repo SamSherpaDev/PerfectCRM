@@ -161,11 +161,14 @@ Washi-styled PDF (`QuotePdf`, via `prawn`), always from
 builder (`/quotes/new?client_id=` or `?lead_id=`) picks a trip, then a
 departure with live seats; prices stay the captain's to enter because
 PerfectBook exposes no catalog price, and prefill from the newest earlier
-quote for the same trip (`Quote.last_unit_for_trip`). Trip and departure
+sent or accepted quote by the same captain, preferring the same departure
+and falling back to the same trip (`Quote.last_unit_for_trip`). Trip and departure
 lines snapshot catalog names and dates at build time, so later
 PerfectBook edits never rewrite history; custom lines cover permits,
 single supplements, and extra nights. Revisions chain through
-`parent` with a bumped `version`; duplicates start fresh. Sending a quote
+`parent` with a bumped `version` and supersede the old accept link; duplicates
+start fresh. Inclusions are entered per quote; “Remember these inclusions for
+this trip” saves CRM-owned preferences separately from the trip mirror. Sending a quote
 moves its lead to `quoted` (`Quote#deliver!`).
 
 Each quote carries an unguessable tap-to-accept link (`/q/:token`, no
@@ -185,8 +188,10 @@ PerfectBook", plus a Refresh button that re-pulls just that contact
 (`PerfectBook::SyncBookingsJob` with `perfectbook_contact_id`).
 PerfectBook's API exposes no document-status fields yet, so there is no
 received/missing line; each booking links "Nudge for missing documents"
-to the document-request template instead (see
-`TODO(pb-api-documents)` in `shared/_perfectbook_bookings`).
+to an editable copy of the document-request template with client, trip,
+dates, and booking reference. Document status arrives with the PerfectBook
+update. TODO(pb-api-documents): consume the PerfectBook booking API
+document-status/checklist follow-up when it becomes available.
 
 ## Checks
 
@@ -450,3 +455,4 @@ The Docker image is built by GitHub Actions and published to
 secrets inventory, backups, and the restore drill. Production credential and
 bucket templates are in `.env.app.example` and `.env.litestream.example`;
 backup cron variables are documented in the runbook.
+

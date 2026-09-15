@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_14_211520) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_14_211521) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -421,6 +421,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_211520) do
     t.index ["quote_id"], name: "index_quote_lines_on_quote_id"
   end
 
+  create_table "quote_trip_preferences", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "included"
+    t.integer "perfectbook_trip_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["perfectbook_trip_id"], name: "index_quote_trip_preferences_on_perfectbook_trip_id", unique: true
+  end
+
   create_table "quote_views", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "ip_digest", null: false
@@ -438,7 +446,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_211520) do
     t.integer "client_id"
     t.datetime "created_at", null: false
     t.string "currency", default: "USD", null: false
-    t.datetime "declined_at"
     t.date "departure_end_on"
     t.string "departure_label"
     t.date "departure_start_on"
@@ -453,6 +460,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_211520) do
     t.integer "perfectbook_trip_id"
     t.string "reference", null: false
     t.datetime "sent_at"
+    t.string "sent_by_email"
     t.string "status", default: "draft", null: false
     t.string "trip_name"
     t.datetime "updated_at", null: false

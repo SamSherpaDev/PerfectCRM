@@ -7,10 +7,10 @@
 # Owner is exactly one of a client or a lead. Revisions form a chain through
 # #parent with an incrementing #version; duplicates start a fresh chain.
 class Quote < ApplicationRecord
-  STATUSES = %w[draft sent viewed accepted declined expired].freeze
+  STATUSES = %w[draft sent viewed accepted superseded expired].freeze
   # Tabs on the quotes index. Viewed lives under Sent; Expired is derived
   # from valid_until, not a stored transition (see .expired).
-  TABS = %w[draft sent accepted declined expired].freeze
+  TABS = %w[draft sent accepted expired].freeze
   CURRENCIES = %w[USD].freeze
 
   belongs_to :client, optional: true
@@ -57,17 +57,16 @@ class Quote < ApplicationRecord
     self.deposit_minor = (value.to_s.to_d * 100).round
   end
 
-  # Captains enter prices: PerfectBook exposes no catalog price today, so the
-  # builder prefills each trip line from the newest earlier quote for the
-  # same PerfectBook trip.
-  def self.last_unit_for_trip(perfectbook_trip_id, kind: "trip")
-    return nil if perfectbook_trip_id.blank?
+  def self.last_unit_for_trip(perfectbook_trip_id, departure_id: nil, sender_email: Current.user_email)
+    return nil if perfectbook_trip_id.blank? || sender_email.blank?
 
-    QuoteLine.joins(:quote)
-      .where(kind: kind, perfectbook_trip_id: perfectbook_trip_id)
-      .where("quote_lines.unit_minor > 0")
-      .order("quotes.created_at DESC")
-      .pick(:unit_minor)
+    prices = QuoteLine.joins(:quote)
+      .where(kind: %w[trip departure], perfectbook_trip_id: perfectbook_trip_id)
+      .where(quotes: { status: %w[sent viewed accepted], sent_by_email: sender_email })
+      .where.not(quotes: { sent_at: nil })
+      .order("quotes.sent_at DESC", "quotes.id DESC", "quote_lines.id ASC")
+    departure_price = prices.where(perfectbook_departure_id: departure_id).pick(:unit_minor) if departure_id.present?
+    departure_price || prices.pick(:unit_minor)
   end
 
   def owner
@@ -88,7 +87,7 @@ class Quote < ApplicationRecord
 
   # Money is integer minor units; lines own their totals (see QuoteLine).
   def subtotal_minor
-    lines.to_a.sum(&:total_minor)
+    lines.to_a.reject(&:marked_for_destruction?).sum(&:total_minor)
   end
   alias total_minor subtotal_minor
 
@@ -109,7 +108,7 @@ class Quote < ApplicationRecord
   end
 
   def decided?
-    %w[accepted declined expired].include?(status)
+    %w[accepted superseded expired].include?(status)
   end
 
   # Sending moves a lead-owned quote's lead to quoted (manual captain action;
@@ -120,7 +119,7 @@ class Quote < ApplicationRecord
     raise ActiveRecord::RecordInvalid, self unless sendable?
 
     transaction do
-      update!(status: "sent", sent_at: Time.current)
+      update!(status: "sent", sent_at: Time.current, sent_by_email: Current.user_email)
       if lead && !lead.converted? && %w[new chatting].include?(lead.status)
         lead.update!(status: "quoted")
       end
@@ -133,35 +132,27 @@ class Quote < ApplicationRecord
   end
 
   def mark_viewed!
-    return unless %w[sent viewed].include?(status)
+    with_lock do
+      return unless %w[sent viewed].include?(status) && !expired?
 
-    update_columns(status: "viewed", viewed_at: viewed_at || Time.current,
-      view_count: view_count.to_i + 1, updated_at: Time.current)
+      update_columns(status: "viewed", viewed_at: viewed_at || Time.current,
+        view_count: view_count.to_i + 1, updated_at: Time.current)
+    end
+  end
+
+  def acceptable?
+    %w[sent viewed].include?(status) && !expired?
   end
 
   def accept!
-    return false if expired? || decided?
+    with_lock do
+      return false unless acceptable?
 
-    transaction do
       update!(status: "accepted", accepted_at: Time.current,
         intake_payload: JSON.generate(intake_details))
       ActivityEvent.create!(
         subject: owner, kind: "quote",
-        summary: "Quote #{reference} accepted — create the booking in PerfectBook",
-        occurred_at: Time.current, metadata: { "quote_id" => id }
-      )
-    end
-    true
-  end
-
-  def decline!
-    return false if expired? || decided?
-
-    transaction do
-      update!(status: "declined", declined_at: Time.current)
-      ActivityEvent.create!(
-        subject: owner, kind: "quote",
-        summary: "Quote #{reference} declined",
+        summary: "Quote #{reference} accepted - create the booking in PerfectBook",
         occurred_at: Time.current, metadata: { "quote_id" => id }
       )
     end
@@ -175,22 +166,28 @@ class Quote < ApplicationRecord
     copy.status = "draft"
     copy.version = 1
     copy.parent = nil
-    copy.sent_at = copy.viewed_at = copy.accepted_at = copy.declined_at = nil
+    copy.sent_at = copy.viewed_at = copy.accepted_at = nil
+    copy.sent_by_email = nil
     copy.view_count = 0
     copy.intake_payload = nil
     copy.accept_token = self.class.generate_unique_secure_token
-    copy.save!
     lines.each do |line|
-      copy.lines.create!(line.attributes.except("id", "quote_id", "created_at", "updated_at"))
+      copy.lines.build(line.attributes.except("id", "quote_id", "created_at", "updated_at"))
     end
+    copy.save!
     copy
   end
 
   # A new draft version chained to this quote (this quote keeps its history).
   def new_revision!
-    revision = duplicate!
-    revision.update!(parent: self, version: version.to_i + 1)
-    revision
+    with_lock do
+      return revisions.ordered.first if status == "superseded"
+
+      revision = duplicate!
+      revision.update!(parent: self, version: version.to_i + 1)
+      update!(status: "superseded")
+      revision
+    end
   end
 
   # Payload staged for PerfectBook once its enquiry-creation endpoint ships.

@@ -104,11 +104,51 @@ class QuoteTest < ActiveSupport::TestCase
     assert_equal "draft", revision.status
   end
 
-  test "prefills prices from the last quote for the same trip" do
-    old = Quote.create!(client: @client)
-    old.lines.create!(kind: "trip", description: "Everest", quantity: 1,
-      unit_minor: 200_000, perfectbook_trip_id: 42)
-    assert_equal 200_000, Quote.last_unit_for_trip(42, kind: "trip")
-    assert_nil Quote.last_unit_for_trip(43, kind: "trip")
+  test "prefill prefers the same departure and only the sending captain's sent work" do
+    sent = Quote.create!(client: @client, status: "accepted", sent_at: 2.days.ago, sent_by_email: "captain@example.com")
+    sent.lines.create!(kind: "departure", description: "Everest", quantity: 1,
+      unit_minor: 200_000, perfectbook_trip_id: 42, perfectbook_departure_id: 7)
+    recent = Quote.create!(client: @client, status: "sent", sent_at: 1.day.ago, sent_by_email: "captain@example.com")
+    recent.lines.create!(kind: "trip", description: "Everest", quantity: 1,
+      unit_minor: 300_000, perfectbook_trip_id: 42)
+    draft = Quote.create!(client: @client, sent_by_email: "captain@example.com")
+    draft.lines.create!(kind: "trip", description: "Everest", quantity: 1,
+      unit_minor: 1, perfectbook_trip_id: 42)
+    other = Quote.create!(client: @client, status: "sent", sent_at: Time.current, sent_by_email: "other@example.com")
+    other.lines.create!(kind: "departure", description: "Everest", quantity: 1,
+      unit_minor: 2, perfectbook_trip_id: 42, perfectbook_departure_id: 7)
+    assert_equal 200_000, Quote.last_unit_for_trip(42, departure_id: 7, sender_email: "captain@example.com")
+    assert_equal 300_000, Quote.last_unit_for_trip(42, departure_id: 8, sender_email: "captain@example.com")
+    assert_nil Quote.last_unit_for_trip(43, sender_email: "captain@example.com")
+    assert_nil Quote.last_unit_for_trip(42, sender_email: nil)
+  end
+
+  test "stale accept and view objects cannot repeat or overwrite acceptance" do
+    quote = Quote.create!(client: @client, status: "sent")
+    stale_accept = Quote.find(quote.id)
+    stale_view = Quote.find(quote.id)
+    assert_difference -> { @client.activity_events.where(kind: "quote").count }, 1 do
+      assert quote.accept!
+      assert_not stale_accept.accept!
+      stale_view.mark_viewed!
+    end
+    assert_equal "accepted", quote.reload.status
+    assert_equal 0, quote.view_count
+  end
+
+  test "duplicate and revision retain a positive deposit and lines" do
+    quote = Quote.new(client: @client, status: "sent", deposit_minor: 5000)
+    quote.lines.build(kind: "custom", description: "Trek", quantity: 1, unit_minor: 10000)
+    quote.save!
+    copy = quote.duplicate!
+    assert_equal 5000, copy.reload.deposit_minor
+    assert_equal 10000, copy.subtotal_minor
+    stale = Quote.find(quote.id)
+    revision = quote.new_revision!
+    assert_equal 5000, revision.reload.deposit_minor
+    assert_equal 10000, revision.subtotal_minor
+    assert_equal "superseded", quote.reload.status
+    assert_not stale.accept!
+    assert_equal revision, stale.new_revision!
   end
 end
