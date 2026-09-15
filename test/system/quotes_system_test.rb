@@ -89,6 +89,7 @@ class QuotesSystemTest < ApplicationSystemTestCase
     quote.lines.create!(kind: "custom", description: "Trek", quantity: 2, unit_dollars: "1500")
     visit edit_quote_path(quote)
     fill_in "Note", with: "Held two seats for you."
+    assert_no_overflow("edited draft phone actions")
     sticky_send = find(".sticky button", text: "Send quote")
     assert sticky_send.evaluate_script(<<~JS), "Phone navigation must not cover the sticky Send quote button"
       (() => {
@@ -414,7 +415,7 @@ class QuotesSystemTest < ApplicationSystemTestCase
     assert_selector "input[data-description][value='Everest - 4 May – 18 May 2027']"
     assert_selector "[data-line-row]:first-child input[data-each][value='0.00']"
     click_button "Save draft"
-    assert_text "Quote saved as a draft"
+    assert_selector "[role='status']", text: "Quote saved as a draft"
     assert_equal 0, Quote.order(:id).last.lines.find_by!(kind: "departure").unit_minor
   end
 
