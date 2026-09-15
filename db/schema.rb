@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_14_211521) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_14_211522) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -434,7 +434,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_211521) do
     t.string "ip_digest", null: false
     t.integer "quote_id", null: false
     t.datetime "updated_at", null: false
-    t.string "user_agent"
     t.index ["quote_id", "created_at"], name: "index_quote_views_on_quote_id_and_created_at"
     t.index ["quote_id"], name: "index_quote_views_on_quote_id"
   end

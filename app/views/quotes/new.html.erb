@@ -79,6 +79,7 @@
         </div>
         <%= card_caption "Trip and departure lines snapshot the catalog; custom lines cover permits, single supplements, and extra nights." %>
         <% unless @prefilled_unit.nil? %><p class="hint">Prefilled from your last quote. Edit the price as needed.</p><% end %>
+        <p class="hint">Enter prices and deposits without commas, for example 1500.00.</p>
         <div class="space-y-3" data-quote-builder-target="rows">
           <%= form.fields_for :lines do |line_form| %>
             <%= render "line_fields", form: line_form %>

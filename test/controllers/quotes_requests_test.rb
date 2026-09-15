@@ -249,4 +249,41 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
     assert_equal "Hi {{full_name}}, {{departure_dates}}: {{missing_documents}}", template.reload.body
   end
 
+  test "revision after acceptance preserves the booking intake panel" do
+    quote = Quote.create!(client: @client, status: "sent", sent_at: Time.current)
+    quote.accept!
+    assert_no_difference "Quote.count" do
+      post revise_quote_path(quote)
+    end
+    assert_redirected_to quote_path(quote)
+    follow_redirect!
+    assert_includes response.body, "Create booking in PerfectBook"
+    assert_equal "accepted", quote.reload.status
+  end
+
+  test "failed line edits retain changed added and removed rows for resubmission" do
+    quote = Quote.create!(client: @client)
+    changed = quote.lines.create!(kind: "custom", description: "Original", quantity: 1, unit_minor: 10000)
+    removed = quote.lines.create!(kind: "custom", description: "Remove me", quantity: 1, unit_minor: 90000)
+    assert_no_enqueued_emails do
+      patch quote_path(quote), params: { send_now: "1", quote: {
+        deposit_dollars: "1,500", lines_attributes: {
+          "0" => { id: changed.id, description: "Changed", quantity: 2, unit_dollars: "1,500" },
+          "1" => { id: removed.id, _destroy: "1" },
+          "2" => { kind: "custom", description: "New line", quantity: 1, unit_dollars: "50" }
+        }
+      } }
+    end
+    assert_response :unprocessable_entity
+    assert_select "input[name='quote[deposit_dollars]'][value='1,500']"
+    assert_select "input[name='quote[lines_attributes][0][description]'][value='Changed']"
+    assert_select "input[name='quote[lines_attributes][0][quantity]'][value='2']"
+    assert_select "input[name='quote[lines_attributes][0][unit_dollars]'][value='1,500']"
+    assert_select "[data-line-row].hidden input[data-destroy][value='1']"
+    assert_select "input[value='New line']"
+    assert_equal "draft", quote.reload.status
+    assert_equal 10000, changed.reload.unit_minor
+    assert_equal 2, quote.lines.count
+  end
+
 end

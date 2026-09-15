@@ -107,6 +107,8 @@ class QuotesController < ApplicationController
 
   def revise
     revision = @quote.new_revision!
+    return redirect_to @quote, alert: "This quote can no longer be revised." unless revision
+
     redirect_to edit_quote_path(revision), notice: "Revision #{revision.reference} started. The old version keeps its history."
   end
 

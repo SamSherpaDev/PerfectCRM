@@ -16,9 +16,12 @@
       </div>
     <% elsif @quote.status == "superseded" %>
       <div class="callout-neutral callout mt-4" role="status">
-        <p class="font-medium">A newer quote exists.</p>
-        <% if (revision = @quote.revisions.ordered.first) %>
+        <% revision = @quote.revisions.ordered.first %>
+        <% if revision&.sent_at.present? && !revision.draft? %>
+          <p class="font-medium">A newer quote exists.</p>
           <%= link_to "View the newer quote", public_quote_path(revision.accept_token), class: "link" %>
+        <% else %>
+          <p class="font-medium">A newer quote is on its way</p>
         <% end %>
       </div>
     <% elsif @quote.expired? %>

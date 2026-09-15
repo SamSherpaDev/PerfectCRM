@@ -50,11 +50,12 @@ class Quote < ApplicationRecord
   # Dollar display for the builder: PerfectBook has no catalog price, so the
   # captain types dollars and the model keeps integer cents.
   def deposit_dollars
-    format("%.2f", deposit_minor.to_i / 100.0)
+    deposit_minor.nil? ? @deposit_dollars_input : format("%.2f", deposit_minor / 100.0)
   end
 
   def deposit_dollars=(value)
-    self.deposit_minor = (value.to_s.to_d * 100).round
+    @deposit_dollars_input = value.to_s.strip
+    self.deposit_minor = QuoteMoney.parse(@deposit_dollars_input)
   end
 
   def self.last_unit_for_trip(perfectbook_trip_id, departure_id: nil, sender_email: Current.user_email)
@@ -182,6 +183,7 @@ class Quote < ApplicationRecord
   def new_revision!
     with_lock do
       return revisions.ordered.first if status == "superseded"
+      return nil if decided?
 
       revision = duplicate!
       revision.update!(parent: self, version: version.to_i + 1)

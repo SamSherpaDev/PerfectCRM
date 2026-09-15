@@ -47,6 +47,23 @@ class QuotesSystemTest < ApplicationSystemTestCase
     end
     fill_in "Note", with: "Held two seats for you."
     assert_no_overflow("builder with lines")
+    dimensions = all("[data-line-row]").last.evaluate_script(<<~JS)
+      (() => {
+        const description = this.querySelector("input[data-description]").getBoundingClientRect()
+        const price = this.querySelector("input[data-each]").getBoundingClientRect()
+        const quantity = this.querySelector("input[data-qty]").getBoundingClientRect()
+        const remove = this.querySelector("button").getBoundingClientRect()
+        return { descriptionWidth: description.width, descriptionBottom: description.bottom,
+          priceTop: price.top, priceWidth: price.width, quantityTop: quantity.top,
+          removeWidth: remove.width, removeHeight: remove.height }
+      })()
+    JS
+    assert_operator dimensions["descriptionWidth"], :>=, 250
+    assert_operator dimensions["priceWidth"], :>=, 70
+    assert_operator dimensions["descriptionBottom"], :<=, dimensions["priceTop"]
+    assert_in_delta dimensions["priceTop"], dimensions["quantityTop"], 1
+    assert_operator dimensions["removeWidth"], :>=, 44
+    assert_operator dimensions["removeHeight"], :>=, 44
 
     click_button "Send quote", match: :first
     assert_text "Quote sent"
