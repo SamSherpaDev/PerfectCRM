@@ -53,7 +53,7 @@ out. On mobile, use Open menu to show the drawer. The rail holds **Today**
 **Settings**. Quotes renders a branded empty state until its
 feature lands. See [Today and follow-ups](#today-and-follow-ups), [Mail](#mail),
 [Templates](#templates), and [Pipeline](#pipeline) for the live features. Settings provides appearance,
-morning and pipeline digests, connections, history import, and export controls.
+morning and pipeline digests, connections, history import, automation settings, and export controls.
 
 On phones (under 750px) a bottom tab bar holds **Today**, **Inbox**,
 **Leads**, **Clients**, and **More** (Pipeline, Quotes, Templates,
@@ -242,7 +242,8 @@ Settings → Export everything downloads a zip containing leads, clients,
 people, organizations, notes, tags, tag assignments, and timeline events as
 CSV with a UTF-8 BOM. Cells beginning with `=`, `+`, `-`, or `@` receive a
 leading single quote to prevent spreadsheet formula execution, including
-phone numbers beginning with `+`.
+phone numbers beginning with `+`. The leads CSV includes website inquiry
+answers, consent, reference, and attribution (inside JSON metadata).
 
 ## Leads
 
@@ -273,9 +274,16 @@ with no reverse path.
 
 Fit labels and bar colors use the supplied fit band; the CRM does not
 derive a band from the numeric score. Edit lets you enter these fields
-manually and add another person in the blank People fields. The n8n/Panda
-AI integration and inbound API are future work; `external_ref` and timeline
-kind `automation` prepare for them without running automation today.
+manually and add another person in the blank People fields.
+
+Website inquiries now arrive directly in Leads. Open a lead to read its
+inquiry and optional travel details; unknown timing takes precedence over
+previous dates. The Automations strip shows recent integration activity.
+In Settings → Automations, manage credentials and the n8n subscription,
+and review machine events and delivery results. The website form and external
+n8n/Panda AI workflows are configured separately; see the
+[website intake contract](docs/leads-intake.md) for setup, delivery behavior,
+and the allowed automation actions.
 
 ## Mail
 

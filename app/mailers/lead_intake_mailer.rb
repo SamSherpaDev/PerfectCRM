@@ -1,6 +1,6 @@
 # The email copy of every website inquiry, sent to the captain with
-# Reply-To the visitor so one tap answers them. Click IDs stay in lead
-# metadata and never enter the body.
+# Reply-To the visitor so one tap answers them. Attribution stays in lead
+# metadata; the displayed page URL strips tracking query parameters.
 class LeadIntakeMailer < ApplicationMailer
   def inquiry_copy(lead)
     @lead = lead
@@ -34,5 +34,4 @@ class LeadIntakeMailer < ApplicationMailer
   rescue URI::InvalidURIError, ArgumentError
     nil
   end
-
 end

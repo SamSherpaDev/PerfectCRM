@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # Shared rules for the website-form intake endpoints (see
-# docs/leads-intake.md, mirroring intake-spec.md section 2): relay HMAC
+# docs/leads-intake.md): relay HMAC
 # verification, source derivation, suspicion scoring, and rate limiting.
 module Leads
   PAID_MEDIUMS = %w[cpc ppc paid].freeze

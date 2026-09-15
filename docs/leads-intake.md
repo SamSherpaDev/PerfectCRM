@@ -1,9 +1,7 @@
 # Website leads intake
 
 How the storefront inquiry form and the automation ecosystem talk to
-PerfectCRM. The normative contract is intake-spec.md sections 2, 4, 5 and 8
-(shared with the PerfectBook storefront crew); this page documents what this
-app actually serves.
+PerfectCRM. This page owns the API contract served by this app.
 
 Base URL: `https://perfectcrm.sherpaholidays.com`.
 
@@ -19,8 +17,9 @@ Base URL: `https://perfectcrm.sherpaholidays.com`.
 Bodies are `application/json`, max 32 KB. Error bodies are
 `{ "error": "bad_request" | "forbidden" | "unauthorized" | "validation" |
 "rate_limited" | "not_found" | "expired" | "converted" | "server" }`;
-validation errors add a `fields` map from payload key to
-`invalid` / `taken`.
+validation errors add a `fields` map from payload key (or model attribute
+for save failures) to `invalid` / `taken`. A converted verdict instead returns
+`{ "error": "validation", "fields": { "base": "converted" } }`.
 
 ## Browser mode (the storefront form)
 
@@ -28,7 +27,7 @@ CORS allow-origin: `https://www.sherpaholidays.com` and
 `https://sherpaholidays.com` only. Methods `POST, OPTIONS`; headers
 `Content-Type, X-Sherpa-Site-Key`; no credentials; preflight cached 24 h.
 
-Every request sends the public site key (Settings → Automations) and an
+Every browser request sends the public site key (Settings → Automations) and an
 `Origin` on the allowlist. Unknown key, bad `Origin`, or missing `Origin`:
 `403 { "error": "forbidden" }`.
 
@@ -56,15 +55,17 @@ curl -X POST https://perfectcrm.sherpaholidays.com/api/v1/leads/intake \
 ```
 
 Behavior, in order: schema/size check (`400`); auth (`403`); rate limits
-(10 per IP per 10 minutes, 3 per email per hour — `429` with `Retry-After`);
+(10 per IP per 10 minutes, 3 per email per hour - `429` with `Retry-After`);
 filled honeypot (answered `202` with a synthetic reference, stored nowhere);
 required fields (`contact.name` 2–120 chars, `contact.email` shaped with
-MX/A records, `consent.contact: true`, `submission_id`); suspicion scoring
-that only flags, never rejects.
+MX/A records, `consent.contact: true`, nonblank `submission_id` up to 64 chars);
+suspicion scoring that only flags, never rejects. DNS lookup failures fail open;
+a completed lookup with no MX or A record rejects the address.
 
+Replays pass authentication, rate limits, and required-field validation first.
 Replaying the same `submission_id` returns `200` with the original
-reference and re-enqueues pending notifications. A second open inquiry from the same email is
-a `400` validation with `{ "contact.email": "taken" }` — reply in the
+reference and re-enqueues pending notifications without replacing the inquiry.
+A second open inquiry from the same email is a `400` validation with `{ "contact.email": "taken" }` - reply in the
 existing thread instead.
 
 Source derivation: `google_ads` on `gclid`/`gbraid`/`wbraid`, or
@@ -90,9 +91,17 @@ curl -X POST https://perfectcrm.sherpaholidays.com/api/v1/leads/intake/details \
 # 200 { "reference": "SH-4K7Q" }
 ```
 
-Unknown id: `404`. Older than 24 hours: `410`. Only provided fields change;
-a "Details added by the visitor" note is appended once (repeating the same
-body is one update). No email is sent; the lead page shows the answers.
+Unknown id: `404`. Older than 24 hours: `410`. Converted lead: `422` with
+`error: "converted"`. Details have their own IP rate limit, with no email
+limit. Only provided fields change; each change appends a "Details added by
+the visitor" note. Repeating answers already stored makes no new note or
+notification. No email is sent; the lead page shows the answers.
+
+Month accepts integers 1-12, year 2020-2100, and party size 1-20.
+Budget bands are defined by `Lead::BUDGET_BANDS`. These fields accept `null`
+to clear them; `timing_unknown` accepts only `true` or `false`. Invalid field
+values return `400`; model validation failures return `422`. Setting unknown
+timing does not clear stored dates; see [Leads](../README.md#leads) for display behavior.
 
 ## Relay mode (n8n, Panda AI, any server)
 
@@ -108,6 +117,11 @@ An optional `,kid=<name>` names the caller (e.g. `kid=panda-ai`) for the
 timeline. Intake and details accept relay mode; the verdict endpoint
 requires it (`401` for browser credentials).
 
+Rotate the relay secret to obtain its full value, copy it immediately, and
+update server callers and webhook verifiers together. Rotation invalidates
+the previous secret immediately. Site-key rotation likewise requires updating
+the storefront form; there is no overlap period for either credential.
+
 ```bash
 T=$(date +%s)
 BODY='{...}'
@@ -121,38 +135,48 @@ curl -X POST https://perfectcrm.sherpaholidays.com/api/v1/leads/intake \
 ## Verdicts (Panda AI scoring)
 
 ```bash
+T=$(date +%s)
+BODY='{"fit_score":82,"fit_band":"strong","fit_reason":"Honeymoon, flexible dates","status":"chatting"}'
+SIG=$(printf '%s.%s' "$T" "$BODY" | openssl dgst -sha256 -hmac "$RELAY_SECRET" | sed 's/.* //')
 curl -X POST https://perfectcrm.sherpaholidays.com/api/v1/leads/123/verdict \
   -H 'Content-Type: application/json' \
   -H "X-Sherpa-Signature: t=$T,v1=$SIG,kid=panda-ai" \
-  -d '{ "fit_score": 82, "fit_band": "strong",
-        "fit_reason": "Honeymoon, flexible dates", "status": "chatting" }'
+  -d "$BODY"
 # 200 { "reference": "SH-4K7Q", "status": "chatting", "fit_score": 82, "fit_band": "strong" }
 ```
 
 `fit_score` 0–100, `fit_band` strong/possible/weak, `status` optional and
-limited to `new`, `chatting`, `lost` — `quoted`, `nudged`, `won`, or a
-converted lead are `422`. Every call lands on the lead timeline as an
-`automation` event naming the caller.
+limited to `new`, `chatting`, `lost` - `quoted`, `nudged`, `won`, or a
+converted lead are `422`. Reopening a lost lead also returns `422` if its
+email or PerfectBook identity belongs to another open lead. Every successful
+call saves its changes and an `automation` timeline event naming the caller
+in one transaction. Failed calls do not add events.
 
 ## What happens after intake
 
 - **Email copy.** A background job mails the inquiry to
   `info@sherpaholidays.com`, Reply-To the visitor, From the app's `MAIL_FROM`
   (default `info@sherpaholidays.com`). Suspected spam prefixes
-  the subject with `[check]`. Click IDs never enter the body. A mail
-  failure never touches the lead.
+  the subject with `[check]`. Attribution metadata is omitted, and the
+  displayed page URL strips `gclid`, `gbraid`, `wbraid`, and `utm_*` query
+  parameters. A mail failure never touches the lead.
 - **Webhooks.** `lead.created` and `lead.details_added` are POSTed as
   `{ "event", "lead": { public fields plus attribution } }` to the single URL in
   Settings, signed with the relay secret in the same `X-Sherpa-Signature`
-  format, retried with backoff, and logged. An empty URL disables them.
+  format, retried on failure, and logged. `LeadWebhookJob#webhook_payload`
+  defines the payload fields; each attempt reads the current lead and current
+  subscription settings. An empty URL disables delivery, completing pending
+  webhook notifications without sending; enabling it later does not replay
+  those completed notifications.
 - **Spam.** Fast submits, link-stuffed messages, throwaway domains, and
-  name-equals-email are scored, tagged `suspected_spam`, and counted —
+  name-equals-email are scored, tagged `suspected_spam`, and counted -
   never rejected.
 
 Notification intent is saved in `lead_notifications` in the same transaction
 as the inquiry or details update. Intake and details replays re-check pending
-rows. Solid Queue retries failed deliveries every five minutes, and a recurring
-minute-by-minute drain recovers lost enqueues and expired delivery claims.
+rows. Solid Queue retries failed deliveries every five minutes. In production,
+a recurring minute-by-minute drain recovers lost enqueues and expired delivery
+claims.
 Delivery is at least once: a crash after sending but before recording completion
 can resend a notification. Each webhook attempt remains in the delivery log.
 Rate-limit admission uses a primary-database transaction shared across workers.

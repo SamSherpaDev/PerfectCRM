@@ -4,8 +4,9 @@ module Api
   module V1
     module Leads
       # POST /api/v1/leads/intake/details — the optional step-two answers
-      # (when, how many, budget) posted after a successful send. Same auth,
-      # CORS and rate limits as intake. Contract: docs/leads-intake.md.
+      # (when, how many, budget) posted after a successful send. Same auth
+      # and CORS as intake; separate IP limit, no email limit.
+      # Contract: docs/leads-intake.md.
       class DetailsController < BaseController
         def preflight
           cors_preflight
