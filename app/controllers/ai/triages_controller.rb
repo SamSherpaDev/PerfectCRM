@@ -23,6 +23,5 @@ module Ai
         format.html { redirect_to inbox_thread_path(@conversation) }
       end
     end
-
   end
 end

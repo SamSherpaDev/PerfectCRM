@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-# Three-bullet thread summary, cached per conversation and refreshed when
-# new mail arrives (Message clears ai_summary on create).
+# Three-bullet thread summary. New mail invalidates the cache; the next
+# explicit request rebuilds it.
 module Ai
   module Summarize
     def self.call(conversation)

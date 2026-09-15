@@ -50,6 +50,5 @@ module Ai
     rescue JSON::ParserError
       nil
     end
-
   end
 end

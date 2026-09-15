@@ -82,8 +82,8 @@ class Conversation < ApplicationRecord
     linkable.respond_to?(:name) ? linkable.name : nil
   end
 
-  # Cached AI summary is stale once new mail lands; the next summarize
-  # call rebuilds it.
+  # New mail invalidates AI results so the next explicit request uses the
+  # current thread, and an older proposal can no longer be accepted.
   def expire_ai_caches!
     update_columns(ai_summary: nil, ai_summary_at: nil,
       ai_triage: nil, ai_triage_reason: nil, ai_triage_suggested_source: nil, ai_triage_at: nil,

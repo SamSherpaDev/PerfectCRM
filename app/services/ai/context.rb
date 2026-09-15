@@ -63,6 +63,5 @@ module Ai
         "--- #{template.name} ---\n#{Scrub.scrub(template.body.to_s.truncate(600))}"
       end.join("\n\n").presence || "No templates yet."
     end
-
   end
 end

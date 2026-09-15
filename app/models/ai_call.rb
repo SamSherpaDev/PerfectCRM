@@ -1,6 +1,4 @@
-# Per-call log for every AI attempt: purpose, prompt version, model, token
-# counts, cost estimate, latency, status, and the redacted request/response
-# the captain can review. Kept 90 days (see Ai::PruneCallsJob).
+# Call accounting and retention; see README "AI assistance" for log scope.
 class AiCall < ApplicationRecord
   PURPOSES = %w[draft_reply summarize_thread suggest_next_action triage].freeze
   STATUSES = %w[ok error blocked off over_cap rate_limited].freeze

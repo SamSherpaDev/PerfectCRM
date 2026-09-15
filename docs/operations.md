@@ -64,12 +64,13 @@ are not repeated here. This file covers only what differs for the CRM.
 | `SPACES_*` (attachments bucket + keys) | Step 2 | `.env.app`, password manager |
 | `LITESTREAM_*`, backup-bucket `SPACES_ENDPOINT`/`SPACES_REGION` | Step 2 | `.env.litestream`, password manager |
 | `SMTP_USERNAME`, `SMTP_PASSWORD` | Gmail app password | `.env.app`, password manager |
+| AI provider key | [AI setup](../README.md#ai-assistance) | Settings; encrypted in the primary database, password manager |
 | Mailbox login and app password | [Mail setup](../README.md#mail) | Settings; app password encrypted in the primary database, password manager |
 | `PERFECTBOOK_BASE_URL`, `PERFECTBOOK_API_TOKEN` | [PerfectBook connection setup](../README.md#perfectbook-connection) | CRM `.env.app`; token also in PerfectBook's `.env.app` and password manager |
 
 Preserve the Active Record encryption keys with database backups and supply the
 same keys when restoring. Losing or replacing them makes encrypted values
-unreadable, including the mailbox app password, lead phone fields, and relay
+unreadable, including the mailbox app password, AI provider key, lead phone fields, and relay
 secret. For relay credential setup and rotation, see the
 [website intake contract](leads-intake.md#relay-mode-n8n-panda-ai-any-server).
 

@@ -1,13 +1,9 @@
 # frozen_string_literal: true
 
-# Provider-neutral entry point. One interface (chat completion with a system
-# prompt, messages, max tokens, JSON mode); the captain picks the provider
-# and model in Settings. Every call is logged to ai_calls with the prompt
-# version, token counts, a cost estimate, latency, status, and the redacted
-# request/response for review.
-#
-# Zero-retention posture: callers pass only message text and CRM facts.
-# Attachments, document bytes, and PDF titles never reach this layer.
+# Shared OpenAI-compatible call boundary; see README "AI assistance" for
+# configuration, accounting, logging, and provider-retention limits.
+# Callers must pass only message text and CRM facts, never attachments,
+# document bytes, or PDF titles.
 module Ai
   class Client
     Result = Struct.new(:text, :status, :ai_call, keyword_init: true)
