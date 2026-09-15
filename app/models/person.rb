@@ -39,7 +39,10 @@ class Person < ApplicationRecord
       return
     end
 
-    excluded_ids = [ id, *owner&.people&.select(&:marked_for_destruction?)&.map(&:id) ].compact
+    pending_people = owner&.people&.select do |person|
+      person.marked_for_destruction? || person.will_save_change_to_email?
+    end
+    excluded_ids = [ id, *pending_people&.map(&:id) ].compact
 
     if client_id.present? || (client.present? && client.persisted?)
       owner_id = client_id.presence || client.id
