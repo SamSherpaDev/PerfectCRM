@@ -6,7 +6,7 @@
   </div>
   <div class="min-w-0">
     <%= form.label :unit_dollars, "Each ($)", class: "label sm:sr-only" %>
-    <%= form.text_field :unit_dollars, class: "input min-w-0 text-right", inputmode: "decimal", aria: { label: "Price each in dollars" }, data: { each: true, action: "input->quote-builder#recalc" } %>
+    <%= form.text_field :unit_dollars, class: "input min-w-0 text-right", inputmode: "decimal", aria: { label: "Price each in dollars" }, data: { each: true, action: "input->quote-builder#editPrice" } %>
   </div>
   <div class="min-w-0">
     <%= form.label :quantity, "Qty", class: "label sm:sr-only" %>
@@ -14,6 +14,7 @@
   </div>
   <div class="min-w-0 break-words pb-2.5 text-right text-sm tabular-nums text-ink" data-line-total>$0.00</div>
   <div class="flex items-center gap-1 pb-1.5">
+    <%= form.hidden_field :price_edited, value: form.object.price_edited || "1", data: { price_edited: true } %>
     <%= form.hidden_field :kind, value: form.object.kind.presence || "custom" %>
     <% if form.object.persisted? %>
       <%= form.hidden_field :_destroy, value: form.object.marked_for_destruction? ? "1" : "0", data: { destroy: true } %>

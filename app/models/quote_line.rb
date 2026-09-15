@@ -4,6 +4,8 @@
 class QuoteLine < ApplicationRecord
   KINDS = %w[trip departure custom].freeze
 
+  attr_accessor :price_edited
+
   belongs_to :quote
 
   before_validation :sync_total
