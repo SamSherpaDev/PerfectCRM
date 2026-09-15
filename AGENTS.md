@@ -31,8 +31,6 @@ When updating this file, preserve this bar for all agents and keep entries conci
   by hand or automation (DESIGN.md 4.11).
 - Appearance behavior and authentication policy: see README.md, "Navigation"
   and "Google sign-in". Preserve instant appearance changes.
-- System-test Chrome here needs nix NSS libs on `LD_LIBRARY_PATH`; check
-  driver startup output if `chromedriver` cannot start.
 - Plain `bin/rails server` serves the prebuilt `app/assets/builds/tailwind.css`;
   rebuild with `bin/rails tailwindcss:build` after CSS/view-class changes
   (`bin/dev` watches, plain server does not).

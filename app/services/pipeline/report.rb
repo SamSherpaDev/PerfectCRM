@@ -1,6 +1,4 @@
-# The four numbers a solo operator actually reads, computed live from
-# leads and clients. Median first-response time stays nil until the mail
-# task lands its inbound/outbound events.
+# Report definitions and deferred metrics: README.md, "Pipeline".
 class Pipeline::Report
   def value_by_stage
     sums = Lead.where(converted_client_id: nil).group(:status).sum(:expected_value_minor)
@@ -20,8 +18,7 @@ class Pipeline::Report
     Lead.open.sum(:expected_value_minor).to_i
   end
 
-  # First outbound after first inbound per thread; nil until mail lands.
-  # Kept as an explicit method so the mail task has one place to fill in.
+  # Reserved integration point for first-response reporting.
   def median_first_response_time
     nil
   end

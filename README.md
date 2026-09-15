@@ -368,23 +368,27 @@ trip, and referrer; client trip matches use converted lead interests or
 mirrored booking trip names. On the phone, a stage list shows counts and
 money; tapping a stage opens its cards.
 
-Open leads quiet for more than 7 days glow stale. Adding a note counts as
-a touch; changing stage or editing details does not. Nudge opens a
+Open leads quiet for more than 7 days glow stale. Adding a note or importing
+inbound or outbound mail linked to the lead counts as a touch. Linking an
+existing conversation uses its latest message time; older imported mail
+never overwrites a newer touch. Changing stage or editing details does not
+count as contact. Nudge opens a
 Suggested message panel rendered from the first active itinerary follow-up
 template, with Copy message and a prefilled Open email link when the lead
 has an email address. If no template is available, the panel links to
 Templates. Copying or opening email does not clear staleness; record the
-contact with a note for now. TODO perfectcrm-mail-out-65: connect suggested
+contact with a note if it has not synced from mail. TODO perfectcrm-mail-out-65: connect suggested
 messages to the reply box and sending.
 
 Lead transitions use `Leads::Transition`; its automation policy is documented
 in that service. For the tasks hook, see [Today and follow-ups](#today-and-follow-ups). Stage moves
 record `stage_change` events; conversion records `conversion` events.
-`Lead#record_touch!` is the integration point for future mail sync.
+`Lead#record_touch!` preserves the latest contact time; mail ingestion and
+conversation linking call it through `Conversation#touch_linkable!`.
 
 The Numbers card is independent of board filters. It shows value by stage
-using the same value sources as the board, median first reply (unavailable
-until mail is connected), repeat-and-referral rate among this year's
+using the same value sources as the board, median first reply (currently
+unavailable; reporting integration is pending), repeat-and-referral rate among this year's
 conversions, and asks by source this month. “Out in total” sums only open
 leads' expected values. The repeat-and-referral rate counts each qualifying
 conversion once, including returns to existing clients and referral leads.
