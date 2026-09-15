@@ -8,23 +8,15 @@ class SettingsController < ApplicationController
 
   def update
     @settings = Setting.current
-    value = params.dig(:setting, :appearance).to_s
-    unless Setting::APPEARANCES.include?(value)
-      @settings.errors.add(:appearance, "is not included in the list")
-      return respond_to do |format|
-        format.turbo_stream do
-          render turbo_stream: turbo_stream.update("appearance-status", "Appearance could not be saved. Choose Paper or Night."), status: :unprocessable_entity
-        end
-        format.html { render :edit, status: :unprocessable_entity }
-      end
-    end
-    # Appearance applies on its own auto-submitting form (see the Stimulus
-    # controller): bypass validations so the choice always persists, with no
-    # separate Save step.
-    @settings.update_column(:appearance, value)
-    respond_to do |format|
-      format.turbo_stream { render turbo_stream: turbo_stream.update("appearance-status", "Settings saved.") }
-      format.html { redirect_to edit_settings_path, notice: "Settings saved.", status: :see_other }
+    setting_params = params[:setting] || {}
+    if setting_params.key?(:appearance) || setting_params.key?("appearance")
+      update_appearance(setting_params[:appearance] || setting_params["appearance"])
+    elsif setting_params.key?(:digest_enabled) || setting_params.key?("digest_enabled")
+      raw = setting_params[:digest_enabled].nil? ? setting_params["digest_enabled"] : setting_params[:digest_enabled]
+      @settings.update!(digest_enabled: ActiveModel::Type::Boolean.new.cast(raw))
+      redirect_to edit_settings_path, notice: "Settings saved.", status: :see_other
+    else
+      redirect_to edit_settings_path, status: :see_other
     end
   end
 
@@ -42,5 +34,28 @@ class SettingsController < ApplicationController
     redirect_to edit_settings_path, alert: "PerfectBook rate limit reached.#{wait}", status: :see_other
   rescue PerfectBook::Error => e
     redirect_to edit_settings_path, alert: "PerfectBook is unreachable right now.", status: :see_other
+  end
+
+  private
+
+  def update_appearance(value)
+    value = value.to_s
+    unless Setting::APPEARANCES.include?(value)
+      @settings.errors.add(:appearance, "is not included in the list")
+      return respond_to do |format|
+        format.turbo_stream do
+          render turbo_stream: turbo_stream.update("appearance-status", "Appearance could not be saved. Choose Paper or Night."), status: :unprocessable_entity
+        end
+        format.html { render :edit, status: :unprocessable_entity }
+      end
+    end
+    # Appearance applies on its own auto-submitting form (see the Stimulus
+    # controller): bypass validations so the choice always persists, with no
+    # separate Save step.
+    @settings.update_column(:appearance, value)
+    respond_to do |format|
+      format.turbo_stream { render turbo_stream: turbo_stream.update("appearance-status", "Settings saved.") }
+      format.html { redirect_to edit_settings_path, notice: "Settings saved.", status: :see_other }
+    end
   end
 end

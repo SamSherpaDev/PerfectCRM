@@ -52,4 +52,13 @@ Rails.application.routes.draw do
     post :perfectbook_test, on: :collection
   end
   get "settings/export", to: "exports#show", as: :settings_export
+  resources :tasks, only: %i[create] do
+    member do
+      patch :complete
+      patch :snooze
+    end
+    collection do
+      post :create_review_ask
+    end
+  end
 end

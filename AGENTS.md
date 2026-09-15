@@ -40,3 +40,7 @@ When updating this file, preserve this bar for all agents and keep entries conci
 - Views cannot name the `Template` model bare: the
   constant resolves to `ActionView::Template`. Expose what views need
   through helpers with explicit `::Template` references instead.
+- Today and follow-ups: see README.md, "Today and follow-ups"; `Task`
+  rules live in the model, the landing queries in `Today::Summary`,
+  automatic proposals in `Tasks::Automatic` (idempotent per booking),
+  and the digest in `TodayDigestJob` + `CaptainDigestMailer`.

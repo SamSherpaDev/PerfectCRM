@@ -1,0 +1,13 @@
+<%# Snooze presets plus pick-a-date, no JavaScript needed. locals: (task:) %>
+<details class="snooze relative">
+  <summary>Snooze</summary>
+  <div class="snooze-pop">
+    <%= button_to "Tomorrow", snooze_task_path(task, preset: "tomorrow"), method: :patch, class: "check-link w-full" %>
+    <%= button_to "In 3 days", snooze_task_path(task, preset: "3days"), method: :patch, class: "check-link w-full" %>
+    <%= button_to "Next week", snooze_task_path(task, preset: "week"), method: :patch, class: "check-link w-full" %>
+    <%= form_with url: snooze_task_path(task), method: :patch, class: "flex items-center gap-2 pt-1" do %>
+      <%= date_field_tag :snoozed_until, nil, min: Date.current.to_s, required: true, class: "input min-h-[44px] flex-1", aria: { label: "Snooze until date" } %>
+      <%= submit_tag "Set", class: "btn-secondary btn btn-sm" %>
+    <% end %>
+  </div>
+</details>

@@ -541,6 +541,29 @@
     @apply text-ink-2 break-words;
   }
 
+  /* Follow-up check rows (Today + client card): one-tap complete, 44px targets. */
+  .check-row {
+    @apply flex items-center gap-2 py-1.5 sm:gap-3;
+  }
+  .check-btn {
+    @apply inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink-3 transition-colors hover:text-good hover:bg-good-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seal;
+  }
+  .check-btn svg {
+    @apply h-5 w-5;
+  }
+  .check-link {
+    @apply inline-flex min-h-[44px] items-center text-[13px] whitespace-nowrap text-ink-2 no-underline hover:text-ink hover:underline underline-offset-4 decoration-seal;
+  }
+  .snooze summary {
+    @apply inline-flex min-h-[44px] cursor-pointer items-center text-[13px] list-none text-ink-2 no-underline hover:text-ink hover:underline underline-offset-4 decoration-seal;
+  }
+  .snooze summary::-webkit-details-marker {
+    @apply hidden;
+  }
+  .snooze-pop {
+    @apply absolute z-10 mt-1 flex min-w-44 flex-col gap-1 rounded-control border border-rule bg-paper-2 p-2 shadow-raise-sm;
+  }
+
   /* Empty state: an enso, a scene where the page has air */
   .empty {
     @apply card flex flex-col items-center justify-center gap-3 px-6 py-14 text-center overflow-hidden;

@@ -158,6 +158,45 @@ shellcheck -S warning deploy/*.sh test/deploy/*.sh
 bash test/deploy/test_deploy.sh
 ```
 
+## Today and follow-ups
+
+Today (the root route) is the captain's morning screen: four tiles
+(Waiting on you, Follow-ups due, Quotes out, Overdue), then Replies
+waiting, Follow-ups as one-tap check rows, Departing soon (trips leaving
+in 14 days), and Back from the mountains (home in 7 days, each with a
+one-tap Create review ask). Waiting-on-you threads and the quotes count
+read zero until the mail and quotes tasks land (marked TODO in
+`app/services/today/summary.rb` and the view).
+
+`Task` belongs to a client, lead, or organization (polymorphic subject)
+with a kind (`follow_up`, `document`, `payment_nudge`, `review_ask`,
+`call`, `custom`), `due_on` (`due_at` optional), `done_at`,
+`snoozed_until`, and `created_by` (`automation` or `captain`). Overdue,
+today, and upcoming are computed on the Pacific date. Completing a task
+appends an ActivityEvent to the subject's timeline. Snooze presets are
+tomorrow, 3 days, next week, or a picked date. The client page's
+Follow-ups card (the slot in `app/views/clients/_tasks_card.html.erb`)
+lists open tasks, takes new ones, and names the suggested nudge when
+opened with `?template=<id>`; the reply box that prefills it arrives
+with the mail task. A Nudge link on a task without a template is hidden
+until then.
+
+`Tasks::Automatic` (run daily at 6am Pacific by
+`Tasks::GenerateAutomaticJob`, see [`config/recurring.yml`](config/recurring.yml))
+proposes a review ask 3 days after a booking's departure ends, a
+repeat-trip nudge 10 months after return, and a deposit nudge when a
+mirrored invoice reads sent with a balance due on a booking first seen
+at least 5 days ago. Each fires once per booking (`idempotency_key`);
+everything is a task the captain acts on, never sent mail. The pipeline
+board calls `Tasks::OnStageChange.call(subject:, from:, to:)` on stage
+changes; stages map to optional task templates in
+`STAGE_TASK_TEMPLATES` (empty until the pipeline task fills it).
+
+The 7am Pacific digest (`TodayDigestJob` + `CaptainDigestMailer`, same
+schedule file) emails today's follow-ups, overdue items, replies
+waiting, and departures with deep links to the first allowlisted
+address. Settings → Morning digest toggles it.
+
 ## Clients
 
 Clients own people, tags, notes, and the timeline later tasks fill in.

@@ -6,6 +6,7 @@ class Organization < ApplicationRecord
   has_many :referred_clients, class_name: "Client",
     foreign_key: :referred_by_organization_id, dependent: :nullify, inverse_of: :referred_by_organization
   has_many :notes, as: :notable, dependent: :destroy
+  has_many :tasks, as: :subject, dependent: :destroy
   has_many :taggings, as: :taggable, dependent: :destroy
   has_many :tags, -> { order(:name) }, through: :taggings
   has_many :activity_events, as: :subject, dependent: :destroy

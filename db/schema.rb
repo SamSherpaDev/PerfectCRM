@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_14_202112) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_14_211502) do
   create_table "activity_events", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "kind", null: false
@@ -232,6 +232,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_202112) do
   create_table "settings", force: :cascade do |t|
     t.string "appearance", default: "paper", null: false
     t.datetime "created_at", null: false
+    t.boolean "digest_enabled", default: true, null: false
     t.integer "singleton_key", default: 1, null: false
     t.datetime "updated_at", null: false
     t.index ["singleton_key"], name: "index_settings_on_singleton_key", unique: true
@@ -254,6 +255,28 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_202112) do
     t.string "name", null: false
     t.datetime "updated_at", null: false
     t.index ["name"], name: "index_tags_on_name", unique: true
+  end
+
+  create_table "tasks", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "created_by", default: "captain", null: false
+    t.datetime "done_at"
+    t.datetime "due_at"
+    t.date "due_on", null: false
+    t.string "idempotency_key"
+    t.string "kind", default: "follow_up", null: false
+    t.text "notes"
+    t.date "snoozed_until"
+    t.integer "subject_id", null: false
+    t.string "subject_type", null: false
+    t.integer "template_id"
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.index ["done_at"], name: "index_tasks_on_done_at"
+    t.index ["due_on"], name: "index_tasks_on_due_on"
+    t.index ["idempotency_key"], name: "index_tasks_on_idempotency_key", unique: true, where: "idempotency_key IS NOT NULL AND idempotency_key != ''"
+    t.index ["subject_type", "subject_id"], name: "index_tasks_on_subject_type_and_subject_id"
+    t.index ["template_id"], name: "index_tasks_on_template_id"
   end
 
   create_table "templates", force: :cascade do |t|
@@ -290,6 +313,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_202112) do
   add_foreign_key "people", "clients"
   add_foreign_key "people", "leads"
   add_foreign_key "taggings", "tags"
+  add_foreign_key "tasks", "templates"
 
   # Virtual tables defined in this database.
   # Note that virtual tables may not work with other database engines. Be careful if changing database.

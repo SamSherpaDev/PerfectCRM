@@ -46,6 +46,18 @@
     </div>
   </section>
 
+  <section class="card card-pad" aria-labelledby="digest-heading">
+    <h2 class="section-title" id="digest-heading">Morning digest</h2>
+    <%= card_caption "A short email at 7am Pacific with today's follow-ups, overdue items, and departures to watch." %>
+    <%= form_with model: @settings, url: settings_path, method: :patch, class: "mt-4" do |form| %>
+      <div class="flex flex-wrap items-center gap-3">
+        <%= form.check_box :digest_enabled, class: "checkbox" %>
+        <%= form.label :digest_enabled, "Send the morning digest", class: "text-sm text-ink-2" %>
+        <%= form.submit "Save", class: "btn-secondary btn btn-sm" %>
+      </div>
+    <% end %>
+  </section>
+
   <section class="card card-pad" aria-labelledby="export-heading">
     <h2 class="section-title" id="export-heading">Export everything</h2>
     <%= card_caption "A zip of leads, clients, people, organizations, notes, tags, and timeline events as CSV. Opens cleanly in Excel." %>

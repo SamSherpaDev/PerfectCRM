@@ -10,6 +10,7 @@ class Lead < ApplicationRecord
   belongs_to :converted_client, class_name: "Client", optional: true
   has_many :people, -> { order(:created_at, :id) }, dependent: :destroy, inverse_of: :lead
   has_many :notes, as: :notable, dependent: :destroy
+  has_many :tasks, as: :subject, dependent: :destroy
   has_many :taggings, as: :taggable, dependent: :destroy
   has_many :tags, -> { order(:name) }, through: :taggings
   has_many :activity_events, as: :subject, dependent: :destroy

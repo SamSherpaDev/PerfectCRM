@@ -116,6 +116,17 @@ module ApplicationHelper
     date&.strftime("%b %-d, %Y")
   end
 
+  # Due phrasing for a follow-up task: overdue reads as a warning.
+  def due_label(task)
+    if task.overdue?
+      content_tag(:span, "Overdue since #{date_short(task.due_on)}", class: "font-medium text-bad")
+    elsif task.due_on == Date.current
+      "Due today"
+    else
+      "Due #{date_short(task.due_on)}"
+    end
+  end
+
   # Organization websites are user-entered. Only link http(s); otherwise text.
   def external_website_link(url)
     href = url.to_s.strip

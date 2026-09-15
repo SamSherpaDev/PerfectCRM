@@ -1,0 +1,19 @@
+Good morning — <%= @today.strftime("%A, %-b %-d") %>.
+
+<% if @summary.overdue.any? %>Overdue (<%= @summary.overdue.count %>):
+<% @summary.overdue.each do |task| %>- <%= task.title %> (due <%= task.due_on.strftime("%-b %-d") %>)
+  <%= polymorphic_url(task.subject) %>
+<% end %>
+<% else %>Nothing overdue. The desk is clear behind you.
+<% end %>
+Today (<%= @summary.followups_due.count %>):
+<% if @summary.followups_due.any? %><% @summary.followups_due.each do |task| %>- <%= task.title %>
+  <%= polymorphic_url(task.subject) %>
+<% end %><% else %>- No follow-ups due today.
+<% end %>
+Replies waiting: <%= @summary.waiting_on_you %>.
+<% if @summary.departing_soon.any? %>
+Departing soon:
+<% @summary.departing_soon.each do |booking| %>- <%= booking.trip_name %> · <%= booking.start_date.strftime("%-b %-d") %> (<%= booking.party_size %> travelers)
+<% end %><% end %>
+Open Today: <%= root_url %>

@@ -22,3 +22,9 @@ production:
   perfectbook_sync_bookings:
     class: PerfectBook::SyncBookingsJob
     schedule: every 15 minutes
+  tasks_generate_automatic:
+    class: Tasks::GenerateAutomaticJob
+    schedule: every day at 6am
+  today_digest:
+    class: TodayDigestJob
+    schedule: every day at 7am
