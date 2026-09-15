@@ -18,7 +18,7 @@ module ApplicationHelper
     "queued" => :neutral, "sending" => :info, "failed" => :danger,
     "received" => :brand, "complete" => :success,
     "draft" => :neutral, "viewed" => :info, "accepted" => :success,
-    "superseded" => :neutral, "expired" => :warning,
+    "superseded" => :neutral, "expired" => :warning
   }.freeze
 
   # USD amounts from integer cents: "$1,234.56", "-$12.00".

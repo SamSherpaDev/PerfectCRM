@@ -474,6 +474,79 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_001005) do
     t.index ["perfectbook_id"], name: "index_perfectbook_trips_on_perfectbook_id", unique: true
   end
 
+  create_table "quote_lines", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "description", null: false
+    t.string "kind", default: "custom", null: false
+    t.integer "perfectbook_departure_id"
+    t.integer "perfectbook_trip_id"
+    t.integer "position", default: 0, null: false
+    t.integer "quantity", default: 1, null: false
+    t.integer "quote_id", null: false
+    t.string "snapshot_departure_label"
+    t.date "snapshot_end_on"
+    t.date "snapshot_start_on"
+    t.string "snapshot_trip_name"
+    t.integer "total_minor", default: 0, null: false
+    t.integer "unit_minor", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["quote_id"], name: "index_quote_lines_on_quote_id"
+  end
+
+  create_table "quote_trip_preferences", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "included"
+    t.integer "perfectbook_trip_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["perfectbook_trip_id"], name: "index_quote_trip_preferences_on_perfectbook_trip_id", unique: true
+  end
+
+  create_table "quote_views", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "ip_digest", null: false
+    t.integer "quote_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["quote_id", "created_at"], name: "index_quote_views_on_quote_id_and_created_at"
+    t.index ["quote_id"], name: "index_quote_views_on_quote_id"
+  end
+
+  create_table "quotes", force: :cascade do |t|
+    t.string "accept_token", null: false
+    t.datetime "accepted_at"
+    t.date "balance_due_on"
+    t.integer "client_id"
+    t.datetime "created_at", null: false
+    t.string "currency", default: "USD", null: false
+    t.date "departure_end_on"
+    t.string "departure_label"
+    t.date "departure_start_on"
+    t.integer "deposit_minor", default: 0, null: false
+    t.text "included"
+    t.text "intake_payload"
+    t.integer "lead_id"
+    t.text "notes"
+    t.integer "parent_id"
+    t.integer "party_size"
+    t.integer "perfectbook_departure_id"
+    t.integer "perfectbook_trip_id"
+    t.string "reference", null: false
+    t.datetime "sent_at"
+    t.string "sent_by_email"
+    t.string "status", default: "draft", null: false
+    t.string "trip_name"
+    t.datetime "updated_at", null: false
+    t.date "valid_until"
+    t.integer "version", default: 1, null: false
+    t.integer "view_count", default: 0, null: false
+    t.datetime "viewed_at"
+    t.index ["accept_token"], name: "index_quotes_on_accept_token", unique: true
+    t.index ["client_id"], name: "index_quotes_on_client_id"
+    t.index ["lead_id"], name: "index_quotes_on_lead_id"
+    t.index ["parent_id"], name: "index_quotes_on_parent_id"
+    t.index ["reference"], name: "index_quotes_on_reference", unique: true
+    t.index ["status"], name: "index_quotes_on_status"
+  end
+
   create_table "settings", force: :cascade do |t|
     t.string "ai_api_key"
     t.string "ai_base_url"
@@ -588,6 +661,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_001005) do
   add_foreign_key "notes", "users", column: "author_id"
   add_foreign_key "people", "clients"
   add_foreign_key "people", "leads"
+  add_foreign_key "quote_lines", "quotes"
+  add_foreign_key "quote_views", "quotes"
+  add_foreign_key "quotes", "clients"
+  add_foreign_key "quotes", "leads"
+  add_foreign_key "quotes", "quotes", column: "parent_id"
   add_foreign_key "taggings", "tags"
   add_foreign_key "tasks", "templates"
 
