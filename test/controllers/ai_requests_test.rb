@@ -172,7 +172,8 @@ class AiRequestsTest < ActionDispatch::IntegrationTest
       lead = Lead.create!(name: "Protected", email: email, ai_opt_out: true)
       thread = Conversation.create!(linkable: lead)
       thread.messages.create!(direction: "in", text_body: "Private inquiry")
-      post convert_lead_path(lead)
+      post convert_lead_path(lead), params: { expected_client_id: lead.matching_client&.id || "new" }
+      assert_redirected_to client_path(lead.reload.converted_client)
       assert lead.reload.converted_client.ai_opt_out?
       assert_no_difference "AiCall.count" do
         post ai_conversation_draft_path(thread), headers: { "Accept" => "text/vnd.turbo-stream.html" }
