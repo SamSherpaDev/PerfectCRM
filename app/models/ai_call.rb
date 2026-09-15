@@ -2,7 +2,7 @@
 # counts, cost estimate, latency, status, and the redacted request/response
 # the captain can review. Kept 90 days (see Ai::PruneCallsJob).
 class AiCall < ApplicationRecord
-  PURPOSES = %w[draft_reply summarize_thread suggest_next_action triage triage_confirm].freeze
+  PURPOSES = %w[draft_reply summarize_thread suggest_next_action triage].freeze
   STATUSES = %w[ok error blocked off over_cap rate_limited].freeze
 
   belongs_to :conversation, optional: true
@@ -16,6 +16,6 @@ class AiCall < ApplicationRecord
   scope :expired, -> { where("created_at < ?", 90.days.ago) }
 
   def self.daily_cost_cents
-    today.sum(:cost_cents)
+    today.sum(:cost_micro_cents).to_d / 1_000_000
   end
 end

@@ -420,11 +420,11 @@ each surface shows the thinking orb (composing for drafts and summaries,
 shaping for triage and suggestions); when AI is off or failing, a plain
 fallback keeps the captain writing by hand.
 
-Setup (captain, about 5 minutes): pick a provider in Settings → AI assistance
-(OpenAI-compatible covers OpenAI and OpenRouter via the base URL; Anthropic is
-the other choice), enter the model name, paste the provider key, write the
-short voice guide (his templates are the style examples), and turn on Enable
-AI assistance. Leaving the key blank when saving preserves the saved key.
+AI assistance is on by default. In Settings → AI assistance, enter an
+OpenAI-compatible base URL (OpenAI or OpenRouter), model name, provider key,
+and short voice guide (templates are the style examples). Without a key,
+threads show "Add a provider key in Settings to enable drafts".
+Use this draft fills the reply box for editing and Send; Copy is secondary. Leaving the key blank when saving preserves the saved key.
 The key is stored encrypted; production encryption keys must be configured
 and preserved (see Secrets inventory). The daily cost cap stops AI for the day
 when estimated spend reaches it; the per-minute limit paces bursts. Turn off
@@ -435,8 +435,8 @@ organization.
 Prompts live in `config/ai_prompts.yml` under version control; the version is
 logged on every call. Every attempt is logged to `ai_calls` (purpose, prompt
 version, model, token counts, cost estimate, latency, status, redacted request
-and response) and pruned after 90 days (`Ai::PruneCallsJob`). Triage
-confirmations are logged for later prompt tuning. Zero-retention posture: only
+and response) and pruned after 90 days (`Ai::PruneCallsJob`). Costs are stored
+as integer micro-cents and summed before applying the daily cap. Zero-retention posture: only
 message text and CRM facts reach the provider — never attachments, document
 bytes, or PDF titles. Passport numbers, dates of birth, and card numbers are
 redacted before sending and filtered out of replies, both ways.

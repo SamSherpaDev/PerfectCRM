@@ -13,6 +13,7 @@
         <textarea id="ai-draft-body-<%= conversation.id %>" class="textarea mt-1" rows="6"
           data-ai-assist-target="draftBody"><%= draft_text %></textarea>
         <div class="mt-2 flex flex-wrap gap-2">
+          <button type="button" class="btn-primary btn btn-sm" data-action="ai-assist#useDraft">Use this draft</button>
           <button type="button" class="btn-secondary btn btn-sm" data-action="ai-assist#copy">Copy draft</button>
           <%= button_to "Try again", ai_conversation_draft_path(conversation), method: :post,
                 class: "btn-ghost btn btn-sm", data: { turbo_frame: "ai-draft-#{conversation.id}" },

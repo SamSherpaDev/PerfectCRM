@@ -1,9 +1,7 @@
-<%# AI assistance panel for the thread (docs/DESIGN.md 4.4 AI draft, 4.13 orbs).
-    Approval-only: drafts, summaries, suggestions, and triage all land here
-    for the captain to review. Nothing sends or creates without his tap.
-    The data-assist hook is the slot the reply box owns: when the outbound
-    reply box merges, it renders this same panel inside its composer. %>
 <div class="ai-panel mt-4" data-controller="ai-assist" data-assist>
+  <% if Setting.current.ai_enabled? && Setting.current.ai_api_key.blank? %>
+    <p class="hint" role="status">Add a provider key in Settings to enable drafts</p>
+  <% end %>
   <%= render "ai/summary_block", conversation: @conversation, fallback: nil %>
   <%= render "ai/draft_block", conversation: @conversation, draft_text: nil, fallback: nil %>
   <%= render "ai/suggestion_block", conversation: @conversation, fallback: nil %>

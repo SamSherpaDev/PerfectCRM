@@ -1,6 +1,6 @@
 class AddAiToSettings < ActiveRecord::Migration[8.1]
   def change
-    add_column :settings, :ai_enabled, :boolean, default: false, null: false
+    add_column :settings, :ai_enabled, :boolean, default: true, null: false
     add_column :settings, :ai_provider, :string, default: "openai_compatible"
     add_column :settings, :ai_model, :string
     add_column :settings, :ai_base_url, :string

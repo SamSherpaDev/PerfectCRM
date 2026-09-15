@@ -5,7 +5,10 @@
 # of any text a provider returns. When in doubt it redacts rather than echoes.
 module Ai
   module Scrub
+    MONTH = /(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?/i
+
     PATTERNS = [
+      /\b(?:dob|date of birth|born)\b[^\n]{0,24}?(?:\d{1,2}(?:st|nd|rd|th)?[ \-]+#{MONTH}[ ,\-]+\d{4}|#{MONTH}[ \-]+\d{1,2}(?:st|nd|rd|th)?[ ,\-]+\d{4})\b/i,
       # Passport labels with a following code. The code must contain a digit
       # so the replacement token itself never re-matches.
       /\bpassport[^\n]{0,20}[A-Z0-9]*\d[A-Z0-9]{5,}/i,

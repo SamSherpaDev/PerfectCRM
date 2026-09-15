@@ -6,9 +6,7 @@ class Setting < ApplicationRecord
   encrypts :mailbox_app_password
   encrypts :ai_api_key
 
-  AI_PROVIDERS = %w[openai_compatible anthropic].freeze
 
-  validates :ai_provider, inclusion: { in: AI_PROVIDERS }, allow_blank: true
   validates :ai_daily_cost_cap_cents, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
   validates :ai_rate_limit_per_minute, numericality: { only_integer: true, greater_than_or_equal_to: 1, less_than_or_equal_to: 120 }
 

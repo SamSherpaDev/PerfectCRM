@@ -10,11 +10,7 @@
 # Attachments, document bytes, and PDF titles never reach this layer.
 module Ai
   class Client
-    PROVIDERS = %w[openai_compatible anthropic].freeze
     Result = Struct.new(:text, :status, :ai_call, keyword_init: true)
-
-    # Rough per-1k-tokens USD estimates, stored as cents on the log row.
-    COST_PER_1K_CENTS = { input: 0.15, output: 0.6 }.freeze
 
     def self.available?(record = nil)
       settings = Setting.current
@@ -63,7 +59,7 @@ module Ai
         cost = estimate_cost(raw[:input_tokens].to_i, raw[:output_tokens].to_i)
         call = log(purpose: purpose, version: version, model: settings.ai_model,
           input_tokens: raw[:input_tokens].to_i, output_tokens: raw[:output_tokens].to_i,
-          cost_cents: cost, latency_ms: raw[:latency_ms] ||
+          cost_micro_cents: cost, latency_ms: raw[:latency_ms] ||
             ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1000).round,
           status: "ok", request: request_preview, response: text.truncate(4000),
           conversation: conversation)
@@ -78,25 +74,19 @@ module Ai
     end
 
     def self.build_adapter(settings)
-      case settings.ai_provider.to_s
-      when "anthropic"
-        AnthropicAdapter.new(base_url: settings.ai_base_url, model: settings.ai_model, api_key: settings.ai_api_key)
-      else
-        base = settings.ai_base_url.presence || "https://api.openai.com/v1"
-        OpenAiAdapter.new(base_url: base, model: settings.ai_model, api_key: settings.ai_api_key)
-      end
+      base = settings.ai_base_url.presence || "https://api.openai.com/v1"
+      OpenAiAdapter.new(base_url: base, model: settings.ai_model, api_key: settings.ai_api_key)
     end
 
     def self.estimate_cost(input_tokens, output_tokens)
-      ((input_tokens / 1000.0) * COST_PER_1K_CENTS[:input] +
-       (output_tokens / 1000.0) * COST_PER_1K_CENTS[:output]).round
+      input_tokens * 150 + output_tokens * 600
     end
 
     def self.log(purpose:, version:, model: nil, input_tokens: nil, output_tokens: nil,
-      cost_cents: 0, latency_ms: nil, status:, request: nil, response: nil, conversation: nil)
+      cost_micro_cents: 0, latency_ms: nil, status:, request: nil, response: nil, conversation: nil)
       AiCall.create!(
         purpose: purpose.to_s, prompt_version: version.to_s, model: model.to_s.presence,
-        input_tokens: input_tokens, output_tokens: output_tokens, cost_cents: cost_cents.to_i,
+        input_tokens: input_tokens, output_tokens: output_tokens, cost_micro_cents: cost_micro_cents.to_i,
         latency_ms: latency_ms, status: status.to_s,
         request_redacted: request.to_s.presence, response_redacted: response.to_s.presence,
         conversation: conversation

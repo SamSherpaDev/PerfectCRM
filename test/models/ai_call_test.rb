@@ -27,4 +27,20 @@ class AiCallTest < ActiveSupport::TestCase
     assert_nil conversation.reload.ai_summary
     assert_nil conversation.reload.ai_suggestion_title
   end
+  test "summary preserves substantive leading numbers" do
+    assert_equal "• 4 guests confirmed\n• 2026 departure requested\n• Call captain",
+      Ai::Summarize.normalize("• 4 guests confirmed\n2. 2026 departure requested\n- Call captain")
+  end
+
+  test "stale conversation cannot accept a suggestion twice" do
+    client = Client.create!(name: "Traveler")
+    conversation = Conversation.create!(linkable: client, ai_suggestion_title: "Call traveler")
+    stale = Conversation.find(conversation.id)
+    assert_difference "Task.count", 1 do
+      assert Ai::Suggest.accept!(conversation)
+      assert_nil Ai::Suggest.accept!(stale)
+    end
+    assert_equal 1, client.activity_events.where("summary LIKE ?", "Accepted AI suggestion:%").count
+  end
+
 end

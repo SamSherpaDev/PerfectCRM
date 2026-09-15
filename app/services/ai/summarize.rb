@@ -5,6 +5,7 @@
 module Ai
   module Summarize
     def self.call(conversation)
+      message_ids = conversation.messages.reorder(:id).pluck(:id)
       thread = Context.thread_text(conversation)
       return Client::Result.new(text: "", status: :off, ai_call: nil) if thread.blank?
 
@@ -13,7 +14,11 @@ module Ai
         messages: [ { role: :user, content: user } ], max_tokens: 300, conversation: conversation)
       if result.status == :ok && result.text.present?
         bullets = normalize(result.text)
-        conversation.update_columns(ai_summary: bullets, ai_summary_at: Time.current)
+        conversation.with_lock do
+          if conversation.messages.reorder(:id).pluck(:id) == message_ids
+            conversation.update_columns(ai_summary: bullets, ai_summary_at: Time.current)
+          end
+        end
         Client::Result.new(text: bullets, status: :ok, ai_call: result.ai_call)
       else
         result
@@ -22,7 +27,7 @@ module Ai
 
     def self.normalize(text)
       lines = text.to_s.lines.map(&:strip).reject(&:blank?).first(3)
-      lines = lines.map { |line| line.sub(/\A[-*•\d.)\s]+/, "") }.reject(&:blank?)
+      lines = lines.map { |line| line.sub(/\A(?:[-*•]\s*|\d+[.)]\s+)/, "") }.reject(&:blank?)
       lines.first(3).map { |line| "• #{line}" }.join("\n")
     end
   end

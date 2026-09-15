@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_15_001004) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_15_001005) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -54,7 +54,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_001004) do
 
   create_table "ai_calls", force: :cascade do |t|
     t.integer "conversation_id"
-    t.integer "cost_cents", default: 0, null: false
+    t.integer "cost_micro_cents", default: 0, null: false
     t.datetime "created_at", null: false
     t.integer "input_tokens"
     t.integer "latency_ms"
@@ -106,7 +106,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_001004) do
     t.datetime "ai_summary_at"
     t.string "ai_triage"
     t.datetime "ai_triage_at"
-    t.string "ai_triage_confirmed"
     t.string "ai_triage_reason"
     t.string "ai_triage_suggested_source"
     t.datetime "created_at", null: false
@@ -439,9 +438,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_001004) do
     t.string "ai_api_key"
     t.string "ai_base_url"
     t.integer "ai_daily_cost_cap_cents", default: 200, null: false
-    t.boolean "ai_enabled", default: false, null: false
+    t.boolean "ai_enabled", default: true, null: false
     t.string "ai_model"
-    t.string "ai_provider", default: "openai_compatible"
     t.integer "ai_rate_limit_per_minute", default: 20, null: false
     t.text "ai_voice_guide", default: "", null: false
     t.string "appearance", default: "paper", null: false

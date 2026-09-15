@@ -22,7 +22,7 @@ class AiRequestsTest < ActionDispatch::IntegrationTest
   end
 
   def enable_ai!
-    Setting.current.update!(ai_enabled: true, ai_provider: "openai_compatible",
+    Setting.current.update!(ai_enabled: true,
       ai_model: "mini", ai_api_key: "test-key", ai_base_url: "https://api.example.com/v1",
       ai_daily_cost_cap_cents: 10_000, ai_rate_limit_per_minute: 20)
   end
@@ -87,7 +87,7 @@ class AiRequestsTest < ActionDispatch::IntegrationTest
     assert_nil @conversation.reload.ai_suggestion_title
   end
 
-  test "triage classifies with reason and logs the confirmation" do
+  test "triage classifies with reason for manual actions" do
     thread = Conversation.create!(subject: "New trek ask", last_message_at: Time.current)
     thread.messages.create!(direction: "in", from_address: "newbie@example.com",
       sent_at: Time.current, text_body: "Hi, I found you on Google and want Annapurna in October.")
@@ -98,10 +98,7 @@ class AiRequestsTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "new_inquiry", thread.reload.ai_triage
     assert_match "First ask", response.body
-    post ai_confirm_conversation_triage_path(thread), params: { category: "new_inquiry" }
-    assert_redirected_to inbox_thread_path(thread)
-    assert_equal "new_inquiry", thread.reload.ai_triage_confirmed
-    assert AiCall.exists?(purpose: "triage_confirm", conversation_id: thread.id)
+
   end
 
   test "kill switch falls back without calling the provider" do
@@ -126,7 +123,7 @@ class AiRequestsTest < ActionDispatch::IntegrationTest
 
   test "daily cost cap stops new calls" do
     Setting.current.update!(ai_daily_cost_cap_cents: 1)
-    AiCall.create!(purpose: "draft_reply", prompt_version: "v1", status: "ok", cost_cents: 5)
+    AiCall.create!(purpose: "draft_reply", prompt_version: "v1", status: "ok", cost_micro_cents: 5_000_000)
     Ai::Client.stub(:build_adapter, ->(*) { raise "must not be called" }) do
       post ai_conversation_summary_path(@conversation),
         headers: { "Accept" => "text/vnd.turbo-stream.html" }
@@ -145,13 +142,117 @@ class AiRequestsTest < ActionDispatch::IntegrationTest
   end
 
   test "settings saves the provider key and voice guide" do
-    patch ai_settings_path, params: { setting: { ai_enabled: "1", ai_provider: "anthropic",
+    patch ai_settings_path, params: { setting: { ai_enabled: "1", ai_base_url: "https://openrouter.ai/api/v1",
       ai_model: "haiku", ai_api_key: "new-key", ai_voice_guide: "Short and warm.",
       ai_daily_cost_cap_cents: "500", ai_rate_limit_per_minute: "10" } }
     assert_redirected_to edit_settings_path
     settings = Setting.current.reload
     assert settings.ai_enabled?
-    assert_equal "anthropic", settings.ai_provider
+    assert_equal "https://openrouter.ai/api/v1", settings.ai_base_url
     assert_equal "new-key", settings.ai_api_key
   end
+  test "new settings enable AI and missing credentials explain setup" do
+    assert Setting.new.ai_enabled?
+    Setting.current.update!(ai_api_key: nil)
+    get inbox_thread_path(@conversation)
+    assert_select "[role=status]", text: "Add a provider key in Settings to enable drafts"
+    assert_no_difference "AiCall.count" do
+      post ai_conversation_draft_path(@conversation), headers: { "Accept" => "text/vnd.turbo-stream.html" }
+    end
+    assert_match "Add a provider key in Settings to enable drafts", response.body
+  end
+
+  test "converted lead opt-outs protect both new and existing clients" do
+    [ false, true ].each do |returning|
+      email = "conversion-#{returning}@example.com"
+      Client.create!(name: "Returning", email: email) if returning
+      lead = Lead.create!(name: "Protected", email: email, ai_opt_out: true)
+      thread = Conversation.create!(linkable: lead)
+      thread.messages.create!(direction: "in", text_body: "Private inquiry")
+      post convert_lead_path(lead)
+      assert lead.reload.converted_client.ai_opt_out?
+      assert_no_difference "AiCall.count" do
+        post ai_conversation_draft_path(thread), headers: { "Accept" => "text/vnd.turbo-stream.html" }
+      end
+      assert_match "AI is off for this client", response.body
+    end
+  end
+
+  test "written birthdays are scrubbed in provider input logs and output" do
+    @conversation.messages.create!(direction: "in", text_body: "Date of birth: 14 May 1990")
+    adapter = Object.new
+    adapter.define_singleton_method(:chat) do |**args|
+      raise "birthday leaked" if args[:messages].any? { |row| row[:content].include?("14 May 1990") }
+      { text: "Date of birth: May 14, 1990", input_tokens: 1000, output_tokens: 300 }
+    end
+    Ai::Client.stub(:build_adapter, adapter) do
+      post ai_conversation_draft_path(@conversation), headers: { "Accept" => "text/vnd.turbo-stream.html" }
+    end
+    call = AiCall.order(:id).last
+    assert_equal "ok", call.status
+    assert_no_match "1990", call.request_redacted
+    assert_no_match "1990", call.response_redacted
+    assert_no_match "1990", response.body
+    assert_equal 330_000, call.cost_micro_cents
+  end
+
+  test "provider receives recent messages in chronological order and currency units" do
+    @client.update!(perfectbook_contact_id: 789)
+    PerfectBook::Booking.create!(perfectbook_id: 789, perfectbook_contact_id: 789,
+      balance_due_minor: 12500, currency: "USD", synced_at: Time.current)
+    @conversation.messages.delete_all
+    14.times do |i|
+      @conversation.messages.create!(direction: "in", sent_at: Time.current.beginning_of_day,
+        text_body: "Request #{i}", from_address: "person#{i}@example.com")
+    end
+    captured = []
+    adapter = Object.new
+    adapter.define_singleton_method(:chat) do |**args|
+      captured << args[:messages].first[:content]
+      { text: '{"category":"other","reason":"Review"}', input_tokens: 1, output_tokens: 1 }
+    end
+    Ai::Client.stub(:build_adapter, adapter) do
+      post ai_conversation_draft_path(@conversation), headers: { "Accept" => "text/vnd.turbo-stream.html" }
+      post ai_conversation_triage_path(@conversation), headers: { "Accept" => "text/vnd.turbo-stream.html" }
+    end
+    assert_equal (2..13).to_a, captured.first.scan(/Request (\d+)/).flatten.map(&:to_i)
+    assert_includes captured.first, "Balance: USD 125.00"
+    assert_equal (8..13).to_a, captured.last.scan(/Request (\d+)/).flatten.map(&:to_i)
+    assert_includes captured.last, "From: person13@example.com"
+  end
+
+  test "mail arriving during generation prevents publishing obsolete caches" do
+    [ ai_conversation_summary_path(@conversation), ai_conversation_suggestion_path(@conversation) ].each do |path|
+      thread = @conversation
+      adapter = Object.new
+      adapter.define_singleton_method(:chat) do |**_args|
+        thread.messages.create!(direction: "in", text_body: "Actually October", sent_at: Time.current)
+        { text: '{"title":"Ask about May","due_in_days":3}', input_tokens: 1, output_tokens: 1 }
+      end
+      Ai::Client.stub(:build_adapter, adapter) do
+        post path, headers: { "Accept" => "text/vnd.turbo-stream.html" }
+      end
+      assert_nil @conversation.reload.ai_summary
+      assert_nil @conversation.ai_suggestion_title
+    end
+  end
+
+  test "short calls accumulate toward the daily cap" do
+    Setting.current.update!(ai_daily_cost_cap_cents: 1)
+    adapter = Object.new
+    adapter.define_singleton_method(:chat) do |**_args|
+      { text: "Draft", input_tokens: 1000, output_tokens: 300 }
+    end
+    Ai::Client.stub(:build_adapter, adapter) do
+      4.times do
+        post ai_conversation_draft_path(@conversation), headers: { "Accept" => "text/vnd.turbo-stream.html" }
+      end
+      assert_equal 1.32.to_d, AiCall.daily_cost_cents
+      assert_no_difference "AiCall.count" do
+        post ai_conversation_draft_path(@conversation), headers: { "Accept" => "text/vnd.turbo-stream.html" }
+      end
+      assert_match "cost cap", response.body
+    end
+  end
+
 end

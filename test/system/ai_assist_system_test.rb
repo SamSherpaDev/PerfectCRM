@@ -34,7 +34,8 @@ class AiAssistSystemTest < ApplicationSystemTestCase
     assert_selector "section.ai-summary", text: /Thread summary/
     assert_selector "section.ai-suggestion", text: /Suggested next action/
     click_button "Draft a reply", match: :first
-    assert_text "AI drafts are off"
+    assert_text "Add a provider key in Settings to enable drafts"
+    assert_no_selector "[data-ai-assist-target=orbSlot] canvas"
     assert_text "Nothing sends by itself"
     width = page.evaluate_script("document.documentElement.scrollWidth")
     assert_operator width, :<=, 390, "AI panel overflows 390px (#{width}px)"
@@ -45,8 +46,36 @@ class AiAssistSystemTest < ApplicationSystemTestCase
     assert_selector ".triage-card", text: /Suggested client/
     assert_selector ".ai-triage", text: /Classify with AI/
     click_button "Classify with AI"
-    assert_text "AI drafts are off"
+    assert_text "Add a provider key in Settings to enable drafts"
     width = page.evaluate_script("document.documentElement.scrollWidth")
     assert_operator width, :<=, 390, "triage card overflows 390px (#{width}px)"
   end
+  test "use draft fills the composer fallback and emits its insertion event" do
+    Setting.current.update!(ai_enabled: true, ai_model: "test", ai_api_key: "test")
+    adapter = Object.new
+    adapter.define_singleton_method(:chat) do |**_args|
+      { text: "Hi Tashi, which dates suit you?", input_tokens: 1, output_tokens: 1 }
+    end
+    Ai::Client.stub(:build_adapter, adapter) do
+      visit inbox_thread_path(@conversation)
+      click_button "Draft a reply", match: :first
+      assert_button "Use this draft"
+    end
+    assert_no_selector "[data-ai-assist-target=orbSlot] canvas"
+    page.execute_script(<<~JS)
+      const field = document.createElement("textarea")
+      field.id = "message_body"
+      field.value = "Earlier text"
+      document.body.appendChild(field)
+      field.addEventListener("template:insert", event => { window.insertedDraft = event.detail.body })
+      field.addEventListener("input", () => { window.composerChanged = true })
+    JS
+    click_button "Use this draft"
+    assert_field "message_body", with: "Hi Tashi, which dates suit you?"
+    assert_equal "Hi Tashi, which dates suit you?", page.evaluate_script("window.insertedDraft")
+    assert page.evaluate_script("window.composerChanged")
+    assert_text "Review it and press Send there"
+    assert_equal 0, @conversation.messages.outbound.count
+  end
+
 end

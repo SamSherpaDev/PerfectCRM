@@ -2,14 +2,14 @@
 
 # Inbound triage classification: new_inquiry, returning_client, operator,
 # vendor_or_spam, or other, with a one-line reason and a suggested lead
-# source. The captain's confirmations are logged for later prompt tuning.
+# source.
 module Ai
   module Triage
     CATEGORIES = %w[new_inquiry returning_client operator vendor_or_spam other].freeze
     SOURCES = %w[google_ads meta_ads website_form email referral manual].freeze
 
     def self.call(conversation)
-      latest = conversation.messages.inbound.oldest_first.limit(6)
+      latest = conversation.messages.inbound.reorder(sent_at: :desc, id: :desc).limit(6).to_a.reverse
       thread = latest.map do |message|
         body = Scrub.scrub(message.text_body.presence ||
           ActionView::Base.full_sanitizer.sanitize(message.html_body.to_s).squish)
@@ -27,8 +27,7 @@ module Ai
       return Client::Result.new(text: "", status: :error, ai_call: result.ai_call) if parsed.nil?
 
       conversation.update_columns(ai_triage: parsed[:category], ai_triage_reason: parsed[:reason],
-        ai_triage_suggested_source: parsed[:source], ai_triage_at: Time.current,
-        ai_triage_confirmed: nil)
+        ai_triage_suggested_source: parsed[:source], ai_triage_at: Time.current)
       Client::Result.new(text: parsed[:category], status: :ok, ai_call: result.ai_call)
     end
 
@@ -45,15 +44,5 @@ module Ai
       nil
     end
 
-    def self.confirm!(conversation, category)
-      category = category.to_s
-      category = "other" unless CATEGORIES.include?(category)
-      conversation.update_columns(ai_triage_confirmed: category)
-      AiCall.create!(purpose: "triage_confirm", prompt_version: Prompts.version,
-        model: Setting.current.ai_model.presence, status: "ok",
-        request_redacted: "confirm #{conversation.ai_triage} -> #{category}".truncate(500),
-        conversation: conversation)
-      category
-    end
   end
 end

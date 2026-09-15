@@ -95,12 +95,11 @@ class SettingsController < ApplicationController
   # preserves the saved key. See README "AI assistance".
   def ai
     @settings = Setting.current
-    attrs = params.require(:setting).permit(:ai_enabled, :ai_provider, :ai_model,
+    attrs = params.require(:setting).permit(:ai_enabled, :ai_model,
       :ai_base_url, :ai_voice_guide, :ai_daily_cost_cap_cents, :ai_rate_limit_per_minute)
     @settings.assign_attributes(attrs)
     key = params.dig(:setting, :ai_api_key).to_s.strip
     @settings.ai_api_key = key if key.present?
-    @settings.ai_provider = "openai_compatible" if @settings.ai_provider.blank?
     if @settings.save
       redirect_to edit_settings_path, notice: "AI assistance saved.", status: :see_other
     else

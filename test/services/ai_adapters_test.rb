@@ -41,18 +41,6 @@ class AiAdaptersTest < ActiveSupport::TestCase
     end
   end
 
-  test "anthropic adapter parses blocks and usage" do
-    payload = { content: [ { text: "Hello," }, { text: " trekker!" } ],
-                usage: { input_tokens: 7, output_tokens: 3 } }
-    with_http(fake_ok(payload)) do
-      result = Ai::AnthropicAdapter.new(base_url: "", model: "haiku", api_key: "k")
-        .chat(system: "sys", messages: [ { role: :user, content: "hi" } ])
-      assert_equal "Hello, trekker!", result[:text]
-      assert_equal 7, result[:input_tokens]
-      assert_equal 3, result[:output_tokens]
-    end
-  end
-
   test "prompt version is pinned and logged" do
     assert_equal "v1", Ai::Prompts.version
     system, user = Ai::Prompts.render(:summarize_thread, thread: "hello")

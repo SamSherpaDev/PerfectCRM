@@ -98,7 +98,6 @@ Rails.application.routes.draw do
     post "conversations/:conversation_id/suggestion", to: "suggestions#create", as: :conversation_suggestion
     post "conversations/:conversation_id/suggestion/accept", to: "suggestions#accept", as: :accept_conversation_suggestion
     post "conversations/:conversation_id/triage", to: "triages#create", as: :conversation_triage
-    post "conversations/:conversation_id/triage/confirm", to: "triages#confirm", as: :confirm_conversation_triage
   end
   get "settings/export", to: "exports#show", as: :settings_export
   resources :tasks, only: %i[create] do

@@ -10,7 +10,7 @@ module Ai
     BODY_LIMIT = 1200
 
     def self.thread_text(conversation)
-      conversation.messages.oldest_first.limit(THREAD_LIMIT).map do |message|
+      conversation.messages.reorder(sent_at: :desc, id: :desc).limit(THREAD_LIMIT).to_a.reverse.map do |message|
         who = message.direction == "in" ? "Client" : "Captain"
         date = message.sent_at ? message.sent_at.strftime("%b %-d") : "undated"
         body = Scrub.scrub(message.text_body.presence ||
@@ -48,7 +48,7 @@ module Ai
         parts << "Trip: #{booking.try(:trip_name) || booking.try(:trip)}" rescue nil
         parts << "Status: #{booking.status}" if booking.respond_to?(:status) && booking.status.present?
         parts << "Start: #{booking.start_date}" if booking.respond_to?(:start_date) && booking.start_date.present?
-        parts << "Balance: #{booking.balance_due_minor}" if booking.respond_to?(:balance_due_minor) && !booking.balance_due_minor.nil?
+        parts << "Balance: #{booking.currency.presence || 'USD'} #{format('%.2f', booking.balance_due_minor.to_d / 100)}" if booking.respond_to?(:balance_due_minor) && !booking.balance_due_minor.nil?
         parts.compact_blank.join(" · ")
       end.join("\n")
     end
@@ -59,10 +59,5 @@ module Ai
       end.join("\n\n").presence || "No templates yet."
     end
 
-    def self.allowed_numbers(thread:, client_facts:, booking_facts:)
-      numbers = (thread.to_s + "\n" + client_facts.to_s + "\n" + booking_facts.to_s)
-        .scan(/\$[\d,]+(?:\.\d{2})?|\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b|\b\d{3,}\b/).uniq.first(20)
-      numbers.any? ? numbers.join(", ") : "none supplied — do not use any numbers"
-    end
   end
 end

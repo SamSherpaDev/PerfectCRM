@@ -13,7 +13,7 @@ module Ai
     def ai_blocked_reason
       settings = Setting.current
       return :off unless settings.ai_enabled?
-      return :off if settings.ai_api_key.blank? || settings.ai_model.blank?
+      return :unconfigured if settings.ai_api_key.blank? || settings.ai_model.blank?
       return :opt_out unless @conversation.ai_enabled_for_linkable?
       return :over_cap if Ai::Client.over_daily_cap?(settings)
 

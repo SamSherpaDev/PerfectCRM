@@ -1,6 +1,6 @@
 module Ai
   # Inbound triage classification with a one-line reason and a suggested
-  # lead source. Confirmations are logged for later prompt tuning.
+  # lead source.
   class TriagesController < ApplicationController
     include Guard
 
@@ -24,10 +24,5 @@ module Ai
       end
     end
 
-    def confirm
-      find_conversation
-      category = Ai::Triage.confirm!(@conversation, params[:category])
-      redirect_to inbox_thread_path(@conversation), notice: "Triage confirmed as #{category.humanize}.", status: :see_other
-    end
   end
 end

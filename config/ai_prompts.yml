@@ -32,8 +32,7 @@ prompts:
       Voice guide:
       %{voice_guide}
 
-      Draft the reply now. Facts you may reuse (never invent others):
-      %{allowed_numbers}
+      Draft the reply now.
   summarize_thread:
     description: Three-bullet thread summary.
     system_addition: >-
