@@ -169,6 +169,27 @@ class TemplatesRequestsTest < ActionDispatch::IntegrationTest
     assert_select ".flash-alert", text: /at least one recipient/
   end
 
+  test "merge preview redacts recipient rosters from request logs" do
+    sign_in
+    output = StringIO.new
+    logger = ActiveSupport::Logger.new(output)
+    logger.level = Logger::INFO
+    Rails.logger.broadcast_to(logger)
+
+    post merge_templates_path, params: { template_id: @template.id,
+      recipients: "Maya Gurung <maya@example.com>\npemba@example.com" }
+
+    assert_response :success
+    assert_select "li", text: /maya@example.com/
+    assert_select "li", text: /pemba@example.com/
+    assert_includes output.string, "[FILTERED]"
+    assert_not_includes output.string, "Maya Gurung"
+    assert_not_includes output.string, "maya@example.com"
+    assert_not_includes output.string, "pemba@example.com"
+  ensure
+    Rails.logger.stop_broadcasting_to(logger) if logger
+  end
+
   test "every template page requires sign in" do
     get templates_path
     assert_redirected_to sign_in_path
