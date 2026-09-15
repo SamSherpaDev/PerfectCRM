@@ -86,7 +86,7 @@ class TemplatesTest < ApplicationSystemTestCase
     visit edit_template_path(template)
     fill_in "Body", with: "Welcome {{first_name}}"
     within("#template_preview") { assert_text "Welcome Maya" }
-    [template_path(template), "#{template_path(template)}/preview"].each do |path|
+    [ template_path(template), "#{template_path(template)}/preview" ].each do |path|
       status = page.evaluate_async_script(<<~JS, path)
         const done = arguments[arguments.length - 1]
         fetch(arguments[0]).then(response => done(response.status))
