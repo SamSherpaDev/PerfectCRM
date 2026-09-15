@@ -1,5 +1,5 @@
 class TemplatesController < ApplicationController
-  before_action :set_template, only: %i[show edit update destroy preview duplicate archive unarchive move use]
+  before_action :set_template, only: %i[edit update destroy duplicate archive unarchive move use]
 
   def index
     @tab = params[:tab] == "archived" ? "archived" : "active"
@@ -10,10 +10,6 @@ class TemplatesController < ApplicationController
       records = scope.for_purpose(purpose).to_a
       [ purpose, records ] if records.any?
     end
-  end
-
-  def show
-    redirect_to edit_template_path(@template)
   end
 
   def new
@@ -43,11 +39,6 @@ class TemplatesController < ApplicationController
   def destroy
     @template.destroy!
     redirect_to templates_path, notice: "Template deleted."
-  end
-
-  # Sample-context preview for a saved template (the Turbo frame on new/edit).
-  def preview
-    render layout: false if turbo_frame_request?
   end
 
   # Live preview for the unsaved form: subject/body come from the form fields.

@@ -4,7 +4,7 @@
   <%= render "shared/flash" %>
 
   <div class="card card-pad">
-    <%= form_with url: merge_templates_path, method: :post do |form| %>
+    <%= form_with url: merge_templates_path, method: :post, data: { turbo: false } do |form| %>
       <div class="grid gap-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
         <div>
           <%= form.label :template_id, "Template", class: "label" %>

@@ -15,7 +15,7 @@ Rails.application.routes.draw do
   resources :clients, only: %i[index]
   get "pipeline", to: "pipeline#show"
   resources :quotes, only: %i[index]
-  resources :templates do
+  resources :templates, except: :show do
     collection do
       post :preview, action: :collection_preview
       get :picker
@@ -23,7 +23,6 @@ Rails.application.routes.draw do
       post :merge, action: :merge_preview
     end
     member do
-      get :preview
       post :duplicate
       patch :archive
       patch :unarchive

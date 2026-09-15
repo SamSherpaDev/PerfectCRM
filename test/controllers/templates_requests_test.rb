@@ -54,11 +54,16 @@ class TemplatesRequestsTest < ActionDispatch::IntegrationTest
     assert_equal "Renamed", @template.reload.name
   end
 
-  test "member preview renders the sample context" do
+  test "member preview is not available" do
     sign_in
-    get preview_template_path(@template)
-    assert_response :success
-    assert_select "p", text: /Maya/
+    get "/templates/#{@template.id}/preview"
+    assert_response :not_found
+  end
+
+  test "show alias is not available" do
+    sign_in
+    get template_path(@template)
+    assert_response :not_found
   end
 
   test "collection preview renders unsaved form text" do

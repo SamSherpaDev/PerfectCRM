@@ -116,30 +116,92 @@ class TemplatesTest < ApplicationSystemTestCase
     assert_field "Subject"
     page.execute_script <<~JS
       window.previewBodies = []
-      window.fetch = () => Promise.resolve({
-        ok: true,
-        text: () => new Promise(resolve => {
-          window.previewBodies.push(resolve)
-          document.documentElement.dataset.previewRequests = window.previewBodies.length
-        })
-      })
+      const originalFetch = window.fetch.bind(window)
+      window.fetch = async (...args) => {
+        const response = await originalFetch(...args)
+        const html = await response.text()
+        return {
+          ok: response.ok,
+          text: () => new Promise(resolve => {
+            window.previewBodies.push(() => resolve(html))
+            document.documentElement.dataset.previewRequests = window.previewBodies.length
+          })
+        }
+      }
     JS
 
     fill_in "Subject", with: "Earlier wording"
     assert_selector "html[data-preview-requests='1']"
     fill_in "Subject", with: "Current wording"
     assert_selector "html[data-preview-requests='2']"
-    page.execute_script "window.previewBodies[1]('<p>Current wording</p>')"
+    page.execute_script "window.previewBodies[1]()"
     within("#template_preview") { assert_text "Current wording" }
     page.evaluate_async_script <<~JS
       const done = arguments[0]
-      window.previewBodies[0]('<p>Earlier wording</p>')
+      window.previewBodies[0]()
       requestAnimationFrame(() => requestAnimationFrame(done))
     JS
     within("#template_preview") do
       assert_text "Current wording"
       assert_no_text "Earlier wording"
     end
+  end
+
+  test "maintain library and preview personal messages at 390px without sending" do
+    load Rails.root.join("db/seeds/templates.rb")
+    sign_in_through_google
+    page.current_window.resize_to(390, 844)
+    visit templates_path
+    assert_equal 8, Template.active.count
+    assert_no_overflow
+    capture_evidence("library-mobile")
+    template = Template.first
+    visit edit_template_path(template)
+    fill_in "Name", with: "Group greeting"
+    fill_in "Subject", with: "Hello {{first_name}}"
+    fill_in "Body", with: "Dear {{full_name}}, welcome aboard. {{unknown}}"
+    within("#template_preview") do
+      assert_text "Dear Maya"
+      assert_text "unknown"
+    end
+    capture_evidence("editor-mobile")
+    click_button "Save changes"
+    assert_text "Template saved."
+    within("[aria-label='Actions for Group greeting']") { click_button "Archive" }
+    assert_text "Template archived."
+    visit picker_templates_path
+    assert_no_text "Group greeting"
+    visit templates_path(tab: "archived")
+    within("[aria-label='Actions for Group greeting']") { click_button "Restore" }
+    assert_text "Template restored."
+
+    visit merge_templates_path
+    select "Group greeting", from: "Template"
+    fill_in "Recipients", with: "Maya Gurung <maya@example.com>\nPemba Sherpa <pemba@example.com>"
+    before_deliveries = ActionMailer::Base.deliveries.size
+    click_button "Preview merge"
+    assert_text "2 messages ready"
+    assert_text "Dear Maya Gurung, welcome aboard."
+    assert_text "Dear Pemba Sherpa, welcome aboard."
+    assert_text "Nothing sent"
+    assert_no_selector "input[type='submit'][value='Send']"
+    assert_equal before_deliveries, ActionMailer::Base.deliveries.size
+    assert_equal 0, template.reload.usage_count
+    assert_no_overflow
+    find("[aria-label='Merged messages']").scroll_to(:top)
+    capture_evidence("merge-mobile")
+    fill_in "Recipients", with: ""
+    click_button "Preview merge"
+    assert_text "Add at least one recipient email."
+    assert_text "0 messages ready"
+  end
+
+  def capture_evidence(name)
+    return unless ENV["TEMPLATE_EVIDENCE_DIR"].present?
+
+    page.current_window.resize_to(390, page.evaluate_script("document.documentElement.scrollHeight") + 300)
+    page.save_screenshot(File.join(ENV.fetch("TEMPLATE_EVIDENCE_DIR"), "#{name}.png"))
+    page.current_window.resize_to(390, 844)
   end
 
   private
