@@ -4,8 +4,8 @@
     phone the composer lives in a bottom sheet behind a floating Reply
     pill, so it never covers the thread until the captain opens it.
     Locals: owner (Client, Lead, or Organization). The ReplyBox concern
-    supplies @reply_conversation, @reply_draft, @reply_bookings,
-    @reply_context, @reply_booking_contexts, and @reply_chips. %>
+    supplies @reply_conversation, @reply_draft, @reply_to, @reply_data,
+    @reply_context, and @reply_chips. %>
 <% send_url = owner.is_a?(Client) ? client_messages_path(owner) :
      owner.is_a?(Lead) ? lead_messages_path(owner) : organization_messages_path(owner) %>
 <% draft_url = owner.is_a?(Client) ? client_draft_path(owner) :

@@ -92,8 +92,7 @@ class TemplatesController < ApplicationController
     render json: { id: @template.id, name: @template.name, **@template.rendered(use_context) }
   end
 
-  # Compact embeddable list for the reply box (a later mail task embeds
-  # templates/_picker); JSON returns each row rendered and ready to insert.
+  # Picker integration and usage semantics: see README.md, "Templates".
   def picker
     @query = params[:q].to_s.strip
     scope = Template.active.ordered

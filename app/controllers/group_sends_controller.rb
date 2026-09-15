@@ -1,5 +1,5 @@
 # Sends a group departure merge: one personal email per recipient, each
-# rendered from live data and each logged on its own timeline. Sending
+# rendered from live data. Logging rules: see README.md, "Replying". Sending
 # only runs from a complete batch (no malformed lines); the show page is
 # the per-batch summary.
 class GroupSendsController < ApplicationController

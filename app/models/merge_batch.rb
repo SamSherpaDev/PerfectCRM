@@ -1,9 +1,6 @@
 # frozen_string_literal: true
 
-# A preview of one template rendered for several recipients at once — the
-# group-departure merge. No sending happens here; GroupSendsController
-# consumes this object (each entry becomes one personal send) when delivery
-# lands.
+# A group-departure preview consumed by GroupSendsController for delivery.
 #
 # Malformed recipient lines are RETAINED with their line numbers and shown
 # as errors: the batch refuses to present itself as complete until they are

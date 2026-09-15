@@ -1,3 +1,7 @@
+# One thread of email with a client, lead, or organization. Replies share
+# threading headers; an explicit new message starts a new conversation. The mail-in
+# task will attach inbound messages here; outbound sends create (or reuse)
+# the conversation through Outbound::Composer.
 class Conversation < ApplicationRecord
   OWNER_TYPES = %w[Client Lead Organization].freeze
   alias_attribute :owner_type, :linkable_type

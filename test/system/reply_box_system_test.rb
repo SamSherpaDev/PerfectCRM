@@ -33,10 +33,11 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
 
     # One tap on the template chip fills subject and body with live data.
     click_button "Quick hello"
-    assert_equal "Hi Maya", find_field("Subject").value
-    assert_includes find_field("Message").value, "Hello Maya"
+    assert_field "Subject", with: "Hi Maya"
+    assert_field "Message", with: "Hello Maya, thinking of [missing: trip]!"
     assert_includes find_field("Message").value, "[missing: trip]"
     assert_no_overflow("after insert")
+    capture_outbound_evidence("mobile-template-reply")
 
     # Save draft persists without sending.
     fill_in "Message", with: "Hello Maya, half written…"
@@ -106,6 +107,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     attach_file "Attachments", Rails.root.join("test/fixtures/files/sample.txt")
     click_button "Save draft"
     assert_selector "[aria-label='Draft attachments'] li", text: "sample.txt", count: 1
+    capture_outbound_evidence("saved-attachment")
     assert_equal "", find_field("Attachments").value
     click_button "Save draft"
     assert_text "Draft saved"
@@ -146,7 +148,107 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
       click_button "Quick hello", match: :first
       assert_field "Message", with: "Sona Maya trek $501.00 INV-501"
       assert_text "Booking reference: Maya Gurung's booking."
+      capture_outbound_evidence("recipient-booking-fallback")
     end
+  end
+
+  test "invalid group lines block sending and corrected names stay personal" do
+    sign_in_browser
+    page.current_window.resize_to(390, 844)
+    visit merge_templates_path
+    select "Quick hello", from: "Template"
+    fill_in "Recipients", with: "Maya <family@example.com>\nwrong@@example.com\na@example.com, b@example.com"
+    click_button "Preview merge"
+    within("[aria-label='Recipient problems']") do
+      assert_text "Line 2:"
+      assert_text "Line 3:"
+      assert_text "wrong@@example.com"
+    end
+    assert_no_button "Send 1 personal emails"
+    assert_equal 0, GroupSend.count
+    capture_outbound_evidence("group-invalid-mobile")
+    fill_in "Recipients", with: "Maya <family@example.com>\nPemba <family@example.com>\nstranger@example.com"
+    click_button "Preview merge"
+    assert_text "Hello Maya"
+    assert_text "Hello Pemba"
+    assert_text "Missing: first name"
+    assert_text "Missing: trip"
+    click_button "Send 3 personal emails"
+    assert_current_path %r{/group_sends/\d+}
+    assert_selector "h1", text: "Send summary"
+    assert_equal 3, Message.count
+    assert_equal ["Hi Maya", "Hi Pemba", "Hi [missing: first_name]"], Message.order(:id).pluck(:subject)
+    capture_outbound_evidence("group-summary-mobile")
+    message = Message.last
+    message.mark_failed!("SMTP unavailable")
+    visit group_send_path(message.group_send)
+    click_button "Retry"
+    assert_no_button "Retry"
+    assert_equal "queued", message.reload.status
+    assert_equal 3, Message.count
+  end
+
+  test "rejected older and new thread sends preserve fields and attachments" do
+    older = @client.conversations.create!(subject_line: "Older", last_message_at: 2.days.ago)
+    newer = @client.conversations.create!(subject_line: "Newer", last_message_at: 1.day.ago)
+    newer.create_draft!(owner: @client, subject: "Other subject", body: "Other words")
+    sign_in_browser
+    page.current_window.resize_to(1400, 1000)
+    [inbox_thread_path(older), client_path(@client, new_thread: 1)].each_with_index do |path, index|
+      visit path
+      fill_in "To", with: "secondary@example.com"
+      fill_in "Subject", with: "Correct this reply"
+      fill_in "Message", with: "  "
+      attach_file "Attachments", Rails.root.join("test/fixtures/files/sample.txt")
+      click_button "Send"
+      assert_text "Could not send"
+      assert_field "To", with: "secondary@example.com"
+      assert_field "Subject", with: "Correct this reply"
+      assert_selector "[aria-label='Draft attachments'] li", text: "sample.txt"
+      assert_current_path path
+      assert_equal 0, Message.count
+      capture_outbound_evidence("validation-recovery-#{index}")
+    end
+    assert_equal "Other words", newer.reload.draft.body
+  end
+
+  test "duplicate gets a free position and can move up" do
+    Template.create!(name: "Second", purpose: @template.purpose, body: "Hi", position: @template.position + 1)
+    sign_in_browser
+    visit templates_path
+    within("[aria-label='Actions for Quick hello']") { click_button "Duplicate" }
+    assert_text "duplicated"
+    copy = Template.order(:id).last
+    assert_equal Template.where.not(id: copy.id).maximum(:position) + 1, copy.position
+    visit templates_path
+    before = copy.position
+    click_button "Move #{copy.name} up"
+    assert_selector "section li:nth-child(2) a", text: copy.name
+    assert_operator copy.reload.position, :<, before
+  end
+
+  test "departure selection loads mirrored travelers and live trip values" do
+    PerfectBook::Departure.create!(perfectbook_id: 7001, trip_name: "Annapurna", label: "May 2027", synced_at: Time.current)
+    PerfectBook::Contact.create!(perfectbook_id: 4242, name: "Maya Gurung", email: @client.email, synced_at: Time.current)
+    PerfectBook::Booking.create!(perfectbook_id: 9002, perfectbook_contact_id: 4242,
+      departure_id: 7001, trip_name: "Annapurna", synced_at: Time.current)
+    sign_in_browser
+    page.current_window.resize_to(390, 844)
+    visit merge_templates_path
+    select "Annapurna · May 2027", from: "Departure travelers"
+    assert_field "Recipients", with: "Maya Gurung <maya@example.com>"
+    assert_text "Hello Maya, thinking of Annapurna!"
+    capture_outbound_evidence("departure-merge-mobile")
+    click_button "Send 1 personal emails"
+    assert_selector "h1", text: "Send summary"
+    assert_equal "Hello Maya, thinking of Annapurna!", Message.last.text_body
+    assert_equal @client, Message.last.owner
+  end
+
+  def capture_outbound_evidence(name)
+    return if ENV["OUTBOUND_EVIDENCE_DIR"].blank?
+
+    page.save_screenshot(File.join(ENV.fetch("OUTBOUND_EVIDENCE_DIR"), "#{name}.png"))
   end
 
   private

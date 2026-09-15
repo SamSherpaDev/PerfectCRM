@@ -12,8 +12,9 @@ The CRM owns people, conversations, quotes, tasks, and the pipeline, and
 reads PerfectBook through a small versioned, token-authenticated API (see
 "PerfectBook connection" below). The client foundation currently supports leads,
 clients, organizations, people, notes, search, and export. The message-template
-library, [Pipeline](#pipeline), and approval-only [AI assistance](#ai-assistance)
-are also available; see [Templates](#templates). Sensitive traveler documents
+library, outbound email, [Pipeline](#pipeline), and approval-only
+[AI assistance](#ai-assistance) are also available; see [Templates](#templates)
+and [Replying](#replying). Sensitive traveler documents
 and date-of-birth data belong in PerfectBook; do not put them in CRM notes.
 
 Stack: Rails 8.1, Hotwire (Turbo, Stimulus, importmap), Tailwind v4, three
@@ -52,8 +53,8 @@ out. On mobile, use Open menu to show the drawer. The rail holds **Today**
 (root), **Inbox**, **Leads**, **Clients**, **Pipeline**, **Quotes**, **Templates**, and
 **Settings**. Quotes renders a branded empty state until its
 feature lands. See [Today and follow-ups](#today-and-follow-ups), [Mail](#mail),
-[Templates](#templates), and [Pipeline](#pipeline) for the live features. Settings provides appearance,
-morning and pipeline digests, connections, history import, automation settings, and export controls.
+[Replying](#replying), [Templates](#templates), and [Pipeline](#pipeline) for the live features. Settings provides appearance,
+morning and pipeline digests, connections, history import, automation settings, email sender settings, and export controls.
 
 On phones (under 750px) a bottom tab bar holds **Today**, **Inbox**,
 **Leads**, **Clients**, and **More** (Pipeline, Quotes, Templates,
@@ -79,28 +80,26 @@ Archived tabs carrying counts; each row shows its usage count and last use
 so dead templates get pruned. New/edit pairs the form with a live preview
 pane and a placeholder chooser that inserts at the cursor.
 
-Placeholders (`{{first_name}}`, `{{trip}}`, `{{balance_due}}`, and friends -
-the full list is `TemplateRenderer::PLACEHOLDERS`) render through
-`TemplateRenderer` against a plain-hash context, so the mail and
-PerfectBook tasks can supply real values later without changing that code.
-Unknown placeholders render as a visible `[missing: name]` marker, never
-blank. Seeded from `db/seeds/templates.rb` (idempotent; reruns never
+Placeholders render through `TemplateRenderer` against live values; see
+[Replying](#replying) for context resolution and missing-value behavior.
+The placeholder chooser uses `TemplateRenderer::PLACEHOLDERS` as its source.
+Templates are seeded from `db/seeds/templates.rb` (idempotent; reruns never
 overwrite captain edits).
 
-The reply box (a later mail task) embeds `templates/_picker`: a compact
-searchable list backed by `GET /templates/picker.json`, which returns each
-row rendered and ready to insert. Tapping Insert records a use and emits a
-window `template:insert` event with `{ id, subject, body }` detail for the
-reply box to catch. Group departures get a merge preview at
-`GET /templates/merge`: pick a template, paste `Name <email>` lines, and
-review every rendered message. Nothing sends from there; the mail task
-consumes the `MergeBatch` value object (`app/models/merge_batch.rb`).
+The reply box embeds a searchable template picker. Insert fills the subject
+and inserts the body at the cursor for review; usage is counted when a
+message is queued, not when a template is inserted. Duplicate places the
+copy at the end of the ordering, where Move up/down still works. Delete
+archives a template referenced by any message, draft, or group send;
+unreferenced templates are deleted. For departure merges, see
+[Replying](#replying).
 
 ## Replying
 
 Replies send as `info@sherpaholidays.com` through Gmail SMTP
 (`smtp.gmail.com:587`, `SMTP_USERNAME`/`SMTP_PASSWORD` plus `MAIL_FROM` in
-`.env.app.example` — the same app password the mailbox sync stores), with
+`.env.app.example`; use the personal Gmail account receiving the alias
+and its app password), with
 `From` and `Reply-To` on the mailbox, `In-Reply-To`/`References` from the
 thread, a generated `Message-ID` that is kept, the signature from Settings → Email replies,
 and uploaded attachments. Delivery runs on Solid Queue
@@ -112,21 +111,38 @@ The reply box docks at the bottom of the client, lead, organization, and
 inbox thread views: recipient chips prefilled from the thread, `Re:`
 subject, a plain-text editor, attachments, one-tap template chips and the full picker
 (filled from live data), a booking select when several mirrored bookings
-exist, Save draft per conversation, and Send. `reply_box/_assist` (with
+exist, Save draft per conversation, and Send. On a phone, tap Reply or
+Resume reply to open the composer; Details holds recipients, subject,
+booking choice, and attachments. New message starts a separate conversation
+regardless of subject. Saved attachments accompany newly uploaded files;
+a successful delivery clears the submitted draft only if it has not been
+edited since submission. `reply_box/_assist` (with
 its `data-assist` hook) is the reserved slot where AI drafts will appear
 for approval; nothing sends without the captain pressing Send.
 
-Placeholders (`TemplateContext.for(client_or_lead, booking:)`) fill from
-the CRM record plus the most recent active mirrored PerfectBook booking:
-`first_name`, `full_name`, `trip`, `departure_dates`, `balance_due`,
-`invoice_number`, `payment_reference`, `advisor_name`, `my_name`,
-`signature`. Unknown or empty values render `[missing: name]`, never
-blank; sample data appears only in the labeled template-editor preview.
-Group sends (`POST /group_sends` from the merge preview) take recipients
-from a departure's mirrored bookings or pasted lines, refuse malformed
-lines with line numbers until fixed or removed, then send one personal
-email per traveler — each logged on its own timeline — with a per-batch
-summary at `GET /group_sends/:id`.
+Template inserts and group sends resolve identity from the recipient's
+actual email, preferring their own mirrored PerfectBook contact and bookings.
+Only when that contact is absent do booking values fall back to the owning
+CRM record; the booking reference names that owner. CRM advisor relationships
+remain available independently of the recipient's identity. Replies default
+to the booking with the latest start date, preferring active bookings, and
+let you choose another; a group departure uses a booking for that departure.
+Unknown or empty placeholder values render `[missing: name]`, never blanks
+or an email substituted for an unknown name. Sample values appear only in
+the labeled template-editor preview. Set Your name and Signature in
+Settings → Email replies and press Save email settings; these values also
+fill templates for recipients without CRM records.
+
+In Templates → Merge preview, select a template and a departure to fill the
+recipient list from mirrored bookings, or paste one `Name <email>` or bare
+email per line. Bookings without email are counted and omitted. Preview merge
+shows personal messages and retains malformed lines with line numbers;
+fix or remove them before sending. Review missing-value markers before
+pressing Send personal emails. Each message is logged on a matching client
+or open lead timeline (including matches through their people). Recipients
+without a match remain supported and are logged only in the batch summary;
+no CRM record is created. The summary shows delivery counts and Retry for
+failed messages, including recipients without a CRM record.
 
 ## Google sign-in
 
@@ -255,6 +271,8 @@ Settings → Morning digest toggles it; it is enabled by default.
 
 Clients own people, tags, notes, and a timeline. Linked email appears in the
 Email card; see [Mail](#mail).
+See
+[Replying](#replying) for composing messages.
 Use New client to create a record, and Edit to update facts or add another
 person in the blank People fields. Archive moves a client to the Archived
 tab, where Restore makes it active again. The Organizations tab holds
@@ -300,7 +318,7 @@ leads can link to the same client; conversion never merges two clients.
 Without a match, conversion creates a client with the lead's facts,
 including its exact source and campaign, and copies people and history.
 Only clients created by conversion show Started as a lead.
-Both paths transfer the lead's tasks, linked conversations, and remembered
+Both paths transfer the lead's tasks, drafts, linked conversations, and remembered
 email identities to the client, then link forward and freeze the lead read-only,
 with no reverse path.
 
