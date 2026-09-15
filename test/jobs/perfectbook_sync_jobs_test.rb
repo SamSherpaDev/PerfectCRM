@@ -337,5 +337,4 @@ class PerfectBookSyncJobsTest < ActiveSupport::TestCase
     DemoSeed.wipe!
     assert_equal synced, mirror.reload.attributes
   end
-
 end
