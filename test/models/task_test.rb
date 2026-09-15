@@ -93,6 +93,21 @@ class TaskTest < ActiveSupport::TestCase
     assert_not task.complete!
   end
 
+  test "completion from separately loaded tasks records only one event" do
+    task = @client.tasks.create!(title: "Nudge Maya", due_on: Date.current)
+    stale_task = Task.find(task.id)
+
+    assert_difference -> { @client.activity_events.where(kind: "task").count }, 1 do
+      assert task.complete!
+      completed_at = task.reload.done_at
+      travel 1.minute do
+        assert_not stale_task.complete!
+      end
+      assert_equal completed_at, task.reload.done_at
+    end
+    assert stale_task.done?
+  end
+
   test "belongs to leads and organizations too" do
     lead = Lead.create!(name: "Ask", source: "email")
     org = Organization.create!(name: "Ops Co", kind: "operator")

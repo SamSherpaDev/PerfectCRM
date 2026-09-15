@@ -62,9 +62,9 @@ class Task < ApplicationRecord
 
   # One tap on a check row: stamps completion and leaves a timeline trail.
   def complete!
-    return false if done?
+    with_lock do
+      return false if done?
 
-    transaction do
       update!(done_at: Time.current)
       subject.activity_events.create!(
         kind: "task", summary: "Completed: #{title}",
