@@ -16,16 +16,22 @@ class PublicQuotesController < ApplicationController
   end
 
   def accept
-    if @quote.expired?
-      return redirect_to public_quote_path(@quote.accept_token), alert: "This quote has expired. Reply to info@sherpaholidays.com and Sam will refresh it."
-    end
+    @quote.with_lock(requires_new: true) do
+      if @quote.expired?
+        return redirect_to public_quote_path(@quote.accept_token), alert: "This quote has expired. Reply to info@sherpaholidays.com and Sam will refresh it."
+      end
 
-    if @quote.accept!
-      QuoteMailer.accepted_notice(@quote).deliver_later
-      redirect_to public_quote_path(@quote.accept_token), notice: "Accepted - thank you! Sam will be in touch to confirm your booking."
-    else
-      redirect_to public_quote_path(@quote.accept_token), alert: "This quote can no longer be accepted."
+      unless @quote.accept!
+        return redirect_to public_quote_path(@quote.accept_token), alert: "This quote can no longer be accepted."
+      end
+
+      job = QuoteMailer.accepted_notice(@quote).deliver_later
+      raise ActiveJob::EnqueueError, "Quote acceptance notice was not queued" unless job
     end
+    redirect_to public_quote_path(@quote.accept_token), notice: "Accepted - thank you! Sam will be in touch to confirm your booking."
+  rescue ActiveJob::EnqueueError, SolidQueue::Job::EnqueueError => error
+    Rails.logger.error("Quote #{@quote.reference} acceptance enqueue failed: #{error.class}")
+    redirect_to public_quote_path(@quote.accept_token), alert: "We could not confirm your acceptance. Please try accepting again."
   end
 
   private

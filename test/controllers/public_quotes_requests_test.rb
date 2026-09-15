@@ -1,4 +1,5 @@
 require "test_helper"
+require "minitest/mock"
 
 # The tap-to-accept page is public: the unguessable token is the only key.
 class PublicQuotesRequestsTest < ActionDispatch::IntegrationTest
@@ -105,6 +106,36 @@ class PublicQuotesRequestsTest < ActionDispatch::IntegrationTest
     get public_quote_path(@quote.accept_token)
     assert_equal "accepted", @quote.reload.status
     assert_equal 3, @quote.view_count
+  end
+
+  %w[ActiveJob::EnqueueError SolidQueue::Job::EnqueueError].each do |error_class|
+    test "acceptance remains retryable after #{error_class}" do
+      get public_quote_path(@quote.accept_token)
+      reject = ->(_job) { raise error_class.constantize, "Queue unavailable" }
+      assert_no_enqueued_emails do
+        QuoteMailer.delivery_job.queue_adapter.stub(:enqueue, reject) do
+          post accept_public_quote_path(@quote.accept_token)
+        end
+      end
+      assert_redirected_to public_quote_path(@quote.accept_token)
+      assert_equal "viewed", @quote.reload.status
+      assert_nil @quote.accepted_at
+      assert_nil @quote.intake_payload
+      assert_equal 0, @client.activity_events.where(kind: "quote").count
+      follow_redirect!
+      assert_includes response.body, "Please try accepting again"
+      assert_select "form[action=?]", accept_public_quote_path(@quote.accept_token)
+      assert_enqueued_emails 1 do
+        post accept_public_quote_path(@quote.accept_token)
+      end
+      assert_equal "accepted", @quote.reload.status
+      assert_not_nil @quote.accepted_at
+      assert_equal "Everest trek", JSON.parse(@quote.intake_payload).fetch("trip")
+      assert_equal 1, @client.activity_events.where(kind: "quote").count
+      assert_no_enqueued_emails do
+        post accept_public_quote_path(@quote.accept_token)
+      end
+    end
   end
 
 end
