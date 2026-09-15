@@ -423,5 +423,4 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
     end
     assert_equal "sent", quote.reload.status
   end
-
 end

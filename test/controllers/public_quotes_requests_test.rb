@@ -137,5 +137,4 @@ class PublicQuotesRequestsTest < ActionDispatch::IntegrationTest
       end
     end
   end
-
 end
