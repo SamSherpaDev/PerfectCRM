@@ -102,7 +102,8 @@ Replies send as `info@sherpaholidays.com` through Gmail SMTP
 and its app password), with
 `From` and `Reply-To` on the mailbox, `In-Reply-To`/`References` from the
 thread, a generated `Message-ID` that is kept, the signature from Settings → Email replies,
-and uploaded attachments. Delivery runs on Solid Queue
+and uploaded attachments, subject to the [mail document restrictions](#mail).
+Delivery runs on Solid Queue
 (`OutboundDeliveryJob`, retries with backoff); the timeline shows each
 message as sending, sent, or failed, and a failure keeps the draft so no
 words are lost. Failed messages retry from their timeline row.
@@ -339,8 +340,8 @@ connects to the personal Google account that receives this alias by IMAP with
 an app password. It keeps only messages with an exact parsed mailbox address
 in From, To, Cc, Bcc, Delivered-To, or X-Original-To; personal mail is skipped
 without storing it. This release reads received and sent Gmail history;
-sending replies in CRM is future work; [AI assistance](#ai-assistance) can
-already prepare a draft to copy.
+see [Replying](#replying) for composing and sending from CRM.
+[AI assistance](#ai-assistance) can prepare a draft to copy.
 
 Setup (captain, about 10 minutes): Google Account → Security → turn on
 2-step verification → App passwords → create one named PerfectCRM → paste
@@ -367,17 +368,24 @@ with icons and counts. Inbox and record timelines offer Load older so complete
 history is reachable, and expanded messages show their full body.
 
 Ordinary email attachments are part of the conversation and stay in CRM storage.
-There is no attachment-count cap. Files over 25 MB are skipped with a visible
+There is no attachment-count cap. On import, files over 25 MB are skipped with a visible
 message notice. Before any blob is created or uploaded, filenames, content types,
 and PDF titles are screened for passport, visa, insurance, identity/ID,
-date-of-birth, and scan documents. Flagged attachments are never uploaded:
-only a placeholder with filename, size, type, and "held: collect in PerfectBook"
+date-of-birth, and scan documents. Flagged attachments are never uploaded.
+On import, only a placeholder with filename, size, type, and "held: collect in PerfectBook"
 remains on the timeline, with a follow-up note to collect the document in
 PerfectBook. PDF metadata is parsed in memory; unreadable or encrypted PDFs
 are also held. Document bytes and PDF titles are not persisted. Attached emails are screened
 recursively: sensitive enclosures become placeholders, safe enclosures remain
 available, and an enclosing .eml containing a sensitive file is never uploaded. Held documents
 appear in Triage even on linked conversations.
+
+Send, Save draft, and recovery after a send validation error use the same
+screening. A refused upload shows "Sensitive documents live in PerfectBook -
+attach it there" and is never persisted; an attached email containing any
+held enclosure is refused in full. Send stops for correction, while draft
+saving retains the text and allowed attachments.
+
 Every stored ordinary attachment still offers **Remove from CRM, collect in
 PerfectBook** if the captain identifies a sensitive file that screening missed.
 This deletes its stored file, records an activity event, and leaves a follow-up

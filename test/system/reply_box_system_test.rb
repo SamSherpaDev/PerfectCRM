@@ -278,6 +278,33 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     assert_equal 0, Message.count
   end
 
+  test "sensitive enclosed documents are refused in every browser upload path" do
+    mail = ::Mail.new
+    mail.from = "sender@example.com"
+    mail.to = "info@sherpaholidays.com"
+    mail.body = "See enclosed"
+    mail.attachments["passport.pdf"] = { mime_type: "application/pdf", content: "sensitive test bytes" }
+    sign_in_browser
+    page.current_window.resize_to(390, 844)
+    Tempfile.create([ "correspondence", ".eml" ], Rails.root.join("tmp")) do |file|
+      file.write(mail.encoded)
+      file.flush
+      [ :draft, :send, :recovery ].each do |action|
+        visit client_path(@client, new_thread: 1)
+        find(".reply-pill").click
+        find(".reply-details > summary").click
+        fill_in "Subject", with: "Document check"
+        fill_in "Message", with: action == :recovery ? "  " : "See attached"
+        attach_file "Attachments", file.path
+        assert_no_difference([ "ActiveStorage::Blob.count", "ActiveStorage::Attachment.count", "Message.count" ]) do
+          click_button(action == :draft ? "Save draft" : "Send")
+          assert_text "Sensitive documents live in PerfectBook - attach it there"
+        end
+        capture_outbound_evidence("sensitive-upload-#{action}")
+      end
+    end
+  end
+
   private
 
   def sign_in_browser
