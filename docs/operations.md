@@ -130,10 +130,17 @@ All from `/opt/apps/perfectcrm` on the box.
   stopped; `./deploy.sh` also pulls the newest green image first.
 - **Deploy a version.** `./deploy.sh` pulls and runs `:latest` (last green
   `main`). To pin one: `IMAGE_TAG=<commit-sha> ./deploy.sh`.
-- **Rollback.** `IMAGE_TAG=<previous-sha> ./deploy.sh`, then confirm
-  `/up` and sign in. The entrypoint's `db:prepare` only migrates forward,
-  so roll back data from the nightly backup first if the bad deploy
-  migrated the schema.
+- **Rollback.** First review migrations applied since the target version
+  and verify that version against an isolated copy of the current database.
+  The entrypoint's `db:prepare` does not undo migrations. Additive changes,
+  such as the demo manifest table, can remain compatible with the previous
+  app. When compatible, keep the current database and run
+  `IMAGE_TAG=<previous-sha> ./deploy.sh`, then confirm `/up`, sign in, and
+  check the affected workflows. If incompatible, prefer a forward fix that
+  preserves current data. Restore a backup only when recovery actually
+  requires it: stop app and job writes, preserve consistent copies of the
+  current primary and queue databases, and identify changes since the
+  backup that would be lost or need reconciliation before restoring.
 - **Health.** `https://perfectcrm.sherpaholidays.com/up` (uptime check)
   plus the healthchecks.io nightly-backup ping (backup check).
 
