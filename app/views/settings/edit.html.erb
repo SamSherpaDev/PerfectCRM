@@ -58,83 +58,86 @@
     <% end %>
   </section>
 
-  <section class="card card-pad mt-6" aria-labelledby="mailbox-heading">
-    <h2 class="section-title" id="mailbox-heading">Mailbox</h2>
-    <%= card_caption "Gmail mail to and from #{@mailbox_address} lands on client timelines. Only that address is ever kept; personal mail is skipped without storing it." %>
-    <dl class="mt-4 space-y-1 text-sm">
-      <div class="flex gap-2">
-        <dt class="muted">Gmail address:</dt>
-        <dd class="font-medium text-ink"><%= @mailbox_address %></dd>
+  </section>
+
+  <section class="card card-pad mt-6" aria-labelledby="automations-heading">
+    <h2 class="section-title" id="automations-heading">Automations</h2>
+    <%= card_caption "The website form, Panda AI scoring, and the n8n webhooks. Automations may create leads, score them, and move them between New, Chatting and Lost. Quoted, Nudged, conversion to client, and everything after stay manual." %>
+
+    <div class="mt-4 space-y-4">
+      <div class="setting">
+        <div>
+          <p class="font-medium text-sm">Site key</p>
+          <p class="hint">Public identifier the storefront form sends with every inquiry. Last used <%= @settings.site_key_last_used_at ? time_24_12(@settings.site_key_last_used_at) : "never" %>.</p>
+          <p class="mono mt-1 text-xs"><%= @settings.site_key %></p>
+        </div>
+        <%= button_to "Rotate", rotate_site_key_settings_path, method: :post, class: "btn-secondary btn btn-sm", form: { data: { turbo_confirm: "Rotate the site key? Update the storefront block right after." } } %>
       </div>
-      <div class="flex gap-2">
-        <dt class="muted">Last sync:</dt>
-        <dd><%= @settings.mailbox_last_sync_at ? time_24_12(@settings.mailbox_last_sync_at) : "Never" %></dd>
+
+      <div class="setting">
+        <div>
+          <p class="font-medium text-sm">Relay secret</p>
+          <p class="hint">Signs server calls from n8n and Panda AI, and signs the webhooks sent to n8n. Last used <%= @settings.relay_last_used_at ? time_24_12(@settings.relay_last_used_at) : "never" %>.</p>
+          <% if @fresh_relay_secret %>
+            <p class="mono mt-1 text-xs" role="status">New secret (shown once): <%= @fresh_relay_secret %></p>
+          <% else %>
+            <p class="mono mt-1 text-xs"><%= @settings.masked_relay_secret %></p>
+          <% end %>
+        </div>
+        <%= button_to "Rotate", rotate_relay_secret_settings_path, method: :post, class: "btn-secondary btn btn-sm", form: { data: { turbo_confirm: "Rotate the relay secret? Update n8n and Panda AI right after." } } %>
       </div>
-      <div class="flex gap-2">
-        <dt class="muted">Last error:</dt>
-        <dd><%= @settings.mailbox_last_error.presence || @mail_sync&.last_error.presence || "None" %></dd>
-      </div>
-    </dl>
-    <%= form_with model: @settings, url: mailbox_settings_path, method: :patch, class: "mt-4 space-y-3" do |form| %>
+    </div>
+
+    <%= form_with model: @settings, url: settings_path, method: :patch, class: "mt-4 space-y-4" do |form| %>
       <div>
-        <%= form.label :mailbox_login, "Google account login", class: "label" %>
-        <%= form.email_field :mailbox_login, class: "input", placeholder: "you@gmail.com", autocomplete: "username" %>
-        <p class="hint">The personal Gmail that receives the <%= @mailbox_address %> alias.</p>
+        <%= form.label :intake_copy_to, "Inquiry email copy goes to", class: "label" %>
+        <%= form.email_field :intake_copy_to, class: "input", autocomplete: "email" %>
+        <p class="hint">One copy of every website inquiry, with Reply-To the visitor.</p>
       </div>
       <div>
-        <%= form.label :mailbox_app_password, "App password", class: "label" %>
-        <%= form.password_field :mailbox_app_password, class: "input", placeholder: @settings.mailbox_configured? ? "Saved — enter a new one to replace it" : "xxxx xxxx xxxx xxxx", autocomplete: "new-password" %>
-        <p class="hint">Google Account → Security → 2-step verification → App passwords. Name it PerfectCRM. Never use your main Google password. Stored encrypted.</p>
+        <%= form.label :lead_webhooks_text, "n8n webhook URLs", class: "label" %>
+        <%= form.text_area :lead_webhooks_text, value: @settings.lead_webhook_urls_text, rows: 3, class: "textarea mono text-xs", placeholder: "https://n8n.example.com/webhook/lead" %>
+        <p class="hint">One URL per line. Each new lead and each details answer is posted here, signed with the relay secret. Empty means disabled.</p>
       </div>
-      <% if @settings.errors[:mailbox_login].any? %>
-        <p class="text-sm text-bad"><%= @settings.errors[:mailbox_login].to_sentence %></p>
+      <div>
+        <%= form.submit "Save automations", class: "btn-primary btn btn-sm" %>
+      </div>
+    <% end %>
+
+    <div class="mt-6">
+      <h3 class="card-title">Recent automation activity</h3>
+      <%= card_caption "The last 50 machine events and webhook deliveries, newest first." %>
+      <% if @automation_events.any? || @webhook_deliveries.any? %>
+        <ul class="mt-2 space-y-3">
+          <% @automation_events.each do |event| %>
+            <li class="flex items-start gap-3">
+              <%= render "shared/icon", name: automation_icon(automation_caller(event)), class: "h-4 w-4 mt-0.5 text-info" %>
+              <div class="min-w-0">
+                <p class="text-sm text-ink"><%= event.summary %></p>
+                <p class="text-xs muted"><%= time_24_12(event.occurred_at) %></p>
+              </div>
+              <%= badge "Automated", :info, dot: true %>
+            </li>
+          <% end %>
+          <% @webhook_deliveries.each do |delivery| %>
+            <li class="flex items-start gap-3">
+              <%= render "shared/icon", name: :external, class: "h-4 w-4 mt-0.5 muted" %>
+              <div class="min-w-0">
+                <p class="text-sm text-ink"><%= delivery.event %> to <%= delivery.url %></p>
+                <p class="text-xs muted"><%= time_24_12(delivery.created_at) %><% if delivery.lead %> · <%= link_to delivery.lead.reference || delivery.lead.name, lead_path(delivery.lead), class: "link-quiet" %><% end %></p>
+              </div>
+              <%= status_badge(delivery.status == "delivered" ? "sent" : delivery.status == "failed" ? "error" : "pending") %>
+            </li>
+          <% end %>
+        </ul>
+      <% else %>
+        <div class="empty-inline">
+          <%= sketch :enso, class: "enso" %>
+          <p class="text-sm text-ink">No automation activity yet.</p>
+          <p class="text-xs muted">Website inquiries, Panda AI verdicts, and webhook deliveries will appear here.</p>
+        </div>
       <% end %>
-      <div class="flex flex-wrap gap-2">
-        <%= form.submit "Save mailbox", class: "btn-primary btn btn-sm" %>
-        <%= link_to "Test connection", mailbox_test_settings_path, data: { turbo_method: :post }, class: "btn-secondary btn btn-sm" %>
-      </div>
-    <% end %>
-    <p class="hint mt-4">Setup: turn on 2-step verification on the Google account, create an app password, paste it here, then Test connection. Sync runs every 5 minutes over [Gmail]/All Mail, read-only — it never moves, deletes, or flags server mail. See README “Mail”.</p>
-  </section>
-
-  <section class="card card-pad mt-6" aria-labelledby="import-heading">
-    <h2 class="section-title" id="import-heading">Import history</h2>
-    <%= card_caption "Bring past email with clients and operators into the CRM. Preview first, flip clients and organizations per row, then import." %>
-    <div class="mt-4 flex flex-wrap gap-2">
-      <%= link_to "Import history", new_mail_import_path, class: "btn-secondary btn btn-sm" %>
-      <%= link_to "Past imports", mail_imports_path, class: "btn-ghost btn btn-sm" %>
+      <% if @honeypot_dropped.to_i.positive? %>
+        <p class="hint mt-3"><%= @honeypot_dropped %> spam-bot submission<%= "s" unless @honeypot_dropped.to_i == 1 %> quietly dropped at the door.</p>
+      <% end %>
     </div>
-    <% if @imports.any? %>
-      <ul class="mt-3 space-y-1 text-sm">
-        <% @imports.each do |import| %>
-          <li><%= link_to "#{import.scope_label} · #{import.status}", mail_import_path(import), class: "link" %></li>
-        <% end %>
-      </ul>
-    <% end %>
-  </section>
-
-  <section class="card card-pad mt-6" aria-labelledby="pipeline-digest-heading">
-    <h2 class="section-title" id="pipeline-digest-heading">Monday pipeline note</h2>
-    <%= card_caption "One line every Monday at 7am: open leads, stale cards, and pipeline value." %>
-    <%= form_with model: @settings, url: settings_path, method: :patch, class: "mt-4" do |form| %>
-      <label class="inline-flex items-center gap-2 text-sm">
-        <%= form.check_box :pipeline_digest, class: "checkbox" %>
-        Send the Monday note to info@sherpaholidays.com
-      </label>
-      <div class="mt-3">
-        <%= form.submit "Save", class: "btn-secondary btn btn-sm" %>
-      </div>
-    <% end %>
-  </section>
-
-  <section class="card card-pad" aria-labelledby="export-heading">
-    <h2 class="section-title" id="export-heading">Export everything</h2>
-    <%= card_caption "A zip of leads, clients, people, organizations, notes, tags, and timeline events as CSV. Opens cleanly in Excel." %>
-    <div class="mt-4">
-      <%= link_to "Export everything", settings_export_path, class: "btn-secondary btn btn-sm" %>
-    </div>
-  </section>
-  <div class="foot-sketch" aria-hidden="true">
-    <%= sketch :wheel, class: "sk scene" %>
-  </div>
-</div>

@@ -64,3 +64,7 @@ When updating this file, preserve this bar for all agents and keep entries conci
   rules live in the model, the landing queries in `Today::Summary`,
   automatic proposals in `Tasks::Automatic` (idempotent per booking),
   and the digest in `TodayDigestJob` + `CaptainDigestMailer`.
+- Website leads intake: public endpoints under `app/controllers/api/v1/leads/`
+  (intake, details, verdict), contract in `docs/leads-intake.md`; automation
+  settings on the Settings "Automations" card; `Leads` service module holds
+  the relay HMAC, source, scoring, and rate-limit rules.

@@ -29,6 +29,7 @@ class LeadsController < ApplicationController
     end
     scope = @query.present? ? base.search(@query) : base
     @leads = sort_leads(scope).includes(:tags, :people, :referred_by_organization, :converted_client)
+    @automations = automation_rows
   end
 
   def show
@@ -112,6 +113,37 @@ class LeadsController < ApplicationController
     if @lead.converted?
       redirect_to @lead, alert: "Converted leads stay read-only."
     end
+  end
+
+  # One row per configured integration for the Automations strip:
+  # the website form, Panda AI verdicts, and the n8n webhooks.
+  def automation_rows
+    settings = Setting.current
+    last_intake = Lead.where.not(external_ref: nil).order(received_at: :desc, created_at: :desc).first
+    last_verdict = ActivityEvent.where(kind: "automation").newest_first.first
+    last_delivery = LeadWebhookDelivery.newest_first.first
+    webhook_detail = if settings.webhooks_enabled?
+      last_delivery ? "#{last_delivery.event} #{last_delivery.status} #{time_ago_in_words(last_delivery.created_at)} ago" : "Configured, nothing sent yet"
+    else
+      "Disabled: add a webhook URL in Settings"
+    end
+    [
+      {
+        name: "Website form", icon: :globe,
+        detail: last_intake ? "Last inquiry #{time_ago_in_words(last_intake.received_at || last_intake.created_at)} ago" : "No inquiries yet",
+        badge: last_intake ? [ "Automated", :info ] : [ "Manual", :neutral ]
+      },
+      {
+        name: "Panda AI", icon: :robot,
+        detail: last_verdict ? last_verdict.summary.truncate(80) : "Scores new leads",
+        badge: last_verdict ? [ "Automated", :info ] : [ "Manual", :neutral ]
+      },
+      {
+        name: "n8n webhooks", icon: :bolt,
+        detail: webhook_detail,
+        badge: settings.webhooks_enabled? ? [ "Automated", :info ] : [ "Manual", :neutral ]
+      }
+    ]
   end
 
   def sort_leads(scope)

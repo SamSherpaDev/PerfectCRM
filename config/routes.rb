@@ -3,6 +3,20 @@ Rails.application.routes.draw do
   # Can be used by load balancers and uptime monitors to verify that the app is live.
   get "up" => "rails/health#show", as: :rails_health_check
 
+  # Website-form intake API (public; per-request auth, no sign-in).
+  # Contract: docs/leads-intake.md.
+  namespace :api do
+    namespace :v1 do
+      scope module: :leads do
+        match "leads/intake", to: "intakes#preflight", via: :options
+        post "leads/intake", to: "intakes#create"
+        match "leads/intake/details", to: "details#preflight", via: :options
+        post "leads/intake/details", to: "details#create"
+        post "leads/:id/verdict", to: "verdicts#create"
+      end
+    end
+  end
+
   # Defines the root path route ("/")
   root "today#show"
   get "sign-in", to: "sessions#new", as: :sign_in
@@ -72,19 +86,5 @@ Rails.application.routes.draw do
   end
   resource :settings, only: %i[edit update] do
     post :perfectbook_test, on: :collection
-    patch :mailbox, on: :collection
-    post :mailbox_test, on: :collection
-  end
-  get "settings/export", to: "exports#show", as: :settings_export
-  resources :tasks, only: %i[create] do
-    member do
-      patch :complete
-      patch :snooze
-    end
-    collection do
-      post :create_review_ask
-    end
-  end
-  # Component kit preview (signed-in only, listed nowhere in the rail).
-  get "design", to: "design#show"
-end
+    post :rotate_site_key, on: :collection
+    post :rotate_relay_secret, on: :collection
