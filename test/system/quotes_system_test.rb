@@ -453,6 +453,23 @@ class QuotesSystemTest < ApplicationSystemTestCase
     assert_no_selector "button", text: "Send"
   end
 
+  test "document nudges prefer the current open lead over an older lost lead" do
+    Lead.create!(name: "Old name", email: "old@example.com", perfectbook_contact_id: 7,
+      status: "lost", lost_reason: "other")
+    lead = Lead.create!(name: "Current name", email: "current@example.com", perfectbook_contact_id: 7)
+    PerfectBook::Booking.create!(perfectbook_id: 11, perfectbook_contact_id: 7,
+      ref: "BK-11", status: "deposit_received", trip_name: "Everest trek",
+      start_date: Date.new(2027, 5, 4), end_date: Date.new(2027, 5, 18), synced_at: Time.current)
+
+    visit lead_path(lead)
+    click_link "Nudge for missing documents"
+    assert_field "To", with: "current@example.com"
+    body = find_field("Message").value
+    assert_includes body, "Current name"
+    assert_not_includes body, "Old name"
+    assert_includes body, "BK-11"
+  end
+
   private
 
   def assert_no_overflow(context)
