@@ -4,12 +4,6 @@
     <h2 class="card-title" id="tasks-heading">Follow-ups</h2>
   </div>
   <%= card_caption "Nudges and to-dos for this client. The Today view gathers them each morning." %>
-  <% suggested = params[:template].present? ? ::Template.active.find_by(id: params[:template]) : nil %>
-  <% if suggested %>
-    <div class="callout-neutral callout" role="note">
-      Suggested nudge: <%= suggested.name %>. The reply box will prefill this message once mail lands.
-    </div>
-  <% end %>
   <% open_tasks = client.tasks.visible.ordered.includes(:template) %>
   <% if open_tasks.any? %>
     <ul class="divide-y divide-rule-2">

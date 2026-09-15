@@ -13,8 +13,7 @@
     </p>
   </div>
   <% if task.template %>
-    <%# TODO(mail-out): open the reply box prefilled with this template. Until the reply box lands, the client page names the suggested message. %>
-    <%= link_to "Nudge", polymorphic_path(task.subject, template: task.template_id), class: "check-link" %>
+    <%= link_to "Nudge", polymorphic_path(task.subject, template: task.template_id, task: task.id), class: "check-link" %>
   <% end %>
   <%= render "tasks/snooze", task: task %>
 </li>

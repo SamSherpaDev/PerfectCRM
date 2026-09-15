@@ -153,6 +153,7 @@ class Lead < ApplicationRecord
           occurred_at: event.occurred_at, metadata: metadata
         )
       end
+      tasks.update_all(subject_type: "Client", subject_id: client.id)
       update!(converted_client: client, converted_at: Time.current)
       ActivityEvent.create!(
         subject: self, kind: "conversion", summary: "Converted to client",

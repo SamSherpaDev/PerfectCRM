@@ -32,24 +32,24 @@ module Tasks
     end
 
     def try_review_ask!(booking, subject, today)
-      return nil if booking.end_date.blank? || booking.end_date != today - REVIEW_DELAY
+      return nil if booking.end_date.blank? || booking.end_date + REVIEW_DELAY > today
 
       create_once!(
         key: "review-ask:#{booking.perfectbook_id}", subject: subject,
         title: "Ask #{subject.name} for a review (#{booking.trip_name})",
-        kind: "review_ask", due_on: today, template: template_for(:review_ask),
+        kind: "review_ask", due_on: booking.end_date + REVIEW_DELAY, template: template_for(:review_ask),
         notes: booking.ref.present? ? "Booking #{booking.ref}." : nil
       )
     end
 
     def try_repeat_nudge!(booking, subject, today)
       return nil if booking.end_date.blank?
-      return nil unless booking.end_date == today - REPEAT_DELAY
+      return nil if booking.end_date + REPEAT_DELAY > today
 
       create_once!(
         key: "repeat-nudge:#{booking.perfectbook_id}", subject: subject,
         title: "Invite #{subject.name} back to the mountains (#{booking.trip_name})",
-        kind: "follow_up", due_on: today, template: template_for(:repeat_nudge),
+        kind: "follow_up", due_on: booking.end_date + REPEAT_DELAY, template: template_for(:repeat_nudge),
         notes: booking.ref.present? ? "Last travelled #{booking.end_date} on #{booking.ref}." : nil
       )
     end

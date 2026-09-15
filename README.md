@@ -260,3 +260,5 @@ The Docker image is built by GitHub Actions and published to
 secrets inventory, backups, and the restore drill. Production credential and
 bucket templates are in `.env.app.example` and `.env.litestream.example`;
 backup cron variables are documented in the runbook.
+
+TODO (perfectcrm-mail-out-65): Replace the Suggested message copy/mailto fallback with the approval-only reply box, preserving the template and task parameters.
