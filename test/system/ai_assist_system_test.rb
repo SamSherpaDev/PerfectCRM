@@ -54,7 +54,7 @@ class AiAssistSystemTest < ApplicationSystemTestCase
     width = page.evaluate_script("document.documentElement.scrollWidth")
     assert_operator width, :<=, 390, "triage card overflows 390px (#{width}px)"
   end
-  test "use draft fills the composer fallback and emits its insertion event" do
+  test "use draft opens and fills the reply composer and emits its insertion event" do
     Setting.current.update!(ai_enabled: true, ai_model: "test", ai_api_key: "test")
     adapter = Object.new
     adapter.define_singleton_method(:chat) do |**_args|
@@ -66,11 +66,10 @@ class AiAssistSystemTest < ApplicationSystemTestCase
       assert_button "Use this draft"
     end
     assert_no_selector "[data-ai-assist-target=orbSlot] canvas"
+    assert_no_selector "#message_body"
     page.execute_script(<<~JS)
-      const field = document.createElement("textarea")
-      field.id = "message_body"
+      const field = document.getElementById("message_body")
       field.value = "Earlier text"
-      document.body.appendChild(field)
       field.addEventListener("template:insert", event => { window.insertedDraft = event.detail.body })
       field.addEventListener("input", () => { window.composerChanged = true })
     JS
