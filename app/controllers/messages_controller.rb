@@ -27,8 +27,7 @@ class MessagesController < ApplicationController
     return render_not_found unless owner || message.group_send
     destination = message.group_send ? group_send_path(message.group_send) : owner_path_for(owner)
 
-    if message.failed?
-      message.update!(status: "queued", send_error: nil)
+    if Message.where(id: message.id, status: "failed").update_all(status: "queued", send_error: nil, updated_at: Time.current) == 1
       OutboundDeliveryJob.perform_later(message.id)
       redirect_to destination, notice: "Retrying delivery…"
     else
@@ -72,9 +71,10 @@ class MessagesController < ApplicationController
       owner.conversations.find_by(id: params[:conversation_id]) : nil
     draft = Draft.for_owner(owner, conversation: conversation)
     draft.assign_attributes(draft_attributes)
+    draft.attach_uploads(params.dig(:message, :files))
     if draft.empty?
       draft.destroy if draft.persisted?
-    elsif draft.changed? || draft.new_record?
+    else
       draft.save
     end
   end

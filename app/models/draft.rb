@@ -18,6 +18,11 @@ class Draft < ApplicationRecord
     end
   end
 
+  def attach_uploads(uploads)
+    uploads = uploads.values if uploads.is_a?(Hash)
+    Array(uploads).compact_blank.each { |upload| files.attach(upload) }
+  end
+
   def empty?
     [ to_addrs, cc_addrs, bcc_addrs, subject, body ].all?(&:blank?) &&
       template_id.nil? && perfectbook_booking_id.nil? && !files.attached?

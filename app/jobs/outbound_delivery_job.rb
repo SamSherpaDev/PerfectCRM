@@ -20,13 +20,14 @@ class OutboundDeliveryJob < ApplicationJob
 
   def perform(message_id)
     message = Message.find(message_id)
-    return if message.sent? || !message.outbound?
-
-    message.mark_sending!
+    claimed = message.mark_sending!
+    return unless claimed
     ClientMailer.outbound(message).deliver_now
     message.mark_sent!
     message.group_send&.refresh_status!
   rescue *TRANSIENT_ERRORS => e
+    raise unless claimed
+
     if executions < MAX_ATTEMPTS
       message.update!(status: "queued", send_error: e.message.truncate(500))
       retry_job(wait: backoff)
@@ -35,6 +36,8 @@ class OutboundDeliveryJob < ApplicationJob
       message.group_send&.refresh_status!
     end
   rescue StandardError => e
+    raise unless claimed
+
     message.mark_failed!(e.message) unless message.sent?
     message.group_send&.refresh_status!
   end

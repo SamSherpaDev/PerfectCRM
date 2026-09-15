@@ -35,6 +35,27 @@ class MessagesRequestsTest < ActionDispatch::IntegrationTest
     assert_equal "maya@example.com", draft.to_addrs
   end
 
+  test "validation recovery preserves both saved and submitted draft attachments" do
+    draft = Draft.create!(owner: @client, subject: "Hi", body: "Saved words")
+    draft.files.attach(io: StringIO.new("saved bytes"), filename: "saved.txt", content_type: "text/plain")
+    sign_in
+    assert_no_difference("Message.count") do
+      post client_messages_path(@client), params: {
+        message: { to: @client.email, subject: "Hi", body: "  ",
+          files: [ fixture_file_upload("test/fixtures/files/sample.txt", "text/plain") ] }
+      }
+    end
+    assert_redirected_to client_path(@client)
+    follow_redirect!
+    assert_select "[aria-label='Draft attachments'] li", count: 2
+    files = draft.reload.files.index_by { |file| file.filename.to_s }
+    assert_equal [ "sample.txt", "saved.txt" ], files.keys.sort
+    assert_equal "saved bytes", files["saved.txt"].download
+    assert_equal File.read(Rails.root.join("test/fixtures/files/sample.txt")), files["sample.txt"].download
+    post client_messages_path(@client), params: { message: { to: @client.email, subject: "Hi", body: "Corrected" } }
+    assert_equal [ "sample.txt", "saved.txt" ], Message.last.files.map { |file| file.filename.to_s }.sort
+  end
+
   test "converted leads stay read-only for sends" do
     lead = Lead.create!(name: "Old Ask", email: "old@example.com", source: "email")
     lead.convert_to_client!

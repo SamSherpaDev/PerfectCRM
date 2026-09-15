@@ -118,7 +118,12 @@ class Message < ApplicationRecord
   end
 
   def mark_sending!
-    update!(status: "sending", send_error: nil)
+    claimed = self.class.where(id: id, direction: "outbound", status: "queued")
+      .update_all(status: "sending", send_error: nil, updated_at: Time.current)
+    return false unless claimed == 1
+
+    reload
+    true
   end
 
   def mark_sent!

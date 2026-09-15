@@ -10,7 +10,7 @@ class DraftsController < ApplicationController
       owner.conversations.find_by(id: params[:conversation_id]) : nil
     @draft = Draft.for_owner(owner, conversation: conversation)
     @draft.assign_attributes(draft_attributes)
-    attach_files(@draft)
+    @draft.attach_uploads(params.dig(:message, :files))
 
     if @draft.empty?
       @draft.destroy if @draft.persisted?
@@ -46,12 +46,6 @@ class DraftsController < ApplicationController
       template_id: permitted[:template_id].presence,
       perfectbook_booking_id: permitted[:perfectbook_booking_id].presence
     }
-  end
-
-  def attach_files(draft)
-    files = params.dig(:message, :files)
-    files = files.values if files.is_a?(Hash)
-    Array(files).compact_blank.each { |file| draft.files.attach(file) }
   end
 
   def render_not_found
