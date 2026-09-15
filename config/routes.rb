@@ -33,5 +33,4 @@ Rails.application.routes.draw do
   resource :settings, only: %i[edit update] do
     post :perfectbook_test, on: :collection
   end
-
 end

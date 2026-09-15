@@ -10,7 +10,8 @@ at `perfectcrm.sherpaholidays.com` on the same VPS.
 PerfectBook stays the system of record for bookings, invoices, and money.
 The CRM owns people, conversations, quotes, tasks, and the pipeline, and
 reads PerfectBook through a small versioned, token-authenticated API (see
-"PerfectBook connection" below).
+"PerfectBook connection" below). The message-template library is available now; see
+[Templates](#templates).
 
 Stack: Rails 8.1, Hotwire (Turbo, Stimulus, importmap), Tailwind v4, three
 SQLite databases (primary, cache, queue), Solid Queue running inside Puma,

@@ -80,6 +80,43 @@ class TemplatesTest < ApplicationSystemTestCase
     assert_no_overflow
   end
 
+  test "removed member URLs return not found while the editor still previews" do
+    template = Template.create!(name: "Route check", body: "Hello")
+    sign_in_through_google
+    visit edit_template_path(template)
+    fill_in "Body", with: "Welcome {{first_name}}"
+    within("#template_preview") { assert_text "Welcome Maya" }
+    [template_path(template), "#{template_path(template)}/preview"].each do |path|
+      status = page.evaluate_async_script(<<~JS, path)
+        const done = arguments[arguments.length - 1]
+        fetch(arguments[0]).then(response => done(response.status))
+      JS
+      assert_equal 404, status, path
+    end
+  end
+
+  test "stale picker reports a real missing template response and allows retry" do
+    template = Template.create!(name: "Retry template", purpose: "deposit_nudge", body: "Hello")
+    attributes = template.attributes
+    sign_in_through_google
+    page.current_window.resize_to(390, 844)
+    visit picker_templates_path
+    assert_button "Insert"
+    template.destroy!
+
+    click_button "Insert"
+    assert_selector "[role='alert']", text: "Could not insert template. Please try again."
+    assert_button "Insert", disabled: false
+    capture_evidence("picker-error-mobile")
+
+    restored = Template.create!(attributes)
+    click_button "Insert"
+    assert_selector "button", text: /Inserted/
+    assert_no_text "Could not insert template. Please try again."
+    assert_equal 1, restored.reload.usage_count
+    capture_evidence("picker-retry-mobile")
+  end
+
   %w[http network json].each do |failure|
     test "picker reports #{failure} failures and allows retry" do
       template = Template.create!(name: "Retry template", purpose: "deposit_nudge", body: "Hello")
