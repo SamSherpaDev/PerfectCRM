@@ -24,6 +24,9 @@ runbooks and crews transfer. PerfectCRM's Washi visual contract lives in
 [docs/DESIGN.md](docs/DESIGN.md); the proposed shared package is described in
 [docs/DESIGN-SYNC.md](docs/DESIGN-SYNC.md).
 
+For the first sign-in walkthrough and local demo data, see
+[Getting started](docs/getting-started.md).
+
 ## Local development
 
 ```sh

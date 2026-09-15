@@ -89,36 +89,17 @@ For configuration, sync behavior, and the Settings connection check, see
 
 ## First sign-in setup
 
-Most setup lives in Settings; the PerfectBook credentials require box access.
-Work top to bottom; each Settings card saves itself.
+Follow the [first sign-in walkthrough](getting-started.md) for Settings
+and the daily workflow. Configure storefront and relay credentials using
+[the website intake contract](leads-intake.md). For digest delivery controls,
+see [Today and follow-ups](../README.md#today-and-follow-ups) and
+[Pipeline](../README.md#pipeline).
 
-1. **Appearance.** Pick Paper or Night. It applies the moment you choose
-   it.
-2. **Mailbox.** Settings → Mailbox: the Gmail address receiving the
-   `info@sherpaholidays.com` alias plus its app password (Google Account →
-   Security → 2-step verification → App passwords, named PerfectCRM),
-   then Test connection. Sync runs every 5 minutes over `[Gmail]/All Mail`,
-   read-only. Then Settings → Import history → Preview to backfill recent
-   mail before triaging. See [Mail](../README.md#mail).
-3. **Email replies.** Your name and signature. Every reply sends as
-   `info@sherpaholidays.com` with these attached. See
-   [Replying](../README.md#replying).
-4. **AI drafts.** The provider key, then Edit voice to set the voice guide
-   the drafts are written in. Nothing sends without Send. See
-   [AI assistance](../README.md#ai-assistance).
-5. **Automations.** The public site key for the storefront form; the relay
-   secret and webhook URL for n8n and Panda AI. Rotate either credential
-   from the same card after pasting the new value at the other end. See the
-   [website intake contract](leads-intake.md).
-6. **PerfectBook.** Set `PERFECTBOOK_BASE_URL` and
-   `PERFECTBOOK_API_TOKEN` in `/opt/apps/perfectcrm/.env.app` on the box.
-   From `/opt/apps/perfectcrm`, run
-   `docker compose -f compose.yml up -d --force-recreate app`.
-   Settings shows connection status and Test connection; it does not edit
-   these credentials. Use Test connection after recreating the container. See
-   [PerfectBook connection](../README.md#perfectbook-connection).
-7. **Digests.** The 7am Today mail and the Monday pipeline note are on by
-   default; turn either off from its card.
+PerfectBook setup requires box access. Follow the credential configuration
+in [PerfectBook connection](../README.md#perfectbook-connection), editing
+`/opt/apps/perfectcrm/.env.app` on the box. From `/opt/apps/perfectcrm`, run
+`docker compose -f compose.yml up -d --force-recreate app` to apply the CRM
+environment changes. Then use Settings → PerfectBook → Test connection.
 
 ## Daily operations
 

@@ -80,15 +80,7 @@ When updating this file, preserve this bar for all agents and keep entries conci
   `PerfectBook::Catalog` (never the API from views); sending goes through
   `QuoteMailer` plus `QuotePdf`; the public accept page is
   `PublicQuotesController` (`/q/:token`, logged in `QuoteView`).
-- Demo data: `db/seeds/demo.rb` + `DemoSeed` (`db/seeds/demo_seed.rb`)
-  behind a `DEMO_SEED=1` guard (refuses production); load with
-  `DEMO_SEED=1 bin/rails db:seed` (idempotent, never clobbers earned
-  stages), wipe demo-only rows with
-  `bin/rails runner 'require "./db/seeds/demo_seed"; DemoSeed.wipe!'`.
-  `DemoSeed` is not autoloaded, so the runner needs the explicit require.
-  Ownership is recorded in `DemoRecord`; collisions with unmarked records
-  fail the load. Wipe removes only manifest records and refuses if unmarked
-  records are attached. Converted leads stay read-only on reseed.
-  PerfectBook syncs release mirror demo ownership atomically on real upserts.
+- Demo data: see `docs/getting-started.md`, "Demo data", for loading,
+  cleanup, and ownership rules; implementation is `db/seeds/demo_seed.rb`.
 - A partial's first-line `<%# locals: (...) %>` is parsed as strict locals:
   keep it pure Ruby on one line and put prose in a separate comment.

@@ -1,11 +1,8 @@
 # Demo dataset for the first sign-in: a believable small Sherpa Holidays
 # world so Today, Inbox, Pipeline, and Quotes look alive.
 #
-# Load:   DEMO_SEED=1 bin/rails db:seed
-# Reload: DEMO_SEED=1 bin/rails db:seed  (idempotent, safe to rerun)
-#
-# Guard: this file does nothing unless DEMO_SEED=1 is set, and refuses to
-# run in production. It is never loaded by default.
+# Usage and cleanup: docs/getting-started.md, "Demo data".
+# Keep this opt-in guard: db:prepare also loads seeds on first deployment.
 return unless ENV["DEMO_SEED"] == "1"
 raise "DEMO_SEED must never run in production" if Rails.env.production?
 

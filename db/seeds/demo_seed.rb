@@ -341,7 +341,6 @@ module DemoSeed
       { dir: "in", from: "james@#{DEMO_DOMAIN}", days_ago: 0, hours_ago: 5, unread: true,
         body: "Hi, I found you through a friend. Solo trekker, hoping for Everest sometime next year. Where do I start?" }
     ])
-
   end
 
   def thread(owner, subject, messages)
@@ -449,5 +448,4 @@ module DemoSeed
       elena.notes.create!(body: "Panda AI scored strong: flexible November dates, party of two, open departure.")
     end
   end
-
 end

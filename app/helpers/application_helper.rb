@@ -226,7 +226,6 @@ module ApplicationHelper
     "#{date_short(from)} – #{date_short(to)}"
   end
 
-  # Times read 24-hour with the 12-hour equivalent in parentheses: "14:30 (2:30 PM)".
   # Pacific 24-hour clock, as in PerfectBook (docs/DESIGN.md: dates and
   # times render Pacific, 24-hour). The name is historical.
   def time_24_12(value)
