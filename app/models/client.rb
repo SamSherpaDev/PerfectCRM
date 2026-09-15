@@ -1,10 +1,14 @@
 class Client < ApplicationRecord
   KINDS = %w[individual company].freeze
   SOURCES = %w[website email instagram whatsapp referral repeat other google_ads meta_ads website_form manual].freeze
+  PIPELINE_STAGES = %w[won post_trip].freeze
 
   encrypts :phone
 
   belongs_to :referred_by_organization, class_name: "Organization", optional: true
+  has_many :converted_leads, class_name: "Lead", foreign_key: :converted_client_id
+  has_many :perfectbook_bookings, class_name: "PerfectBook::Booking",
+    primary_key: :perfectbook_contact_id, foreign_key: :perfectbook_contact_id
   has_many :people, -> { order(:created_at, :id) }, dependent: :destroy, inverse_of: :client
   has_many :notes, as: :notable, dependent: :destroy
   has_many :tasks, as: :subject, dependent: :destroy
@@ -27,6 +31,7 @@ class Client < ApplicationRecord
     format: { with: URI::MailTo::EMAIL_REGEXP, allow_blank: true }
   validates :perfectbook_contact_id, uniqueness: { allow_nil: true },
     numericality: { only_integer: true, greater_than: 0, allow_nil: true }
+  validates :pipeline_stage, inclusion: { in: PIPELINE_STAGES }
 
   after_create :stamp_activity
   after_save :sync_fts_later
@@ -34,6 +39,7 @@ class Client < ApplicationRecord
 
   scope :active, -> { where(archived_at: nil) }
   scope :archived, -> { where.not(archived_at: nil) }
+  scope :in_stage, ->(stage) { active.where(pipeline_stage: stage) }
   scope :ordered, -> { order(Arel.sql("COALESCE(last_activity_at, updated_at) DESC")) }
   scope :by_name, -> { order(:name) }
 
@@ -88,6 +94,16 @@ class Client < ApplicationRecord
 
   def unarchive!
     update!(archived_at: nil)
+  end
+
+  def pipeline_values_by_currency
+    if perfectbook_bookings.any?
+      perfectbook_bookings.group_by(&:currency).transform_values do |bookings|
+        bookings.sum { |booking| booking.total_minor.to_i }
+      end
+    else
+      { "USD" => converted_leads.sum { |lead| lead.expected_value_minor.to_i } }
+    end
   end
 
   def display_email

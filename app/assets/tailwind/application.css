@@ -773,6 +773,76 @@
     @apply text-[16px] font-semibold text-ink;
   }
 
+  /* Pipeline board: seven columns under the drawn trail, stage list on the phone. */
+  .trail-groups {
+    @apply grid gap-3;
+    grid-template-columns: repeat(7, minmax(128px, 1fr));
+  }
+  .trail-group {
+    @apply px-1 pb-1.5 text-[12px] font-medium text-ink-3;
+    background: var(--pb-sk-line) left bottom / 720px 6px repeat-x;
+  }
+  .board {
+    @apply grid gap-2.5 overflow-x-auto pb-1;
+    grid-template-columns: repeat(7, minmax(128px, 1fr));
+  }
+  .col-head {
+    @apply flex items-baseline justify-between gap-2 px-1 pt-1;
+  }
+  .col-name {
+    @apply text-[13.5px] font-semibold text-ink;
+  }
+  .col-count {
+    @apply text-[12px] tabular-nums text-ink-3;
+  }
+  .col-sum {
+    @apply px-1 pb-2 text-[12px] tabular-nums text-ink-3;
+    background: var(--pb-sk-line) left bottom / 720px 6px repeat-x;
+  }
+  .col-cards {
+    @apply flex min-h-24 flex-col gap-2 pt-2;
+  }
+  .kcard {
+    @apply relative flex cursor-grab flex-col gap-1 rounded-card border border-edge bg-paper-2 p-2.5 pl-3 shadow-raise;
+  }
+  .kcard:active {
+    @apply cursor-grabbing;
+  }
+  .kcard-unread::after {
+    content: "";
+    @apply absolute bottom-3 left-0 top-3 w-[3px] rounded-full bg-seal;
+  }
+  .kcard-name {
+    @apply text-[13px] font-medium leading-snug text-ink;
+  }
+  .kcard-trip {
+    @apply truncate text-[12px] text-ink-3;
+  }
+  .kcard-meta {
+    @apply flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[12px] tabular-nums text-ink-3;
+  }
+  .kcard-stale {
+    @apply border-warn-mark bg-warn-tint/40;
+  }
+  .kcard-ghost {
+    @apply border border-dashed border-ink-4 bg-transparent shadow-none opacity-70;
+  }
+  .kcard-dragging {
+    @apply opacity-60;
+  }
+  .col-drop-target .col-cards {
+    @apply rounded-card outline-2 outline-dashed outline-seal/60 outline-offset-2;
+  }
+  .stage-row {
+    @apply flex w-full items-center gap-3 rounded-card border border-edge bg-paper-2 px-4 py-3 text-left shadow-raise;
+  }
+  .stage-row[aria-expanded="true"] {
+    @apply bg-paper-3 shadow-press;
+  }
+  .stage-count {
+    @apply ml-auto font-display text-[22px] leading-none tabular-nums text-ink;
+  }
+
   /* Signed-out shell */
   .signed-out {
     @apply relative flex min-h-screen flex-col;
@@ -1301,7 +1371,6 @@
     color: var(--pb-ink-3);
     padding: 0 4px 4px;
     font-variant-numeric: tabular-nums;
-    white-space: nowrap;
   }
   .kcard {
     position: relative;
@@ -2020,4 +2089,10 @@
   .ev-new {
     animation: none;
   }
+}
+
+.pipeline-move-menu { position: static; }
+
+@media (min-width: 768px) {
+  .pipeline-move-menu { position: absolute; }
 }

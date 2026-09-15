@@ -29,7 +29,7 @@ class Note < ApplicationRecord
       record_timeline_event
     elsif notable.is_a?(Lead)
       Lead.increment_counter(:notes_count, notable.id)
-      notable.touch_activity!
+      notable.record_touch!
       record_timeline_event
     elsif notable.respond_to?(:touch_activity!)
       notable.touch_activity!

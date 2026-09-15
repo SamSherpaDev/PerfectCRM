@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_14_211508) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_14_211513) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -64,6 +64,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_211508) do
     t.integer "notes_count", default: 0, null: false
     t.integer "perfectbook_contact_id"
     t.string "phone"
+    t.string "pipeline_stage", default: "won", null: false
     t.integer "referred_by_organization_id"
     t.string "source"
     t.string "state"
@@ -72,6 +73,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_211508) do
     t.index ["email"], name: "index_clients_on_email", unique: true, where: "email IS NOT NULL AND email != ''"
     t.index ["last_activity_at"], name: "index_clients_on_last_activity_at"
     t.index ["perfectbook_contact_id"], name: "index_clients_on_perfectbook_contact_id", unique: true, where: "perfectbook_contact_id IS NOT NULL"
+    t.index ["pipeline_stage"], name: "index_clients_on_pipeline_stage"
     t.index ["referred_by_organization_id"], name: "index_clients_on_referred_by_organization_id"
   end
 
@@ -111,25 +113,32 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_211508) do
     t.string "country"
     t.datetime "created_at", null: false
     t.string "email"
+    t.integer "expected_value_minor"
     t.string "external_ref"
     t.string "fit_band"
     t.text "fit_reason"
     t.integer "fit_score"
     t.string "kind", default: "individual", null: false
     t.datetime "last_activity_at"
+    t.datetime "last_touch_at"
+    t.text "lost_note"
+    t.string "lost_reason"
     t.string "name", null: false
     t.integer "notes_count", default: 0, null: false
     t.integer "perfectbook_contact_id"
     t.string "phone"
     t.integer "referred_by_organization_id"
     t.string "source", default: "manual", null: false
+    t.datetime "stage_changed_at"
     t.string "state"
     t.string "status", default: "new", null: false
+    t.string "trip_interest"
     t.datetime "updated_at", null: false
     t.index ["converted_client_id"], name: "index_leads_on_converted_client_id"
     t.index ["email"], name: "index_leads_on_email", unique: true, where: "email IS NOT NULL AND email != '' AND converted_client_id IS NULL AND status != 'lost'"
     t.index ["external_ref"], name: "index_leads_on_external_ref", unique: true, where: "external_ref IS NOT NULL AND external_ref != ''"
     t.index ["last_activity_at"], name: "index_leads_on_last_activity_at"
+    t.index ["last_touch_at"], name: "index_leads_on_last_touch_at"
     t.index ["perfectbook_contact_id"], name: "index_leads_on_perfectbook_contact_id", unique: true, where: "perfectbook_contact_id IS NOT NULL AND converted_client_id IS NULL AND status != 'lost'"
     t.index ["referred_by_organization_id"], name: "index_leads_on_referred_by_organization_id"
     t.index ["status"], name: "index_leads_on_status"
@@ -353,6 +362,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_211508) do
     t.datetime "mailbox_last_error_at"
     t.datetime "mailbox_last_sync_at"
     t.string "mailbox_login"
+    t.boolean "pipeline_digest", default: true, null: false
     t.integer "singleton_key", default: 1, null: false
     t.datetime "updated_at", null: false
     t.index ["singleton_key"], name: "index_settings_on_singleton_key", unique: true

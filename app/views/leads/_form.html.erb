@@ -44,6 +44,15 @@
         <%= form.select :status, Lead::STATUSES.map { |status| [ status.humanize, status ] }, {}, class: "select" %>
       </div>
       <div>
+        <%= form.label :lost_reason, "Lost reason", class: "label" %>
+        <%= form.select :lost_reason, [ [ "Still talking", "" ] ] + Lead::LOST_REASONS.map { |reason| [ reason.humanize, reason ] }, {}, class: "select" %>
+        <p class="hint">Required when the stage is Lost.</p>
+      </div>
+      <div>
+        <%= form.label :lost_note, "Lost note", class: "label" %>
+        <%= form.text_field :lost_note, class: "input", placeholder: "What happened, in one line…" %>
+      </div>
+      <div>
         <%= form.label :source, class: "label" %>
         <%= form.select :source, Lead::SOURCES.map { |source| [ source.humanize, source ] }, {}, class: "select" %>
       </div>
@@ -63,6 +72,15 @@
       <div>
         <%= form.label :referred_by_organization_id, "Referred by", class: "label" %>
         <%= form.collection_select :referred_by_organization_id, Organization.order(:name), :id, :name, { include_blank: "No referrer" }, class: "select" %>
+      </div>
+      <div>
+        <%= form.label :trip_interest, "Trip interest", class: "label" %>
+        <%= form.text_field :trip_interest, class: "input", placeholder: "Everest Base Camp" %>
+      </div>
+      <div>
+        <%= form.label :expected_value_dollars, "Expected value (USD)", class: "label" %>
+        <%= form.number_field :expected_value_dollars, min: 0, step: "0.01", class: "input", placeholder: "2500" %>
+        <p class="hint">Your estimate. Feeds the pipeline totals.</p>
       </div>
       <div>
         <%= form.label :fit_score, "Fit score", class: "label" %>

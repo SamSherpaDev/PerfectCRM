@@ -113,6 +113,20 @@
     <% end %>
   </section>
 
+  <section class="card card-pad mt-6" aria-labelledby="pipeline-digest-heading">
+    <h2 class="section-title" id="pipeline-digest-heading">Monday pipeline note</h2>
+    <%= card_caption "One line every Monday at 7am: open leads, stale cards, and pipeline value." %>
+    <%= form_with model: @settings, url: settings_path, method: :patch, class: "mt-4" do |form| %>
+      <label class="inline-flex items-center gap-2 text-sm">
+        <%= form.check_box :pipeline_digest, class: "checkbox" %>
+        Send the Monday note to info@sherpaholidays.com
+      </label>
+      <div class="mt-3">
+        <%= form.submit "Save", class: "btn-secondary btn btn-sm" %>
+      </div>
+    <% end %>
+  </section>
+
   <section class="card card-pad" aria-labelledby="export-heading">
     <h2 class="section-title" id="export-heading">Export everything</h2>
     <%= card_caption "A zip of leads, clients, people, organizations, notes, tags, and timeline events as CSV. Opens cleanly in Excel." %>

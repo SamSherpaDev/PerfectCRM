@@ -2,6 +2,12 @@ class Lead < ApplicationRecord
   KINDS = %w[individual company].freeze
   SOURCES = %w[google_ads meta_ads website_form email referral manual].freeze
   STATUSES = %w[new chatting quoted nudged lost].freeze
+  # Stages an automation (n8n, Panda AI) may set. Quoted, nudged, and won
+  # stay manual; conversion is manual too. Enforced in Leads::Transition.
+  AUTOMATION_STATUSES = %w[new chatting lost].freeze
+  LOST_REASONS = %w[no_reply price dates chose_another not_a_fit other].freeze
+  # A card glows stale after this long with no touch.
+  STALE_AFTER = 7.days
   FIT_BANDS = %w[strong possible weak].freeze
 
   encrypts :phone
@@ -25,6 +31,10 @@ class Lead < ApplicationRecord
 
   before_validation :normalize_email
   before_validation :normalize_external_ref
+  normalizes :lost_reason, with: ->(value) { value.to_s.strip.presence }
+
+  before_validation :normalize_trip_interest
+  before_create :stamp_stage
   validate :no_changes_when_converted, on: :update
   validate :no_unconvert, on: :update
 
@@ -40,6 +50,10 @@ class Lead < ApplicationRecord
   validates :perfectbook_contact_id, numericality: { only_integer: true, greater_than: 0, allow_nil: true }
   validates :fit_score, numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 100, allow_nil: true }
   validates :fit_band, inclusion: { in: FIT_BANDS }, allow_blank: true
+  validates :lost_reason, inclusion: { in: LOST_REASONS }, allow_nil: true
+  validate :lost_reason_required_when_lost
+  validates :expected_value_minor,
+    numericality: { only_integer: true, greater_than_or_equal_to: 0, allow_nil: true }
 
   after_create :stamp_activity
   after_save :sync_fts_later
@@ -49,6 +63,9 @@ class Lead < ApplicationRecord
   scope :lost, -> { where(status: "lost").where(converted_client_id: nil) }
   scope :converted, -> { where.not(converted_client_id: nil) }
   scope :by_status, ->(status) { where(status: status).where(converted_client_id: nil) }
+  scope :stale, -> {
+    open.where("COALESCE(last_touch_at, last_activity_at, updated_at, created_at) < ?", STALE_AFTER.ago)
+  }
   scope :ordered, -> { order(Arel.sql("COALESCE(last_activity_at, updated_at) DESC")) }
   scope :by_name, -> { order(:name) }
 
@@ -130,6 +147,7 @@ class Lead < ApplicationRecord
         referred_by_organization: referred_by_organization,
         perfectbook_contact_id: perfectbook_contact_id
       )
+      client.update!(pipeline_stage: "won")
       people.find_each do |person|
         next if person.email.present? && client.people.exists?(email: person.email)
 
@@ -181,12 +199,48 @@ class Lead < ApplicationRecord
     update_column(:last_activity_at, Time.current) if persisted?
   end
 
+  # The last real contact with the traveler: mail in or out, or a note.
+  def record_touch!(at: Time.current)
+    return unless persisted?
+
+    self.class.where(id: id).update_all([
+      "last_touch_at = MAX(COALESCE(last_touch_at, ?), ?), last_activity_at = MAX(COALESCE(last_activity_at, ?), ?)",
+      at, at, at, at
+    ])
+  end
+
+  def last_touch
+    last_touch_at || last_activity_at || updated_at
+  end
+
+  def stale?
+    return false if converted? || status == "lost"
+
+    (last_touch || Time.current) < STALE_AFTER.ago
+  end
+
+  # Whole days spent in the current stage, for the board card.
+  def stage_age_days
+    base = stage_changed_at || updated_at || Time.current
+    ((Time.current - base) / 1.day).floor.clamp(0, 9999)
+  end
+
   def last_activity
     last_activity_at || updated_at
   end
 
   def fit_label
     [ fit_band.presence&.humanize || "Scoring", fit_score ].compact.join(" · ")
+  end
+
+  # Dollars in the form, cents in the column.
+  def expected_value_dollars
+    expected_value_minor.nil? ? nil : expected_value_minor / 100.0
+  end
+
+  def expected_value_dollars=(value)
+    text = value.to_s.strip.delete(",$")
+    self.expected_value_minor = text.blank? ? nil : (text.to_d * 100).round
   end
 
   def sync_fts!
@@ -216,6 +270,12 @@ class Lead < ApplicationRecord
 
   private
 
+  def lost_reason_required_when_lost
+    return unless status == "lost" && converted_client_id.nil?
+
+    errors.add(:lost_reason, "is required when a lead is lost") if lost_reason.blank?
+  end
+
   def reject_converted_write
     return unless persisted? && self.class.lock.find(id).converted?
 
@@ -231,6 +291,16 @@ class Lead < ApplicationRecord
   def normalize_external_ref
     normalized = external_ref.to_s.strip
     self.external_ref = normalized.presence
+  end
+
+  def normalize_trip_interest
+    normalized = trip_interest.to_s.strip
+    self.trip_interest = normalized.presence
+  end
+
+  def stamp_stage
+    self.stage_changed_at ||= Time.current
+    self.last_touch_at ||= Time.current
   end
 
   # Validate the loaded state for form errors; reject_converted_write checks

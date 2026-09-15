@@ -31,8 +31,6 @@ When updating this file, preserve this bar for all agents and keep entries conci
   by hand or automation (DESIGN.md 4.11).
 - Appearance behavior and authentication policy: see README.md, "Navigation"
   and "Google sign-in". Preserve instant appearance changes.
-- System-test Chrome here needs nix NSS libs on `LD_LIBRARY_PATH`; check
-  driver startup output if `chromedriver` cannot start.
 - Plain `bin/rails server` serves the prebuilt `app/assets/builds/tailwind.css`;
   rebuild with `bin/rails tailwindcss:build` after CSS/view-class changes
   (`bin/dev` watches, plain server does not).
@@ -46,6 +44,11 @@ When updating this file, preserve this bar for all agents and keep entries conci
 - `TaggedRecord` validates pending tags before saving and assigns them in
   `after_save`; assigning through-tags before the parent saves trips
   Tagging uniqueness.
+- Pipeline usage and integration points: see README.md, "Pipeline".
+- System-test Chrome here needs nix NSS *and* NSPR libs on `LD_LIBRARY_PATH`
+  (e.g. `nixpkgs#nss` + `nixpkgs#nspr` `.../lib`), plus an explicit
+  `resize_to(1400, 900)` in desktop tests; check driver startup output if
+  `chromedriver` cannot start.
 - PerfectBook link: `PerfectBook::Client` (`lib/perfectbook/`) + mirror tables
   (`app/models/perfectbook/`) + `config/recurring.yml` jobs; contract in
   README.md, "PerfectBook connection". Mirrors only, never money truth.

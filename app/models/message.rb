@@ -73,7 +73,7 @@ class Message < ApplicationRecord
 
   def bump_conversation
     conversation.refresh_counters!
-    touch_linkable
+    conversation.touch_linkable!
   rescue ActiveRecord::RecordNotFound
     nil
   end
@@ -81,13 +81,6 @@ class Message < ApplicationRecord
   def rebalance_conversation
     conversation.refresh_counters!
   rescue ActiveRecord::RecordNotFound
-    nil
-  end
-
-  def touch_linkable
-    target = conversation.linkable
-    target.touch_activity! if target&.respond_to?(:touch_activity!)
-  rescue NoMethodError, ActiveRecord::RecordNotFound
     nil
   end
 end

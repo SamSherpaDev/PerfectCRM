@@ -12,8 +12,9 @@ The CRM owns people, conversations, quotes, tasks, and the pipeline, and
 reads PerfectBook through a small versioned, token-authenticated API (see
 "PerfectBook connection" below). The client foundation currently supports leads,
 clients, organizations, people, notes, search, and export. The message-template
-library is also available; see [Templates](#templates). Sensitive traveler
-documents and date-of-birth data belong in PerfectBook; do not put them in CRM notes.
+library and [Pipeline](#pipeline) are also available; see [Templates](#templates).
+Sensitive traveler documents and date-of-birth data belong in PerfectBook;
+do not put them in CRM notes.
 
 Stack: Rails 8.1, Hotwire (Turbo, Stimulus, importmap), Tailwind v4, three
 SQLite databases (primary, cache, queue), Solid Queue running inside Puma,
@@ -49,10 +50,10 @@ configuration lives in `config/environments/development.rb`.
 On desktop, hover or focus the icon rail to reveal navigation labels and Sign
 out. On mobile, use Open menu to show the drawer. The rail holds **Today**
 (root), **Inbox**, **Leads**, **Clients**, **Pipeline**, **Quotes**, **Templates**, and
-**Settings**. Pipeline and Quotes render branded empty states until their
-features land. See [Today and follow-ups](#today-and-follow-ups), [Mail](#mail),
-and [Templates](#templates) for the live features. Settings provides appearance,
-morning digest, connections, history import, and export controls.
+**Settings**. Quotes renders a branded empty state until its
+feature lands. See [Today and follow-ups](#today-and-follow-ups), [Mail](#mail),
+[Templates](#templates), and [Pipeline](#pipeline) for the live features. Settings provides appearance,
+morning and pipeline digests, connections, history import, and export controls.
 
 On phones (under 750px) a bottom tab bar holds **Today**, **Inbox**,
 **Leads**, **Clients**, and **More** (Pipeline, Quotes, Templates,
@@ -207,9 +208,10 @@ nudges fire once per booking and invoice number. A matching local client,
 organization, or lead is required; converted leads resolve to their client.
 Everything is a task the captain acts on, never sent mail.
 
-`Tasks::OnStageChange.call(subject:, from:, to:)` is the integration hook
-for the pipeline task. Its `STAGE_TASK_TEMPLATES` mapping is currently empty,
-so stage changes propose no tasks until that integration supplies the mapping.
+`Leads::Transition` calls `Tasks::OnStageChange` after lead stage changes
+and conversion. Its task mapping is owned by
+[`app/services/tasks/on_stage_change.rb`](app/services/tasks/on_stage_change.rb);
+the empty mapping currently proposes no tasks.
 
 The production 7am Pacific digest (`TodayDigestJob` + `CaptainDigestMailer`,
 same schedule file) emails today's follow-ups, overdue items, replies
@@ -258,7 +260,8 @@ Conversion is one-way and manual. Convert to client matches an existing
 client by PerfectBook contact ID first, then normalized primary email.
 The confirmation names a matched client before attaching the lead's
 people (deduplicated by email), tags, notes, and activity to them. Existing
-client facts stay intact; their timeline records Returned as a lead from
+client contact facts stay intact; conversion sets their pipeline stage to Won.
+Their timeline records Returned as a lead from
 the source, with the campaign in the event metadata. Multiple historical
 leads can link to the same client; conversion never merges two clients.
 Without a match, conversion creates a client with the lead's facts,
@@ -344,6 +347,57 @@ suggest organizations only with two or more distinct addresses on a non-public
 domain or a PerfectBook partner match. Public email providers (Gmail,
 Googlemail, Yahoo, Hotmail, Outlook, Live, iCloud, Me, AOL, Proton, Protonmail)
 are exempt. Import respects the same exact parsed mailbox-address rule.
+
+## Pipeline
+
+The board at `/pipeline` draws leads and clients on one trail: New,
+Chatting, Quoted, Nudged (leads), Won, Post-trip (clients), and Lost.
+Each column shows its count and value. Lead values are expected amounts
+entered in USD. Client values sum their mirrored PerfectBook bookings,
+keeping currencies separate; until a client has a mirrored booking, its
+value is the sum of its converted leads' expected values. These are
+read-only booking totals, not a CRM ledger. Lead cards show source, trip
+interest, days in stage, expected value, and the fit bar when scored.
+
+Drag cards between stages, or use the Move menu with keyboard or touch.
+Moving a lead to Won opens its record for the conversion review described
+in [Leads](#leads). Moving to Lost opens a required-reason sheet with an
+optional note; lost leads can move back to an open stage. Clients move
+manually between Won and Post-trip. Filters narrow the board by source,
+trip, and referrer; client trip matches use converted lead interests or
+mirrored booking trip names. On the phone, a stage list shows counts and
+money; tapping a stage opens its cards.
+
+Open leads quiet for more than 7 days glow stale. Adding a note or importing
+inbound or outbound mail linked to the lead counts as a touch. Linking an
+existing conversation uses its latest message time; older imported mail
+never overwrites a newer touch. Changing stage or editing details does not
+count as contact. Nudge opens a
+Suggested message panel rendered from the first active itinerary follow-up
+template, with Copy message and a prefilled Open email link when the lead
+has an email address. If no template is available, the panel links to
+Templates. Copying or opening email does not clear staleness; record the
+contact with a note if it has not synced from mail. TODO perfectcrm-mail-out-65: connect suggested
+messages to the reply box and sending.
+
+Lead transitions use `Leads::Transition`; its automation policy is documented
+in that service. For the tasks hook, see [Today and follow-ups](#today-and-follow-ups). Stage moves
+record `stage_change` events; conversion records `conversion` events.
+`Lead#record_touch!` preserves the latest contact time; mail ingestion and
+conversation linking call it through `Conversation#touch_linkable!`.
+
+The Numbers card is independent of board filters. It shows value by stage
+using the same value sources as the board, median first reply (currently
+unavailable; reporting integration is pending), repeat-and-referral rate among this year's
+conversions, and asks by source this month. “Out in total” sums only open
+leads' expected values. The repeat-and-referral rate counts each qualifying
+conversion once, including returns to existing clients and referral leads.
+
+The one-line digest reports open and stale leads, wins this month, and open
+lead value. Its production schedule is in [`config/recurring.yml`](config/recurring.yml).
+Settings → Monday pipeline note controls delivery to info@sherpaholidays.com;
+it is enabled by default. It is separate from the morning digest described
+in [Today and follow-ups](#today-and-follow-ups); combining them is pending.
 
 ## Production shape
 

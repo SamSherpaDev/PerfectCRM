@@ -13,6 +13,7 @@ module ApplicationHelper
     "soft-deleted" => :danger,
     "connected" => :success, "pulling" => :info, "error" => :danger, "disconnected" => :neutral,
     "new" => :info, "chatting" => :neutral, "nudged" => :warning, "lost" => :neutral,
+    "won" => :success, "post_trip" => :info, "stage_change" => :info,
     "converted" => :success, "conversion" => :success, "automation" => :info
   }.freeze
 
@@ -21,6 +22,12 @@ module ApplicationHelper
     minor = minor.to_i
     sign = minor.negative? ? "-" : ""
     "#{sign}$#{number_with_delimiter(format('%.2f', minor.abs / 100.0))}"
+  end
+
+  def pipeline_money(totals)
+    return money_in(0, "USD") if totals.empty?
+
+    totals.sort_by { |currency, _| currency.to_s }.map { |currency, minor| money_in(minor, currency) }.join(" · ")
   end
 
   # Any supported currency from integer minor units. USD keeps the dollar sign;
@@ -111,6 +118,10 @@ module ApplicationHelper
 
   # Model constants live behind helpers because bare `Template` in a view
   # resolves to ActionView::Template, not the model.
+  def pipeline_nudge_template
+    @pipeline_nudge_template ||= ::Template.active.itinerary_follow_up.ordered.first
+  end
+
   def template_purpose_options
     ::Template.purposes.keys.map { |key| [ ::Template::PURPOSE_LABELS.fetch(key), key ] }
   end

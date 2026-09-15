@@ -33,6 +33,20 @@ class LeadsController < ApplicationController
 
   def show
     @matching_client = @lead.matching_client unless @lead.converted?
+    if params[:nudge] == "1"
+      template = Template.active.find_by(id: params[:template])
+      if template
+        context = {
+          first_name: @lead.name.split.first, full_name: @lead.name,
+          trip: @lead.trip_interest, advisor_name: @lead.referred_by_organization&.name,
+          my_name: current_user.name, signature: current_user.name
+        }
+        @suggested_message = {
+          subject: TemplateRenderer.render(template.subject, context),
+          body: TemplateRenderer.render(template.body, context)
+        }
+      end
+    end
     @note = Note.new
     load_record_history(@lead)
     @conversations = Conversation.where(linkable: @lead).ordered
@@ -58,19 +72,31 @@ class LeadsController < ApplicationController
   end
 
   def update
-    if @lead.update(lead_params)
-      redirect_to @lead, notice: "Lead saved."
-    else
-      @lead.people.build unless @lead.people.any?(&:new_record?)
-      render :edit, status: :unprocessable_entity
+    attrs = lead_params.to_h
+    target_status = attrs.delete("status")
+    if target_status.present? && !Lead::STATUSES.include?(target_status)
+      @lead.errors.add(:status, "is not a lead stage")
+      raise ActiveRecord::RecordInvalid, @lead
     end
+    if target_status.present? && target_status != @lead.status
+      Leads::Transition.call(@lead, to: target_status, actor: :captain,
+        lost_reason: attrs.delete("lost_reason"), lost_note: attrs.delete("lost_note"),
+        attributes: attrs)
+    else
+      @lead.update!(attrs)
+    end
+    redirect_to @lead, notice: "Lead saved."
+  rescue ActiveRecord::RecordInvalid
+    @lead.people.build unless @lead.people.any?(&:new_record?)
+    render :edit, status: :unprocessable_entity
   end
 
   def convert
     if @lead.converted?
       return redirect_to @lead, alert: "Already converted."
     end
-    client = @lead.convert_to_client!(expected_client_id: params[:expected_client_id])
+    client = Leads::Transition.call(@lead, to: "won",
+      expected_client_id: params[:expected_client_id].presence || "new").converted_client
     redirect_to client, notice: "Lead converted. Their timeline moved with them."
   rescue ActiveRecord::RecordInvalid => e
     redirect_to @lead, alert: e.record.errors.full_messages.to_sentence.presence || "Could not convert."
@@ -106,6 +132,7 @@ class LeadsController < ApplicationController
       :name, :email, :phone, :country, :state, :kind, :source, :campaign_name,
       :external_ref, :fit_score, :fit_band, :fit_reason, :status,
       :referred_by_organization_id, :perfectbook_contact_id, :tag_list,
+      :trip_interest, :expected_value_dollars, :lost_reason, :lost_note,
       people_attributes: %i[id name email phone role _destroy]
     )
   end
