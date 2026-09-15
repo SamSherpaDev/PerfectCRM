@@ -12,7 +12,7 @@ class PublicQuotesController < ApplicationController
 
   def show
     log_view
-    @quote.mark_viewed! if !@quote.expired? && @quote.viewed_at.nil? && %w[sent viewed].include?(@quote.status)
+    @quote.mark_viewed!
   end
 
   def accept
@@ -31,7 +31,7 @@ class PublicQuotesController < ApplicationController
   private
 
   def find_quote
-    @quote = Quote.includes(:lines, :client, :lead).find_by!(accept_token: params[:token])
+    @quote = Quote.where.not(sent_at: nil).where.not(status: "draft").includes(:lines, :client, :lead).find_by!(accept_token: params[:token])
   end
 
   def rate_limit_views
@@ -44,7 +44,6 @@ class PublicQuotesController < ApplicationController
   end
 
   def log_view
-    @quote.views.create!(ip_digest: QuoteView.digest(request.remote_ip),
-      user_agent: request.user_agent.to_s.truncate(255))
+    @quote.views.create!(ip_digest: QuoteView.digest(request.remote_ip))
   end
 end

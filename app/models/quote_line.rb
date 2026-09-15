@@ -18,11 +18,12 @@ class QuoteLine < ApplicationRecord
 
   # Dollar display for the builder; the model keeps integer cents.
   def unit_dollars
-    format("%.2f", unit_minor.to_i / 100.0)
+    unit_minor.nil? ? @unit_dollars_input : format("%.2f", unit_minor / 100.0)
   end
 
   def unit_dollars=(value)
-    self.unit_minor = (value.to_s.to_d * 100).round
+    @unit_dollars_input = value.to_s.strip
+    self.unit_minor = QuoteMoney.parse(@unit_dollars_input)
   end
 
   private

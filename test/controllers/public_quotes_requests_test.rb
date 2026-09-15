@@ -47,18 +47,30 @@ class PublicQuotesRequestsTest < ActionDispatch::IntegrationTest
     assert_equal events, @client.activity_events.where(kind: "quote").count
   end
 
-  test "superseded links point to the revision and cannot accept either draft" do
+  test "superseded links stay private until the revision is sent" do
     revision = @quote.new_revision!
     get public_quote_path(@quote.accept_token)
     assert_response :success
-    assert_select "a[href=?]", public_quote_path(revision.accept_token), text: "View the newer quote"
+    assert_includes response.body, "A newer quote is on its way"
+    assert_select "a[href=?]", public_quote_path(revision.accept_token), count: 0
     assert_select "form[action=?]", accept_public_quote_path(@quote.accept_token), count: 0
     assert_no_enqueued_emails do
       post accept_public_quote_path(@quote.accept_token)
       post accept_public_quote_path(revision.accept_token)
+      assert_response :not_found
     end
     assert_equal "superseded", @quote.reload.status
     assert_equal "draft", revision.reload.status
+    revision.update!(notes: "Private draft notes")
+    get public_quote_path(revision.accept_token)
+    assert_response :not_found
+    assert_equal 0, revision.views.count
+    revision.deliver!
+    get public_quote_path(@quote.accept_token)
+    assert_select "a[href=?]", public_quote_path(revision.accept_token), text: "View the newer quote"
+    get public_quote_path(revision.accept_token)
+    assert_response :success
+    assert_includes response.body, "Private draft notes"
   end
 
   test "decline endpoint is unavailable" do
@@ -85,4 +97,14 @@ class PublicQuotesRequestsTest < ActionDispatch::IntegrationTest
     get public_quote_path(@quote.accept_token)
     assert_response :too_many_requests
   end
+  test "every eligible visit increments the count without changing accepted state" do
+    3.times { get public_quote_path(@quote.accept_token) }
+    assert_equal 3, @quote.reload.view_count
+    assert_equal 3, @quote.views.count
+    @quote.accept!
+    get public_quote_path(@quote.accept_token)
+    assert_equal "accepted", @quote.reload.status
+    assert_equal 3, @quote.view_count
+  end
+
 end

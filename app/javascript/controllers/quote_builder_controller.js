@@ -37,7 +37,8 @@ export default class extends Controller {
     let guests = 0
     this.rowsTarget.querySelectorAll("[data-line-row]:not(.hidden)").forEach((row) => {
       const qty = Number(row.querySelector("input[data-qty]")?.value || 0)
-      const each = Number(row.querySelector("input[data-each]")?.value || 0)
+      const price = row.querySelector("input[data-each]")?.value.trim() || ""
+      const each = price === "" || /^[0-9]+(?:\.[0-9]{1,2})?$/.test(price) ? Number(price) : NaN
       const line = Math.round(qty * each * 100) / 100
       total += line
       const cell = row.querySelector("[data-line-total]")
@@ -54,6 +55,7 @@ export default class extends Controller {
   }
 
   money(value) {
+    if (!Number.isFinite(value)) return "Check price"
     return "$" + value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   }
 }

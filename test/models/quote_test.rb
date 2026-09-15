@@ -151,4 +151,36 @@ class QuoteTest < ActiveSupport::TestCase
     assert_not stale.accept!
     assert_equal revision, stale.new_revision!
   end
+  test "a stale revision request cannot replace accepted intake" do
+    quote = Quote.create!(client: @client, status: "sent", sent_at: Time.current)
+    stale = Quote.find(quote.id)
+    quote.accept!
+    payload = quote.intake_payload
+    assert_no_difference "Quote.count" do
+      assert_nil stale.new_revision!
+    end
+    assert_equal "accepted", quote.reload.status
+    assert_equal payload, quote.intake_payload
+  end
+
+  test "monetary inputs validate the whole value and retain invalid input" do
+    quote = Quote.new(client: @client)
+    line = quote.lines.build(kind: "custom", description: "Trek", quantity: 1, unit_minor: 200000)
+    ["1,500", "12oops", "1e3", "12.345", "-2"].each do |input|
+      quote.deposit_dollars = input
+      assert_not quote.valid?, "Accepted invalid deposit #{input}"
+      assert_equal input, quote.deposit_dollars
+      quote.deposit_dollars = "0"
+      line.unit_dollars = input
+      assert_not quote.valid?, "Accepted invalid price #{input}"
+      assert_equal input, line.unit_dollars
+      line.unit_dollars = "2000"
+    end
+    quote.deposit_dollars = " 1500.25 "
+    line.unit_dollars = "2000.50"
+    quote.save!
+    assert_equal 150025, quote.reload.deposit_minor
+    assert_equal 200050, quote.lines.first.unit_minor
+  end
+
 end

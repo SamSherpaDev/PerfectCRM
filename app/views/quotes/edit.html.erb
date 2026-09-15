@@ -29,8 +29,9 @@
           <button type="button" class="btn btn-ghost btn-sm" data-action="quote-builder#add">Add line</button>
         </div>
         <%= card_caption "Edit the trip, departure, and prices before sending this version." %>
+        <p class="hint">Enter prices and deposits without commas, for example 1500.00.</p>
         <div class="space-y-3" data-quote-builder-target="rows">
-          <%= form.fields_for :lines, @quote.lines.order(:position, :id) do |line_form| %>
+          <%= form.fields_for :lines, @quote.lines.to_a.sort_by { |line| [line.position.to_i, line.id || Float::INFINITY] } do |line_form| %>
             <%= render "line_fields", form: line_form %>
           <% end %>
         </div>
