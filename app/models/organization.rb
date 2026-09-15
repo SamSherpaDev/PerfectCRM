@@ -7,8 +7,10 @@ class Organization < ApplicationRecord
     foreign_key: :referred_by_organization_id, dependent: :nullify, inverse_of: :referred_by_organization
   has_many :notes, as: :notable, dependent: :destroy
   has_many :taggings, as: :taggable, dependent: :destroy
-  has_many :tags, through: :taggings
+  has_many :tags, -> { order(:name) }, through: :taggings
   has_many :activity_events, as: :subject, dependent: :destroy
+
+  include TaggedRecord
 
   before_validation :normalize_email
   before_validation :normalize_website
@@ -22,7 +24,6 @@ class Organization < ApplicationRecord
   validates :website, format: { with: %r{\Ahttps?://\S+\z}, allow_blank: true }
 
   after_create :stamp_activity
-  after_save :assign_pending_tags
   after_save :sync_fts_later
   after_destroy :remove_fts_row
 
@@ -69,21 +70,6 @@ class Organization < ApplicationRecord
     SQL
   end
 
-  def tag_list
-    return @pending_tag_list if new_record? && @pending_tag_list
-
-    tags.order(:name).pluck(:name).join(", ")
-  end
-
-  def tag_list=(value)
-    names = parse_tag_names(value)
-    if persisted?
-      self.tags = names.map { |name| Tag.find_or_create_by!(name: name) }
-    else
-      @pending_tag_list = names.join(", ")
-    end
-  end
-
   def touch_activity!
     update_column(:last_activity_at, Time.current) if persisted?
   end
@@ -113,21 +99,6 @@ class Organization < ApplicationRecord
   end
 
   private
-
-  def parse_tag_names(value)
-    value.to_s.split(",").map(&:strip).reject(&:blank?).map(&:downcase).uniq.first(20)
-  end
-
-  def assign_pending_tags
-    return unless @pending_tag_list
-
-    names = parse_tag_names(@pending_tag_list)
-    @pending_tag_list = nil
-    self.tags = names.map { |name| Tag.find_or_create_by!(name: name) }
-    sync_fts! if persisted?
-  rescue ActiveRecord::RecordInvalid
-    nil
-  end
 
   def normalize_email
     normalized = email.to_s.strip.downcase

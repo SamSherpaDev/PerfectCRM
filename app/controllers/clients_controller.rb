@@ -1,4 +1,6 @@
 class ClientsController < ApplicationController
+  include RecordHistory
+
   before_action :set_client, only: %i[show edit update archive unarchive]
 
   def index
@@ -22,8 +24,7 @@ class ClientsController < ApplicationController
 
   def show
     @note = Note.new
-    @events = @client.activity_events.newest_first.limit(100)
-    @notes = @client.notes.newest_first.limit(50).includes(:author)
+    load_record_history(@client)
     @origin_lead = Lead.find_by(converted_client_id: @client.id)
   end
 
@@ -43,13 +44,14 @@ class ClientsController < ApplicationController
   end
 
   def edit
-    @client.people.build if @client.people.empty?
+    @client.people.build
   end
 
   def update
     if @client.update(client_params)
       redirect_to @client, notice: "Client saved."
     else
+      @client.people.build unless @client.people.any?(&:new_record?)
       render :edit, status: :unprocessable_entity
     end
   end
@@ -93,16 +95,16 @@ class ClientsController < ApplicationController
 
   def sort_clients(scope)
     case @sort
-    when "name" then scope.by_name
-    when "newest" then scope.order(created_at: :desc)
+    when "name" then scope.reorder(:name)
+    when "newest" then scope.reorder(created_at: :desc)
     else scope.ordered
     end
   end
 
   def sort_organizations(scope)
     case @sort
-    when "name" then scope.order(:name)
-    when "newest" then scope.order(created_at: :desc)
+    when "name" then scope.reorder(:name)
+    when "newest" then scope.reorder(created_at: :desc)
     else scope.ordered
     end.includes(:tags)
   end

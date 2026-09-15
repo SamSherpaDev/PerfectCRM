@@ -18,14 +18,16 @@ class Lead < ApplicationRecord
 
   belongs_to :referred_by_organization, class_name: "Organization", optional: true
   belongs_to :converted_client, class_name: "Client", optional: true
-  has_many :people, dependent: :destroy
+  has_many :people, -> { order(:created_at, :id) }, dependent: :destroy
   has_many :notes, as: :notable, dependent: :destroy
   has_many :taggings, as: :taggable, dependent: :destroy
-  has_many :tags, through: :taggings
+  has_many :tags, -> { order(:name) }, through: :taggings
   has_many :activity_events, as: :subject, dependent: :destroy
 
   accepts_nested_attributes_for :people, allow_destroy: true,
     reject_if: proc { |attrs| attrs["name"].blank? && attrs["email"].blank? && attrs["phone"].blank? }
+
+  include TaggedRecord
 
   before_validation :normalize_email
   before_validation :normalize_external_ref
@@ -45,7 +47,6 @@ class Lead < ApplicationRecord
   validates :fit_band, inclusion: { in: FIT_BANDS }, allow_blank: true
 
   after_create :stamp_activity
-  after_save :assign_pending_tags
   after_save :sync_fts_later
   after_destroy :remove_fts_row
 
@@ -111,9 +112,9 @@ class Lead < ApplicationRecord
   # activity onto a new Client, links forward, and freezes the lead.
   # Raises when already converted. Never reverses.
   def convert_to_client!
-    raise ActiveRecord::RecordInvalid, self if converted?
+    with_lock do
+      raise ActiveRecord::RecordInvalid, self if converted?
 
-    transaction do
       new_client = Client.create!(
         name: name,
         email: email,
@@ -132,13 +133,19 @@ class Lead < ApplicationRecord
       end
       new_client.tag_list = tag_list
       new_client.save! if new_client.tag_list.present?
-      notes.find_each do |note|
-        new_client.notes.create!(body: note.body, author: note.author, created_at: note.created_at)
+      note_ids = {}
+      ActivityEvent.suppress do
+        notes.find_each do |note|
+          copied_note = Note.create!(notable: new_client, body: note.body, author: note.author, created_at: note.created_at)
+          note_ids[note.id] = copied_note.id
+        end
       end
       activity_events.find_each do |event|
+        metadata = (event.metadata || {}).merge("from_lead_id" => id)
+        metadata["note_id"] = note_ids.fetch(metadata["note_id"]) if note_ids.key?(metadata["note_id"])
         ActivityEvent.create!(
           subject: new_client, kind: event.kind, summary: event.summary,
-          occurred_at: event.occurred_at, metadata: (event.metadata || {}).merge("from_lead_id" => id)
+          occurred_at: event.occurred_at, metadata: metadata
         )
       end
       update!(converted_client: new_client, converted_at: Time.current)
@@ -157,23 +164,8 @@ class Lead < ApplicationRecord
     end
   end
 
-  def tag_list
-    return @pending_tag_list if new_record? && @pending_tag_list
-
-    tags.order(:name).pluck(:name).join(", ")
-  end
-
-  def tag_list=(value)
-    names = parse_tag_names(value)
-    if persisted?
-      self.tags = names.map { |name| Tag.find_or_create_by!(name: name) }
-    else
-      @pending_tag_list = names.join(", ")
-    end
-  end
-
   def display_email
-    email.presence || people.order(:created_at).pick(:email)
+    email.presence || people.map(&:email).find(&:present?)
   end
 
   def touch_activity!
@@ -219,21 +211,6 @@ class Lead < ApplicationRecord
 
   private
 
-  def parse_tag_names(value)
-    value.to_s.split(",").map(&:strip).reject(&:blank?).map(&:downcase).uniq.first(20)
-  end
-
-  def assign_pending_tags
-    return unless @pending_tag_list
-
-    names = parse_tag_names(@pending_tag_list)
-    @pending_tag_list = nil
-    self.tags = names.map { |name| Tag.find_or_create_by!(name: name) }
-    sync_fts! if persisted?
-  rescue ActiveRecord::RecordInvalid
-    nil
-  end
-
   def normalize_email
     normalized = email.to_s.strip.downcase
     self.email = normalized.presence
@@ -252,7 +229,7 @@ class Lead < ApplicationRecord
     return if errors.any?
 
     changed = changes.keys - %w[last_activity_at updated_at]
-    if changed.any?
+    if changed.any? || !@pending_tag_list.nil?
       errors.add(:base, "Converted leads stay read-only")
     end
   end

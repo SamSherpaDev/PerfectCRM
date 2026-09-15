@@ -82,7 +82,7 @@
     </dl>
     <% if @lead.tags.any? %>
       <div class="mt-4 flex flex-wrap gap-1.5" aria-label="Tags">
-        <% @lead.tags.order(:name).each do |tag| %>
+        <% @lead.tags.each do |tag| %>
           <%= badge tag.name, :brand %>
         <% end %>
       </div>
@@ -146,6 +146,7 @@
         <% end %>
       </ul>
     <% end %>
+    <%= render "shared/history_pagination", record: @lead, page: @notes_page, older: @older_notes, parameter: :notes_page, label: "notes", anchor: "notes-heading" %>
   </section>
 
   <section class="card card-pad" aria-labelledby="timeline-heading">
@@ -175,5 +176,6 @@
         <p class="text-xs muted">Conversations will appear here once mail is connected.</p>
       </div>
     <% end %>
+    <%= render "shared/history_pagination", record: @lead, page: @events_page, older: @older_events, parameter: :events_page, label: "activity", anchor: "timeline-heading" %>
   </section>
 </div>

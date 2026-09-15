@@ -40,7 +40,7 @@
                 <%= link_to organization.name, organization_path(organization), class: "link font-medium" %>
                 <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
                   <%= badge organization.kind.humanize.downcase, :neutral %>
-                  <% organization.tags.order(:name).each do |tag| %>
+                  <% organization.tags.each do |tag| %>
                     <%= badge tag.name, :brand %>
                   <% end %>
                   <% if organization.email.present? %>
@@ -51,7 +51,7 @@
               <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs muted sm:justify-end">
                 <span>Active <%= date_short(organization.last_activity_at || organization.updated_at) %></span>
                 <% if organization.perfectbook_contact_id.present? %>
-                  <%= link_to "Open in PerfectBook", perfectbook_contact_url(organization.perfectbook_contact_id), class: "link-quiet inline-flex items-center gap-1", target: "_blank", rel: "noopener" do %>
+                  <%= link_to perfectbook_contact_url(organization.perfectbook_contact_id), class: "link-quiet inline-flex items-center gap-1", target: "_blank", rel: "noopener" do %>
                     <%= render "shared/icon", name: :external, class: "h-3.5 w-3.5" %>Open in PerfectBook
                   <% end %>
                 <% end %>
@@ -80,7 +80,7 @@
                     <%= badge client.source.humanize.downcase, :neutral %>
                   <% end %>
                   <%= badge client.kind.humanize.downcase, :info %>
-                  <% client.tags.order(:name).each do |tag| %>
+                  <% client.tags.each do |tag| %>
                     <%= badge tag.name, :brand %>
                   <% end %>
                   <% if client.display_email.present? %>
@@ -91,7 +91,7 @@
               <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs muted sm:justify-end">
                 <span>Active <%= date_short(client.last_activity) %></span>
                 <% if client.perfectbook_contact_id.present? %>
-                  <%= link_to "Open in PerfectBook", perfectbook_contact_url(client.perfectbook_contact_id), class: "link-quiet inline-flex items-center gap-1", target: "_blank", rel: "noopener" do %>
+                  <%= link_to perfectbook_contact_url(client.perfectbook_contact_id), class: "link-quiet inline-flex items-center gap-1", target: "_blank", rel: "noopener" do %>
                     <%= render "shared/icon", name: :external, class: "h-3.5 w-3.5" %>Open in PerfectBook
                   <% end %>
                 <% end %>

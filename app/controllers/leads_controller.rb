@@ -1,4 +1,6 @@
 class LeadsController < ApplicationController
+  include RecordHistory
+
   before_action :set_lead, only: %i[show edit update convert]
   before_action :block_converted_edit, only: %i[edit update]
 
@@ -31,8 +33,7 @@ class LeadsController < ApplicationController
 
   def show
     @note = Note.new
-    @events = @lead.activity_events.newest_first.limit(100)
-    @notes = @lead.notes.newest_first.limit(50).includes(:author)
+    load_record_history(@lead)
   end
 
   def new
@@ -51,13 +52,14 @@ class LeadsController < ApplicationController
   end
 
   def edit
-    @lead.people.build if @lead.people.empty?
+    @lead.people.build
   end
 
   def update
     if @lead.update(lead_params)
       redirect_to @lead, notice: "Lead saved."
     else
+      @lead.people.build unless @lead.people.any?(&:new_record?)
       render :edit, status: :unprocessable_entity
     end
   end
@@ -86,9 +88,9 @@ class LeadsController < ApplicationController
 
   def sort_leads(scope)
     case @sort
-    when "name" then scope.by_name
-    when "newest" then scope.order(created_at: :desc)
-    when "fit" then scope.order(Arel.sql("fit_score DESC NULLS LAST, COALESCE(last_activity_at, updated_at) DESC"))
+    when "name" then scope.reorder(:name)
+    when "newest" then scope.reorder(created_at: :desc)
+    when "fit" then scope.reorder(Arel.sql("fit_score DESC NULLS LAST, COALESCE(last_activity_at, updated_at) DESC"))
     else scope.ordered
     end
   end

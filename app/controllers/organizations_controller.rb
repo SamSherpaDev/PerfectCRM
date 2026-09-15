@@ -1,10 +1,11 @@
 class OrganizationsController < ApplicationController
+  include RecordHistory
+
   before_action :set_organization, only: %i[show edit update destroy]
 
   def show
     @note = Note.new
-    @events = @organization.activity_events.newest_first.limit(100)
-    @notes = @organization.notes.newest_first.limit(50).includes(:author)
+    load_record_history(@organization)
     @referred_clients = @organization.referred_clients.active.ordered.limit(20).includes(:tags)
   end
 

@@ -5,14 +5,16 @@ class Client < ApplicationRecord
   encrypts :phone
 
   belongs_to :referred_by_organization, class_name: "Organization", optional: true
-  has_many :people, dependent: :destroy
+  has_many :people, -> { order(:created_at, :id) }, dependent: :destroy
   has_many :notes, as: :notable, dependent: :destroy
   has_many :taggings, as: :taggable, dependent: :destroy
-  has_many :tags, through: :taggings
+  has_many :tags, -> { order(:name) }, through: :taggings
   has_many :activity_events, as: :subject, dependent: :destroy
 
   accepts_nested_attributes_for :people, allow_destroy: true,
     reject_if: proc { |attrs| attrs["name"].blank? && attrs["email"].blank? && attrs["phone"].blank? }
+
+  include TaggedRecord
 
   before_validation :normalize_email
 
@@ -25,7 +27,6 @@ class Client < ApplicationRecord
     numericality: { only_integer: true, greater_than: 0, allow_nil: true }
 
   after_create :stamp_activity
-  after_save :assign_pending_tags
   after_save :sync_fts_later
   after_destroy :remove_fts_row
 
@@ -87,23 +88,8 @@ class Client < ApplicationRecord
     update!(archived_at: nil)
   end
 
-  def tag_list
-    return @pending_tag_list if new_record? && @pending_tag_list
-
-    tags.order(:name).pluck(:name).join(", ")
-  end
-
-  def tag_list=(value)
-    names = parse_tag_names(value)
-    if persisted?
-      self.tags = names.map { |name| Tag.find_or_create_by!(name: name) }
-    else
-      @pending_tag_list = names.join(", ")
-    end
-  end
-
   def display_email
-    email.presence || people.order(:created_at).pick(:email)
+    email.presence || people.map(&:email).find(&:present?)
   end
 
   def touch_activity!
@@ -140,21 +126,6 @@ class Client < ApplicationRecord
   end
 
   private
-
-  def parse_tag_names(value)
-    value.to_s.split(",").map(&:strip).reject(&:blank?).map(&:downcase).uniq.first(20)
-  end
-
-  def assign_pending_tags
-    return unless @pending_tag_list
-
-    names = parse_tag_names(@pending_tag_list)
-    @pending_tag_list = nil
-    self.tags = names.map { |name| Tag.find_or_create_by!(name: name) }
-    sync_fts! if persisted?
-  rescue ActiveRecord::RecordInvalid
-    nil
-  end
 
   def normalize_email
     normalized = email.to_s.strip.downcase

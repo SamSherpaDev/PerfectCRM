@@ -73,7 +73,7 @@
                   <%= badge "Scoring", :info, dot: true %>
                 <% end %>
                 <%= status_badge(lead.converted? ? "converted" : lead.status) %>
-                <% lead.tags.order(:name).each do |tag| %>
+                <% lead.tags.each do |tag| %>
                   <%= badge tag.name, :brand %>
                 <% end %>
               </div>

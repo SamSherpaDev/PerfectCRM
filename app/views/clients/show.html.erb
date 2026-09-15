@@ -59,7 +59,7 @@
     </dl>
     <% if @client.tags.any? %>
       <div class="mt-4 flex flex-wrap gap-1.5" aria-label="Tags">
-        <% @client.tags.order(:name).each do |tag| %>
+        <% @client.tags.each do |tag| %>
           <%= badge tag.name, :brand %>
         <% end %>
       </div>
@@ -128,6 +128,7 @@
         <% end %>
       </ul>
     <% end %>
+    <%= render "shared/history_pagination", record: @client, page: @notes_page, older: @older_notes, parameter: :notes_page, label: "notes", anchor: "notes-heading" %>
   </section>
 
   <section class="card card-pad" aria-labelledby="timeline-heading">
@@ -154,5 +155,6 @@
         <p class="text-xs muted">Conversations will appear here once mail is connected.</p>
       </div>
     <% end %>
+    <%= render "shared/history_pagination", record: @client, page: @events_page, older: @older_events, parameter: :events_page, label: "activity", anchor: "timeline-heading" %>
   </section>
 </div>
