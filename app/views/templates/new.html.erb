@@ -1,0 +1,6 @@
+<% content_for :title, "New template · PerfectCRM" %>
+<div class="page">
+  <%= render layout: "shared/page_header", locals: { back: [ "Templates", templates_path ], eyebrow: "Reusable words", title: "New template", subtitle: "Write it once in your voice; placeholders fill in per client." } do %><% end %>
+  <%= render "shared/flash" %>
+  <%= render "form", template: @template %>
+</div>

@@ -57,6 +57,36 @@ module ApplicationHelper
       { viewBox: SKETCH_VIEWBOXES.fetch(name), preserveAspectRatio: preserve, class: css, "aria-hidden": true, focusable: false }.merge(options))
   end
 
+  # Plain rendered text (merge results) to safe preview HTML: escape, keep
+  # line breaks, badge the missing markers.
+  def plain_preview(text)
+    highlight_missing(simple_format(ERB::Util.html_escape(text.to_s)))
+  end
+
+  # Wraps [missing: name] markers in a warning badge inside already-safe HTML.
+  def highlight_missing(safe_html)
+    safe_html.to_s.gsub(/\[missing: ([\w]+)\]/) do
+      content_tag(:span, "Missing: #{Regexp.last_match(1).tr("_", " ")}", class: "badge badge-warning")
+    end.html_safe # rubocop:disable Rails/OutputSafety
+  end
+
+  def usage_line(template)
+    count = template.usage_count
+    used = count == 1 ? "Used once" : "Used #{count} times"
+    last = template.last_used_at ? " · last used #{time_ago_in_words(template.last_used_at)} ago" : " · never used"
+    "#{used}#{last}"
+  end
+
+  # Model constants live behind helpers because bare `Template` in a view
+  # resolves to ActionView::Template, not the model.
+  def template_purpose_options
+    ::Template.purposes.keys.map { |key| [ ::Template::PURPOSE_LABELS.fetch(key), key ] }
+  end
+
+  def template_purpose_label(key)
+    ::Template::PURPOSE_LABELS.fetch(key.to_s)
+  end
+
   # Tab in a `.tabs` nav: icon, sentence-case label, optional count, brush underline when active.
   def tab_link(label, path, icon:, active: false, count: nil)
     link_to path, class: "tab#{' tab-on' if active}", aria: ({ current: "page" } if active) do

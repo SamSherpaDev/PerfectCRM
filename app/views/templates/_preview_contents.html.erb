@@ -1,0 +1,17 @@
+<%# Preview contents: rendered subject + body with missing markers badged. %>
+<% context = ::TemplateRenderer::SAMPLE_CONTEXT %>
+<% subject_html = ::TemplateRenderer.render_html(template.subject.to_s, context) %>
+<% body_html = ::TemplateRenderer.render_html(template.body.to_s, context) %>
+<% missing = template.placeholders - ::TemplateRenderer::PLACEHOLDERS %>
+<div class="mt-4 space-y-3">
+  <div class="rounded-control bg-paper-3 px-4 py-3 shadow-press">
+    <p class="text-[11.5px] font-medium muted">Subject</p>
+    <p class="mt-0.5 text-sm font-medium text-ink"><%= highlight_missing(subject_html).presence || content_tag(:span, "No subject", class: "muted") %></p>
+  </div>
+  <div class="text-sm leading-relaxed text-ink-2">
+    <%= highlight_missing(simple_format(body_html)).presence || content_tag(:p, "Nothing to preview yet.", class: "muted") %>
+  </div>
+  <% if missing.any? %>
+    <p class="hint">Unknown placeholders: <%= missing.map { |name| "{{#{name}}}" }.join(", ") %>. They send as [missing: …] — fix the spelling or leave them out.</p>
+  <% end %>
+</div>

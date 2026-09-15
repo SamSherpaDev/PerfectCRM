@@ -15,8 +15,24 @@ Rails.application.routes.draw do
   resources :clients, only: %i[index]
   get "pipeline", to: "pipeline#show"
   resources :quotes, only: %i[index]
-  resources :templates, only: %i[index]
+  resources :templates do
+    collection do
+      post :preview, action: :collection_preview
+      get :picker
+      get :merge
+      post :merge, action: :merge_preview
+    end
+    member do
+      get :preview
+      post :duplicate
+      patch :archive
+      patch :unarchive
+      patch :move
+      post :use
+    end
+  end
   resource :settings, only: %i[edit update] do
     post :perfectbook_test, on: :collection
   end
+
 end

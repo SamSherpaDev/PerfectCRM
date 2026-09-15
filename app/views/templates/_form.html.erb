@@ -1,0 +1,54 @@
+<%# Shared new/edit form: fields on the left, live preview on the right (stacked on phones). %>
+<%= form_with model: template, data: { controller: "template-preview placeholder-insert", "template-preview-url-value": preview_templates_path } do |form| %>
+  <% if template.errors.any? %>
+    <div class="form-errors" role="alert">
+      <p class="font-medium">Could not save this template.</p>
+      <ul><% template.errors.full_messages.each do |message| %><li><%= message %></li><% end %></ul>
+    </div>
+  <% end %>
+
+  <div class="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+    <div class="card card-pad space-y-5">
+      <div>
+        <%= form.label :name, class: "label" %>
+        <%= form.text_field :name, class: "input", required: true, autocomplete: "off", placeholder: "Deposit nudge" %>
+      </div>
+      <div>
+        <%= form.label :purpose, "Kind of message", class: "label" %>
+        <%= form.select :purpose, template_purpose_options, {}, class: "select" %>
+        <p class="hint">Groups the template on the index. Emails only, always from info@sherpaholidays.com.</p>
+      </div>
+      <div>
+        <%= form.label :subject, class: "label" %>
+        <%= form.text_field :subject, class: "input", autocomplete: "off", placeholder: "Your {{trip}} deposit",
+              data: { "template-preview-target": "subject", "placeholder-insert-target": "field", action: "input->template-preview#changed focus->placeholder-insert#track" } %>
+      </div>
+      <div>
+        <%= form.label :body, class: "label" %>
+        <%= form.text_area :body, rows: 12, class: "textarea", placeholder: "Hi {{first_name}},\n\n…",
+              data: { "template-preview-target": "body", "placeholder-insert-target": "field", action: "input->template-preview#changed focus->placeholder-insert#track" } %>
+        <p class="hint">Plain text with line breaks. Type {{ and pick below, or tap a placeholder to drop it where the cursor sits.</p>
+      </div>
+      <div>
+        <p class="label" id="placeholder-chooser-label">Placeholders</p>
+        <div class="flex flex-wrap gap-1.5" role="group" aria-labelledby="placeholder-chooser-label">
+          <% ::TemplateRenderer::PLACEHOLDERS.each do |name| %>
+            <button type="button" class="btn btn-ghost btn-sm mono" data-action="placeholder-insert#insert" data-token="{{<%= name %>}}" title="Insert {{<%= name %>}}">{{<%= name %>}}</button>
+          <% end %>
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <%= form.submit template.persisted? ? "Save changes" : "Create template", class: "btn btn-primary" %>
+        <%= link_to "Cancel", templates_path, class: "btn btn-secondary" %>
+      </div>
+    </div>
+
+    <section class="card card-pad lg:sticky lg:top-6 lg:self-start" aria-label="Live preview" aria-live="polite">
+      <h2 class="card-title">Preview</h2>
+      <%= card_caption "How it reads with sample client details. Anything unknown shows as a missing badge." %>
+      <%= turbo_frame_tag "template_preview", data: { "template-preview-target": "pane" } do %>
+        <%= render "preview_contents", template: template %>
+      <% end %>
+    </section>
+  </div>
+<% end %>

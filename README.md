@@ -45,8 +45,9 @@ configuration lives in `config/environments/development.rb`.
 On desktop, hover or focus the icon rail to reveal navigation labels and Sign
 out. On mobile, use Open menu to show the drawer. The rail holds **Today**
 (root), **Inbox**, **Clients**, **Pipeline**, **Quotes**, **Templates**, and
-**Settings**. Today through Templates render branded empty states until their
-features land; Settings provides the appearance control below.
+**Settings**. Inbox, Clients, Pipeline, and Quotes render branded empty
+states until their features land; Templates is live (see "Templates"
+below).
 
 PerfectCRM defaults to **Paper**, the light Washi scheme. In **Settings →
 Appearance**, choose **Paper** or **Night** to apply the scheme immediately
@@ -55,6 +56,33 @@ separate Save step. The status beneath the choice confirms when it is saved.
 The choice is shared across the app and persists across navigation and later
 sign-ins; signed-out pages use Paper. Device reduced-motion preferences
 disable the ridge and enso animations.
+
+## Templates
+
+Templates are the messages the captain sends over and over (first reply,
+itinerary follow-up, deposit nudge, document request, pre-trip briefing,
+during-trip check-in, review ask, repeat nudge), email only, always from
+info@sherpaholidays.com. The index groups them by kind with Active /
+Archived tabs carrying counts; each row shows its usage count and last use
+so dead templates get pruned. New/edit pairs the form with a live preview
+pane and a placeholder chooser that inserts at the cursor.
+
+Placeholders (`{{first_name}}`, `{{trip}}`, `{{balance_due}}`, and friends -
+the full list is `TemplateRenderer::PLACEHOLDERS`) render through
+`TemplateRenderer` against a plain-hash context, so the mail and
+PerfectBook tasks can supply real values later without changing that code.
+Unknown placeholders render as a visible `[missing: name]` marker, never
+blank. Seeded from `db/seeds/templates.rb` (idempotent; reruns never
+overwrite captain edits).
+
+The reply box (a later mail task) embeds `templates/_picker`: a compact
+searchable list backed by `GET /templates/picker.json`, which returns each
+row rendered and ready to insert. Tapping Insert records a use and emits a
+window `template:insert` event with `{ id, subject, body }` detail for the
+reply box to catch. Group departures get a merge preview at
+`GET /templates/merge`: pick a template, paste `Name <email>` lines, and
+review every rendered message. Nothing sends from there; the mail task
+consumes the `MergeBatch` value object (`app/models/merge_batch.rb`).
 
 ## Google sign-in
 

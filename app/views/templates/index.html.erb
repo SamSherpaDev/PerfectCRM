@@ -1,7 +1,52 @@
 <% content_for :title, "Templates · PerfectCRM" %>
 <div class="page">
-  <%= render layout: "shared/page_header", locals: { eyebrow: "Reusable words", title: "Templates", subtitle: "The replies and itineraries sent most often, ready to personalize." } do %><% end %>
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Reusable words", title: "Templates", subtitle: "The replies sent over and over, with live details filled in. Usage counts show what earns its keep." } do %>
+    <%= link_to "Merge preview", merge_templates_path, class: "btn btn-secondary btn-sm" %>
+    <%= link_to "New template", new_template_path, class: "btn btn-primary btn-sm" %>
+  <% end %>
   <%= render "shared/flash" %>
 
-  <%= render "shared/empty_state", title: "No templates yet", body: "Reusable replies and itineraries for the messages sent most often will live here." %>
+  <nav class="tabs" aria-label="Template states">
+    <%= tab_link "Active", templates_path, icon: :check, active: @tab == "active", count: @active_count %>
+    <%= tab_link "Archived", templates_path(tab: "archived"), icon: :archive, active: @tab == "archived", count: @archived_count %>
+  </nav>
+
+  <% if @grouped.empty? %>
+    <%= render "shared/empty_state", title: (@tab == "archived" ? "Nothing archived" : "No templates yet"), body: (@tab == "archived" ? "Archived templates rest here when they stop earning their keep." : "Reusable replies for the messages sent most often will live here.") do %>
+      <%= link_to "New template", new_template_path, class: "btn btn-primary btn-sm" if @tab == "active" %>
+    <% end %>
+  <% else %>
+    <% @grouped.each do |purpose, records| %>
+      <section class="card card-pad" aria-label="<%= template_purpose_label(purpose) %>">
+        <div class="card-header">
+          <h2 class="card-title"><%= template_purpose_label(purpose) %></h2>
+          <span class="tab-count"><%= records.size %></span>
+        </div>
+        <%= card_caption "Tap a row to edit. Counts show which wording earns its keep." %>
+        <ul class="divide-y divide-rule-2">
+          <% records.each do |template| %>
+            <li class="flex flex-col gap-2 py-4 first:pt-1 last:pb-0 sm:flex-row sm:items-center sm:gap-4">
+              <div class="min-w-0 flex-1">
+                <%= link_to template.name, edit_template_path(template), class: "link font-medium text-ink" %>
+                <p class="mt-0.5 truncate text-[13px] muted"><%= template.subject.presence || "No subject" %></p>
+                <p class="mt-0.5 text-xs muted"><%= usage_line(template) %></p>
+              </div>
+              <div class="flex flex-wrap items-center gap-1.5" role="group" aria-label="Actions for <%= template.name %>">
+                <%= link_to "Edit", edit_template_path(template), class: "btn btn-ghost btn-sm" %>
+                <%= button_to "Duplicate", duplicate_template_path(template), method: :post, class: "btn btn-ghost btn-sm" %>
+                <% if template.archived? %>
+                  <%= button_to "Restore", unarchive_template_path(template), method: :patch, class: "btn btn-ghost btn-sm" %>
+                  <%= button_to "Delete", template_path(template), method: :delete, class: "btn btn-danger btn-sm", form: { data: { turbo_confirm: "Delete this template for good?" } } %>
+                <% else %>
+                  <%= button_to "Up", move_template_path(template, direction: "up"), method: :patch, class: "btn btn-ghost btn-sm", aria: { label: "Move #{template.name} up" } %>
+                  <%= button_to "Down", move_template_path(template, direction: "down"), method: :patch, class: "btn btn-ghost btn-sm", aria: { label: "Move #{template.name} down" } %>
+                  <%= button_to "Archive", archive_template_path(template), method: :patch, class: "btn btn-ghost btn-sm" %>
+                <% end %>
+              </div>
+            </li>
+          <% end %>
+        </ul>
+      </section>
+    <% end %>
+  <% end %>
 </div>

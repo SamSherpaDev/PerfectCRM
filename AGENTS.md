@@ -28,3 +28,6 @@ When updating this file, preserve this bar for all agents and keep entries conci
 - PerfectBook link: `PerfectBook::Client` (`lib/perfectbook/`) + mirror tables
   (`app/models/perfectbook/`) + `config/recurring.yml` jobs; contract in
   README.md, "PerfectBook connection". Mirrors only, never money truth.
+- Views cannot name the `Template` model (or `TemplateRenderer`) bare: the
+  constant resolves to `ActionView::Template`. Expose what views need
+  through helpers with explicit `::Template` references instead.
