@@ -5,5 +5,5 @@
     <%= link_to "New quote", new_quote_path(client_id: client.id), class: "link-quiet text-xs" %>
   </div>
   <%= card_caption "Trip quotes built from the PerfectBook catalog. The client taps a link to accept." %>
-  <%= render "shared/quotes_table", quotes: Quote.where(client: client).ordered.includes(:lines) %>
+  <%= render "shared/quotes_table", quotes: Quote.where(client: client).or(Quote.where(lead_id: Lead.where(converted_client: client).select(:id))).ordered.includes(:lines) %>
 </section>

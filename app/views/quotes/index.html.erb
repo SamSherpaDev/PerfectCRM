@@ -1,7 +1,7 @@
 <% content_for :title, "Quotes · PerfectCRM" %>
 <div class="page">
   <%= render layout: "shared/page_header", locals: { eyebrow: "Trips", title: "Quotes", subtitle: "Quotes built from the PerfectBook catalog. The client taps a link to accept." } do %>
-    <%= link_to "New quote", new_quote_path, class: "btn btn-ghost btn-sm" %>
+    <%= link_to "New quote", clients_path, class: "btn btn-ghost btn-sm" %>
   <% end %>
   <%= render "shared/flash" %>
 

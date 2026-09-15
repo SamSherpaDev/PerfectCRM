@@ -20,6 +20,17 @@ class QuoteMailerTest < ActionMailer::TestCase
     assert_includes body, "$3,000.00"
   end
 
+  test "Unicode names notes and line descriptions deliver with a PDF" do
+    @client.update!(name: "माया गुरुङ")
+    @quote.update!(notes: "नमस्ते 🏔️ 🥾", included: "अनुमति र गाइड")
+    @quote.lines.first.update!(description: "हिमालय यात्रा 🏔️")
+    assert_emails 1 do
+      mail = QuoteMailer.quote_email(@quote).deliver_now
+      assert_includes mail.text_part.decoded, "नमस्ते"
+      assert_match(/%PDF/, mail.attachments.first.decoded)
+    end
+  end
+
   test "accepted notice goes to the captain" do
     mail = QuoteMailer.accepted_notice(@quote)
     assert_equal [ "info@sherpaholidays.com" ], mail.to

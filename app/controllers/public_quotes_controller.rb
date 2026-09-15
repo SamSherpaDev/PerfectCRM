@@ -22,17 +22,9 @@ class PublicQuotesController < ApplicationController
 
     if @quote.accept!
       QuoteMailer.accepted_notice(@quote).deliver_later
-      redirect_to public_quote_path(@quote.accept_token), notice: "Accepted — thank you! Sam will be in touch to confirm your booking."
+      redirect_to public_quote_path(@quote.accept_token), notice: "Accepted - thank you! Sam will be in touch to confirm your booking."
     else
       redirect_to public_quote_path(@quote.accept_token), alert: "This quote can no longer be accepted."
-    end
-  end
-
-  def decline
-    if @quote.decline!
-      redirect_to public_quote_path(@quote.accept_token), notice: "Thanks for letting us know. Reply any time if plans change."
-    else
-      redirect_to public_quote_path(@quote.accept_token), alert: "This quote can no longer be declined."
     end
   end
 

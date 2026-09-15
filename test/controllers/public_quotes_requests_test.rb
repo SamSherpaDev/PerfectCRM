@@ -47,10 +47,24 @@ class PublicQuotesRequestsTest < ActionDispatch::IntegrationTest
     assert_equal events, @client.activity_events.where(kind: "quote").count
   end
 
-  test "decline records the decision" do
-    post decline_public_quote_path(@quote.accept_token)
-    assert_redirected_to public_quote_path(@quote.accept_token)
-    assert_equal "declined", @quote.reload.status
+  test "superseded links point to the revision and cannot accept either draft" do
+    revision = @quote.new_revision!
+    get public_quote_path(@quote.accept_token)
+    assert_response :success
+    assert_select "a[href=?]", public_quote_path(revision.accept_token), text: "View the newer quote"
+    assert_select "form[action=?]", accept_public_quote_path(@quote.accept_token), count: 0
+    assert_no_enqueued_emails do
+      post accept_public_quote_path(@quote.accept_token)
+      post accept_public_quote_path(revision.accept_token)
+    end
+    assert_equal "superseded", @quote.reload.status
+    assert_equal "draft", revision.reload.status
+  end
+
+  test "decline endpoint is unavailable" do
+    post "/q/#{@quote.accept_token}/decline"
+    assert_response :not_found
+    assert_equal "sent", @quote.reload.status
   end
 
   test "expired quotes show expiry and refuse accept" do

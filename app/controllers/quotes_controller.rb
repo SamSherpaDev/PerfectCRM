@@ -5,7 +5,7 @@ class QuotesController < ApplicationController
   before_action :set_quote, only: %i[show edit update send_quote duplicate revise]
 
   TAB_ICONS = { "draft" => :pencil, "sent" => :mail, "accepted" => :check,
-                "declined" => :close, "expired" => :history }.freeze
+                "expired" => :history }.freeze
 
   def index
     @tab = Quote::TABS.include?(params[:tab]) ? params[:tab] : "draft"
@@ -13,7 +13,6 @@ class QuotesController < ApplicationController
       "draft" => Quote.where(status: "draft").count,
       "sent" => Quote.where(status: %w[sent viewed]).count,
       "accepted" => Quote.where(status: "accepted").count,
-      "declined" => Quote.where(status: "declined").count,
       "expired" => Quote.expired.count
     }
     @quotes = Quote.for_tab(@tab).ordered.includes(:client, :lead, :lines)
@@ -43,7 +42,7 @@ class QuotesController < ApplicationController
       trip_name: @trip&.name,
       party_size: 2,
       valid_until: 14.days.from_now.to_date,
-      included: default_included
+      included: QuoteTripPreference.find_by(perfectbook_trip_id: @trip&.perfectbook_id)&.included
     ))
     prefill_lines
     3.times { @quote.lines.build(quantity: 1) }
@@ -54,8 +53,8 @@ class QuotesController < ApplicationController
     return redirect_to quotes_path, alert: "Pick a client or lead first." unless @owner
 
     @quote = Quote.new(quote_params.merge(owner_params))
-    apply_departure_snapshot
-    if @quote.save
+    if apply_catalog_snapshot && @quote.save
+      remember_inclusions
       if params[:send_now].present?
         send_and_redirect
       else
@@ -70,18 +69,23 @@ class QuotesController < ApplicationController
 
   def edit
     redirect_to(@quote, alert: "Only drafts can be edited. Make a revision instead.") and return unless @quote.draft?
+    load_catalog_options
   end
 
   def update
     redirect_to(@quote, alert: "Only drafts can be edited. Make a revision instead.") and return unless @quote.draft?
 
-    if @quote.update(quote_params)
+    @quote.assign_attributes(quote_params)
+    catalog_changed = @quote.perfectbook_trip_id_changed? || @quote.perfectbook_departure_id_changed?
+    if (!catalog_changed || apply_catalog_snapshot(replace_description: true)) && @quote.save
+      remember_inclusions
       if params[:send_now].present?
         send_saved_quote
       else
         redirect_to @quote, notice: "Quote saved."
       end
     else
+      load_catalog_options
       render :edit, status: :unprocessable_entity
     end
   end
@@ -132,59 +136,55 @@ class QuotesController < ApplicationController
     end
   end
 
-  # Prices are entered by the captain: PerfectBook has no catalog price, so
-  # prefill the trip line from the newest earlier quote for the same trip.
   def prefill_lines
     return unless @trip
 
-    unit = Quote.last_unit_for_trip(@trip.perfectbook_id, kind: "trip")
-    departure_id = params[:departure_id].presence
-    if departure_id
-      departure = PerfectBook::Departure.find_by(perfectbook_id: departure_id,
-        perfectbook_trip_id: @trip.perfectbook_id)
-      if departure
-        @quote.perfectbook_departure_id = departure.perfectbook_id
-        @quote.departure_label = departure_label(departure)
-        @quote.departure_start_on = departure.start_date
-        @quote.departure_end_on = departure.end_date
-        @quote.lines.build(kind: "departure", description: "#{@trip.name} — #{departure_label(departure)}",
-          quantity: @quote.party_size.to_i.positive? ? @quote.party_size.to_i : 2,
-          unit_minor: unit.to_i, perfectbook_trip_id: @trip.perfectbook_id,
-          perfectbook_departure_id: departure.perfectbook_id,
-          snapshot_trip_name: @trip.name, snapshot_departure_label: departure_label(departure),
-          snapshot_start_on: departure.start_date, snapshot_end_on: departure.end_date)
-        return
-      end
-    end
-    @quote.lines.build(kind: "trip", description: @trip.name,
-      quantity: 2, unit_minor: unit.to_i, perfectbook_trip_id: @trip.perfectbook_id,
-      snapshot_trip_name: @trip.name)
+    @quote.perfectbook_departure_id = params[:departure_id].presence
+    @prefilled_unit = Quote.last_unit_for_trip(@trip.perfectbook_id, departure_id: @quote.perfectbook_departure_id)
+    @quote.lines.build(kind: "trip", description: @trip.name, quantity: 2, unit_minor: @prefilled_unit.to_i)
+    apply_catalog_snapshot(replace_description: true)
   end
 
-  def apply_departure_snapshot
-    return if @quote.perfectbook_departure_id.blank?
+  def apply_catalog_snapshot(replace_description: false)
+    trip = PerfectBook::Trip.find_by(perfectbook_id: @quote.perfectbook_trip_id) if @quote.perfectbook_trip_id.present?
+    departure = PerfectBook::Departure.find_by(perfectbook_id: @quote.perfectbook_departure_id) if @quote.perfectbook_departure_id.present?
+    if (@quote.perfectbook_trip_id.present? && !trip) ||
+        (@quote.perfectbook_departure_id.present? && (!departure || departure.perfectbook_trip_id != trip&.perfectbook_id))
+      @quote.errors.add(:base, "Choose a departure belonging to the selected trip.")
+      return false
+    end
 
-    departure = PerfectBook::Departure.find_by(perfectbook_id: @quote.perfectbook_departure_id)
-    return unless departure
-
-    trip = PerfectBook::Trip.find_by(perfectbook_id: departure.perfectbook_trip_id)
-    @quote.trip_name ||= trip&.name || departure.trip_name
-    @quote.perfectbook_trip_id ||= departure.perfectbook_trip_id
-    @quote.departure_label ||= departure_label(departure)
-    @quote.departure_start_on ||= departure.start_date
-    @quote.departure_end_on ||= departure.end_date
+    @quote.trip_name = trip&.name if trip || replace_description
+    @quote.departure_label = departure && departure_label(departure)
+    @quote.departure_start_on = departure&.start_date
+    @quote.departure_end_on = departure&.end_date
     @quote.lines.each do |line|
-      next unless %w[trip departure].include?(line.kind)
+      next if line.marked_for_destruction? || !%w[trip departure].include?(line.kind)
 
-      line.perfectbook_trip_id ||= @quote.perfectbook_trip_id
-      line.snapshot_trip_name ||= @quote.trip_name
-      if line.kind == "departure"
-        line.perfectbook_departure_id ||= departure.perfectbook_id
-        line.snapshot_departure_label ||= @quote.departure_label
-        line.snapshot_start_on ||= departure.start_date
-        line.snapshot_end_on ||= departure.end_date
+      line.kind = trip ? (departure ? "departure" : "trip") : "custom"
+      line.perfectbook_trip_id = trip&.perfectbook_id
+      line.snapshot_trip_name = trip&.name
+      line.perfectbook_departure_id = departure&.perfectbook_id
+      line.snapshot_departure_label = @quote.departure_label
+      line.snapshot_start_on = departure&.start_date
+      line.snapshot_end_on = departure&.end_date
+      if replace_description && trip
+        line.description = [ trip.name, @quote.departure_label ].compact.join(" - ")
       end
     end
+    true
+  end
+
+  def load_catalog_options
+    @trips = PerfectBook::Catalog.new.active_trips
+    @departures = PerfectBook::Departure.order(:start_date)
+  end
+
+  def remember_inclusions
+    return unless params[:remember_inclusions] == "1" && @quote.perfectbook_trip_id.present?
+
+    preference = QuoteTripPreference.find_or_initialize_by(perfectbook_trip_id: @quote.perfectbook_trip_id)
+    preference.update!(included: @quote.included)
   end
 
   def departure_label(departure)
@@ -193,11 +193,6 @@ class QuotesController < ApplicationController
     else
       departure.label.presence || departure.place.presence || "Flexible dates"
     end
-  end
-
-  def default_included
-    "Guided trek with an experienced Sherpa guide, teahouse lodges, " \
-      "all permits, and ground transfers in Nepal."
   end
 
   def send_and_redirect

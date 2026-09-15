@@ -18,7 +18,7 @@ module ApplicationHelper
     "queued" => :neutral, "sending" => :info, "failed" => :danger,
     "received" => :brand, "complete" => :success,
     "draft" => :neutral, "viewed" => :info, "accepted" => :success,
-    "declined" => :neutral, "expired" => :warning,
+    "superseded" => :neutral, "expired" => :warning,
   }.freeze
 
   # USD amounts from integer cents: "$1,234.56", "-$12.00".
@@ -232,11 +232,4 @@ module ApplicationHelper
       .order(Arel.sql("start_date IS NULL, start_date ASC"))
   end
 
-  # One-tap nudge for missing documents. The mail reply box is not on main
-  # yet, so this links to the document-request template the captain copies
-  # from; wire it to open the reply box prefilled once mail-out lands.
-  def document_nudge_path
-    template = ::Template.active.for_purpose(:document_request).ordered.first
-    template ? edit_template_path(template) : templates_path
-  end
 end

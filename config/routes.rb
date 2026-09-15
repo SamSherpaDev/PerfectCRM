@@ -85,6 +85,8 @@ Rails.application.routes.draw do
   resources :group_sends, only: %i[create show]
   get "pipeline", to: "pipeline#show"
   patch "pipeline/move", to: "pipeline#move", as: :pipeline_move
+  get "document-nudge/:booking_id", to: "templates#document_nudge", as: :document_nudge
+
   resources :quotes, except: %i[destroy] do
     member do
       post :send_quote
@@ -95,7 +97,6 @@ Rails.application.routes.draw do
   # Public tap-to-accept quote page: unguessable token, no sign-in.
   get "q/:token", to: "public_quotes#show", as: :public_quote
   post "q/:token/accept", to: "public_quotes#accept", as: :accept_public_quote
-  post "q/:token/decline", to: "public_quotes#decline", as: :decline_public_quote
   resources :templates, except: :show do
     collection do
       post :preview, action: :collection_preview

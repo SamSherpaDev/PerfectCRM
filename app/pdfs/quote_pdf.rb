@@ -3,10 +3,7 @@
 require "prawn"
 require "prawn/table"
 
-Prawn::Fonts::AFM.hide_m17n_warning = true
-
 # Washi-styled quote PDF attached to the quote email: cream page, ink text,
-# one ochre rule, Gelasio-style serif headlines approximated with Helvetica.
 # Matches the spirit of PerfectBook's invoice PDF (same paper, same accent).
 class QuotePdf
   INK = "14110E"
@@ -28,6 +25,14 @@ class QuotePdf
   private
 
   def build(pdf)
+    directory = Rails.root.join("app/assets/fonts/quote")
+    pdf.font_families.update(
+      "NotoSans" => { normal: directory.join("NotoSans-Regular.ttf"), bold: directory.join("NotoSans-Bold.ttf") },
+      "Devanagari" => { normal: directory.join("NotoSansDevanagari-Regular.ttf"), bold: directory.join("NotoSansDevanagari-Regular.ttf") },
+      "Symbols" => { normal: directory.join("NotoSansSymbols2-Regular.ttf"), bold: directory.join("NotoSansSymbols2-Regular.ttf") }
+    )
+    pdf.font "NotoSans"
+    pdf.fallback_fonts = [ "Devanagari", "Symbols" ]
     header(pdf)
     pdf.stroke_color RULE
     pdf.stroke_horizontal_rule
@@ -117,7 +122,7 @@ class QuotePdf
     pdf.fill_color OCHRE
     pdf.text "Accept this quote", size: 12, style: :bold
     pdf.fill_color MUTED
-    pdf.text "Tap the link to accept — no account needed. " \
+    pdf.text "Tap the link to accept - no account needed. " \
       "Questions? Just reply to info@sherpaholidays.com.", size: 9
     pdf.move_down 2
     pdf.fill_color OCHRE

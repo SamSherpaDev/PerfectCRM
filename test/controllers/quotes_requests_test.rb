@@ -13,10 +13,10 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
     Quote.create!(client: @client)
     get quotes_path
     assert_response :success
-    %w[Draft Sent Accepted Declined Expired].each do |tab|
+    %w[Draft Sent Accepted Expired].each do |tab|
       assert_select "nav.tabs a", text: /#{tab}/
     end
-    assert_select "nav.tabs svg", minimum: 5
+    assert_select "nav.tabs svg", minimum: 4
   end
 
   test "client page renders mirrored bookings with money and deep links" do
@@ -161,4 +161,92 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
     get quotes_path
     assert_redirected_to sign_in_path
   end
+  test "removing a line cannot leave the deposit above the saved total" do
+    quote = Quote.new(client: @client, deposit_minor: 50_000)
+    quote.lines.build(kind: "custom", description: "Small", quantity: 1, unit_minor: 10_000)
+    quote.lines.build(kind: "custom", description: "Large", quantity: 1, unit_minor: 90_000)
+    quote.save!
+    line = quote.lines.find_by!(description: "Large")
+    patch quote_path(quote), params: { quote: { lines_attributes: { "0" => { id: line.id, _destroy: "1" } } } }
+    assert_response :unprocessable_entity
+    assert_includes response.body, "cannot be more than the quote total"
+    assert_equal 100_000, quote.reload.subtotal_minor
+    assert_equal 2, quote.lines.count
+  end
+
+  test "trip only creation snapshots the catalog and remembers inclusions only on request" do
+    trip = PerfectBook::Trip.create!(perfectbook_id: 42, name: "Everest trek", active: true, synced_at: Time.current)
+    get new_quote_path(client_id: @client.id, trip_id: trip.perfectbook_id)
+    assert_select "textarea[name='quote[included]']", text: ""
+    post quotes_path, params: { client_id: @client.id, remember_inclusions: "1", quote: {
+      perfectbook_trip_id: 42, included: "Guide only", lines_attributes: {
+        "0" => { kind: "trip", description: "My trek", quantity: 1, unit_dollars: "100" }
+      }
+    } }
+    quote = Quote.order(:id).last
+    assert_redirected_to quote_path(quote)
+    assert_equal 42, quote.lines.first.perfectbook_trip_id
+    assert_equal "Everest trek", quote.lines.first.snapshot_trip_name
+    get new_quote_path(client_id: @client.id, trip_id: 42)
+    assert_select "textarea[name='quote[included]']", text: "Guide only"
+    patch quote_path(quote), params: { quote: { included: "Guide and permits" } }
+    assert_equal "Guide only", QuoteTripPreference.find_by!(perfectbook_trip_id: 42).included
+    get new_quote_path(client_id: @client.id)
+    assert_select "textarea[name='quote[included]']", text: ""
+  end
+
+  test "revision edit changes trip and departure snapshots without changing the original" do
+    PerfectBook::Trip.create!(perfectbook_id: 42, name: "Annapurna", active: true, synced_at: Time.current)
+    departure = PerfectBook::Departure.create!(perfectbook_id: 43, perfectbook_trip_id: 42,
+      trip_name: "Annapurna", start_date: Date.new(2027, 6, 1), end_date: Date.new(2027, 6, 10), synced_at: Time.current)
+    quote = Quote.create!(client: @client, status: "sent", trip_name: "Everest", perfectbook_trip_id: 7)
+    quote.lines.create!(kind: "trip", description: "Everest", quantity: 1, unit_minor: 10000,
+      perfectbook_trip_id: 7, snapshot_trip_name: "Everest")
+    post revise_quote_path(quote)
+    revision = Quote.order(:id).last
+    follow_redirect!
+    assert_select "select[name='quote[perfectbook_trip_id]']"
+    assert_select "select[name='quote[perfectbook_departure_id]']"
+    patch quote_path(revision), params: { quote: { perfectbook_trip_id: 42, perfectbook_departure_id: 43 } }
+    assert_redirected_to quote_path(revision)
+    assert_equal "Annapurna", revision.reload.trip_name
+    assert_equal departure.start_date, revision.lines.first.snapshot_start_on
+    assert_equal 43, revision.lines.first.perfectbook_departure_id
+    assert_equal "Everest", quote.reload.trip_name
+    assert_equal "Everest", quote.lines.first.snapshot_trip_name
+  end
+
+  test "converted lead quotes appear on the client page" do
+    lead = Lead.create!(name: "Pasang", email: "pasang@example.com")
+    quote = Quote.create!(lead: lead)
+    client = lead.convert_to_client!
+    get client_path(client)
+    assert_response :success
+    assert_select "a[href=?]", quote_path(quote), text: quote.reference
+  end
+
+  test "new quote index action opens client selection" do
+    get quotes_path
+    assert_select "a[href=?]", clients_path, text: "New quote"
+    get clients_path
+    assert_response :success
+    assert_select "a[href=?]", client_path(@client)
+  end
+
+  test "document nudge renders the selected booking context without modifying the template" do
+    template = Template.create!(name: "Documents", purpose: :document_request,
+      subject: "Documents for {{trip}}", body: "Hi {{full_name}}, {{departure_dates}}: {{missing_documents}}")
+    booking = PerfectBook::Booking.create!(perfectbook_id: 99, perfectbook_contact_id: 7,
+      ref: "BK-99", trip_name: "Annapurna", start_date: Date.new(2027, 6, 1), end_date: Date.new(2027, 6, 10), synced_at: Time.current)
+    get client_path(@client)
+    assert_select "a[href=?]", document_nudge_path(booking_id: booking.id)
+    assert_includes response.body, "Document status arrives with the PerfectBook update"
+    get document_nudge_path(booking_id: booking.id)
+    assert_response :success
+    assert_select "input[name='recipient'][value=?]", @client.email
+    assert_select "textarea[name='body']", text: /Maya Gurung.*Annapurna.*2027.*BK-99/m
+    assert_select "textarea[name='body']", text: /Check missing documents in PerfectBook/
+    assert_equal "Hi {{full_name}}, {{departure_dates}}: {{missing_documents}}", template.reload.body
+  end
+
 end
