@@ -67,7 +67,11 @@
         <dl class="mt-2 space-y-3 text-sm">
           <div class="flex items-center justify-between gap-3">
             <dt class="muted">Guests</dt>
-            <dd><%= form.number_field :party_size, min: 1, class: "input w-24 text-right", data: { party_size: true, action: "input->quote-builder#recalc" } %></dd>
+            <dd><%= form.number_field :party_size, min: 1, class: "input w-24 text-right", data: { party_size: true, action: "input->quote-builder#recalc" } %>
+              <% @quote.errors.full_messages_for(:party_size).each do |message| %>
+                <p class="mt-1 text-xs text-danger" role="alert"><%= message %></p>
+              <% end %>
+            </dd>
           </div>
           <div class="flex items-center justify-between gap-3">
             <dt class="muted">Deposit ($)</dt>
@@ -79,7 +83,11 @@
           </div>
           <div class="flex items-center justify-between gap-3">
             <dt class="muted">Valid until</dt>
-            <dd><%= form.date_field :valid_until, class: "input w-40" %></dd>
+            <dd><%= form.date_field :valid_until, class: "input w-40" %>
+              <% @quote.errors.full_messages_for(:valid_until).each do |message| %>
+                <p class="mt-1 text-xs text-danger" role="alert"><%= message %></p>
+              <% end %>
+            </dd>
           </div>
         </dl>
         <div class="mt-4 border-t border-rule-2 pt-4">

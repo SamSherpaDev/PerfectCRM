@@ -48,7 +48,7 @@ class QuoteTest < ActiveSupport::TestCase
 
   test "deliver moves a chatting lead to quoted and writes the timeline" do
     lead = Lead.create!(name: "Pasang", email: "pasang@example.com", status: "chatting")
-    quote = Quote.create!(lead: lead)
+    quote = Quote.create!(party_size: 2, valid_until: Date.current + 14, lead: lead)
     quote.lines.create!(kind: "trip", description: "Everest trek", quantity: 1, unit_dollars: "10.00")
     quote.deliver!
     assert_equal "sent", quote.status
@@ -59,7 +59,7 @@ class QuoteTest < ActiveSupport::TestCase
 
   test "deliver leaves a nudged lead alone" do
     lead = Lead.create!(name: "Dawa", email: "dawa@example.com", status: "nudged")
-    quote = Quote.create!(lead: lead)
+    quote = Quote.create!(party_size: 2, valid_until: Date.current + 14, lead: lead)
     quote.lines.create!(kind: "trip", description: "Everest trek", quantity: 1, unit_dollars: "10.00")
     quote.deliver!
     assert_equal "nudged", lead.reload.status
@@ -195,7 +195,7 @@ class QuoteTest < ActiveSupport::TestCase
   end
 
   test "delivery reloads line totals before sending a stale draft" do
-    quote = Quote.create!(client: @client)
+    quote = Quote.create!(party_size: 2, valid_until: Date.current + 14, client: @client)
     line = quote.lines.create!(kind: "custom", description: "Trek", quantity: 1, unit_minor: 150000)
     stale = Quote.includes(:lines).find(quote.id)
     line.update!(unit_minor: 160000)
@@ -203,4 +203,17 @@ class QuoteTest < ActiveSupport::TestCase
     assert_equal 160000, stale.subtotal_minor
     assert_not quote.deliver!
   end
+  test "sending requires each term while incomplete drafts remain valid" do
+    [ :party_size, :valid_until ].each do |field|
+      quote = Quote.create!(client: @client, party_size: 2, valid_until: Date.current + 14)
+      quote.lines.create!(kind: "custom", description: "Trek", quantity: 1, unit_minor: 150000)
+      quote.update!(field => nil)
+      assert_not quote.deliver!
+      assert_includes quote.errors[field], "can't be blank"
+      assert_equal "draft", quote.reload.status
+      assert_nil quote.sent_at
+      assert quote.valid?
+    end
+  end
+
 end
