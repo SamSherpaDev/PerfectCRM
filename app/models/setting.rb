@@ -1,7 +1,5 @@
 class Setting < ApplicationRecord
   APPEARANCES = %w[paper night].freeze
-  AUTOMATION_MAY = "Create leads, score them, and move them between New, Chatting and Lost."
-  AUTOMATION_MANUAL = "Quoted, Nudged, conversion to client, and everything after stay manual."
 
   encrypts :relay_secret, deterministic: false
 
@@ -26,10 +24,7 @@ class Setting < ApplicationRecord
 
   # Public storefront identifier for browser-mode intake. Shown in Settings.
   def rotate_site_key!
-    update!(
-      site_key: "sh_site_#{SecureRandom.alphanumeric(24)}",
-      site_key_version: site_key_version.to_i + 1
-    )
+    update!(site_key: "sh_site_#{SecureRandom.alphanumeric(24)}")
     site_key
   end
 
@@ -37,7 +32,7 @@ class Setting < ApplicationRecord
   # is shown once right after rotation, then only masked.
   def rotate_relay_secret!
     secret = "sh_relay_#{SecureRandom.alphanumeric(32)}"
-    update!(relay_secret: secret, relay_secret_version: relay_secret_version.to_i + 1)
+    update!(relay_secret: secret)
     secret
   end
 

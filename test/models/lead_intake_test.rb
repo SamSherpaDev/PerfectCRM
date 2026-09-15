@@ -29,7 +29,7 @@ class LeadIntakeFieldsTest < ActiveSupport::TestCase
   test "intake columns persist" do
     lead = Lead.create!(
       name: "Anna Lindqvist", email: "anna@example.com", source: "google_ads",
-      phone_raw: "+1 415 555 0134", phone_country: nil,
+      phone_raw: "+1 415 555 0134",
       trip_handle: "private-nepal-tour", trip_title: "Private Nepal tour",
       message: "Hello.", placement: "landing",
       travel_month: 4, travel_year: 2027, party_size: 2, budget_band: "4000_7000",

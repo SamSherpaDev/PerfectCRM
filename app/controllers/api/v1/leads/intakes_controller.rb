@@ -45,7 +45,6 @@ module Api
 
               lead.lead_notifications.create!(event: "email_copy")
               lead.lead_notifications.create!(event: "lead.created")
-              Setting.current.update_column(:intake_last_received_at, Time.current)
               true
             end
           rescue ActiveRecord::RecordNotUnique

@@ -1,7 +1,6 @@
 class AddIntakeFieldsToLeads < ActiveRecord::Migration[8.1]
   def change
     add_column :leads, :phone_raw, :string
-    add_column :leads, :phone_country, :string
     add_column :leads, :trip_handle, :string
     add_column :leads, :trip_title, :string
     add_column :leads, :message, :text

@@ -47,4 +47,30 @@ class LeadIntakeMailerTest < ActionMailer::TestCase
     mail = LeadIntakeMailer.inquiry_copy(lead)
     assert_equal "New inquiry from Anna Lindqvist: not sure yet", mail.subject
   end
+
+  test "displayed page URL omits tracking parameters without changing metadata" do
+    url = "https://www.sherpaholidays.com/contact?gclid=click-secret&gbraid=braid-secret&wbraid=web-secret&utm_source=google&utm_custom=custom-secret&%75tm_medium=cpc&lang=en&lang=fr#inquiry"
+    metadata = { "page" => { "url" => url }, "attribution" => { "gclid" => "click-secret" } }
+    lead = Lead.create!(name: "Visitor", email: "visitor@example.com", metadata: metadata)
+    body = LeadIntakeMailer.inquiry_copy(lead).body.to_s
+    assert_includes body, "Page: https://www.sherpaholidays.com/contact?lang=en&lang=fr#inquiry"
+    %w[click-secret braid-secret web-secret custom-secret utm_source utm_medium].each do |value|
+      assert_not_includes body, value
+    end
+    assert_equal metadata, lead.reload.metadata
+  end
+
+  test "a page URL containing only tracking parameters has no query in email" do
+    lead = Lead.create!(name: "Visitor", metadata: { "page" => { "url" => "https://www.sherpaholidays.com/?gclid=secret&utm_campaign=trip" } })
+    page_line = LeadIntakeMailer.inquiry_copy(lead).body.to_s.lines.find { |line| line.start_with?("Page:") }
+    assert_equal "Page: https://www.sherpaholidays.com/", page_line.strip
+  end
+
+  test "invalid page URL is omitted from email" do
+    lead = Lead.create!(name: "Visitor", metadata: { "page" => { "url" => "https://bad url/?gclid=secret" } })
+    body = LeadIntakeMailer.inquiry_copy(lead).body.to_s
+    assert_includes body, "Page: -"
+    assert_not_includes body, "secret"
+  end
+
 end
