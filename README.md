@@ -18,8 +18,9 @@ documents and date-of-birth data belong in PerfectBook; do not put them in CRM n
 Stack: Rails 8.1, Hotwire (Turbo, Stimulus, importmap), Tailwind v4, three
 SQLite databases (primary, cache, queue), Solid Queue running inside Puma,
 Active Storage on an S3-compatible bucket - identical to PerfectBook so
-runbooks and crews transfer. The look is inherited from PerfectBook's Washi
-contract in [docs/DESIGN.md](docs/DESIGN.md).
+runbooks and crews transfer. PerfectCRM's Washi visual contract lives in
+[docs/DESIGN.md](docs/DESIGN.md); the proposed shared package is described in
+[docs/DESIGN-SYNC.md](docs/DESIGN-SYNC.md).
 
 ## Local development
 
@@ -53,8 +54,6 @@ their features land. See [Today and follow-ups](#today-and-follow-ups) and
 [Templates](#templates) for the live features. Settings provides appearance,
 morning digest, and export controls.
 
-A lead converts to a client once, by the captain - never back.
-
 On phones (under 750px) a bottom tab bar holds **Today**, **Inbox**,
 **Leads**, **Clients**, and **More** (Pipeline, Quotes, Templates,
 Settings) while the rail hides. Signed-in builders can preview every
@@ -67,7 +66,7 @@ and save it automatically - the choice submits its own form, so there is no
 separate Save step. The status beneath the choice confirms when it is saved.
 The choice is shared across the app and persists across navigation and later
 sign-ins; signed-out pages use Paper. Device reduced-motion preferences
-disable the ridge and enso animations.
+disable the ridge and enso animations and show thinking orbs as static frames.
 
 ## Templates
 

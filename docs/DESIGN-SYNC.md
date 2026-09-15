@@ -1,6 +1,8 @@
 # DESIGN-SYNC: the shared design package between PerfectBook and PerfectCRM
 
-> Draft, 2026-09-14. Describes what the two apps share, what each owns, and how a change moves from one to the other. Written for the crews that will build PerfectCRM and later maintain both.
+> Proposed shared package, 2026-09-14. Sections 1-5 describe the intended extraction and sync workflow, not installed tooling.
+
+**Current implementation:** shared tokens and the CRM component layer coexist in `app/assets/tailwind/application.css`; drawings live in `app/views/shared/_sketches.html.erb`, their helper in `app/helpers/application_helper.rb`, and icons in `app/views/shared/_icon.html.erb`. There is no `design/` package, `config/design.yml`, export/sync command, version display, or package drift check yet. Edit the current sources in this repository. The proposed paths and checks below apply after extraction. [DESIGN.md](DESIGN.md) owns the visual contract; [README.md](../README.md) owns current product usage.
 
 ## 1. Why a package and not a copy
 
@@ -10,7 +12,7 @@ The package is deliberately small. It is not a gem, not an npm package, not a gi
 
 ## 2. What is in the package (copied verbatim)
 
-Everything below lives in PerfectBook today and is copied into the CRM unchanged. The CRM must not edit these files; a needed change is made in PerfectBook first.
+The proposed extraction sources are listed below. Once vendored, shared package files must be changed in PerfectBook first. Source line numbers refer to the design proposal snapshot and are not a live index.
 
 | Package path (in both repos) | PerfectBook source today | What it carries |
 |------|------|------|
@@ -26,25 +28,25 @@ Everything below lives in PerfectBook today and is copied into the CRM unchanged
 | `design/DESIGN.md` | PerfectBook `docs/DESIGN.md` | the parent contract; the CRM's `docs/DESIGN.md` refers to it and never restates sections 1 to 8 |
 | `design/VERSION` | new | `perfectbook <sha> <date>` of the copy |
 
-The first cut of this package is a refactor inside PerfectBook: split `application.css` into the four files above and `@import` them, move the sketch symbols and icon paths into the package paths, and add `bin/design-export` that writes the package directory. PerfectBook keeps working exactly as before; nothing visible changes. That refactor is the first ticket of the CRM build, and lands in PerfectBook before the CRM's first screen.
+The first cut of this package is a refactor inside PerfectBook: split `application.css` into the four files above and `@import` them, move the sketch symbols and icon paths into the package paths, and add `bin/design-export` that writes the package directory. PerfectBook keeps working exactly as before; nothing visible changes. That refactor remains a prerequisite for package syncing; the CRM shell and kit already use the current source locations above.
 
 ## 3. What the CRM owns (never synced back)
 
 | CRM path | Contents |
 |------|------|
-| `app/assets/tailwind/crm.css` | the CRM-only classes from `DESIGN.md` Appendix B: `.unread`, `.mark-inline`, timeline (`.timeline`, `.ev` incl. `.ev.auto`, `.msg`, `.stream`), reply box and chips, `.draft`, board, `.board-groups` and `.kcard`, `.tabbar`, docked reply, `.sheet`, `.stage-row`, `.sticky-send`, `.rowlist`, `.setting`, `.toggle`, `.dep`, `.src`, `.fit` |
+| `app/assets/tailwind/crm.css` | the CRM-only classes from `DESIGN.md` Appendix C: `.unread`, `.mark-inline`, timeline (`.timeline`, `.ev` incl. `.ev.auto`, `.msg`, `.stream`), reply box and chips, `.draft`, board, `.board-groups` and `.kcard`, `.tabbar`, docked reply, `.sheet`, `.stage-row`, `.sticky-send`, `.rowlist`, `.setting`, `.toggle`, `.dep`, `.src`, `.fit` |
 | `app/views/shared/_sketches_crm.html.erb` | `sk-everest`, `sk-bridge`, `sk-pass`, `sk-cairn`, `sk-stream`, `sk-mark-a` (the chosen mark) |
 | `app/helpers/crm_sketches.rb` | extends `SKETCH_VIEWBOXES` with the CRM names; `sketch(:everest)` uses `xMaxYMax meet`, `:stream` uses `none` |
 | `app/views/shared/_nav.html.erb`, `_tabbar.html.erb` | the eight rail items and the five bottom-bar items |
 | `app/views/layouts/application.html.erb` | the shell: rail on desktop, top bar plus bottom bar on the phone, docked areas |
 | `public/icon.svg`, `icon.png`, `apple-touch-icon.png`, `favicon.ico` | the CRM mark on the ink tile |
-| `docs/DESIGN.md` | the CRM contract (this scout's draft), sections 2.2, 4, 7, 10, 12 are CRM-specific |
+| `docs/DESIGN.md` | the approved CRM contract, sections 2.2, 4, 7, 10, 12 are CRM-specific |
 | `docs/DESIGN-SYNC.md` | this file |
-| `config/design.yml` | `mark: a`, `tile: ink`, `header_ridge: everest`, `timeline_density: airy`, `phone_pipeline: stage_list`, `lead_sources: [google_ads, meta_ads, website_form, email, referral, manual]`, `automation_may_move_to: [new, chatting, lost]`, so the captain's choices are data, not scattered constants |
+| `config/design.yml` (proposed) | Configuration derived from the visual decisions owned by `DESIGN.md`; lead data remains owned by the model, with usage in README.md |
 | `design/icons_crm.yml` | the CRM-only icons: lead, bolt, globe, ads, robot, arrow-right |
 | `app/javascript/thinking_orbs.js`, `app/javascript/controllers/orb_controller.js` | the thinking-orbs port (MIT, Jakub Antalik) and its Stimulus mount; CRM-owned until PerfectBook has something to think about, then promoted into the package |
 
-The CRM's `application.css` is: `@import "tailwindcss"; @import "./design/tokens.css"; @import "./design/theme.css"; @import "./design/components.css"; @import "./design/motion.css"; @import "./crm.css";`. The CRM layout renders `shared/sketches` (package) and `shared/sketches_crm` (own) once.
+After extraction, the proposed CRM `application.css` would be: `@import "tailwindcss"; @import "./design/tokens.css"; @import "./design/theme.css"; @import "./design/components.css"; @import "./design/motion.css"; @import "./crm.css";`. The proposed layout would render `shared/sketches` (package) and `shared/sketches_crm` (own) once.
 
 ## 4. How a change propagates
 
