@@ -19,6 +19,26 @@ class TodaySystemTest < ApplicationSystemTestCase
       assert_selector "h1", text: "Today"
     end
     page.current_window.resize_to(390, 844)
+    page.evaluate_async_script("const done = arguments[0]; Promise.all(document.getAnimations().map(a => a.finished.catch(() => {}))).then(done)")
+
+    %w[departing returned].each do |section|
+      empty_state = find("section[aria-labelledby='#{section}-heading'] .empty-inline")
+      overlaps = empty_state.evaluate_script(<<~JS)
+        (() => {
+          const text = Array.from(this.querySelectorAll('p')).flatMap(p => {
+            const range = document.createRange();
+            range.selectNodeContents(p);
+            return Array.from(range.getClientRects());
+          });
+          return Array.from(this.querySelectorAll('svg')).some(svg => {
+            const illustration = svg.getBoundingClientRect();
+            return text.some(line => illustration.left < line.right && illustration.right > line.left &&
+              illustration.top < line.bottom && illustration.bottom > line.top);
+          });
+        })()
+      JS
+      assert_not overlaps, "#{section} illustration overlaps empty-state text at 390px"
+    end
 
     within("section[aria-label=Counts]") do
       assert_selector ".stat", count: 4
