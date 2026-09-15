@@ -121,7 +121,10 @@ class QuotesSystemTest < ApplicationSystemTestCase
     visit new_quote_path(client_id: client.id, trip_id: 42, departure_id: 43)
     select "Annapurna", from: "Trip"
     assert_text "No upcoming departures"
-    within(all("[data-line-row]").first) { fill_in "Each ($)", with: "1500" }
+    within(all("[data-line-row]").first) do
+      assert_field "Description", with: "Annapurna"
+      fill_in "Each ($)", with: "1500"
+    end
     click_button "Save draft"
     assert_text "Quote saved as a draft"
     quote = Quote.order(:id).last
@@ -287,7 +290,14 @@ class QuotesSystemTest < ApplicationSystemTestCase
     fill_in "quote_deposit_dollars", with: "200"
     select "Annapurna", from: "Trip"
     assert_field "Note", with: "Keep these details"
+    within(all("[data-line-row]").first) do
+      assert_field "Description", with: "Annapurna"
+      fill_in "Description", with: "Annapurna with private guide"
+    end
     choose "4 May – 18 May 2027"
+    within(all("[data-line-row]").first) do
+      assert_field "Description", with: "Annapurna with private guide"
+    end
     assert_field "Note", with: "Keep these details"
     assert_field "What is included", with: "Guide only"
     assert_field "quote_deposit_dollars", with: "200.00"
@@ -300,6 +310,7 @@ class QuotesSystemTest < ApplicationSystemTestCase
     click_button "Save draft"
     assert_text "Quote saved as a draft"
     quote = Quote.order(:id).last
+    assert_equal "Annapurna with private guide", quote.lines.find_by!(kind: "departure").description
     assert_equal 45, quote.perfectbook_departure_id
     assert_equal 487500, quote.subtotal_minor
     assert_equal "Keep these details", quote.notes
