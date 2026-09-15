@@ -70,6 +70,10 @@ class InboxRequestsTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "article.stone", count: 1
     assert_select "article", text: /message 20/
+    newest = css_select("a").find { |a| a.text == "Jump to newest ↑" }["href"]
+    get URI.join(request.url, newest).to_s
+    assert_select "article.stone", count: 20
+    assert_select "details", text: /final itinerary detail/
   end
 
   test "inbox exposes the fifty first conversation" do

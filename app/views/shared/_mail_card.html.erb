@@ -15,6 +15,6 @@
     <%= link_to "Load older", url_for(request.query_parameters.merge(mail_page: page + 1, anchor: "email-heading")), class: "btn-secondary btn mt-3" %>
   <% end %>
   <% if messages.any? %>
-    <p class="mt-3 text-xs"><a href="#record-mail-newest" class="link-quiet">Jump to newest ↑</a></p>
+    <p class="mt-3 text-xs"><%= link_to "Jump to newest ↑", url_for(request.query_parameters.merge(mail_page: 1, anchor: "record-mail-newest")), class: "link-quiet" %></p>
   <% end %>
 </section>

@@ -52,8 +52,4 @@
     <%= link_to "Load older", inbox_path(tab: @tab, page: @page + 1), class: "btn-secondary btn mt-4" %>
   <% end %>
 
-  <nav class="mobile-tabbar" aria-label="Inbox shortcuts">
-    <%= link_to inbox_path do %><%= render "shared/icon", name: :mail, class: "h-4 w-4" %>Inbox · <%= @waiting_count %><% end %>
-    <%= link_to root_path do %><%= render "shared/icon", name: :dashboard, class: "h-4 w-4" %>Today<% end %>
-  </nav>
 </div>

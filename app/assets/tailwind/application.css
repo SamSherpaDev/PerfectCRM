@@ -837,18 +837,6 @@
 .triage-card {
   @apply rounded-card border border-warn-mark bg-warn-tint px-5 py-4 text-sm;
 }
-/* One-handed phone bar: bottom tab bar with the Inbox count, back link,
-   and jump-to-newest. Visible only under the mobile breakpoint. */
-.mobile-tabbar {
-  @apply fixed bottom-0 left-0 right-0 z-30 flex items-center justify-around gap-2 border-t border-rule bg-paper-2/95 px-4 py-2.5 backdrop-blur sm:hidden;
-  padding-bottom: max(0.65rem, env(safe-area-inset-bottom));
-}
-.mobile-tabbar a {
-  @apply inline-flex items-center gap-1.5 text-[12.5px] font-medium text-ink-2 no-underline px-3 py-2 rounded-control;
-}
-.mobile-tabbar a:active {
-  @apply bg-neutral-tint;
-}
 .thread-anchor {
   scroll-margin-top: 5rem;
 }

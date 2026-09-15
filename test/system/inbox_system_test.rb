@@ -1,8 +1,6 @@
 require "application_system_test_case"
 require_relative "../support/google_sign_in_test_helper"
 
-# Inbox and thread must work one-handed at 390px: bottom tab bar with the
-# Inbox count, a back link, and a jump-to-newest anchor.
 class InboxSystemTest < ApplicationSystemTestCase
   include GoogleSignInTestHelper
 
@@ -30,9 +28,11 @@ class InboxSystemTest < ApplicationSystemTestCase
 
     visit inbox_path
     assert_selector "h1", text: "Inbox"
+    fixed_bars = page.evaluate_script("Array.from(document.querySelectorAll('nav')).filter(nav => getComputedStyle(nav).position === 'fixed' && getComputedStyle(nav).bottom === '0px').length")
+    assert_equal 1, fixed_bars
     assert_selector "nav.tabs a", text: /Waiting on you/
     assert_selector "nav.tabs a", text: /Triage/
-    assert_selector "nav.mobile-tabbar a", text: /Inbox/
+    assert_selector "nav.tabbar a", text: /Inbox/
     assert_selector "a", text: /Everest dates/
     width = page.evaluate_script("document.documentElement.scrollWidth")
     assert_operator width, :<=, 390, "inbox overflows 390px (#{width}px)"
@@ -43,9 +43,24 @@ class InboxSystemTest < ApplicationSystemTestCase
     assert_selector "a[href='#thread-newest']", text: /Jump to newest/
     assert_selector "article.stone-in", minimum: 1
     assert_selector "article.stone-out", minimum: 1
-    assert_selector "nav.mobile-tabbar a", text: /Inbox/
+    assert_selector "nav.tabbar a", text: /Inbox/
     width = page.evaluate_script("document.documentElement.scrollWidth")
     assert_operator width, :<=, 390, "thread overflows 390px (#{width}px)"
+    jump = find("a[href='#thread-newest']")
+    jump.scroll_to(:center)
+    assert page.evaluate_script("((link) => { const rect = link.getBoundingClientRect(); return link.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)); })(document.querySelector('a[href=\"#thread-newest\"]'))")
+    jump.click
+    19.times do |index|
+      @conversation.messages.create!(direction: "in", from_address: @client.email,
+        sent_at: (index + 2).hours.ago, text_body: "Older message #{index}")
+    end
+    visit client_path(@client)
+    click_link "Load older"
+    assert_text "Older message 18"
+    assert_no_text "Namaste, we want Everest in May."
+    click_link "Jump to newest ↑"
+    assert_text "Namaste, we want Everest in May."
+    assert_equal "mail_page=1", URI.parse(page.current_url).query
   end
 
   test "triage thread offers link, create, and ignore" do

@@ -41,8 +41,5 @@
     <%= render "shared/empty_state", title: "No messages in this thread", body: "Messages will appear here once mail is connected.", scene: :teahouse %>
   <% end %>
 
-  <nav class="mobile-tabbar" aria-label="Thread shortcuts">
-    <%= link_to inbox_path do %><%= render "shared/icon", name: :arrow_left, class: "h-4 w-4" %>Inbox<% end %>
-    <a href="#thread-newest">Jump to newest ↑</a>
-  </nav>
+  <p class="mt-4"><a href="#thread-newest" class="btn-secondary btn btn-sm">Jump to newest ↑</a></p>
 </div>
