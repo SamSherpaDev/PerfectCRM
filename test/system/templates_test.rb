@@ -80,6 +80,68 @@ class TemplatesTest < ApplicationSystemTestCase
     assert_no_overflow
   end
 
+  %w[http network json].each do |failure|
+    test "picker reports #{failure} failures and allows retry" do
+      template = Template.create!(name: "Retry template", purpose: "deposit_nudge", body: "Hello")
+      sign_in_through_google
+      visit picker_templates_path
+      assert_button "Insert"
+      page.execute_script(<<~JS, failure)
+        const failure = arguments[0]
+        const originalFetch = window.fetch
+        window.fetch = (...args) => {
+          window.fetch = originalFetch
+          if (failure === "network") return Promise.reject(new TypeError("Offline"))
+          return Promise.resolve(new Response(failure === "json" ? "invalid" : "Unavailable", {
+            status: failure === "http" ? 503 : 200
+          }))
+        }
+      JS
+
+      click_button "Insert"
+      assert_selector "[role='alert']", text: "Could not insert template. Please try again."
+      assert_button "Insert", disabled: false
+      assert_equal 0, template.reload.usage_count
+
+      click_button "Insert"
+      assert_selector "button", text: /Inserted/
+      assert_no_text "Could not insert template. Please try again."
+      assert_equal 1, template.reload.usage_count
+    end
+  end
+
+  test "preview ignores older response bodies arriving after the current preview" do
+    sign_in_through_google
+    visit new_template_path
+    assert_field "Subject"
+    page.execute_script <<~JS
+      window.previewBodies = []
+      window.fetch = () => Promise.resolve({
+        ok: true,
+        text: () => new Promise(resolve => {
+          window.previewBodies.push(resolve)
+          document.documentElement.dataset.previewRequests = window.previewBodies.length
+        })
+      })
+    JS
+
+    fill_in "Subject", with: "Earlier wording"
+    assert_selector "html[data-preview-requests='1']"
+    fill_in "Subject", with: "Current wording"
+    assert_selector "html[data-preview-requests='2']"
+    page.execute_script "window.previewBodies[1]('<p>Current wording</p>')"
+    within("#template_preview") { assert_text "Current wording" }
+    page.evaluate_async_script <<~JS
+      const done = arguments[0]
+      window.previewBodies[0]('<p>Earlier wording</p>')
+      requestAnimationFrame(() => requestAnimationFrame(done))
+    JS
+    within("#template_preview") do
+      assert_text "Current wording"
+      assert_no_text "Earlier wording"
+    end
+  end
+
   private
 
   def sign_in_through_google

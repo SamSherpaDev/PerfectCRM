@@ -7,13 +7,24 @@ export default class extends Controller {
   static targets = ["subject", "body", "pane"]
   static values = { url: String }
 
+  initialize() {
+    this.revision = 0
+  }
+
+  disconnect() {
+    clearTimeout(this.timer)
+    this.revision += 1
+  }
+
   changed() {
+    this.revision += 1
     clearTimeout(this.timer)
     this.timer = setTimeout(() => this.refresh(), 350)
   }
 
   async refresh() {
     if (!this.hasPaneTarget || !this.urlValue) return
+    const revision = ++this.revision
     const form = new FormData()
     if (this.hasSubjectTarget) form.append("template[subject]", this.subjectTarget.value)
     if (this.hasBodyTarget) form.append("template[body]", this.bodyTarget.value)
@@ -24,7 +35,9 @@ export default class extends Controller {
         body: form,
         headers: { Accept: "text/html", ...(token ? { "X-CSRF-Token": token } : {}) }
       })
-      if (response.ok) this.paneTarget.innerHTML = await response.text()
+      if (!response.ok) return
+      const html = await response.text()
+      if (revision === this.revision) this.paneTarget.innerHTML = html
     } catch {
       // Preview is a nicety; the form still saves without it.
     }

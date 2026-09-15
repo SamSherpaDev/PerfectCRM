@@ -4,7 +4,7 @@ import { Controller } from "@hotwired/stimulus"
 // use (so dead templates get pruned) and emits a window "template:insert"
 // event with {subject, body} detail; the reply box listens and fills itself.
 export default class extends Controller {
-  static targets = ["query"]
+  static targets = ["query", "error"]
 
   connect() {
     // Frame reloads after a search replace the field; hand the cursor back
@@ -27,12 +27,14 @@ export default class extends Controller {
     if (!url) return
     const token = document.querySelector('meta[name="csrf-token"]')?.content
     button.disabled = true
+    this.errorTarget.textContent = ""
+    this.errorTarget.hidden = true
     try {
       const response = await fetch(url, {
         method: "POST",
         headers: { Accept: "application/json", ...(token ? { "X-CSRF-Token": token } : {}) }
       })
-      if (!response.ok) return
+      if (!response.ok) throw new Error("Insertion failed")
       const data = await response.json()
       window.dispatchEvent(new CustomEvent("template:insert", { detail: data, bubbles: true }))
       const original = button.textContent
@@ -43,6 +45,8 @@ export default class extends Controller {
       }, 1200)
     } catch {
       button.disabled = false
+      this.errorTarget.textContent = "Could not insert template. Please try again."
+      this.errorTarget.hidden = false
     }
   }
 }

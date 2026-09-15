@@ -10,6 +10,7 @@
       <%= form.search_field :q, value: local_assigns[:query], class: "input", placeholder: "Search templates…",
             autocomplete: "off", data: { "template-picker-target": "query" } %>
     <% end %>
+    <p class="hint mt-3" role="alert" data-template-picker-target="error" hidden></p>
     <% if templates.empty? %>
       <p class="hint mt-3">No templates match. Try fewer words.</p>
     <% else %>
