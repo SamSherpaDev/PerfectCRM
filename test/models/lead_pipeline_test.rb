@@ -103,5 +103,4 @@ class LeadPipelineTest < ActiveSupport::TestCase
     assert_includes Lead.stale, quiet
     assert_equal old, quiet.last_touch_at
   end
-
 end

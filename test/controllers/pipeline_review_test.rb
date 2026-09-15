@@ -160,5 +160,4 @@ class PipelineReviewTest < ActionDispatch::IntegrationTest
     client.update!(pipeline_stage: "post_trip")
     assert_equal({ "NPR" => 14_000_000, "USD" => 250_000 }, Pipeline::Report.new.value_by_stage.fetch("post_trip"))
   end
-
 end
