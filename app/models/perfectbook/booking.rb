@@ -47,10 +47,6 @@ module PerfectBook
       documents_summary_present?
     end
 
-    def checklist
-      Array(checklist_json)
-    end
-
     private
 
     def documents_summary_present?

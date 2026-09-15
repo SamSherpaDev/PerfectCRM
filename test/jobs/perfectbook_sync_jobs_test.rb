@@ -220,7 +220,7 @@ class PerfectBookSyncJobsTest < ActiveSupport::TestCase
     assert_equal 2, booking.missing_count
     assert_equal "Ama", booking.travelers.first["first_name"]
     assert_equal [ "Ama: visa, insurance" ], booking.missing_lines
-    assert_equal [ true, false ], booking.checklist.map { |item| item["done"] }
+    assert_equal [ true, false ], booking.checklist_json.map { |item| item["done"] }
     assert_equal 2, booking.outstanding_count
   end
 

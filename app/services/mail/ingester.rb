@@ -14,19 +14,12 @@ module Mail
       new.ingest(parsed: parsed, gmail: gmail, **kwargs)
     end
 
-    def ingest(parsed:, gmail:)
-      gmail = gmail.transform_keys(&:to_sym)
-      gm_message_id = gmail[:gm_msgid]&.to_s.presence
-      gm_thread_id = gmail[:gm_thrid]&.to_s.presence
-      labels = Array(gmail[:labels])
+    def self.prepare(parsed:)
+      if DocumentUploadOrphan.connection.current_transaction.joinable?
+        raise ActiveRecord::ActiveRecordError, "Prepare mail uploads before starting a transaction"
+      end
 
-      return skipped(:filtered) unless Mail.keeps?(parsed.headers)
-
-      existing = ::Message.find_by(gm_message_id: gm_message_id) if gm_message_id.present?
-      existing ||= ::Message.find_by(message_id: parsed.message_id) if parsed.message_id.present?
-      return { status: :duplicate, conversation: existing.conversation, message: existing } if existing
-
-      ordinary, held = self.class.partition_attachments(parsed.attachments)
+      ordinary, held = partition_attachments(parsed.attachments)
       orphans = []
       DocumentUploadOrphan.transaction do
         held.each do |entry|
@@ -38,6 +31,22 @@ module Mail
           entry["blob"] = blob
         end
       end
+      [ ordinary, held, orphans ]
+    end
+
+    def ingest(parsed:, gmail:, prepared: nil)
+      gmail = gmail.transform_keys(&:to_sym)
+      gm_message_id = gmail[:gm_msgid]&.to_s.presence
+      gm_thread_id = gmail[:gm_thrid]&.to_s.presence
+      labels = Array(gmail[:labels])
+
+      return skipped(:filtered) unless Mail.keeps?(parsed.headers)
+
+      existing = ::Message.find_by(gm_message_id: gm_message_id) if gm_message_id.present?
+      existing ||= ::Message.find_by(message_id: parsed.message_id) if parsed.message_id.present?
+      return { status: :duplicate, conversation: existing.conversation, message: existing } if existing
+
+      ordinary, held, orphans = prepared || self.class.prepare(parsed: parsed)
       uploaded = []
       ::Message.transaction(requires_new: true) do |transaction|
         orphans.each(&:claim!)
