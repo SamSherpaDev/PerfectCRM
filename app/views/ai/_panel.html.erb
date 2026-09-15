@@ -1,0 +1,13 @@
+<div class="ai-panel mt-4" data-controller="ai-assist" data-assist>
+  <% if Setting.current.ai_enabled? && Setting.current.ai_api_key.blank? %>
+    <p class="hint" role="status">Add a provider key in Settings to enable drafts</p>
+  <% end %>
+  <%= render "ai/summary_block", conversation: @conversation, fallback: nil %>
+  <%= render "ai/draft_block", conversation: @conversation, draft_text: nil, fallback: nil %>
+  <%= render "ai/suggestion_block", conversation: @conversation, fallback: nil %>
+  <% unless @conversation.triage? %>
+    <% if @conversation.ai_triage.present? %>
+      <%= render "ai/triage_block", conversation: @conversation, fallback: nil %>
+    <% end %>
+  <% end %>
+</div>

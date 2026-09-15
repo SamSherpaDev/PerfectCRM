@@ -12,9 +12,9 @@ The CRM owns people, conversations, quotes, tasks, and the pipeline, and
 reads PerfectBook through a small versioned, token-authenticated API (see
 "PerfectBook connection" below). The client foundation currently supports leads,
 clients, organizations, people, notes, search, and export. The message-template
-library and [Pipeline](#pipeline) are also available; see [Templates](#templates).
-Sensitive traveler documents and date-of-birth data belong in PerfectBook;
-do not put them in CRM notes.
+library, [Pipeline](#pipeline), and approval-only [AI assistance](#ai-assistance)
+are also available; see [Templates](#templates). Sensitive traveler documents
+and date-of-birth data belong in PerfectBook; do not put them in CRM notes.
 
 Stack: Rails 8.1, Hotwire (Turbo, Stimulus, importmap), Tailwind v4, three
 SQLite databases (primary, cache, queue), Solid Queue running inside Puma,
@@ -261,8 +261,8 @@ Conversion is one-way and manual. Convert to client matches an existing
 client by PerfectBook contact ID first, then normalized primary email.
 The confirmation names a matched client before attaching the lead's
 people (deduplicated by email), tags, notes, and activity to them. Existing
-client contact facts stay intact; conversion sets their pipeline stage to Won.
-Their timeline records Returned as a lead from
+client contact facts stay intact; conversion sets their pipeline stage to Won
+and preserves [AI opt-outs](#ai-assistance). Their timeline records Returned as a lead from
 the source, with the campaign in the event metadata. Multiple historical
 leads can link to the same client; conversion never merges two clients.
 Without a match, conversion creates a client with the lead's facts,
@@ -293,7 +293,8 @@ connects to the personal Google account that receives this alias by IMAP with
 an app password. It keeps only messages with an exact parsed mailbox address
 in From, To, Cc, Bcc, Delivered-To, or X-Original-To; personal mail is skipped
 without storing it. This release reads received and sent Gmail history;
-composing and sending replies in CRM is future work.
+sending replies in CRM is future work; [AI assistance](#ai-assistance) can
+already prepare a draft to copy.
 
 Setup (captain, about 10 minutes): Google Account → Security → turn on
 2-step verification → App passwords → create one named PerfectCRM → paste
@@ -406,6 +407,54 @@ lead value. Its production schedule is in [`config/recurring.yml`](config/recurr
 Settings → Monday pipeline note controls delivery to info@sherpaholidays.com;
 it is enabled by default. It is separate from the morning digest described
 in [Today and follow-ups](#today-and-follow-ups); combining them is pending.
+
+## AI assistance
+
+Approval-only help on every thread: reply drafts, three-bullet summaries,
+and suggested next actions. On unlinked threads, Classify with AI adds a
+category, one-line reason, and suggested lead source to the triage card;
+the captain still chooses link, create, or ignore. Link a client, lead, or
+organization before accepting a suggested task. Acceptance creates only the
+displayed proposal; if it has changed, review the current one. New mail
+clears summaries, suggestions, and classifications; tap again to regenerate.
+Nothing sends automatically; prices, availability promises, and legal or
+refund language stay human. Thinking orbs show composing for drafts and
+summaries, shaping for triage and suggestions. Plain fallbacks keep manual
+work available when AI is off or fails.
+
+AI assistance is on by default. In Settings → AI assistance, enter an
+OpenAI-compatible base URL (OpenAI or OpenRouter), model name, provider key,
+and short voice guide (templates are the style examples). Without a key,
+threads show "Add a provider key in Settings to enable drafts".
+Drafts appear in an editable dashed-edge block. Use this draft targets the
+outbound mail reply box for editing and Send. This checkout does not yet
+include that composer: the action reports that it is unavailable, and Copy
+draft lets the captain use the text in Gmail. Leaving the key blank when
+saving preserves the saved key. For encrypted key storage and recovery, see
+the [Secrets inventory](docs/operations.md#secrets-inventory).
+
+The daily cost cap blocks new calls when recorded estimated spend reaches it;
+zero disables the cap. Estimates use the fixed token rates in
+`Ai::Client.estimate_cost`, not the selected model's actual billing rates,
+and concurrent calls can exceed the cap. The per-minute limit paces bursts.
+Turn off Enable AI assistance to block new calls (kill switch); calls already
+sent to the provider are not cancelled. To exclude one record, tick Opt out
+of AI assistance on that client, lead, or organization. This prevents new
+generation for linked threads; it does not erase cached results or call logs.
+Lead conversion preserves an opt-out on the destination client.
+
+Prompts live in `config/ai_prompts.yml` under version control; the version is
+logged on every call. Attempts reaching `Ai::Client.chat` are logged to
+`ai_calls` (purpose, prompt version, model, token counts, cost estimate,
+latency, status, redacted request and response) and pruned after 90 days
+(`Ai::PruneCallsJob`). Requests blocked by the controller guard and cached
+summary reads do not create call logs. Costs are stored as integer micro-cents
+and summed before applying the daily cap. Only message text and CRM facts
+reach the provider - never attachments, document bytes, or PDF titles. The
+shared `Ai::Scrub` filter redacts recognized passport numbers, dates of birth,
+and card-number patterns before sending and from returned text. This
+application does not configure or guarantee provider-side zero retention;
+retention depends on the chosen provider and account settings.
 
 ## Production shape
 

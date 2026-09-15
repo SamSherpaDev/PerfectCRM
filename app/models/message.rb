@@ -73,6 +73,7 @@ class Message < ApplicationRecord
 
   def bump_conversation
     conversation.refresh_counters!
+    conversation.expire_ai_caches! if conversation.has_attribute?(:ai_summary)
     conversation.touch_linkable!
   rescue ActiveRecord::RecordNotFound
     nil

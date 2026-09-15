@@ -213,6 +213,64 @@
       <%= link_to "Export everything", settings_export_path, class: "btn-secondary btn btn-sm" %>
     </div>
   </section>
+
+  <section class="card card-pad mt-6" aria-labelledby="ai-heading">
+    <h2 class="section-title" id="ai-heading">AI assistance</h2>
+    <%= card_caption "Approval-only drafts, summaries, suggestions, and triage. Nothing is ever sent or created without your tap. See README \u201CAI assistance\u201D." %>
+    <dl class="mt-4 space-y-1 text-sm">
+      <div class="flex gap-2">
+        <dt class="muted">Calls today:</dt>
+        <dd><%= @ai_calls_today %> · <%= number_to_currency(@ai_cost_today / 100.0) %> estimated</dd>
+      </div>
+      <div class="flex gap-2">
+        <dt class="muted">Prompt version:</dt>
+        <dd><%= Ai::Prompts.version %></dd>
+      </div>
+    </dl>
+    <%= form_with model: @settings, url: ai_settings_path, method: :patch, class: "mt-4 space-y-3" do |form| %>
+      <div class="flex flex-wrap items-center gap-3">
+        <%= form.check_box :ai_enabled, class: "checkbox" %>
+        <%= form.label :ai_enabled, "Enable AI assistance (kill switch)", class: "text-sm text-ink-2" %>
+      </div>
+      <p class="hint">On by default. Turn it off any time to stop every AI call immediately.</p>
+      <div class="grid gap-3 sm:grid-cols-2">
+        <div>
+          <%= form.label :ai_model, "Model", class: "label" %>
+          <%= form.text_field :ai_model, class: "input", placeholder: "gpt-4o-mini", autocomplete: "off" %>
+        </div>
+      </div>
+      <div>
+        <%= form.label :ai_base_url, "Base URL (OpenAI-compatible)", class: "label" %>
+        <%= form.text_field :ai_base_url, class: "input", placeholder: "https://api.openai.com/v1 or https://openrouter.ai/api/v1", autocomplete: "off" %>
+      </div>
+      <div>
+        <%= form.label :ai_api_key, "API key", class: "label" %>
+        <%= form.password_field :ai_api_key, class: "input", placeholder: @settings.ai_api_key.present? ? "Saved — enter a new one to replace it" : "sk-…", autocomplete: "new-password" %>
+        <p class="hint">Stored encrypted. Leaving it blank keeps the saved key.</p>
+      </div>
+      <div>
+        <%= form.label :ai_voice_guide, "Voice guide", class: "label" %>
+        <%= form.text_area :ai_voice_guide, class: "textarea", rows: 3, placeholder: "Short, warm, plain-spoken. Sign as Sam." %>
+        <p class="hint">Your templates are the style examples; this guide steers tone.</p>
+      </div>
+      <div class="grid gap-3 sm:grid-cols-2">
+        <div>
+          <%= form.label :ai_daily_cost_cap_cents, "Daily cost cap (cents)", class: "label" %>
+          <%= form.number_field :ai_daily_cost_cap_cents, class: "input", min: 0, step: 1 %>
+          <p class="hint">AI stops for the day once estimated spend reaches this.</p>
+        </div>
+        <div>
+          <%= form.label :ai_rate_limit_per_minute, "Calls per minute", class: "label" %>
+          <%= form.number_field :ai_rate_limit_per_minute, class: "input", min: 1, max: 120, step: 1 %>
+        </div>
+      </div>
+      <% if @settings.errors.any? %>
+        <p class="text-sm text-bad"><%= @settings.errors.full_messages.to_sentence %></p>
+      <% end %>
+      <%= form.submit "Save AI assistance", class: "btn-primary btn btn-sm" %>
+    <% end %>
+    <p class="hint mt-4">\u201CAlways show me the draft before it sends\u201D is on and cannot be turned off: there is no auto-send setting. Prices, availability promises, and legal or refund language stay human. To opt one client, lead, or organization out, edit their record and tick \u201COpt out of AI assistance\u201D.</p>
+  </section>
   <div class="foot-sketch" aria-hidden="true">
     <%= sketch :wheel, class: "sk scene" %>
   </div>

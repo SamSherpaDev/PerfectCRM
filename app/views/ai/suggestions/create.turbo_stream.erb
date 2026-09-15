@@ -1,0 +1,3 @@
+<%= turbo_stream.replace "ai-suggestion-#{@conversation.id}" do %>
+  <%= render "ai/suggestion_block", conversation: @conversation, fallback: @fallback %>
+<% end %>

@@ -174,6 +174,7 @@ class Lead < ApplicationRecord
         perfectbook_contact_id: perfectbook_contact_id
       )
       client.update!(pipeline_stage: "won")
+      client.update!(ai_opt_out: true) if ai_opt_out?
       people.find_each do |person|
         next if person.email.present? && client.people.exists?(email: person.email)
 

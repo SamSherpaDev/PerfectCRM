@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_14_211517) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_15_001005) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -52,7 +52,27 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_211517) do
     t.index ["subject_type", "subject_id"], name: "index_activity_events_on_subject_type_and_subject_id"
   end
 
+  create_table "ai_calls", force: :cascade do |t|
+    t.integer "conversation_id"
+    t.integer "cost_micro_cents", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.integer "input_tokens"
+    t.integer "latency_ms"
+    t.string "model"
+    t.integer "output_tokens"
+    t.string "prompt_version", null: false
+    t.string "purpose", null: false
+    t.text "request_redacted"
+    t.text "response_redacted"
+    t.string "status", default: "ok", null: false
+    t.datetime "updated_at", null: false
+    t.index ["conversation_id"], name: "index_ai_calls_on_conversation_id"
+    t.index ["created_at"], name: "index_ai_calls_on_created_at"
+    t.index ["purpose"], name: "index_ai_calls_on_purpose"
+  end
+
   create_table "clients", force: :cascade do |t|
+    t.boolean "ai_opt_out", default: false, null: false
     t.datetime "archived_at"
     t.string "campaign_name"
     t.string "country"
@@ -78,6 +98,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_211517) do
   end
 
   create_table "conversations", force: :cascade do |t|
+    t.datetime "ai_suggestion_at"
+    t.date "ai_suggestion_due_on"
+    t.string "ai_suggestion_reason"
+    t.string "ai_suggestion_title"
+    t.text "ai_summary"
+    t.datetime "ai_summary_at"
+    t.string "ai_triage"
+    t.datetime "ai_triage_at"
+    t.string "ai_triage_reason"
+    t.string "ai_triage_suggested_source"
     t.datetime "created_at", null: false
     t.string "gm_thread_id"
     t.boolean "ignored", default: false, null: false
@@ -139,6 +169,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_211517) do
   end
 
   create_table "leads", force: :cascade do |t|
+    t.boolean "ai_opt_out", default: false, null: false
     t.string "budget_band"
     t.string "campaign_name"
     t.datetime "consent_contact_at"
@@ -263,6 +294,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_211517) do
   end
 
   create_table "organizations", force: :cascade do |t|
+    t.boolean "ai_opt_out", default: false, null: false
     t.string "country"
     t.datetime "created_at", null: false
     t.string "email"
@@ -403,6 +435,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_211517) do
   end
 
   create_table "settings", force: :cascade do |t|
+    t.string "ai_api_key"
+    t.string "ai_base_url"
+    t.integer "ai_daily_cost_cap_cents", default: 200, null: false
+    t.boolean "ai_enabled", default: true, null: false
+    t.string "ai_model"
+    t.integer "ai_rate_limit_per_minute", default: 20, null: false
+    t.text "ai_voice_guide", default: "", null: false
     t.string "appearance", default: "paper", null: false
     t.datetime "created_at", null: false
     t.boolean "digest_enabled", default: true, null: false

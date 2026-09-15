@@ -46,7 +46,7 @@ class OrganizationsController < ApplicationController
 
   def organization_params
     params.require(:organization).permit(
-      :name, :kind, :email, :phone, :country, :website, :perfectbook_contact_id, :tag_list
+      :name, :kind, :email, :phone, :country, :website, :perfectbook_contact_id, :tag_list, :ai_opt_out
     )
   end
 end

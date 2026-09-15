@@ -68,3 +68,7 @@ When updating this file, preserve this bar for all agents and keep entries conci
   (intake, details, verdict), contract in `docs/leads-intake.md`; automation
   settings on the Settings "Automations" card; `Leads` service module holds
   the relay HMAC, source, scoring, and rate-limit rules.
+- AI assistance: see README.md, "AI assistance"; `Ai::Client` owns provider
+  calls, `Ai::Scrub` the shared text boundary, and `Ai::Guard` eligibility.
+  Composer insertion lives in `ai_assist_controller.js`; the thread panel
+  currently owns `data-assist`.

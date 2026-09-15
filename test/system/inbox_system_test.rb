@@ -47,7 +47,7 @@ class InboxSystemTest < ApplicationSystemTestCase
     width = page.evaluate_script("document.documentElement.scrollWidth")
     assert_operator width, :<=, 390, "thread overflows 390px (#{width}px)"
     jump = find("a[href='#thread-newest']")
-    jump.scroll_to(:center)
+    jump.scroll_to(jump, align: :center)
     assert page.evaluate_script("((link) => { const rect = link.getBoundingClientRect(); return link.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)); })(document.querySelector('a[href=\"#thread-newest\"]'))")
     jump.click
     19.times do |index|

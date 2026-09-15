@@ -7,6 +7,7 @@ class Conversation < ApplicationRecord
   after_update :touch_linkable!, if: -> { saved_change_to_linkable_id? || saved_change_to_linkable_type? }
 
   validates :unread_count, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
+  validates :ai_triage, inclusion: { in: %w[new_inquiry returning_client operator vendor_or_spam other], allow_nil: true }
 
   scope :ordered, -> { order(Arel.sql("COALESCE(conversations.last_message_at, conversations.updated_at) DESC, conversations.id DESC")) }
   scope :linked, -> { where.not(linkable_type: nil) }
@@ -79,5 +80,22 @@ class Conversation < ApplicationRecord
 
   def linkable_name
     linkable.respond_to?(:name) ? linkable.name : nil
+  end
+
+  # New mail invalidates AI results so the next explicit request uses the
+  # current thread, and an older proposal can no longer be accepted.
+  def expire_ai_caches!
+    update_columns(ai_summary: nil, ai_summary_at: nil,
+      ai_triage: nil, ai_triage_reason: nil, ai_triage_suggested_source: nil, ai_triage_at: nil,
+      ai_suggestion_title: nil, ai_suggestion_due_on: nil,
+      ai_suggestion_reason: nil, ai_suggestion_at: nil)
+  end
+
+  def ai_suggestion_version
+    ai_suggestion_at&.iso8601(6)
+  end
+
+  def ai_enabled_for_linkable?
+    linkable.nil? || !linkable.respond_to?(:ai_opt_out?) || !linkable.ai_opt_out?
   end
 end

@@ -4,6 +4,11 @@ class Setting < ApplicationRecord
   encrypts :relay_secret, deterministic: false
 
   encrypts :mailbox_app_password
+  encrypts :ai_api_key
+
+
+  validates :ai_daily_cost_cap_cents, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
+  validates :ai_rate_limit_per_minute, numericality: { only_integer: true, greater_than_or_equal_to: 1, less_than_or_equal_to: 120 }
 
   validates :singleton_key, inclusion: { in: [ 1 ] }, uniqueness: true
   validates :appearance, inclusion: { in: APPEARANCES }

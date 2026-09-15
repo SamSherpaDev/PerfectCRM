@@ -90,6 +90,14 @@ Rails.application.routes.draw do
     post :mailbox_test, on: :collection
     post :rotate_site_key, on: :collection
     post :rotate_relay_secret, on: :collection
+    patch :ai, on: :collection
+  end
+  namespace :ai do
+    post "conversations/:conversation_id/draft", to: "drafts#create", as: :conversation_draft
+    post "conversations/:conversation_id/summary", to: "summaries#create", as: :conversation_summary
+    post "conversations/:conversation_id/suggestion", to: "suggestions#create", as: :conversation_suggestion
+    post "conversations/:conversation_id/suggestion/accept", to: "suggestions#accept", as: :accept_conversation_suggestion
+    post "conversations/:conversation_id/triage", to: "triages#create", as: :conversation_triage
   end
   get "settings/export", to: "exports#show", as: :settings_export
   resources :tasks, only: %i[create] do
