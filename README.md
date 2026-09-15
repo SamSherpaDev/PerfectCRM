@@ -573,4 +573,3 @@ The Docker image is built by GitHub Actions and published to
 secrets inventory, backups, and the restore drill. Production credential and
 bucket templates are in `.env.app.example` and `.env.litestream.example`;
 backup cron variables are documented in the runbook.
-
