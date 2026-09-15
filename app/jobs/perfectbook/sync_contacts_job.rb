@@ -6,13 +6,15 @@ module PerfectBook
 
     def perform(client: nil)
       client ||= Client.new
+      poll_started_at = Time.current
       since = SyncState.for("contacts").last_success_at
       result = client.list_contacts(updated_since: since)
       unless result[:not_modified]
         now = Time.current
         result[:data].each { |contact| upsert_contact!(contact, now) }
       end
-      SyncState.record_success!("contacts")
+      result[:commit_etags]&.call
+      SyncState.record_success!("contacts", at: poll_started_at)
     rescue PerfectBook::Error => e
       SyncState.record_error!("contacts", e.message)
       raise if e.is_a?(RateLimitedError) || e.is_a?(UnavailableError)

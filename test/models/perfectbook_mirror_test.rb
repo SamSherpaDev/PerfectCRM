@@ -1,19 +1,23 @@
 require "test_helper"
 
 class PerfectBookCatalogTest < ActiveSupport::TestCase
+  setup do
+    PerfectBook::Trip.create!(perfectbook_id: 9, name: "Active", active: true, synced_at: Time.current)
+  end
+
   test "active trips come back ordered by name" do
     PerfectBook::Trip.create!(perfectbook_id: 2, name: "Langtang", active: true, synced_at: Time.current)
     PerfectBook::Trip.create!(perfectbook_id: 1, name: "Annapurna", active: true, synced_at: Time.current)
     PerfectBook::Trip.create!(perfectbook_id: 3, name: "Old", active: false, synced_at: Time.current)
     names = PerfectBook::Catalog.new.active_trips.map(&:name)
-    assert_equal %w[Annapurna Langtang], names
+    assert_equal %w[Active Annapurna Langtang], names
   end
 
   test "upcoming departures skip the past but keep undated rows last" do
     today = Date.new(2026, 9, 15)
-    PerfectBook::Departure.create!(perfectbook_id: 1, place: "Past", start_date: today - 10, synced_at: Time.current)
-    PerfectBook::Departure.create!(perfectbook_id: 2, place: "Soon", start_date: today + 5, synced_at: Time.current)
-    PerfectBook::Departure.create!(perfectbook_id: 3, place: "Undated", start_date: nil, synced_at: Time.current)
+    PerfectBook::Departure.create!(perfectbook_id: 1, perfectbook_trip_id: 9, place: "Past", start_date: today - 10, synced_at: Time.current)
+    PerfectBook::Departure.create!(perfectbook_id: 2, perfectbook_trip_id: 9, place: "Soon", start_date: today + 5, synced_at: Time.current)
+    PerfectBook::Departure.create!(perfectbook_id: 3, perfectbook_trip_id: 9, place: "Undated", start_date: nil, synced_at: Time.current)
     catalog = PerfectBook::Catalog.new(today: today)
     assert_equal %w[Soon Undated], catalog.upcoming_departures.map(&:place)
   end
@@ -31,12 +35,18 @@ class PerfectBookCatalogTest < ActiveSupport::TestCase
 
   test "available departures drop sold-out rows but keep unknown capacity" do
     today = Date.new(2026, 9, 15)
-    PerfectBook::Departure.create!(perfectbook_id: 1, place: "Full", start_date: today + 1,
+    PerfectBook::Departure.create!(perfectbook_id: 1, perfectbook_trip_id: 9, place: "Full", start_date: today + 1,
       seats: 10, booked_seats: 10, available_seats: 0, synced_at: Time.current)
-    PerfectBook::Departure.create!(perfectbook_id: 2, place: "Room", start_date: today + 1,
+    PerfectBook::Departure.create!(perfectbook_id: 2, perfectbook_trip_id: 9, place: "Room", start_date: today + 1,
       seats: 10, booked_seats: 4, available_seats: 6, synced_at: Time.current)
-    PerfectBook::Departure.create!(perfectbook_id: 3, place: "Open", start_date: today + 1,
+    PerfectBook::Departure.create!(perfectbook_id: 3, perfectbook_trip_id: 9, place: "Open", start_date: today + 1,
       seats: nil, available_seats: nil, synced_at: Time.current)
+    PerfectBook::Trip.create!(perfectbook_id: 8, name: "Inactive", active: false, synced_at: Time.current)
+    PerfectBook::Departure.create!(perfectbook_id: 4, perfectbook_trip_id: 8, place: "Inactive",
+      start_date: today, available_seats: 4, synced_at: Time.current)
+    catalog = PerfectBook::Catalog.new(today: today)
+    assert_equal %w[Room], catalog.available_departures(limit: 1).map(&:place)
+    assert_equal %w[Full], catalog.upcoming_departures(limit: 1).map(&:place)
     assert_equal %w[Room Open], PerfectBook::Catalog.new(today: today).available_departures.map(&:place)
   end
 end

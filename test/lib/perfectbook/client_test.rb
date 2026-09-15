@@ -50,6 +50,47 @@ class PerfectBookClientTest < ActiveSupport::TestCase
     PerfectBook::Circuit.reset!
   end
 
+  test "validators remain uncommitted until the consumer succeeds" do
+    etags = MemoryEtags.new
+    body = { data: [], pagination: { has_more: false } }.to_json
+    client = StubPbClient.new(responses: [ FakePbResponse.new("200", body, { "ETag" => '"new"' }) ], etag_store: etags)
+    result = client.list_trips
+    assert_nil etags.read("GET /api/v1/trips?limit=100")
+    result[:commit_etags].call
+    assert_equal '"new"', etags.read("GET /api/v1/trips?limit=100")
+  end
+
+  test "failed pagination leaves validators unchanged" do
+    etags = MemoryEtags.new
+    body = { data: [], pagination: { has_more: true, next_cursor: "1" } }.to_json
+    client = StubPbClient.new(responses: [ FakePbResponse.new("200", body, { "ETag" => '"new"' }), Net::ReadTimeout.new ], etag_store: etags)
+    assert_raises(PerfectBook::UnavailableError) { client.list_trips }
+    assert_nil etags.read("GET /api/v1/trips?limit=100")
+  end
+
+  test "unchanged continuation pages are fetched without validators" do
+    etags = MemoryEtags.new
+    etags.write("GET /api/v1/trips?limit=100&cursor=1", '"old"')
+    first = { data: [ { id: 1 } ], pagination: { has_more: true, next_cursor: "1" } }.to_json
+    last = { data: [ { id: 2 } ], pagination: { has_more: false } }.to_json
+    client = StubPbClient.new(responses: [ FakePbResponse.new("200", first, {}), FakePbResponse.new("304", "", {}), FakePbResponse.new("200", last, {}) ], etag_store: etags)
+    assert_equal [ 1, 2 ], client.list_trips[:data].map(&:id)
+    assert_equal '"old"', client.calls.second[:headers]["If-None-Match"]
+    assert_nil client.calls.third[:headers]["If-None-Match"]
+  end
+
+  test "paced requests pause for rate limits and between pages" do
+    first = { data: [], pagination: { has_more: true, next_cursor: "1" } }.to_json
+    last = { data: [], pagination: { has_more: false } }.to_json
+    client = StubPbClient.new(responses: [ FakePbResponse.new("429", "", { "Retry-After" => "7" }), FakePbResponse.new("200", first, {}), FakePbResponse.new("200", last, {}) ], pace_requests: true)
+    pauses = []
+    client.define_singleton_method(:sleep) { |seconds| pauses << seconds }
+    assert_equal false, client.list_trips[:not_modified]
+    assert_equal 7, pauses.first
+    assert pauses.last.positive?
+    assert_equal 3, client.calls.size
+  end
+
   test "missing local token raises not_configured without an HTTP call" do
     client = PerfectBook::Client.new(base_url: "https://pb.test", api_token: "", etag_store: MemoryEtags.new)
     assert_raises(PerfectBook::NotConfiguredError) { client.list_trips }

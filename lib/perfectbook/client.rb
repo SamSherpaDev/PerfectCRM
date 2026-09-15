@@ -39,10 +39,11 @@ module PerfectBook
     # Collection fetch result: data plus whether the server answered 304.
     Page = Struct.new(:data, :pagination, :not_modified, :etag, keyword_init: true)
 
-    def initialize(base_url: PerfectBook.base_url, api_token: PerfectBook.api_token, etag_store: nil)
+    def initialize(base_url: PerfectBook.base_url, api_token: PerfectBook.api_token, etag_store: nil, pace_requests: false)
       @base_url = base_url.to_s.sub(%r{/+\z}, "")
       @api_token = api_token.to_s
       @etag_store = etag_store || EtagStore
+      @pace_requests = pace_requests
     end
 
     # Used by the Settings "Test connection" button: a cheap one-row read.
@@ -74,24 +75,10 @@ module PerfectBook
       walk_collection("/api/v1/trips", { limit: limit }) { |row| build_trip(row) }
     end
 
-    def fetch_trip(id)
-      json = get_single("/api/v1/trips/#{id}")
-      return { data: nil, not_modified: true } if json[:not_modified]
-
-      { data: build_trip(json[:data]), not_modified: false }
-    end
-
     def list_departures(trip_id: nil, limit: MAX_LIMIT)
       params = { limit: limit }
       params[:trip_id] = trip_id if trip_id.present?
       walk_collection("/api/v1/departures", params) { |row| build_departure(row) }
-    end
-
-    def fetch_departure(id)
-      json = get_single("/api/v1/departures/#{id}")
-      return { data: nil, not_modified: true } if json[:not_modified]
-
-      { data: build_departure(json[:data]), not_modified: false }
     end
 
     private
@@ -101,13 +88,18 @@ module PerfectBook
     def walk_collection(path, params)
       all = []
       cursor = nil
+      validators = {}
       first_page = true
       loop do
         page_params = params.merge(cursor: cursor).compact
         page = get_collection(path, **page_params)
         if page.not_modified
-          return { data: first_page ? [] : all, not_modified: first_page }
+          return { data: [], not_modified: true } if first_page
+
+          page = get_collection(path, conditional: false, **page_params)
+          raise Error, "PerfectBook returned 304 without a cached body" if page.not_modified
         end
+        validators[page.etag.first] = page.etag.last if page.etag
         first_page = false
         all.concat(page.data.map { |row| yield row })
         break unless page.pagination["has_more"]
@@ -115,12 +107,12 @@ module PerfectBook
         cursor = page.pagination["next_cursor"]
         break if cursor.blank?
       end
-      { data: all, not_modified: false }
+      { data: all, not_modified: false, commit_etags: -> { validators.each { |key, etag| @etag_store.write(key, etag) } } }
     end
 
-    def get_collection(path, **params)
+    def get_collection(path, conditional: true, **params)
       query = params.compact
-      response = get(path, query, collection: true)
+      response = get(path, query, collection: true, conditional: conditional)
       return Page.new(data: [], pagination: {}, not_modified: true, etag: response[:etag]) if response[:not_modified]
 
       body = response[:json]
@@ -129,7 +121,7 @@ module PerfectBook
     end
 
     def get_single(path)
-      response = get(path, {}, collection: false)
+      response = get(path, {}, collection: false, conditional: false)
       return { data: nil, not_modified: true } if response[:not_modified]
 
       { data: response[:json]["data"] || {}, not_modified: false }
@@ -137,7 +129,7 @@ module PerfectBook
 
     # Low-level GET with ETag, auth, rate-limit, timeout, and circuit handling.
     # Never logs the token or the Authorization header.
-    def get(path, query, collection:)
+    def get(path, query, collection:, conditional: true)
       raise NotConfiguredError, "PerfectBook API token is not configured" if @api_token.blank?
       raise CircuitOpenError, "PerfectBook circuit is open; skipping request" unless Circuit.allow_request?
 
@@ -145,9 +137,14 @@ module PerfectBook
       uri.query = URI.encode_www_form(query) if query.any?
       cache_key = "GET #{uri.path}#{uri.query ? "?#{uri.query}" : ""}"
       headers = { "Accept" => "application/json" }
-      sent_etag = @etag_store.read(cache_key)
+      sent_etag = @etag_store.read(cache_key) if conditional
       headers["If-None-Match"] = sent_etag if sent_etag.present?
 
+      if @pace_requests && @last_request_at
+        delay = 0.6 - (Process.clock_gettime(Process::CLOCK_MONOTONIC) - @last_request_at)
+        sleep(delay) if delay.positive?
+      end
+      @last_request_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       started = Time.current
       http_response = perform_request(uri, headers)
       elapsed = ((Time.current - started) * 1000).round
@@ -157,8 +154,7 @@ module PerfectBook
       when 200
         Circuit.record_success
         etag = http_response["ETag"]
-        @etag_store.write(cache_key, etag) if etag.present?
-        { json: JSON.parse(http_response.body.to_s), etag: etag, not_modified: false }
+        { json: JSON.parse(http_response.body.to_s), etag: etag.present? ? [ cache_key, etag ] : nil, not_modified: false }
       when 304
         Circuit.record_success
         { json: nil, etag: sent_etag, not_modified: true }
@@ -175,7 +171,6 @@ module PerfectBook
           raise NotFoundError, safe_message(http_response)
         end
       when 429
-        Circuit.record_failure
         raise RateLimitedError.new("PerfectBook rate limit reached", retry_after: retry_after(http_response))
       when 500..599
         Circuit.record_failure
@@ -183,6 +178,11 @@ module PerfectBook
       else
         raise Error, safe_message(http_response)
       end
+    rescue RateLimitedError => e
+      raise unless @pace_requests
+
+      sleep([ e.retry_after || 60, 0.6 ].max)
+      retry
     rescue Net::OpenTimeout, Net::ReadTimeout => e
       Circuit.record_failure
       raise UnavailableError, "PerfectBook timed out (#{e.class})"

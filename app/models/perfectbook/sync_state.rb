@@ -10,9 +10,9 @@ module PerfectBook
       find_or_create_by!(job_name: job_name.to_s)
     end
 
-    def self.record_success!(job_name)
+    def self.record_success!(job_name, at: Time.current)
       state = self.for(job_name)
-      state.update!(last_success_at: Time.current, last_error: nil, last_error_at: nil)
+      state.update!(last_success_at: at, last_error: nil, last_error_at: nil)
       state
     end
 

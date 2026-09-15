@@ -36,6 +36,7 @@ module PerfectBook
           synced_at: now
         )
       end
+      result[:commit_etags]&.call
     end
 
     def sync_departures(client)
@@ -54,6 +55,7 @@ module PerfectBook
           pb_updated_at: parse_time(dep.updated_at), synced_at: now
         )
       end
+      result[:commit_etags]&.call
     end
 
     def parse_date(value)

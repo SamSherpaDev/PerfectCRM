@@ -104,6 +104,6 @@ module ApplicationHelper
   end
 
   def perfectbook_booking_url(booking)
-    booking.respond_to?(:deep_link) ? booking.deep_link : booking.to_s
+    booking.deep_link
   end
 end

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_14_202006) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_14_202007) do
   create_table "perfectbook_bookings", force: :cascade do |t|
     t.integer "balance_due_minor"
     t.datetime "created_at", null: false
@@ -91,6 +91,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_202006) do
   end
 
   create_table "perfectbook_sync_states", force: :cascade do |t|
+    t.bigint "contact_cursor"
     t.datetime "created_at", null: false
     t.string "job_name", null: false
     t.text "last_error"

@@ -75,6 +75,60 @@ class PerfectBookSyncJobsTest < ActiveSupport::TestCase
     PerfectBook::Circuit.reset!
   end
 
+  test "successful empty bookings delete mirrors while 304 preserves them" do
+    PerfectBook::Contact.create!(perfectbook_id: 7, kind: "customer", name: "Ama", synced_at: Time.current)
+    PerfectBook::Booking.create!(perfectbook_id: 11, perfectbook_contact_id: 7, synced_at: Time.current)
+    PerfectBook::SyncBookingsJob.perform_now(client: FakePbCatalogClient.new(not_modified: { bookings_7: true }))
+    assert PerfectBook::Booking.exists?(perfectbook_id: 11)
+    PerfectBook::SyncBookingsJob.perform_now(client: FakePbCatalogClient.new)
+    assert_not PerfectBook::Booking.exists?(perfectbook_id: 11)
+  end
+
+  test "contacts watermark records poll start instead of completion" do
+    start = Time.utc(2026, 9, 14, 12)
+    time_traveler = self
+    travel_to start do
+      client = FakePbCatalogClient.new
+      client.define_singleton_method(:list_contacts) do |**|
+        time_traveler.travel 30.seconds
+        { data: [], not_modified: false }
+      end
+      PerfectBook::SyncContactsJob.perform_now(client: client)
+      assert_equal start, PerfectBook::SyncState.for("contacts").last_success_at
+    end
+  end
+
+  test "bookings resume after the last completed contact on failure" do
+    first = PerfectBook::Contact.create!(perfectbook_id: 7, kind: "customer", synced_at: Time.current)
+    PerfectBook::Contact.create!(perfectbook_id: 8, kind: "customer", synced_at: Time.current)
+    calls = []
+    client = FakePbCatalogClient.new
+    client.define_singleton_method(:list_contact_bookings) do |id|
+      calls << id
+      raise PerfectBook::UnavailableError, "offline" if id == 8
+      { data: [], not_modified: false }
+    end
+    assert_raises(PerfectBook::UnavailableError) { PerfectBook::SyncBookingsJob.perform_now(client: client) }
+    assert_equal first.id, PerfectBook::SyncState.for("bookings").contact_cursor
+    client.define_singleton_method(:list_contact_bookings) do |id|
+      calls << id
+      { data: [], not_modified: false }
+    end
+    PerfectBook::SyncBookingsJob.perform_now(client: client)
+    assert_equal [ 7, 8, 8 ], calls
+    assert_nil PerfectBook::SyncState.for("bookings").contact_cursor
+  end
+
+  test "failed mirror writes do not commit validators" do
+    committed = false
+    client = FakePbCatalogClient.new
+    client.define_singleton_method(:list_trips) do
+      { data: [ pb_trip(id: nil) ], not_modified: false, commit_etags: -> { committed = true } }
+    end
+    assert_raises(ActiveRecord::RecordInvalid) { PerfectBook::SyncCatalogJob.perform_now(client: client) }
+    assert_not committed
+  end
+
   test "catalog sync inserts trips and departures" do
     client = FakePbCatalogClient.new(trips: [ pb_trip ], departures: [ pb_departure ])
     PerfectBook::SyncCatalogJob.perform_now(client: client)

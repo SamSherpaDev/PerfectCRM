@@ -11,11 +11,14 @@ module PerfectBook
     queue_as :default
 
     def perform(client: nil)
-      client ||= Client.new
-      contacts = Contact.where(kind: "customer")
+      client ||= Client.new(pace_requests: true)
+      state = SyncState.for("bookings")
+      contacts = Contact.where(kind: "customer").where("id > ?", state.contact_cursor || 0)
       contacts.find_each do |mirror|
         sync_one_contact!(client, mirror)
+        state.update!(contact_cursor: mirror.id)
       end
+      state.update!(contact_cursor: nil)
       SyncState.record_success!("bookings")
     rescue PerfectBook::Error => e
       SyncState.record_error!("bookings", e.message)
@@ -48,7 +51,8 @@ module PerfectBook
       # Cancelled-away bookings vanish from nothing: the API is the full
       # list, so drop local rows the server no longer returns for this contact.
       Booking.where(perfectbook_contact_id: mirror.perfectbook_id)
-        .where.not(perfectbook_id: seen_ids).delete_all if seen_ids.any?
+        .where.not(perfectbook_id: seen_ids).delete_all
+      result[:commit_etags]&.call
     end
 
     def parse_date(value)
