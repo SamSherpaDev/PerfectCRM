@@ -1,0 +1,26 @@
+# S3-compatible backup bucket (Cloudflare R2 is the documented default;
+# Backblaze B2 works the same with its own endpoint/region). The SPACES_*
+# variable names are historical; they carry whichever provider's values.
+# Backup-bucket credentials only; the app never sees these.
+access-key-id: ${LITESTREAM_ACCESS_KEY_ID}
+secret-access-key: ${LITESTREAM_SECRET_ACCESS_KEY}
+
+dbs:
+  - path: /rails/storage/production.sqlite3
+    sync-interval: 1s
+    replica:
+      type: s3
+      bucket: ${LITESTREAM_BUCKET}
+      path: perfectcrm/primary
+      endpoint: ${SPACES_ENDPOINT}
+      region: ${SPACES_REGION}
+      retention: 24h
+  - path: /rails/storage/production_queue.sqlite3
+    sync-interval: 1s
+    replica:
+      type: s3
+      bucket: ${LITESTREAM_BUCKET}
+      path: perfectcrm/queue
+      endpoint: ${SPACES_ENDPOINT}
+      region: ${SPACES_REGION}
+      retention: 24h

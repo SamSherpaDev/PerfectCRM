@@ -1,0 +1,22 @@
+<% content_for :title, "Settings · PerfectCRM" %>
+<div class="page-narrow">
+  <%= render layout: "shared/page_header", locals: { eyebrow: "PerfectCRM", title: "Settings", subtitle: "How the desk looks and behaves. More controls will join this page as features land." } do %><% end %>
+  <%= render "shared/flash" %>
+
+  <%= form_with model: @settings, url: settings_path, method: :patch, data: { controller: "appearance", action: "change->appearance#apply" } do |form| %>
+    <section class="card card-pad" aria-labelledby="appearance-heading">
+      <h2 class="section-title" id="appearance-heading">Appearance</h2>
+      <%= card_caption "Applies the moment you choose it; Paper by default, Night is the ink scheme with the same drawings." %>
+      <div class="segment mt-4" role="radiogroup" aria-labelledby="appearance-heading">
+        <% { "paper" => [ "Paper", :sun ], "night" => [ "Night", :moon ] }.each do |value, (label, icon)| %>
+          <label>
+            <%= form.radio_button :appearance, value %>
+            <%= render "shared/icon", name: icon, class: "h-3.5 w-3.5" %>
+            <span><%= label %></span>
+          </label>
+        <% end %>
+      </div>
+      <p id="appearance-status" role="status" class="hint" data-appearance-target="status"></p>
+    </section>
+  <% end %>
+</div>

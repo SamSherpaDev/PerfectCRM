@@ -1,0 +1,9 @@
+<% content_for :title, "Sign-in failed · PerfectCRM" %>
+<section class="card w-full max-w-md overflow-hidden p-8 sm:p-10">
+  <%= sketch :ridge, class: "sk hdr-ridge !-top-2 !max-w-[70%]" %>
+  <%= render "shared/logo", on_paper: true %>
+  <p class="eyebrow mt-10 text-bad">Sign-in failed</p>
+  <h1 class="display mt-2 text-3xl">Google sign-in did not complete.</h1>
+  <p class="mt-4 text-sm leading-relaxed muted">Nothing was saved. Please try again; if this keeps happening, check that the Google account has a verified email.</p>
+  <%= link_to "Back to sign in", sign_in_path, class: "btn-secondary mt-8" %>
+</section>

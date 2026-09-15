@@ -1,0 +1,7 @@
+<% content_for :title, "Pipeline · PerfectCRM" %>
+<div class="page">
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Enquiries", title: "Pipeline", subtitle: "From first hello to booked, nothing slips through." } do %><% end %>
+  <%= render "shared/flash" %>
+
+  <%= render "shared/empty_state", title: "Pipeline opens soon", body: "Enquiries will move through stages — new, quoted, following up, booked — so the next step is always clear.", scene: :wheel %>
+</div>
