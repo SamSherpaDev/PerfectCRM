@@ -10,7 +10,7 @@ class OutboundComposerTest < ActiveSupport::TestCase
     message = Outbound::Composer.call(owner: @client, params: { body: "Hi Maya" })
     assert message.persisted?
     assert_equal "queued", message.status
-    assert_equal "outbound", message.direction
+    assert_equal "out", message.direction
     assert_equal "maya@example.com", message.to_addrs
     assert_equal "Hello from Sherpa Holidays", message.subject
   end

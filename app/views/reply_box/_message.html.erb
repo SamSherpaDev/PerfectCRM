@@ -18,7 +18,7 @@
         <ul class="mt-2 space-y-1" aria-label="Attachments">
           <% message.files.each do |file| %>
             <li class="text-xs">
-              <%= link_to file.filename.to_s, attachment_message_path(message, file.id),
+              <%= link_to file.filename.to_s, attachment_path(file.id),
                     class: "link", download: file.filename.to_s %>
               <span class="muted">· <%= number_to_human_size(file.byte_size) %></span>
             </li>

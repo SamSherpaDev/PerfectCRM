@@ -78,7 +78,6 @@ Rails.application.routes.draw do
   resources :messages, only: [] do
     member do
       post :retry
-      get "attachments/:attachment_id", action: :attachment, as: :attachment
     end
   end
   resources :group_sends, only: %i[create show]

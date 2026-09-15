@@ -122,10 +122,10 @@ class MessagesRequestsTest < ActionDispatch::IntegrationTest
       direction: "out", status: "sent",
       to_addrs: "maya@example.com", subject: "Hi", text_body: "Hello")
     message.files.attach(io: StringIO.new("hello"), filename: "hi.txt", content_type: "text/plain")
-    get attachment_message_path(message, message.files.first.id)
+    get attachment_path(message.files.first.id)
     assert_redirected_to sign_in_path
     sign_in
-    get attachment_message_path(message, message.files.first.id)
+    get attachment_path(message.files.first.id)
     assert_response :success
     assert_equal "hello", response.body
   end
@@ -137,7 +137,7 @@ class MessagesRequestsTest < ActionDispatch::IntegrationTest
     sign_in
     get inbox_thread_path(conversation)
     assert_response :success
-    assert_select ".reply-ev", text: /Hello/
+    assert_select ".stone", text: /Hello/
     assert_select ".reply-box", count: 1
   end
 

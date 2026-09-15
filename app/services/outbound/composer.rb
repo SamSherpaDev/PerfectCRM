@@ -119,12 +119,14 @@ module Outbound
     end
 
     def attach_files(message)
-      message.files.attach(@draft.files.blobs.to_a) if @draft&.files&.attached?
       files = @params[:files]
       files = files.values if files.is_a?(Hash)
-      Array(files).compact_blank.each do |file|
-        message.files.attach(file)
-      end
+      uploads = Array(files).compact_blank
+      uploads += @draft.files.blobs.to_a if @draft&.files&.attached?
+      allowed, refused = Uploads.partition(uploads)
+      raise Uploads::SensitiveDocument if refused.any?
+
+      allowed.each { |file| message.files.attach(file) }
     end
   end
 end

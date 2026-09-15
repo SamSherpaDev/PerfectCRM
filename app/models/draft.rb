@@ -18,8 +18,9 @@ class Draft < ApplicationRecord
   end
 
   def attach_uploads(uploads)
-    uploads = uploads.values if uploads.is_a?(Hash)
-    Array(uploads).compact_blank.each { |upload| files.attach(upload) }
+    allowed, refused = Outbound::Uploads.partition(uploads)
+    allowed.each { |upload| files.attach(upload) }
+    refused.any?
   end
 
   def empty?

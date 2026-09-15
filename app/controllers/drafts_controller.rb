@@ -11,7 +11,7 @@ class DraftsController < ApplicationController
       owner.conversations.find_by(id: params[:conversation_id]) : nil
     @draft = Draft.for_owner(owner, conversation: conversation)
     @draft.assign_attributes(draft_attributes)
-    @draft.attach_uploads(params.dig(:message, :files))
+    @upload_refused = @draft.attach_uploads(params.dig(:message, :files))
 
     if @draft.empty?
       @draft.destroy if @draft.persisted?
@@ -23,7 +23,14 @@ class DraftsController < ApplicationController
 
     respond_to do |format|
       format.turbo_stream
-      format.html { redirect_to owner, notice: @saved ? "Draft saved." : "Draft cleared." }
+      format.html do
+        if @upload_refused
+          destination = conversation ? inbox_thread_path(conversation) : polymorphic_path(owner, new_thread: 1)
+          redirect_to destination, alert: Outbound::Uploads::REFUSAL
+        else
+          redirect_to owner, notice: @saved ? "Draft saved." : "Draft cleared."
+        end
+      end
     end
   end
 

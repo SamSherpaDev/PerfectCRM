@@ -1,6 +1,9 @@
 <div class="mt-3" id="draft-attachments">
   <%= label_tag :message_files, "Attachments", class: "label" %>
   <%= file_field_tag "message[files][]", id: "message_files", multiple: true, class: "input" %>
+  <% if flash[:alert] == Outbound::Uploads::REFUSAL %>
+    <p role="alert" class="hint"><%= Outbound::Uploads::REFUSAL %></p>
+  <% end %>
   <% if draft.files.attached? %>
     <ul class="mt-1 space-y-0.5" aria-label="Draft attachments">
       <% draft.files.each do |file| %>

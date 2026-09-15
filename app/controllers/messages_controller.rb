@@ -17,10 +17,11 @@ class MessagesController < ApplicationController
     message = Outbound::Composer.call(owner: owner, params: message_params, conversation: conversation)
     OutboundDeliveryJob.perform_later(message.id)
     redirect_to owner, notice: "Sending your reply…"
-  rescue ActiveRecord::RecordInvalid => e
-    keep_draft(owner, conversation)
+  rescue ActiveRecord::RecordInvalid, Outbound::Uploads::SensitiveDocument => e
+    refused = keep_draft(owner, conversation)
     destination = conversation ? inbox_thread_path(conversation) : polymorphic_path(owner, new_thread: 1)
-    redirect_to destination, alert: "Could not send: #{e.record.errors.full_messages.to_sentence}"
+    alert = refused || e.is_a?(Outbound::Uploads::SensitiveDocument) ? Outbound::Uploads::REFUSAL : "Could not send: #{e.record.errors.full_messages.to_sentence}"
+    redirect_to destination, alert: alert
   end
 
   # A failed delivery keeps its Message; retry re-queues the same words.
@@ -36,17 +37,6 @@ class MessagesController < ApplicationController
     else
       redirect_to destination, alert: "Only a failed message can be retried."
     end
-  end
-
-  # Attachment downloads go through here (never the default Active Storage
-  # routes) so only the signed-in captain can fetch them.
-  def attachment
-    message = Message.find(params[:id])
-    return render_not_found unless message.owner
-
-    file = message.files.find(params[:attachment_id])
-    send_data file.download, filename: file.filename.to_s,
-      type: file.content_type, disposition: "attachment"
   end
 
   private
@@ -71,12 +61,13 @@ class MessagesController < ApplicationController
     return unless owner
     draft = Draft.for_owner(owner, conversation: conversation)
     draft.assign_attributes(draft_attributes)
-    draft.attach_uploads(params.dig(:message, :files))
+    refused = draft.attach_uploads(params.dig(:message, :files))
     if draft.empty?
       draft.destroy if draft.persisted?
     else
       draft.save
     end
+    refused
   end
 
   def owner_path_for(owner)
