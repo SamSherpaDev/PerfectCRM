@@ -89,6 +89,48 @@ SSH-forward hint plus the cleanup command; the drill container stays up until
 the operator confirms the app looks right and runs that cleanup. Quarterly,
 and once before trusting backups.
 
+### Signed-in verification over HTTPS
+
+On the laptop, have Caddy available and add
+`https://localhost:8443/auth/google_oauth2/callback` to the authorized redirect
+URIs of the Google web OAuth client whose ID is in the server's `.env.app`.
+Keep the production redirect URI. The callback must match exactly, including
+scheme and port ([Google redirect URI rules](https://developers.google.com/identity/protocols/oauth2/web-server#uri-validation)).
+
+1. Run the SSH command printed by the drill in a laptop terminal and leave
+   it running. It forwards laptop port 18080 to the restored app's random
+   server loopback port.
+2. In a local working directory on the laptop, create `Caddyfile.drill`:
+
+   ```caddyfile
+   {
+       admin 127.0.0.1:20199
+       auto_https disable_redirects
+   }
+
+   https://localhost:8443 {
+       bind 127.0.0.1
+       tls internal
+       reverse_proxy 127.0.0.1:18080
+   }
+   ```
+
+   Run `caddy run --config Caddyfile.drill --adapter caddyfile` and leave it
+   running. This laptop proxy supplies HTTPS and preserves the localhost
+   host and port for OAuth; the VPS Caddy configuration stays unchanged.
+3. In another laptop terminal, run
+   `caddy trust --address 127.0.0.1:20199` and approve the local CA trust
+   prompt if needed. If the browser uses a separate certificate store,
+   import the Caddy root certificate shown in the Caddy logs there too.
+   See [Caddy's trust command](https://caddyserver.com/docs/command-line#caddy-trust).
+4. Open `https://localhost:8443`, sign in with the allowlisted Google account,
+   and open the dashboard and settings. Database writes go to the isolated
+   restored copy. When attachment features exist, open a known attachment
+   as well; attachment reads still use the configured production bucket.
+5. Run the cleanup command printed by the drill on the VPS, stop both laptop
+   terminal processes with Ctrl-C, and remove the temporary localhost
+   redirect URI from the Google client.
+
 ## Adding another app to this server
 
 Same pattern a third time: its own folder under `/opt/apps`, its own

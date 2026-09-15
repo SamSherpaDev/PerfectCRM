@@ -38,15 +38,19 @@ docker run --rm \
   -v "$WORKDIR:/restore" \
   -v "$PWD/litestream.yml:/etc/litestream.yml:ro" \
   litestream/litestream:0.5.9 \
-  restore -o "/restore/production.sqlite3" \
-  "s3://$LITESTREAM_BUCKET/perfectcrm/primary"
+  restore -config /etc/litestream.yml -o "/restore/production.sqlite3" \
+  /rails/storage/production.sqlite3
 
 docker run --rm --user 0:0 -v "$WORKDIR:/restore" "$IMAGE" \
   chown -R 1000:1000 /restore
 
 # 2. Integrity check.
-docker run --rm -v "$WORKDIR:/restore" "$IMAGE" \
-  sqlite3 /restore/production.sqlite3 "PRAGMA integrity_check;"
+INTEGRITY_RESULT="$(docker run --rm -v "$WORKDIR:/restore" "$IMAGE" \
+  sqlite3 /restore/production.sqlite3 "PRAGMA integrity_check;")"
+if [ "$INTEGRITY_RESULT" != "ok" ]; then
+  printf 'Restore drill FAILED: database integrity check returned:\n%s\n' "$INTEGRITY_RESULT" >&2
+  exit 1
+fi
 
 # 3. Boot a throwaway app container against the restored file, probe /up.
 CONTAINER_ID="$(docker run -d --name "$CONTAINER" \
