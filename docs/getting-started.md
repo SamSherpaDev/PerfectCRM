@@ -37,3 +37,9 @@ converted lead, two organizations, a dozen messages across seven threads,
 three quotes (one accepted), six tasks, and mirrored Everest, Annapurna, and
 Langtang trips with departures and bookings — so Today, the inbox, the
 pipeline, and quotes all look alive.
+
+Demo-created rows are recorded in a database manifest. Loading rejects
+collisions with unmarked records. Wiping deletes only manifest rows and
+refuses if unmarked records are attached; existing data from before the
+manifest was introduced is never automatically claimed or deleted.
+Demo loading leaves PerfectBook sync cursors untouched.

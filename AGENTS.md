@@ -86,9 +86,8 @@ When updating this file, preserve this bar for all agents and keep entries conci
   stages), wipe demo-only rows with
   `bin/rails runner 'require "./db/seeds/demo_seed"; DemoSeed.wipe!'`.
   `DemoSeed` is not autoloaded, so the runner needs the explicit require.
-  Wipe deletes demo quotes first (`delete_all` would orphan quote lines
-  past the FK), clears append-only `ActivityEvent`s with `delete_all`
-  (they are readonly), and destroys leads before clients (converted leads
-  still point at their client).
+  Ownership is recorded in `DemoRecord`; collisions with unmarked records
+  fail the load. Wipe removes only manifest records and refuses if unmarked
+  records are attached. Converted leads stay read-only on reseed.
 - A partial's first-line `<%# locals: (...) %>` is parsed as strict locals:
   keep it pure Ruby on one line and put prose in a separate comment.

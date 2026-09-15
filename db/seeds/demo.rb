@@ -3,8 +3,6 @@
 #
 # Load:   DEMO_SEED=1 bin/rails db:seed
 # Reload: DEMO_SEED=1 bin/rails db:seed  (idempotent, safe to rerun)
-# Wipe:   bin/rails runner 'DemoSeed.wipe!'  (deletes ONLY demo rows,
-#         matched by @demo.example.test emails and reserved PerfectBook ids)
 #
 # Guard: this file does nothing unless DEMO_SEED=1 is set, and refuses to
 # run in production. It is never loaded by default.

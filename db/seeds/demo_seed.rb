@@ -4,16 +4,23 @@
 module DemoSeed
   DEMO_DOMAIN = "demo.example.test".freeze
 
+  RECORD_TYPES = %w[
+    QuoteLine QuoteView Quote Message Conversation Task Note ActivityEvent
+    Person Tagging Lead Client Organization Tag PerfectBook::Departure
+    PerfectBook::Trip PerfectBook::Booking PerfectBook::Contact
+  ].freeze
+
   module_function
 
   def load!
     ActiveRecord::Base.transaction do
-      operator = Organization.find_or_create_by!(email: "namaste@#{DEMO_DOMAIN}") do |org|
+      before = RECORD_TYPES.to_h { |type| [ type, type.constantize.pluck(:id) ] }
+      operator = create_demo(Organization, email: "namaste@#{DEMO_DOMAIN}") do |org|
         org.name = "Himalayan Footprints"
         org.kind = "operator"
         org.website = "https://himalayan-footprints.example.test"
       end
-      advisor = Organization.find_or_create_by!(email: "maya@#{DEMO_DOMAIN}") do |org|
+      advisor = create_demo(Organization, email: "maya@#{DEMO_DOMAIN}") do |org|
         org.name = "Maya Gurung Travels"
         org.kind = "advisor"
       end
@@ -25,52 +32,73 @@ module DemoSeed
       seed_quotes!(clients, leads)
       seed_tasks!(clients, leads)
       seed_notes!(clients, leads)
-      seed_sync_states!
+      RECORD_TYPES.each do |type|
+        (type.constantize.pluck(:id) - before.fetch(type)).each do |id|
+          DemoRecord.create!(record_type: type, record_id: id)
+        end
+      end
     end
   end
 
-  # Deletes only demo rows. Demo clients, leads, and organizations all
-  # use @demo.example.test emails; quotes hang off those owners and are
-  # deleted first (no dependent destroy from the owner side), everything
-  # else (conversations, messages, tasks, notes, activity) goes through
-  # dependent destroys. Mirrored PerfectBook rows use reserved
-  # perfectbook_ids (>= 9000) and are deleted directly.
   def wipe!
     ActiveRecord::Base.transaction do
-      client_ids = Client.where("email LIKE ?", "%@#{DEMO_DOMAIN}").pluck(:id)
-      lead_ids = Lead.where("email LIKE ?", "%@#{DEMO_DOMAIN}").pluck(:id)
-      # ActivityEvent is append-only and readonly: clear demo rows directly.
-      ActivityEvent.where(subject_type: "Client", subject_id: client_ids).delete_all
-      ActivityEvent.where(subject_type: "Lead", subject_id: lead_ids).delete_all
-      # destroy_all (not delete_all): quote lines and views go through callbacks.
-      Quote.where(client_id: client_ids).destroy_all
-      Quote.where(lead_id: lead_ids).destroy_all
-      # Leads before clients: a converted lead still points at its client.
-      Lead.where(id: lead_ids).destroy_all
-      Client.where(id: client_ids).destroy_all
-      Organization.where("email LIKE ?", "%@#{DEMO_DOMAIN}").destroy_all
-      PerfectBook::Trip.where("perfectbook_id >= 9000").delete_all
-      PerfectBook::Departure.where("perfectbook_id >= 9000").delete_all
-      PerfectBook::Booking.where("perfectbook_id >= 9000").delete_all
-      PerfectBook::Contact.where("perfectbook_id >= 9000").delete_all
+      RECORD_TYPES.each do |type|
+        model = type.constantize
+        records = model.where(id: DemoRecord.where(record_type: type).select(:record_id))
+        records.each do |record|
+          model.reflect_on_all_associations.each do |association|
+            next unless [ :has_many, :has_one ].include?(association.macro)
+            next if association.options[:through]
+
+            Array(record.public_send(association.name)).each do |child|
+              unless DemoRecord.exists?(record_type: child.class.name, record_id: child.id)
+                raise "Cannot wipe demo #{type} #{record.id}: unmarked #{child.class.name} #{child.id} is attached"
+              end
+            end
+          end
+        end
+      end
+      RECORD_TYPES.each do |type|
+        records = type.constantize.where(id: DemoRecord.where(record_type: type).select(:record_id))
+        records.each(&:remove_fts_row) if type.constantize.method_defined?(:remove_fts_row)
+        records.delete_all
+      end
+      DemoRecord.delete_all
     end
+  end
+
+  def find_demo(scope, **attributes)
+    record = scope.find_or_initialize_by(attributes)
+    if record.persisted? && !DemoRecord.exists?(record_type: record.class.name, record_id: record.id)
+      raise "Demo seed collision: #{record.class.name} #{attributes.inspect} is not demo-owned"
+    end
+    record
+  end
+
+  def create_demo(scope, **attributes)
+    record = find_demo(scope, **attributes)
+    if record.new_record?
+      yield record if block_given?
+      record.save!
+    end
+    record
   end
 
   def seed_catalog!
     now = Time.current
-    ebc = PerfectBook::Trip.find_or_create_by!(perfectbook_id: 9001) do |trip|
+    ebc = create_demo(PerfectBook::Trip, perfectbook_id: 9001) do |trip|
       trip.name = "Everest Base Camp trek"
       trip.status = "active"
       trip.active = true
       trip.synced_at = now
     end
-    annapurna = PerfectBook::Trip.find_or_create_by!(perfectbook_id: 9002) do |trip|
+    annapurna = create_demo(PerfectBook::Trip, perfectbook_id: 9002) do |trip|
       trip.name = "Annapurna Circuit trek"
       trip.status = "active"
       trip.active = true
       trip.synced_at = now
     end
-    langtang = PerfectBook::Trip.find_or_create_by!(perfectbook_id: 9003) do |trip|
+    langtang = create_demo(PerfectBook::Trip, perfectbook_id: 9003) do |trip|
       trip.name = "Langtang Valley trek"
       trip.status = "active"
       trip.active = true
@@ -92,7 +120,7 @@ module DemoSeed
     ]
     departures.each do |attrs|
       trip = attrs.delete(:trip)
-      dep = PerfectBook::Departure.find_or_initialize_by(perfectbook_id: attrs[:perfectbook_id])
+      dep = find_demo(PerfectBook::Departure, perfectbook_id: attrs[:perfectbook_id])
       dep.assign_attributes(attrs.merge(
         perfectbook_trip_id: trip.perfectbook_id, trip_name: trip.name,
         currency: "USD", status: "open", synced_at: now,
@@ -135,7 +163,7 @@ module DemoSeed
     ]
     clients = {}
     specs.each do |spec|
-      client = Client.find_or_initialize_by(email: spec[:email])
+      client = find_demo(Client, email: spec[:email])
       fresh = client.new_record?
       client.assign_attributes(
         name: spec[:name], kind: "individual", source: spec[:source],
@@ -159,7 +187,7 @@ module DemoSeed
     end
 
     # One converted lead, so the lineage ("started as a lead") shows.
-    becker_lead = Lead.find_or_initialize_by(email: "tom@#{DEMO_DOMAIN}")
+    becker_lead = find_demo(Lead, email: "tom@#{DEMO_DOMAIN}")
     if becker_lead.new_record?
       becker_lead.assign_attributes(name: "Tom Becker", kind: "individual",
         source: "website_form", status: "new", trip_interest: "Everest Base Camp trek",
@@ -167,6 +195,7 @@ module DemoSeed
       becker_lead.save!
     end
     unless becker_lead.converted?
+      find_demo(Client, email: becker_lead.email)
       converted = becker_lead.convert_to_client!
       clients["Tom Becker"] = converted
     else
@@ -182,7 +211,7 @@ module DemoSeed
     when "Jonas Weber" then "SH-2026-0098"
     when "Priya Sharma" then "SH-2026-0151"
     end
-    booking = PerfectBook::Booking.find_or_initialize_by(perfectbook_id: 9200 + spec[:pb_contact])
+    booking = find_demo(PerfectBook::Booking, perfectbook_id: 9200 + spec[:pb_contact])
     booking.assign_attributes(
       perfectbook_contact_id: spec[:pb_contact], ref: ref,
       trip_name: spec[:trip], status: client.pipeline_stage == "post_trip" ? "completed" : "confirmed",
@@ -196,7 +225,7 @@ module DemoSeed
       synced_at: now
     )
     booking.save!
-    contact = PerfectBook::Contact.find_or_initialize_by(perfectbook_id: spec[:pb_contact])
+    contact = find_demo(PerfectBook::Contact, perfectbook_id: spec[:pb_contact])
     contact.assign_attributes(name: client.name, email: client.email, kind: "customer", synced_at: now)
     contact.save!
   end
@@ -223,7 +252,11 @@ module DemoSeed
     ]
     leads = {}
     specs.each do |spec|
-      lead = Lead.find_or_initialize_by(email: spec[:email])
+      lead = find_demo(Lead, email: spec[:email])
+      if lead.converted?
+        leads[spec[:name]] = lead.converted_client
+        next
+      end
       fresh = lead.new_record?
       lead.assign_attributes(
         name: spec[:name], kind: "individual", source: spec[:source],
@@ -308,15 +341,12 @@ module DemoSeed
         body: "Hi, I found you through a friend. Solo trekker, hoping for Everest sometime next year. Where do I start?" }
     ])
 
-    [ first_reply, itinerary, nudge ].compact.each do |template|
-      2.times { template.record_use! }
-    end
   end
 
   def thread(owner, subject, messages)
     convo = owner.conversations.find_or_create_by!(subject: subject)
     messages.each_with_index do |msg, index|
-      key = "demo-#{owner.class.name.downcase}-#{owner.id}-#{index}"
+      key = "demo-conversation-#{convo.id}-#{index}"
       at = msg[:days_ago].days.ago - msg.fetch(:hours_ago, 0).hours
       if msg[:dir] == "in"
         convo.messages.find_or_create_by!(message_id: "<#{key}@#{DEMO_DOMAIN}>") do |m|
@@ -377,8 +407,9 @@ module DemoSeed
       quote.update_columns(sent_at: 75.days.ago, accepted_at: 70.days.ago, view_count: 3, viewed_at: 71.days.ago)
     end
 
-    if Quote.where(lead_id: hannah.id).none?
-      quote = Quote.new(client: nil, lead: hannah,
+    if Quote.where(lead_id: Lead.where(email: "hannah@#{DEMO_DOMAIN}").select(:id)).none? &&
+        (hannah.is_a?(Lead) || Quote.where(client_id: hannah.id).none?)
+      quote = Quote.new(**(hannah.is_a?(Client) ? { client: hannah } : { lead: hannah }),
         trip_name: "Everest Base Camp trek", departure_label: "April departure",
         departure_start_on: Date.new(2027, 4, 5), departure_end_on: Date.new(2027, 4, 18),
         party_size: 2, deposit_minor: 50_000, valid_until: Date.current + 30
@@ -418,9 +449,4 @@ module DemoSeed
     end
   end
 
-  def seed_sync_states!
-    %w[catalog contacts bookings].each do |job|
-      PerfectBook::SyncState.record_success!(job)
-    end
-  end
 end

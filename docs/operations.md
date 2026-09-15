@@ -87,10 +87,10 @@ secret. For relay credential setup and rotation, see the
 For configuration, sync behavior, and the Settings connection check, see
 [PerfectBook connection](../README.md#perfectbook-connection).
 
-## First sign-in setup (captain, Settings only)
+## First sign-in setup
 
-Everything after the first sign-in lives in Settings - no box access
-needed. Work top to bottom; each card saves itself.
+Most setup lives in Settings; the PerfectBook credentials require box access.
+Work top to bottom; each Settings card saves itself.
 
 1. **Appearance.** Pick Paper or Night. It applies the moment you choose
    it.
@@ -110,8 +110,12 @@ needed. Work top to bottom; each card saves itself.
    secret and webhook URL for n8n and Panda AI. Rotate either credential
    from the same card after pasting the new value at the other end. See the
    [website intake contract](leads-intake.md).
-6. **PerfectBook.** Host plus API token, then Test connection. The token
-   also lives in PerfectBook's `.env.app`. See
+6. **PerfectBook.** Set `PERFECTBOOK_BASE_URL` and
+   `PERFECTBOOK_API_TOKEN` in `/opt/apps/perfectcrm/.env.app` on the box.
+   From `/opt/apps/perfectcrm`, run
+   `docker compose -f compose.yml up -d --force-recreate app`.
+   Settings shows connection status and Test connection; it does not edit
+   these credentials. Use Test connection after recreating the container. See
    [PerfectBook connection](../README.md#perfectbook-connection).
 7. **Digests.** The 7am Today mail and the Monday pipeline note are on by
    default; turn either off from its card.
