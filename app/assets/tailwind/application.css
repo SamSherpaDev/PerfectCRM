@@ -808,6 +808,39 @@
   }
 }
 
+/* Mail stream timeline (docs/DESIGN.md stream): inbound raised stones on
+   the left bank, outbound pressed on the right, newest first. */
+.stream {
+  @apply flex flex-col gap-4;
+}
+.stone {
+  @apply relative max-w-[85%] rounded-card px-4 py-3 text-sm leading-relaxed;
+}
+.stone-in {
+  @apply self-start bg-paper-2 text-ink-2 shadow-raise border border-edge;
+}
+.stone-out {
+  @apply self-end bg-paper-3 text-ink-2 shadow-press border border-edge;
+}
+.stone-meta {
+  @apply mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-ink-3;
+}
+.unread-dot {
+  @apply inline-block h-2 w-2 rounded-full bg-seal shrink-0;
+}
+.thread-attachments {
+  @apply mt-3 flex flex-col gap-2;
+}
+.attachment-row {
+  @apply flex flex-wrap items-center gap-2 rounded-control bg-band px-3 py-2 text-[12.5px];
+}
+.triage-card {
+  @apply rounded-card border border-warn-mark bg-warn-tint px-5 py-4 text-sm;
+}
+.thread-anchor {
+  scroll-margin-top: 5rem;
+}
+
 @media print {
   html, body {
     background: #fff !important;

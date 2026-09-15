@@ -1,0 +1,296 @@
+require "test_helper"
+
+def mail_raw(from:, to: "info@sherpaholidays.com", subject: "Hello", message_id: nil, in_reply_to: nil, body: "Hi there")
+  headers = []
+  headers << "From: #{from}"
+  headers << "To: #{to}"
+  headers << "Subject: #{subject}"
+  headers << "Message-ID: #{message_id}" if message_id
+  headers << "In-Reply-To: #{in_reply_to}" if in_reply_to
+  headers << "Date: Mon, 14 Sep 2026 10:00:00 -0700"
+  headers << ""
+  headers << body
+  headers.join("\r\n")
+end
+
+def ingest_raw(raw, gmail: {})
+  parsed = Mail::Ingester.parse_raw(raw)
+  Mail::Ingester.ingest(parsed: parsed, gmail: gmail)
+end
+
+class MailIngesterTest < ActiveSupport::TestCase
+  test "keeps mail to info@ and files to the right client" do
+    client = Client.create!(name: "Tashi", email: "tashi@example.com")
+    result = ingest_raw(mail_raw(from: "tashi@example.com", message_id: "<a1@test>"),
+      gmail: { gm_thrid: "thread-1", gm_msgid: "1001", labels: [ "\\Inbox" ] })
+    assert_equal :stored, result[:status]
+    assert_equal client, result[:conversation].linkable
+    assert_equal "in", result[:message].direction
+    assert_equal [ "\\Inbox" ], result[:message].label_list
+  end
+
+  test "keeps outbound mail from info@ and links by recipient" do
+    client = Client.create!(name: "Maya", email: "maya@example.com")
+    raw = mail_raw(from: "info@sherpaholidays.com", to: "maya@example.com", subject: "Re: trip", message_id: "<out1@test>")
+    result = ingest_raw(raw, gmail: { gm_thrid: "thread-2", gm_msgid: "1002" })
+    assert_equal :stored, result[:status]
+    assert_equal "out", result[:message].direction
+    assert_equal client, result[:conversation].linkable
+  end
+
+  test "drops personal mail with no info@ trace without storing it" do
+    assert_no_difference([ "Conversation.count", "Message.count" ]) do
+      result = ingest_raw(mail_raw(from: "friend@example.com", to: "captain@gmail.com", message_id: "<personal@test>"),
+        gmail: { gm_thrid: "thread-x", gm_msgid: "9999" })
+      assert_equal :filtered, result[:status]
+    end
+  end
+
+  test "dedupes on gm_message_id and on Message-ID" do
+    ingest_raw(mail_raw(from: "a@example.com", to: "info@sherpaholidays.com", message_id: "<dup@test>"),
+      gmail: { gm_thrid: "t1", gm_msgid: "555" })
+    assert_no_difference("Message.count") do
+      again = ingest_raw(mail_raw(from: "a@example.com", to: "info@sherpaholidays.com", message_id: "<other@test>"),
+        gmail: { gm_thrid: "t1", gm_msgid: "555" })
+      assert_equal :duplicate, again[:status]
+    end
+    assert_no_difference("Message.count") do
+      again = ingest_raw(mail_raw(from: "a@example.com", to: "info@sherpaholidays.com", message_id: "<dup@test>"),
+        gmail: { gm_thrid: "t-other", gm_msgid: "556" })
+      assert_equal :duplicate, again[:status]
+    end
+  end
+
+  test "threads on X-GM-THRID and falls back to In-Reply-To" do
+    first = ingest_raw(mail_raw(from: "b@example.com", message_id: "<first@test>"),
+      gmail: { gm_thrid: "thread-9", gm_msgid: "901" })
+    second = ingest_raw(mail_raw(from: "info@sherpaholidays.com", to: "b@example.com", message_id: "<second@test>"),
+      gmail: { gm_thrid: "thread-9", gm_msgid: "902" })
+    assert_equal first[:conversation].id, second[:conversation].id
+
+    third = ingest_raw(mail_raw(from: "c@example.com", message_id: "<third@test>", in_reply_to: "<first@test>"),
+      gmail: {})
+    assert_equal first[:conversation].id, third[:conversation].id
+  end
+
+  test "unknown senders go to triage and never create records silently" do
+    assert_no_difference([ "Client.count", "Lead.count", "Organization.count" ]) do
+      result = ingest_raw(mail_raw(from: "newbie@example.com", message_id: "<new@test>"),
+        gmail: { gm_thrid: "triage-1", gm_msgid: "7001" })
+      assert_equal :stored, result[:status]
+      assert_nil result[:conversation].linkable
+      assert result[:conversation].triage?
+    end
+  end
+
+  test "remembered EmailIdentity auto-links later mail" do
+    client = Client.create!(name: "Linked", email: "linked@example.com")
+    EmailIdentity.remember!("stranger@example.com", linkable: client)
+    result = ingest_raw(mail_raw(from: "stranger@example.com", message_id: "<s1@test>"),
+      gmail: { gm_thrid: "t-s", gm_msgid: "8001" })
+    assert_equal client, result[:conversation].linkable
+  end
+
+  test "matches person email to the parent client" do
+    client = Client.create!(name: "Family")
+    client.people.create!(name: "Maya", email: "maya-person@example.com")
+    result = ingest_raw(mail_raw(from: "maya-person@example.com", message_id: "<p1@test>"),
+      gmail: { gm_thrid: "t-p", gm_msgid: "8002" })
+    assert_equal client, result[:conversation].linkable
+  end
+
+  test "sanitizes html bodies on ingest" do
+    raw = "From: h@example.com\r\nTo: info@sherpaholidays.com\r\nSubject: x\r\nMessage-ID: <h1@test>\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n<p>hi</p><script>alert(1)</script>"
+    result = ingest_raw(raw, gmail: { gm_thrid: "t-h", gm_msgid: "8003" })
+    assert_not_includes result[:message].html_body.to_s, "<script"
+  end
+
+  test "stores attachments on the message" do
+    client = Client.create!(name: "Attach", email: "attach@example.com")
+    parsed = Mail::Ingester.parse_raw(mail_raw(from: "attach@example.com", message_id: "<att@test>"))
+    parsed.attachments << { filename: "note.txt", content_type: "text/plain", data: "hello file" }
+    result = Mail::Ingester.ingest(parsed: parsed, gmail: { gm_thrid: "t-att", gm_msgid: "8004" })
+    assert result[:message].files.attached?
+    assert_equal "note.txt", result[:message].files.first.filename.to_s
+  end
+  test "delivery headers retain alias mail in ingestion" do
+    %w[Bcc Delivered-To X-Original-To].each_with_index do |header, index|
+      raw = "#{header}: info@sherpaholidays.com\r\n" + mail_raw(from: "sender@example.com", to: "captain@gmail.com", message_id: "<delivery#{index}@test>")
+      parsed = Mail::Ingester.parse_raw(raw)
+      assert_equal :stored, Mail::Ingester.ingest(parsed: parsed, gmail: {})[:status]
+    end
+  end
+
+  test "failed upload rolls back ingestion and retries completely" do
+    client = Client.create!(name: "Retry", email: "retry@example.com")
+    parsed = Mail::Ingester.parse_raw(mail_raw(from: client.email, message_id: "<retry@test>"))
+    parsed.attachments << { filename: "route.txt", content_type: "text/plain", data: "route" }
+    service = ActiveStorage::Blob.service
+    assert_no_difference([ "Message.count", "Conversation.count", "ActiveStorage::Blob.count" ]) do
+      service.stub(:upload, ->(*) { raise IOError, "upload failed" }) do
+        assert_raises(IOError) { Mail::Ingester.ingest(parsed: parsed, gmail: { gm_msgid: "retry" }) }
+      end
+    end
+    result = Mail::Ingester.ingest(parsed: parsed, gmail: { gm_msgid: "retry" })
+    assert_equal :stored, result[:status]
+    assert_equal client, result[:conversation].linkable
+    assert_equal "route", result[:message].files.first.download
+  end
+
+  test "ignored identities skip triage on new threads" do
+    EmailIdentity.remember!("ignored@example.com", ignored: true)
+    result = ingest_raw(mail_raw(from: "ignored@example.com", message_id: "<ignored@test>"))
+    assert result[:conversation].ignored?
+    assert_not Conversation.triage.exists?(result[:conversation].id)
+  end
+
+  test "lead conversion transfers mail and resolves original person owners" do
+    lead = Lead.create!(name: "Traveler", email: "lead-mail@example.com", source: "email")
+    lead.people.create!(name: "Companion", email: "companion@example.com")
+    EmailIdentity.remember!("alias@example.com", linkable: lead)
+    first = ingest_raw(mail_raw(from: lead.email, message_id: "<lead-mail@test>"))
+    client = lead.convert_to_client!
+    assert_equal client, first[:conversation].reload.linkable
+    assert_equal client, EmailIdentity.find_for("alias@example.com").linkable
+    %w[lead-mail@example.com companion@example.com alias@example.com].each_with_index do |email, index|
+      result = ingest_raw(mail_raw(from: email, message_id: "<converted#{index}@test>"))
+      assert_equal client, result[:conversation].linkable
+    end
+  end
+
+  test "keeps all ordinary attachments and flags documents while explaining oversize skips" do
+    parsed = Mail::Ingester.parse_raw(mail_raw(from: "files@example.com", message_id: "<many-files@test>"))
+    parsed.attachments = 11.times.map { |i| { filename: "route#{i}.txt", content_type: "text/plain", data: "route" } }
+    parsed.attachments << { filename: "passport.pdf", content_type: "application/pdf", data: "passport" }
+    parsed.attachments << { filename: "large.txt", content_type: "text/plain", data: "a" * (25.megabytes + 1) }
+    result = Mail::Ingester.ingest(parsed: parsed, gmail: {})
+    assert_equal 11, result[:message].files.count
+    assert_equal "passport.pdf", result[:message].held_attachments.first["filename"]
+    assert_includes result[:message].attachment_notices.first, "25 MB"
+    assert Conversation.needs_triage.exists?(result[:conversation].id)
+  end
+
+  test "single part legacy charset text and HTML are converted to UTF-8" do
+    %w[plain html].each do |type|
+      raw = "From: accent@example.com\r\nTo: info@sherpaholidays.com\r\nMessage-ID: <accent-#{type}@test>\r\nContent-Type: text/#{type}; charset=ISO-8859-1\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nAndr=E9"
+      result = ingest_raw(raw)
+      body = type == "html" ? result[:message].reload.html_body : result[:message].reload.text_body
+      assert_equal "André", body
+      assert body.valid_encoding?
+    end
+  end
+
+  test "matching always excludes the configured mailbox" do
+    client = Client.create!(name: "Business mailbox", email: Mail.mailbox_address)
+    EmailIdentity.remember!(Mail.mailbox_address, linkable: client)
+    assert_nil Mail::Matcher.call([ Mail.mailbox_address ]).linkable
+  end
+
+  test "sensitive documents never create blobs or upload bytes" do
+    files = [
+      { filename: "passport.pdf", content_type: "application/pdf", data: "passport bytes" },
+      { filename: "visa.png", content_type: "image/png", data: "visa bytes" },
+      { filename: "insurance.txt", content_type: "text/plain", data: "insurance bytes" },
+      { filename: "traveler-ID.txt", content_type: "text/plain", data: "ID bytes" },
+      { filename: "date_of_birth.txt", content_type: "text/plain", data: "birth bytes" },
+      { filename: "document.txt", content_type: "application/x-passport", data: "typed bytes" },
+      { filename: "document.pdf", content_type: "application/pdf", data: pdf_with_title("Passport copy") },
+      { filename: "unreadable.pdf", content_type: "application/pdf", data: "unreadable" }
+    ]
+    parsed = Mail::Ingester.parse_raw(mail_raw(from: "held@example.com", message_id: "<held@test>"))
+    parsed.attachments = files
+    result = nil
+    assert_no_difference("ActiveStorage::Blob.count") do
+      ActiveStorage::Blob.service.stub(:upload, ->(*) { flunk "sensitive bytes uploaded" }) do
+        result = Mail::Ingester.ingest(parsed: parsed, gmail: {})
+      end
+    end
+    message = result[:message].reload
+    assert_empty message.files
+    assert_equal files.map { |file| { "filename" => file[:filename], "byte_size" => file[:data].bytesize,
+      "content_type" => file[:content_type], "status" => "held: collect in PerfectBook" } }, message.held_attachments
+    assert_match(/Collect the held documents/, Note.find_by!(notable: result[:conversation]).body)
+  end
+
+  test "ordinary PDF with a nonsensitive title remains downloadable" do
+    data = pdf_with_title("Trip itinerary")
+    parsed = Mail::Ingester.parse_raw(mail_raw(from: "route@example.com", message_id: "<ordinary-pdf@test>"))
+    parsed.attachments << { filename: "itinerary.pdf", content_type: "application/pdf", data: data }
+    result = Mail::Ingester.ingest(parsed: parsed, gmail: {})
+    assert_empty result[:message].held_attachments
+    assert_equal data, result[:message].files.first.download
+  end
+
+  test "attachment disposition is screened independently of MIME nesting" do
+    part = "Content-Type: text/plain\r\nContent-Disposition: attachment; filename=insurance.txt\r\n\r\nPRIVATE DOCUMENT"
+    [ part, "Content-Type: multipart/mixed; boundary=parts\r\n\r\n--parts\r\n#{part}\r\n--parts--" ].each_with_index do |body, index|
+      raw = "From: documents@example.com\r\nTo: info@sherpaholidays.com\r\nMessage-ID: <disposition#{index}@test>\r\n#{body}"
+      result = nil
+      assert_no_difference("ActiveStorage::Blob.count") { result = ingest_raw(raw) }
+      assert_nil result[:message].text_body
+      assert_nil result[:message].html_body
+      assert_equal "insurance.txt", result[:message].held_attachments.first["filename"]
+    end
+  end
+
+  test "ordinary single part attachment stays a downloadable file" do
+    raw = "From: documents@example.com\r\nTo: info@sherpaholidays.com\r\nContent-Type: text/plain\r\nContent-Disposition: attachment; filename=itinerary.txt\r\n\r\nOrdinary itinerary"
+    result = ingest_raw(raw)
+    assert_nil result[:message].text_body
+    assert_equal "Ordinary itinerary", result[:message].files.first.download
+  end
+
+  test "forwarded emails cannot upload enclosed sensitive attachments" do
+    enclosed = "From: traveler@example.com\r\nContent-Type: multipart/mixed; boundary=inside\r\n\r\n--inside\r\nContent-Type: text/plain\r\n\r\nForwarded note\r\n--inside\r\nContent-Type: application/pdf\r\nContent-Disposition: attachment; filename=passport.pdf\r\n\r\nPRIVATE PASSPORT BYTES\r\n--inside--\r\n"
+    2.times do |index|
+      enclosed = "Content-Type: message/rfc822\r\nContent-Disposition: attachment; filename=trip.eml\r\nContent-Transfer-Encoding: base64\r\n\r\n#{Base64.strict_encode64(enclosed)}"
+      raw = "From: forwarder@example.com\r\nTo: info@sherpaholidays.com\r\nMessage-ID: <forwarded#{index}@test>\r\n#{enclosed}"
+      result = nil
+      assert_no_difference("ActiveStorage::Blob.count") do
+        ActiveStorage::Blob.service.stub(:upload, ->(*) { flunk "enclosed sensitive bytes uploaded" }) do
+          result = ingest_raw(raw)
+        end
+      end
+      assert_equal [ "passport.pdf" ], result[:message].held_attachments.map { |file| file["filename"] }
+      assert_nil result[:message].text_body
+      assert_nil result[:message].html_body
+    end
+  end
+
+  test "forwarded mail without sensitive enclosures remains downloadable" do
+    enclosed = "From: traveler@example.com\r\nSubject: Trip dates\r\n\r\nOrdinary forwarded note"
+    raw = "From: forwarder@example.com\r\nTo: info@sherpaholidays.com\r\nContent-Type: message/rfc822\r\nContent-Disposition: attachment; filename=trip.eml\r\n\r\n#{enclosed}"
+    result = ingest_raw(raw)
+    assert_empty result[:message].held_attachments
+    downloaded = ::Mail.read_from_string(result[:message].files.first.download)
+    assert_equal [ "traveler@example.com" ], downloaded.from
+    assert_equal "Trip dates", downloaded.subject
+    assert_equal "Ordinary forwarded note", downloaded.body.decoded
+  end
+
+  test "safe enclosures survive a forwarded email with a sensitive enclosure" do
+    enclosed = "Content-Type: multipart/mixed; boundary=inside\r\n\r\n--inside\r\nContent-Type: text/plain\r\nContent-Disposition: attachment; filename=insurance.txt\r\n\r\nPRIVATE\r\n--inside\r\nContent-Type: text/plain\r\nContent-Disposition: attachment; filename=itinerary.txt\r\n\r\nOrdinary itinerary\r\n--inside--\r\n"
+    raw = "From: forwarder@example.com\r\nTo: info@sherpaholidays.com\r\nContent-Type: message/rfc822\r\nContent-Disposition: attachment; filename=trip.eml\r\n\r\n#{enclosed}"
+    result = ingest_raw(raw)
+    assert_equal [ "insurance.txt" ], result[:message].held_attachments.map { |file| file["filename"] }
+    assert_equal [ "itinerary.txt" ], result[:message].files.map { |file| file.filename.to_s }
+    assert_equal "Ordinary itinerary", result[:message].files.first.download
+  end
+
+  private
+
+  def pdf_with_title(title)
+    encoded_title = "FEFF" + title.encode("UTF-16BE").unpack1("H*")
+    objects = [ "<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [] /Count 0 >>", "<< /Title <#{encoded_title}> >>" ]
+    pdf = +"%PDF-1.4\n"
+    offsets = objects.each_with_index.map do |object, index|
+      offset = pdf.bytesize
+      pdf << "#{index + 1} 0 obj\n#{object}\nendobj\n"
+      offset
+    end
+    xref = pdf.bytesize
+    pdf << "xref\n0 4\n0000000000 65535 f \n"
+    offsets.each { |offset| pdf << format("%010d 00000 n \n", offset) }
+    pdf << "trailer\n<< /Size 4 /Root 1 0 R /Info 3 0 R >>\nstartxref\n#{xref}\n%%EOF\n"
+  end
+end

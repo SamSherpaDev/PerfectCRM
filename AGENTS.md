@@ -49,6 +49,11 @@ When updating this file, preserve this bar for all agents and keep entries conci
 - PerfectBook link: `PerfectBook::Client` (`lib/perfectbook/`) + mirror tables
   (`app/models/perfectbook/`) + `config/recurring.yml` jobs; contract in
   README.md, "PerfectBook connection". Mirrors only, never money truth.
+- Mail inbound: `Conversation`/`Message`/`EmailIdentity` + `Mail::SyncJob`
+  (5 min, read-only IMAP over `[Gmail]/All Mail`) + `Mail::ImportJob`;
+  contract in README.md, "Mail". Keep-only-info@ rule lives in
+  `Mail.keeps?`; inside `module Mail` always write `::Message` and
+  `::Conversation` because `Mail::Message` is the mail gem.
 - Views cannot name the `Template` model bare: the
   constant resolves to `ActionView::Template`. Expose what views need
   through helpers with explicit `::Template` references instead.

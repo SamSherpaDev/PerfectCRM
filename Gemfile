@@ -83,3 +83,5 @@ gem "csv"
 
 # Packages CSV exports in a zip archive.
 gem "rubyzip", require: "zip"
+
+gem "pdf-reader", "~> 2.16"

@@ -1,7 +1,55 @@
 <% content_for :title, "Inbox · PerfectCRM" %>
 <div class="page">
-  <%= render layout: "shared/page_header", locals: { eyebrow: "Conversations", title: "Inbox", subtitle: "Every client message in one place, oldest waiting reply first." } do %><% end %>
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Conversations", title: "Inbox", subtitle: "Every message to and from #{Mail.mailbox_address}, oldest waiting reply first." } do %><% end %>
   <%= render "shared/flash" %>
 
-  <%= render "shared/empty_state", title: "No conversations yet", body: "Client messages will land here in one thread per traveler, so every reply starts with the full story.", scene: :bridge %>
+  <nav class="tabs" aria-label="Inbox">
+    <%= tab_link "Waiting on you", inbox_path(tab: "waiting"), icon: :mail, active: @tab == "waiting", count: @waiting_count %>
+    <%= tab_link "Waiting on them", inbox_path(tab: "waiting_them"), icon: :check, active: @tab == "waiting_them", count: @waiting_them_count %>
+    <%= tab_link "All", inbox_path(tab: "all"), icon: :list, active: @tab == "all", count: @all_count %>
+    <%= tab_link "Triage", inbox_path(tab: "triage"), icon: :sparkle, active: @tab == "triage", count: @triage_count %>
+  </nav>
+
+  <% if @conversations.any? %>
+    <ul class="mt-4 space-y-3">
+      <% @conversations.each do |conversation| %>
+        <% last = @latest_messages[conversation.id] %>
+        <li class="card card-pad">
+          <div class="flex items-start gap-2.5">
+            <% if conversation.unread_count.to_i > 0 %>
+              <span class="unread-dot mt-1.5" aria-label="<%= conversation.unread_count %> unread"></span>
+            <% end %>
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-baseline justify-between gap-2">
+                <%= link_to conversation.display_subject, inbox_thread_path(conversation), class: "link font-medium text-ink" %>
+                <span class="text-xs muted"><%= conversation.last_message_at ? time_ago_in_words(conversation.last_message_at) + " ago" : "" %></span>
+              </div>
+              <p class="mt-1 truncate text-sm muted"><%= conversation.other_participants.first(3).join(", ") %></p>
+              <p class="mt-1 text-sm text-ink-2"><%= last&.preview_text(120) %></p>
+              <div class="mt-2 flex flex-wrap items-center gap-2">
+                <% if @document_thread_ids.include?(conversation.id) %>
+                  <%= badge "Review sensitive document", :warning %>
+                <% end %>
+                <% if conversation.linkable %>
+                  <%= status_badge "open", label: conversation.linkable_name || conversation.linkable_type %>
+                <% else %>
+                  <%= badge "Suggested client", :warning, dot: true %>
+                <% end %>
+                <% if conversation.unread_count.to_i > 0 %>
+                  <%= badge "#{conversation.unread_count} unread", :brand %>
+                <% end %>
+              </div>
+            </div>
+          </div>
+        </li>
+      <% end %>
+    </ul>
+  <% else %>
+    <%= render "shared/empty_state", title: "No conversations yet", body: "Client messages will land here in one thread per traveler, so every reply starts with the full story.", scene: :bridge %>
+  <% end %>
+
+  <% if @has_older %>
+    <%= link_to "Load older", inbox_path(tab: @tab, page: @page + 1), class: "btn-secondary btn mt-4" %>
+  <% end %>
+
 </div>

@@ -4,6 +4,9 @@ class SettingsController < ApplicationController
     @perfectbook_configured = PerfectBook.configured?
     @perfectbook_last_success = PerfectBook::SyncState.last_success_at
     @perfectbook_last_error = PerfectBook::SyncState.last_error_row
+    @mailbox_address = Mail.mailbox_address
+    @mail_sync = MailSyncState.find_by(folder: Mail::FOLDER)
+    @imports = MailImport.ordered.limit(5)
   end
 
   def update
@@ -36,12 +39,49 @@ class SettingsController < ApplicationController
     redirect_to edit_settings_path, alert: "PerfectBook is unreachable right now.", status: :see_other
   end
 
+  # Mailbox connection: the Gmail address is fixed to MAILBOX_ADDRESS so
+  # personal mail can never drift in; only the login + app password are
+  # editable. The password is stored encrypted (Rails encrypts).
+  def mailbox
+    @settings = Setting.current
+    login = params.dig(:setting, :mailbox_login).to_s.strip
+    password = params.dig(:setting, :mailbox_app_password).to_s
+    @settings.mailbox_login = login.presence
+    @settings.mailbox_app_password = password.presence || @settings.mailbox_app_password
+    if @settings.save
+      redirect_to edit_settings_path, notice: "Mailbox saved.", status: :see_other
+    else
+      @perfectbook_configured = PerfectBook.configured?
+      @perfectbook_last_success = PerfectBook::SyncState.last_success_at
+      @perfectbook_last_error = PerfectBook::SyncState.last_error_row
+      @mailbox_address = Mail.mailbox_address
+      @mail_sync = MailSyncState.find_by(folder: Mail::FOLDER)
+      @imports = MailImport.ordered.limit(5)
+      render :edit, status: :unprocessable_entity
+    end
+  end
+
+  def mailbox_test
+    Mail::ImapFetcher.new.test_connection
+    redirect_to edit_settings_path, notice: "Mailbox connection works.", status: :see_other
+  rescue Mail::ImapFetcher::NotConfiguredError
+    redirect_to edit_settings_path, alert: "Add the mailbox login and app password first.", status: :see_other
+  rescue Mail::ImapFetcher::ConnectionError
+    redirect_to edit_settings_path, alert: "Mailbox is unreachable right now. Check the login and app password.", status: :see_other
+  end
+
   private
 
   def update_appearance(value)
     value = value.to_s
     unless Setting::APPEARANCES.include?(value)
       @settings.errors.add(:appearance, "is not included in the list")
+      @perfectbook_configured = PerfectBook.configured?
+      @perfectbook_last_success = PerfectBook::SyncState.last_success_at
+      @perfectbook_last_error = PerfectBook::SyncState.last_error_row
+      @mailbox_address = Mail.mailbox_address
+      @mail_sync = MailSyncState.find_by(folder: Mail::FOLDER)
+      @imports = MailImport.ordered.limit(5)
       return respond_to do |format|
         format.turbo_stream do
           render turbo_stream: turbo_stream.update("appearance-status", "Appearance could not be saved. Choose Paper or Night."), status: :unprocessable_entity

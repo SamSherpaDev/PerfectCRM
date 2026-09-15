@@ -10,7 +10,35 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_14_211502) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_14_211508) do
+  create_table "active_storage_attachments", force: :cascade do |t|
+    t.bigint "blob_id", null: false
+    t.datetime "created_at", null: false
+    t.string "name", null: false
+    t.bigint "record_id", null: false
+    t.string "record_type", null: false
+    t.index ["blob_id"], name: "index_active_storage_attachments_on_blob_id"
+    t.index ["record_type", "record_id", "name", "blob_id"], name: "index_active_storage_attachments_uniqueness", unique: true
+  end
+
+  create_table "active_storage_blobs", force: :cascade do |t|
+    t.bigint "byte_size", null: false
+    t.string "checksum"
+    t.string "content_type"
+    t.datetime "created_at", null: false
+    t.string "filename", null: false
+    t.string "key", null: false
+    t.text "metadata"
+    t.string "service_name", null: false
+    t.index ["key"], name: "index_active_storage_blobs_on_key", unique: true
+  end
+
+  create_table "active_storage_variant_records", force: :cascade do |t|
+    t.bigint "blob_id", null: false
+    t.string "variation_digest", null: false
+    t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
+  end
+
   create_table "activity_events", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "kind", null: false
@@ -47,6 +75,35 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_211502) do
     t.index ["referred_by_organization_id"], name: "index_clients_on_referred_by_organization_id"
   end
 
+  create_table "conversations", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "gm_thread_id"
+    t.boolean "ignored", default: false, null: false
+    t.datetime "last_message_at"
+    t.integer "linkable_id"
+    t.string "linkable_type"
+    t.text "participant_emails", default: "[]", null: false
+    t.string "subject"
+    t.integer "unread_count", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["gm_thread_id"], name: "index_conversations_on_gm_thread_id", unique: true, where: "gm_thread_id IS NOT NULL AND gm_thread_id != ''"
+    t.index ["ignored"], name: "index_conversations_on_ignored"
+    t.index ["last_message_at"], name: "index_conversations_on_last_message_at"
+    t.index ["linkable_type", "linkable_id"], name: "index_conversations_on_linkable_type_and_linkable_id"
+  end
+
+  create_table "email_identities", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "email", null: false
+    t.boolean "ignored", default: false, null: false
+    t.datetime "last_confirmed_at"
+    t.integer "linkable_id"
+    t.string "linkable_type"
+    t.datetime "updated_at", null: false
+    t.index ["email"], name: "index_email_identities_on_email", unique: true
+    t.index ["linkable_type", "linkable_id"], name: "index_email_identities_on_linkable_type_and_linkable_id"
+  end
+
   create_table "leads", force: :cascade do |t|
     t.string "campaign_name"
     t.datetime "converted_at"
@@ -76,6 +133,64 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_211502) do
     t.index ["perfectbook_contact_id"], name: "index_leads_on_perfectbook_contact_id", unique: true, where: "perfectbook_contact_id IS NOT NULL AND converted_client_id IS NULL AND status != 'lost'"
     t.index ["referred_by_organization_id"], name: "index_leads_on_referred_by_organization_id"
     t.index ["status"], name: "index_leads_on_status"
+  end
+
+  create_table "mail_imports", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "created_clients", default: 0, null: false
+    t.integer "created_organizations", default: 0, null: false
+    t.text "error"
+    t.datetime "finished_at"
+    t.integer "linked_messages", default: 0, null: false
+    t.integer "months"
+    t.text "preview_json"
+    t.integer "processed_messages", default: 0, null: false
+    t.string "scope", default: "all", null: false
+    t.date "since_date"
+    t.integer "skipped_messages", default: 0, null: false
+    t.datetime "started_at"
+    t.string "status", default: "draft", null: false
+    t.integer "total_messages", default: 0, null: false
+    t.datetime "updated_at", null: false
+  end
+
+  create_table "mail_sync_states", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "folder", null: false
+    t.text "last_error"
+    t.datetime "last_error_at"
+    t.datetime "last_sync_at"
+    t.integer "last_uid", default: 0, null: false
+    t.integer "uid_validity"
+    t.datetime "updated_at", null: false
+    t.index ["folder"], name: "index_mail_sync_states_on_folder", unique: true
+  end
+
+  create_table "messages", force: :cascade do |t|
+    t.text "attachment_notices"
+    t.text "cc_addresses", default: "[]", null: false
+    t.integer "conversation_id", null: false
+    t.datetime "created_at", null: false
+    t.string "direction", default: "in", null: false
+    t.string "from_address"
+    t.string "gm_message_id"
+    t.text "gmail_labels", default: "[]", null: false
+    t.text "held_attachments", default: "[]", null: false
+    t.text "html_body"
+    t.string "in_reply_to"
+    t.string "message_id"
+    t.integer "raw_size", default: 0, null: false
+    t.datetime "read_at"
+    t.text "references_text"
+    t.datetime "sent_at"
+    t.string "subject"
+    t.text "text_body"
+    t.text "to_addresses", default: "[]", null: false
+    t.datetime "updated_at", null: false
+    t.index ["conversation_id", "sent_at"], name: "index_messages_on_conversation_id_and_sent_at"
+    t.index ["conversation_id"], name: "index_messages_on_conversation_id"
+    t.index ["gm_message_id"], name: "index_messages_on_gm_message_id", unique: true, where: "gm_message_id IS NOT NULL AND gm_message_id != ''"
+    t.index ["message_id"], name: "index_messages_on_message_id"
   end
 
   create_table "notes", force: :cascade do |t|
@@ -233,6 +348,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_211502) do
     t.string "appearance", default: "paper", null: false
     t.datetime "created_at", null: false
     t.boolean "digest_enabled", default: true, null: false
+    t.string "mailbox_app_password"
+    t.text "mailbox_last_error"
+    t.datetime "mailbox_last_error_at"
+    t.datetime "mailbox_last_sync_at"
+    t.string "mailbox_login"
     t.integer "singleton_key", default: 1, null: false
     t.datetime "updated_at", null: false
     t.index ["singleton_key"], name: "index_settings_on_singleton_key", unique: true
@@ -306,9 +426,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_211502) do
     t.index ["google_sub"], name: "index_users_on_google_sub", unique: true
   end
 
+  add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "clients", "organizations", column: "referred_by_organization_id"
   add_foreign_key "leads", "clients", column: "converted_client_id"
   add_foreign_key "leads", "organizations", column: "referred_by_organization_id"
+  add_foreign_key "messages", "conversations"
   add_foreign_key "notes", "users", column: "author_id"
   add_foreign_key "people", "clients"
   add_foreign_key "people", "leads"

@@ -64,7 +64,12 @@ are not repeated here. This file covers only what differs for the CRM.
 | `SPACES_*` (attachments bucket + keys) | Step 2 | `.env.app`, password manager |
 | `LITESTREAM_*`, backup-bucket `SPACES_ENDPOINT`/`SPACES_REGION` | Step 2 | `.env.litestream`, password manager |
 | `SMTP_USERNAME`, `SMTP_PASSWORD` | Gmail app password | `.env.app`, password manager |
+| Mailbox login and app password | [Mail setup](../README.md#mail) | Settings; app password encrypted in the primary database, password manager |
 | `PERFECTBOOK_BASE_URL`, `PERFECTBOOK_API_TOKEN` | [PerfectBook connection setup](../README.md#perfectbook-connection) | CRM `.env.app`; token also in PerfectBook's `.env.app` and password manager |
+
+Preserve the Active Record encryption keys with database backups and supply the
+same keys when restoring. Losing or replacing them makes the saved mailbox app
+password unreadable.
 
 ## PerfectBook connection
 
@@ -134,8 +139,8 @@ scheme and port ([Google redirect URI rules](https://developers.google.com/ident
    See [Caddy's trust command](https://caddyserver.com/docs/command-line#caddy-trust).
 4. Open `https://localhost:8443`, sign in with the allowlisted Google account,
    and open Today and Settings. Database writes go to the isolated
-   restored copy. When attachment features exist, open a known attachment
-   as well; attachment reads still use the configured production bucket.
+   restored copy. Open a known ordinary email attachment as well; attachment
+   reads still use the configured production bucket.
 5. Run the cleanup command printed by the drill on the VPS, stop both laptop
    terminal processes with Ctrl-C, and remove the temporary localhost
    redirect URI from the Google client.
