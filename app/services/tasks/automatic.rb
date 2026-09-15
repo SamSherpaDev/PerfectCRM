@@ -1,14 +1,7 @@
 # Proposes follow-up tasks from the mirrored PerfectBook bookings.
-#
-# Three rules, each firing once per booking (idempotency_key):
-# - Review ask, three days after the departure ends.
-# - Repeat-trip nudge, ten months after return.
-# - Deposit nudge, when a mirrored invoice reads sent (or overdue) with a
-#   balance due on a booking first seen at least five days ago that has not
-#   started yet.
-#
-# Every rule only creates a task the captain acts on; nothing ever sends
-# mail. Bookings with no local client, lead, or organization are skipped.
+
+# Eligibility and operator workflow: README.md, "Today and follow-ups".
+# Idempotency keys keep daily retries from duplicating proposals.
 module Tasks
   module Automatic
     REVIEW_DELAY = 3.days
