@@ -46,7 +46,7 @@
             <% end %>
           </header>
 
-          <main class="flex-1 px-5 py-8 sm:px-12 sm:py-12">
+          <main class="shell-main flex-1 px-5 py-8 sm:px-12 sm:py-12">
             <%= yield %>
           </main>
         </div>
@@ -74,6 +74,8 @@
             </div>
           </div>
         </aside>
+
+        <%= render "shared/tabbar" %>
       </div>
     <% else %>
       <div class="signed-out">

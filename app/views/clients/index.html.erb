@@ -60,7 +60,7 @@
           <% end %>
         </ul>
       <% else %>
-        <%= render "shared/empty_state", title: "No organizations yet", body: "Advisors and ground operators will live here once added.", scene: :stupa %>
+        <%= render "shared/empty_state", title: "No organizations yet", body: "Advisors and ground operators will live here once added.", scene: :bridge %>
       <% end %>
     </section>
   <% else %>
@@ -101,11 +101,11 @@
         </ul>
       <% else %>
         <% if @query.present? %>
-          <%= render "shared/empty_state", title: "No matches", body: "Nothing matches that search. Try a name fragment or an email piece.", scene: :stupa %>
+          <%= render "shared/empty_state", title: "No matches", body: "Nothing matches that search. Try a name fragment or an email piece.", scene: :bridge %>
         <% elsif @tab == "archived" %>
-          <%= render "shared/empty_state", title: "Nothing archived", body: "Archived clients rest here when they no longer need follow-up.", scene: :stupa %>
+          <%= render "shared/empty_state", title: "Nothing archived", body: "Archived clients rest here when they no longer need follow-up.", scene: :bridge %>
         <% else %>
-          <%= render "shared/empty_state", title: "No clients yet", body: "Travelers, past guests, and leads will live here with their trips, preferences, and history.", scene: :stupa do %>
+          <%= render "shared/empty_state", title: "No clients yet", body: "Travelers, past guests, and leads will live here with their trips, preferences, and history.", scene: :bridge do %>
             <%= link_to "Add your first client", new_client_path, class: "btn-primary btn btn-sm" %>
           <% end %>
         <% end %>

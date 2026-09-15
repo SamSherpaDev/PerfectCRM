@@ -12,7 +12,7 @@
   </nav>
 
   <% if @grouped.empty? %>
-    <%= render "shared/empty_state", title: (@tab == "archived" ? "Nothing archived" : "No templates yet"), body: (@tab == "archived" ? "Archived templates rest here when they stop earning their keep." : "Reusable replies for the messages sent most often will live here.") do %>
+    <%= render "shared/empty_state", title: (@tab == "archived" ? "Nothing archived" : "No templates yet"), body: (@tab == "archived" ? "Archived templates rest here when they stop earning their keep." : "Reusable replies for the messages sent most often will live here."), scene: :cairn do %>
       <%= link_to "New template", new_template_path, class: "btn btn-primary btn-sm" if @tab == "active" %>
     <% end %>
   <% else %>

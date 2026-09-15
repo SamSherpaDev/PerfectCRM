@@ -18,11 +18,25 @@ When updating this file, preserve this bar for all agents and keep entries conci
   Active Storage on R2), same VPS and deploy shape. PerfectBook stays the
   system of record for bookings, invoices, and money; the CRM owns people,
   conversations, quotes, tasks, and the pipeline. Money-free: no ledger here.
-- `docs/DESIGN.md` is the visual contract (Washi, inherited from
-  PerfectBook). Do not invent a separate visual identity.
+- `docs/DESIGN.md` is the visual contract (PerfectCRM's own Washi contract,
+  approved 2026-09-14; Open Design format, captain's decisions in section 12).
+  `docs/DESIGN-SYNC.md` explains what is shared with PerfectBook and how it
+  syncs. Do not invent a separate visual identity.
+- CRM-only kit lives in `app/assets/tailwind/application.css` (CRM layer) +
+  shared partials; preview every component at `/design` (signed-in only).
+  Rail order: Today, Inbox, Leads, Clients, Pipeline, Quotes, Templates,
+  Settings; phone tab bar: Today, Inbox, Leads, Clients, More.
 - Timezone `America/Los_Angeles` (`config/application.rb`).
+- Leads convert to clients one way only, by the captain; no reverse action,
+  by hand or automation (DESIGN.md 4.11).
 - Appearance behavior and authentication policy: see README.md, "Navigation"
   and "Google sign-in". Preserve instant appearance changes.
+- System-test Chrome here needs nix NSS libs on `LD_LIBRARY_PATH`; check
+  driver startup output if `chromedriver` cannot start.
+- Plain `bin/rails server` serves the prebuilt `app/assets/builds/tailwind.css`;
+  rebuild with `bin/rails tailwindcss:build` after CSS/view-class changes
+  (`bin/dev` watches, plain server does not).
+
 - Client and lead usage: see README.md, "Clients" and "Leads"; conversion
   lives in `Lead#convert_to_client!`, person ownership in `Person`, and
   nested email reassignment in `NestedPeople`.
@@ -32,8 +46,6 @@ When updating this file, preserve this bar for all agents and keep entries conci
 - `TaggedRecord` validates pending tags before saving and assigns them in
   `after_save`; assigning through-tags before the parent saves trips
   Tagging uniqueness.
-- System-test Chrome here needs nix NSS libs on `LD_LIBRARY_PATH`; check
-  driver startup output if `chromedriver` cannot start.
 - PerfectBook link: `PerfectBook::Client` (`lib/perfectbook/`) + mirror tables
   (`app/models/perfectbook/`) + `config/recurring.yml` jobs; contract in
   README.md, "PerfectBook connection". Mirrors only, never money truth.

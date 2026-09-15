@@ -1,5 +1,7 @@
 <%# locals: (title:, body: nil, scene: nil) with optional block for an action.
-    An enso marks every empty state; `scene:` adds the area's drawing (:teahouse, :stupa, :wheel, :ridge). %>
+    An enso marks every empty state; `scene:` adds the area's drawing
+    (docs/DESIGN.md 4.10): Today :pass, Inbox and Clients :bridge,
+    Leads, Quotes and Templates :cairn, Pipeline :pass, Settings :wheel. %>
 <div class="empty">
   <% if local_assigns[:scene] %><%= sketch local_assigns[:scene], class: "sk scene" %><% end %>
   <%= sketch :enso, class: "enso" %>

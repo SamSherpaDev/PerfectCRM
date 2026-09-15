@@ -1,0 +1,360 @@
+<% content_for :title, "Design kit · PerfectCRM" %>
+<div class="page">
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Washi, CRM edition", title: "Design kit", subtitle: "Every CRM component in one place, in the current scheme. Flip Paper and Night in Settings to see both; nothing here is linked from the rail." } do %><% end %>
+  <%= render "shared/flash" %>
+
+  <section class="card card-pad" aria-labelledby="kit-mark" id="design-mark">
+    <div class="card-header"><h2 class="card-title" id="kit-mark">Mark and mountain</h2></div>
+    <%= card_caption "Mark A, the wheel that speaks, on the ink tile with an ochre stroke. Everest replaces Ama Dablam in every header." %>
+    <div class="flex flex-wrap items-center gap-6 px-6 pb-2 sm:px-7">
+      <span class="flex h-16 w-16 items-center justify-center rounded-[14px] bg-[#14110e] text-[#e2963f] ring-1 ring-inset ring-[#e2963f]/35"><%= sketch :"mark-a", class: "h-9 w-9" %></span>
+      <span class="flex h-9 w-9 items-center justify-center rounded-[10px] bg-[#14110e] text-[#e2963f] ring-1 ring-inset ring-[#e2963f]/35"><%= sketch :"mark-a", class: "h-5 w-5" %></span>
+      <div class="min-w-0">
+        <p class="text-sm font-medium text-ink">Ink tile, ochre mark</p>
+        <p class="hint">At 16px the mantra lines drop and only drum, axle, handle, and arcs remain. Mani wall and confluence were dropped in review and are not shipped.</p>
+      </div>
+    </div>
+    <div class="card-foot">
+      <div class="grid gap-6 sm:grid-cols-2">
+        <figure class="min-w-0">
+          <%= sketch :everest, class: "sk h-auto w-full" %>
+          <figcaption class="hint">Everest — every page header</figcaption>
+        </figure>
+        <figure class="min-w-0">
+          <%= sketch :bridge, class: "sk h-auto w-full" %>
+          <figcaption class="hint">Bridge — Inbox and Clients empty states, sign-in, client foot</figcaption>
+        </figure>
+        <figure class="min-w-0">
+          <%= sketch :pass, class: "sk h-auto w-full" %>
+          <figcaption class="hint">Pass — Today and Pipeline empty states and feet</figcaption>
+        </figure>
+        <figure class="min-w-0">
+          <%= sketch :cairn, class: "sk h-auto w-full" %>
+          <figcaption class="hint">Cairn — Leads, Quotes, Templates, Bookings empty state</figcaption>
+        </figure>
+      </div>
+      <div class="mt-6 flex gap-6">
+        <figure class="h-48 w-12 flex-none" aria-label="Stream drawing">
+          <%= sketch :stream, class: "sk h-full w-full" %>
+          <figcaption class="hint">Stream</figcaption>
+        </figure>
+        <p class="hint self-end">Stream — the spine of every timeline. Structural, outside the one-drawing budget. Shared with the app: ridge (sign-in only), wheel (Settings foot), enso (every empty state), rule, river.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="card card-pad" aria-labelledby="kit-orbs" id="design-orbs">
+    <div class="card-header"><h2 class="card-title" id="kit-orbs">Thinking orbs</h2></div>
+    <%= card_caption "Composing drafts a reply or summary; shaping scores or triages, including Panda AI's future Scoring state. Ochre on Paper, cream on Night; still under reduced motion; paused offscreen." %>
+    <ul class="flex flex-wrap items-end gap-8 px-6 pb-2 sm:px-7">
+      <li class="flex flex-col items-center gap-2">
+        <%= orb :composing, size: 64 %>
+        <span class="hint">Composing · 64</span>
+      </li>
+      <li class="flex flex-col items-center gap-2">
+        <%= orb :shaping, size: 64 %>
+        <span class="hint">Shaping · 64</span>
+      </li>
+      <li class="flex flex-col items-center gap-2">
+        <%= orb :composing, size: 20 %>
+        <span class="hint">Composing · 20</span>
+      </li>
+      <li class="flex flex-col items-center gap-2">
+        <%= orb :shaping, size: 20 %>
+        <span class="hint">Shaping · 20</span>
+      </li>
+    </ul>
+  </section>
+
+  <section class="card card-pad" aria-labelledby="kit-stats" id="design-stats">
+    <div class="card-header"><h2 class="card-title" id="kit-stats">Stat tiles</h2></div>
+    <%= card_caption "Gelasio numbers settle in on load; an enso stands beside cleared good-toned zeros." %>
+    <div class="grid grid-cols-2 gap-3 px-6 pb-2 sm:px-7 lg:grid-cols-4 lg:gap-4">
+      <div class="stat"><p class="label">Waiting on you</p><p class="stat-value">3</p><p class="hint">Replies owed</p></div>
+      <div class="stat"><p class="label">With Panda AI</p><p class="stat-value">2</p><p class="hint">Being scored</p></div>
+      <div class="stat"><p class="label">Strong fit unanswered</p><p class="stat-value warn">1</p><p class="hint">Answer first</p></div>
+      <div class="stat"><p class="label">Overdue</p><p class="stat-value">0 <%= sketch :enso, class: "enso" %></p><p class="hint">Nothing late</p></div>
+    </div>
+  </section>
+
+  <section class="card card-pad" aria-labelledby="kit-badges" id="design-badges">
+    <div class="card-header"><h2 class="card-title" id="kit-badges">Stage badges</h2></div>
+    <%= card_caption "One badge per stage, always with the word. Lost is quiet: transparent fill, hairline ring." %>
+    <div class="flex flex-wrap gap-2 px-6 pb-2 sm:px-7">
+      <%= stage_badge :new %>
+      <%= stage_badge :chatting %>
+      <%= stage_badge :quoted %>
+      <%= stage_badge :nudged %>
+      <%= stage_badge :won %>
+      <%= stage_badge :"post-trip" %>
+      <%= stage_badge :lost %>
+      <%= badge "Unread", :brand, dot: true %>
+      <%= badge "Automated", :info, dot: true %>
+      <%= badge "Scoring", :info, dot: true %>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="kit-rows" id="design-rows">
+    <div class="card-header"><h2 class="card-title" id="kit-rows">Lists and unread</h2></div>
+    <%= card_caption "Name, one truncating secondary line, meta right. The unread mark pairs with an ink name and a badge." %>
+    <ul class="rowlist pb-4">
+      <li class="unread">
+        <div class="who"><span class="n">Amara Okafor</span><span class="s">Re: Everest Base Camp, October dates for four?</span></div>
+        <div class="meta"><span>09:12</span><%= badge "Unread", :brand, dot: true %></div>
+      </li>
+      <li>
+        <div class="who"><span class="n">Daniel Lindqvist</span><span class="s">Deposit received, see you in Lukla — forwarded to PerfectBook</span></div>
+        <div class="meta"><span>Yesterday</span><%= stage_badge :won %></div>
+      </li>
+      <li>
+        <div class="who"><span class="n">Follow up: Tashi's permit scans</span><span class="s">Due today · Annapurna Circuit, Apr 12</span></div>
+        <div class="meta"><span class="check on" aria-hidden="true"><%= render "shared/icon", name: :check %></span></div>
+      </li>
+    </ul>
+  </section>
+
+  <section class="card" aria-labelledby="kit-timeline" id="design-timeline">
+    <div class="card-header"><h2 class="card-title" id="kit-timeline">Stream timeline</h2></div>
+    <%= card_caption "Relief says who spoke: inbound raised, outbound pressed, notes flat, system events outlined. Stones pair with a named meta line." %>
+    <ol class="timeline">
+      <%= sketch :stream, class: "sk stream", aria_hidden: true %>
+      <li class="ev in">
+        <span class="stone" aria-hidden="true"><i></i></span>
+        <div class="body">
+          <p class="meta"><b>Amara Okafor</b><span>09:12</span><%= badge "Unread", :brand, dot: true %></p>
+          <div class="msg">Namaste! We are four friends hoping to trek to Everest Base Camp in mid-October. Two of us are slow walkers — is the premium trek right for us?<span class="more">Read the full email</span></div>
+        </div>
+      </li>
+      <li class="ev out">
+        <span class="stone" aria-hidden="true"><i></i></span>
+        <div class="body">
+          <p class="meta"><b>You</b><span>10:02</span></p>
+          <div class="msg">Namaste Amara! October is perfect, and the premium pace was made for exactly this — extra acclimatisation days and a 1:2 guide ratio.</div>
+        </div>
+      </li>
+      <li class="ev note">
+        <span class="stone" aria-hidden="true"><i></i></span>
+        <div class="body">
+          <p class="meta"><b>Note</b><span>10:03</span></p>
+          <div class="msg">Slow walkers — confirm guide ratio with Pasang before quoting.</div>
+        </div>
+      </li>
+      <li class="ev auto">
+        <span class="stone" aria-hidden="true"><i></i></span>
+        <div class="body">
+          <p class="meta"><%= render "shared/icon", name: :robot %><b>Panda AI</b><span>10:04</span><%= badge "Automated", :info, dot: true %></p>
+          <div class="msg"><span><strong class="text-ink">Fit 82 · Strong.</strong> Party of four, October dates, premium trip asked by name.</span></div>
+        </div>
+      </li>
+      <li class="ev q">
+        <span class="stone" aria-hidden="true"><i></i></span>
+        <div class="body">
+          <p class="meta"><b>You</b><span>10:20</span><%= stage_badge :quoted %></p>
+          <div class="msg"><span>Quote EBC-P-104 · $18,450 for four</span><%= link_to "Open quote", quotes_path, class: "link" %></div>
+        </div>
+      </li>
+    </ol>
+    <div class="reply">
+      <p class="to">Reply to <b>Amara Okafor</b><span>Re: Everest Base Camp, October dates</span></p>
+      <div class="box textarea" aria-hidden="true">Draft your reply…</div>
+      <div class="tools">
+        <div class="l chips">
+          <span class="chip"><%= render "shared/icon", name: :sparkle %>Draft a reply</span>
+          <span class="chip"><%= render "shared/icon", name: :receipt %>October dates</span>
+          <span class="chip"><%= render "shared/icon", name: :receipt %>Deposit steps</span>
+        </div>
+        <span class="btn-primary btn">Send</span>
+      </div>
+    </div>
+    <div class="px-6 pb-6 sm:px-7">
+      <div class="draft">
+        <p class="tag"><%= render "shared/icon", name: :sparkle %>AI draft, yours to edit</p>
+        <p>Namaste Amara — October 12th still has four seats at the premium pace, and I have held them until Friday while you decide…</p>
+      </div>
+      <p class="hint mt-3">The dashed edge means a machine wrote it. Nothing sends until Send is pressed; there is no auto-send.</p>
+    </div>
+  </section>
+
+  <section class="card card-pad" aria-labelledby="kit-pipeline" id="design-pipeline">
+    <div class="card-header"><h2 class="card-title" id="kit-pipeline">Pipeline trail, groups, and cards</h2></div>
+    <%= card_caption "Leads over New to Nudged, Clients over Won and Post-trip. A seal edge means the client is waiting." %>
+    <div class="px-6 pb-2 sm:px-7">
+      <div class="board-groups" aria-hidden="true">
+        <span class="g-leads">Leads</span><span class="g-clients">Clients</span><span class="g-lost">Off the path</span>
+      </div>
+      <div class="board">
+        <% %w[New Chatting Quoted Nudged Won Post-trip Lost].each_with_index do |stage, i| %>
+          <div class="min-w-0">
+            <div class="col-head"><span class="n"><%= render "shared/icon", name: :inbox %><%= stage %></span><span class="c"><%= [ 4, 6, 3, 2, 5, 8, 1 ][i] %></span></div>
+            <p class="col-sum">$42,230 out</p>
+            <div class="kcard<%= ' unread-k' if i == 1 %>">
+              <%= render "shared/icon", name: :more, class: "grip" %>
+              <p class="n">Amara Okafor</p>
+              <p class="t">Everest Base Camp Premium</p>
+              <p class="b"><span>2d ago</span><span>4 guests</span></p>
+            </div>
+            <% if i == 1 %>
+              <div class="kcard ghost mt-2.5" aria-hidden="true">
+                <p class="n">Drop here</p>
+                <p class="t">Dashed landing slot</p>
+              </div>
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+      <div class="stepper mt-6" aria-label="Pipeline trail">
+        <%= sketch :rule, class: "sk sk-rule" %>
+        <div class="steps">
+          <div class="step step-done"><i aria-hidden="true"></i>New</div>
+          <div class="step step-done"><i aria-hidden="true"></i>Chatting</div>
+          <div class="step step-now"><i aria-hidden="true"></i>Quoted</div>
+          <div class="step"><i aria-hidden="true"></i>Nudged</div>
+          <div class="step"><i aria-hidden="true"></i>Won</div>
+          <div class="step"><i aria-hidden="true"></i>Post-trip</div>
+          <div class="step"><i aria-hidden="true"></i>Lost</div>
+        </div>
+        <p class="hint mt-2">Done stages read green; the selected stage is a seal dot with a tint halo.</p>
+      </div>
+    <div class="px-6 pb-6 sm:px-7">
+      <h3 class="label">Stage list (phone)</h3>
+      <ul class="stagelist stagelist-demo">
+        <li>
+          <button type="button" class="stage-row" aria-expanded="false">
+            <span class="ic"><%= render "shared/icon", name: :inbox %></span>
+            <span class="k"><b>New</b><span>Just arrived · $12,400 out</span></span>
+            <span class="cnt">4</span>
+            <%= render "shared/icon", name: :chevron_right, class: "chev" %>
+          </button>
+        </li>
+        <li>
+          <button type="button" class="stage-row open" aria-expanded="true">
+            <span class="ic"><%= render "shared/icon", name: :lead %></span>
+            <span class="k"><b>Chatting</b><span>Waiting on two replies</span></span>
+            <span class="cnt">6</span>
+            <%= render "shared/icon", name: :chevron_right, class: "chev" %>
+          </button>
+          <ul class="stage-cards mt-2">
+            <li class="kcard unread-k">
+              <p class="n">Amara Okafor</p>
+              <p class="t">Everest Base Camp Premium</p>
+              <p class="b"><span>2d ago</span><span>4 guests</span></p>
+            </li>
+          </ul>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="card card-pad" aria-labelledby="kit-leads" id="design-leads">
+    <div class="card-header"><h2 class="card-title" id="kit-leads">Lead vocabulary</h2></div>
+    <%= card_caption "Every lead shows its source and campaign; fit is a bar plus a word plus a number — never the bar alone." %>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Lead</th><th>Source</th><th>Fit</th><th class="num">Stage</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="mark-inline" aria-hidden="true"></span><strong class="font-medium text-ink">Amara Okafor</strong></td>
+            <td><span class="src"><%= render "shared/icon", name: :megaphone %>Google Ads · ebc-october</span></td>
+            <td><span class="fit"><span class="bar bar-good" role="img" aria-label="Fit 82, strong"><span class="bar-fill" style="width: 82%"></span></span><span>Strong · 82</span></span></td>
+            <td class="num"><%= stage_badge :new %></td>
+          </tr>
+          <tr>
+            <td><strong class="font-medium text-ink">Jonas Weber</strong></td>
+            <td><span class="src"><%= render "shared/icon", name: :globe %>Website form</span></td>
+            <td><span class="fit"><span class="bar bar-warn" role="img" aria-label="Fit 61, possible"><span class="bar-fill" style="width: 61%"></span></span><span>Possible · 61</span></span></td>
+            <td class="num"><%= stage_badge :chatting %></td>
+          </tr>
+          <tr>
+            <td><strong class="font-medium text-ink">Mina Shrestha</strong></td>
+            <td><span class="src"><%= render "shared/icon", name: :people %>Referral · Pasang D.</span></td>
+            <td><%= badge "Scoring", :info, dot: true %></td>
+            <td class="num"><%= stage_badge :new %></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card card-pad" aria-labelledby="kit-settings" id="design-settings">
+    <div class="card-header"><h2 class="card-title" id="kit-settings">Setting rows, toggles, departures, totals</h2></div>
+    <%= card_caption "Name, hint, control right. Toggles carry their state; departure rows go pressed when chosen." %>
+    <div class="px-6 pb-2 sm:px-7">
+      <div class="setting">
+        <div class="k"><b>Always show me the draft before it sends</b><span>There is no auto-send path.</span></div>
+        <button type="button" class="toggle" aria-pressed="true" aria-label="Always show the draft before it sends"></button>
+      </div>
+      <div class="setting">
+        <div class="k"><b>Suggest a nudge after 4 days</b><span>Quoted, Nudged and Won stay yours.</span></div>
+        <button type="button" class="toggle" aria-pressed="false" aria-label="Suggest a nudge after 4 days"></button>
+      </div>
+      <h3 class="label mt-6 mb-2">Departures</h3>
+      <div class="dep">
+        <label class="on"><span class="d"><i aria-hidden="true"></i>Oct 12 · 4 seats left</span><span class="s">$4,612 pp</span></label>
+        <label><span class="d"><i aria-hidden="true"></i>Oct 26 · 8 seats left</span><span class="s">$4,390 pp</span></label>
+      </div>
+      <div class="total mt-4"><span>Subtotal · 4 guests</span><span class="num">$18,450.00</span></div>
+      <div class="total"><span>Deposit due Oct 1</span><span class="num">$5,535.00</span></div>
+      <div class="total big"><span>Total for 4 guests</span><span class="num">$18,450.00</span></div>
+    </div>
+  </section>
+
+  <section class="card card-pad" aria-labelledby="kit-phone" id="design-phone">
+    <div class="card-header"><h2 class="card-title" id="kit-phone">Phone shells</h2></div>
+    <%= card_caption "Bottom tab bar, docked reply box, templates sheet, and docked quote total — drawn in place here, fixed to the viewport in the app." %>
+    <div class="grid gap-6 px-6 pb-2 sm:px-7 lg:grid-cols-2">
+      <figure class="kit-static kit-phone min-w-0 overflow-hidden rounded-card border border-edge bg-paper-2">
+        <div class="bg-paper-3 px-4 py-8 text-center text-xs muted">Thread content above</div>
+        <div class="reply docked">
+          <div class="box textarea" aria-hidden="true">Reply…</div>
+          <div class="tools">
+            <div class="l chips">
+              <span class="chip"><%= render "shared/icon", name: :sparkle %>Draft a reply</span>
+              <span class="chip"><%= render "shared/icon", name: :receipt %>October dates</span>
+            </div>
+            <span class="btn-primary btn">Send</span>
+          </div>
+        </div>
+        <figcaption class="hint px-4 py-3">Docked reply box</figcaption>
+      </figure>
+      <figure class="kit-static kit-phone min-w-0 overflow-hidden rounded-card border border-edge bg-paper-2">
+        <div class="sheet floating">
+          <h3>Templates</h3>
+          <p class="cap">One tap fills the reply box.</p>
+          <div class="ai"><%= render "shared/icon", name: :sparkle %><div><b>Draft a reply</b><span>Panda voice, yours to edit</span></div></div>
+          <ul>
+            <li><div><b>October dates</b><span>October 12th still has four seats…</span></div><%= render "shared/icon", name: :chevron_right %></li>
+            <li><div><b>Deposit steps</b><span>A 30% deposit holds your seats…</span></div><%= render "shared/icon", name: :chevron_right %></li>
+          </ul>
+        </div>
+        <figcaption class="hint px-4 py-3">Templates sheet</figcaption>
+      </figure>
+      <figure class="kit-static kit-phone min-w-0 overflow-hidden rounded-card border border-edge bg-paper-2">
+        <div class="bg-paper-3 px-4 py-8 text-center text-xs muted">Quote summary above</div>
+        <div class="sticky-send">
+          <p class="t">$18,450.00<small>4 guests · Oct 12</small></p>
+          <span class="btn-primary btn">Send quote</span>
+        </div>
+        <figcaption class="hint px-4 py-3">Docked quote total</figcaption>
+      </figure>
+      <figure class="kit-static kit-phone min-w-0 overflow-hidden rounded-card border border-edge bg-paper-2">
+        <div class="bg-paper-3 px-4 py-8 text-center text-xs muted">Any phone screen above</div>
+        <%= render "shared/tabbar" %>
+        <figcaption class="hint px-4 py-3">Bottom tab bar (five items; More opens Pipeline, Quotes, Templates, Settings)</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="card card-pad" aria-labelledby="kit-rules" id="design-rules">
+    <div class="card-header"><h2 class="card-title" id="kit-rules">Rules that hold everywhere</h2></div>
+    <%= card_caption "The sibling rules, condensed. The full list is DESIGN.md section 10." %>
+    <div class="px-6 pb-4 sm:px-7">
+      <ul class="list-disc space-y-1 pl-5 text-sm muted">
+        <li>One solid button per view; sentence case everywhere; no uppercase labels.</li>
+        <li>Relief never nests; the timeline is the one expressive exception.</li>
+        <li>Bookings and money are read-only with deep links into PerfectBook.</li>
+        <li>A lead converts to a client once, by the captain — never reversed, by hand or automation.</li>
+        <li>Automations may move leads between New, Chatting, and Lost only.</li>
+      </ul>
+    </div>
+  </section>
+</div>

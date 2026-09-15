@@ -53,6 +53,14 @@ their features land. See [Today and follow-ups](#today-and-follow-ups) and
 [Templates](#templates) for the live features. Settings provides appearance,
 morning digest, and export controls.
 
+A lead converts to a client once, by the captain - never back.
+
+On phones (under 750px) a bottom tab bar holds **Today**, **Inbox**,
+**Leads**, **Clients**, and **More** (Pipeline, Quotes, Templates,
+Settings) while the rail hides. Signed-in builders can preview every
+component of the kit at `/design` (listed nowhere in the rail) in Paper
+and Night.
+
 PerfectCRM defaults to **Paper**, the light Washi scheme. In **Settings →
 Appearance**, choose **Paper** or **Night** to apply the scheme immediately
 and save it automatically - the choice submits its own form, so there is no

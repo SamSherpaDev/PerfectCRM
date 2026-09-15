@@ -1,0 +1,23 @@
+<%# Phone bottom tab bar (docs/DESIGN.md 4.1): five items — Today, Inbox, Leads,
+    Clients, More. Visible under 750px via .tabbar CSS; the rail hides there.
+    More opens the drawer (Pipeline, Quotes, Templates, Settings) and is lit
+    when any of those is open. Hidden on thread/quote views where a docked
+    box takes its place (add .tabbar-hidden to <body> there when built). %>
+<% more_active = %w[pipeline quotes templates settings].include?(controller_name) %>
+<nav class="tabbar" aria-label="Primary">
+  <%= link_to root_path, class: ("on" if controller_name == "today"), aria: ({ current: "page" } if controller_name == "today") do %>
+    <%= render "shared/icon", name: :dashboard, class: "" %><span>Today</span>
+  <% end %>
+  <%= link_to inbox_path, class: ("on" if controller_name == "inbox"), aria: ({ current: "page" } if controller_name == "inbox") do %>
+    <%= render "shared/icon", name: :inbox, class: "" %><span>Inbox</span>
+  <% end %>
+  <%= link_to leads_path, class: ("on" if controller_name == "leads"), aria: ({ current: "page" } if controller_name == "leads") do %>
+    <%= render "shared/icon", name: :lead, class: "" %><span>Leads</span>
+  <% end %>
+  <%= link_to clients_path, class: ("on" if controller_name == "clients"), aria: ({ current: "page" } if controller_name == "clients") do %>
+    <%= render "shared/icon", name: :people, class: "" %><span>Clients</span>
+  <% end %>
+  <button type="button" class="<%= 'on' if more_active %>" data-action="click->sidebar#open" aria-label="More: pipeline, quotes, templates, settings" aria-expanded="false">
+    <%= render "shared/icon", name: :more, class: "" %><span>More</span>
+  </button>
+</nav>
