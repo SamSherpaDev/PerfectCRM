@@ -16,8 +16,9 @@ class MessagesController < ApplicationController
     OutboundDeliveryJob.perform_later(message.id)
     redirect_to owner, notice: "Sending your reply…"
   rescue ActiveRecord::RecordInvalid => e
-    keep_draft(owner)
-    redirect_to owner_path_for(owner), alert: "Could not send: #{e.record.errors.full_messages.to_sentence}"
+    keep_draft(owner, conversation)
+    destination = conversation ? inbox_thread_path(conversation) : polymorphic_path(owner, new_thread: 1)
+    redirect_to destination, alert: "Could not send: #{e.record.errors.full_messages.to_sentence}"
   end
 
   # A failed delivery keeps its Message; retry re-queues the same words.
@@ -64,11 +65,8 @@ class MessagesController < ApplicationController
 
   # The send failed validation (no recipient, blank subject/body): stash
   # the attempt as the draft so nothing is lost across the redirect.
-  def keep_draft(owner)
+  def keep_draft(owner, conversation)
     return unless owner
-
-    conversation = params[:conversation_id].present? ?
-      owner.conversations.find_by(id: params[:conversation_id]) : nil
     draft = Draft.for_owner(owner, conversation: conversation)
     draft.assign_attributes(draft_attributes)
     draft.attach_uploads(params.dig(:message, :files))

@@ -27,7 +27,7 @@ class MessagesRequestsTest < ActionDispatch::IntegrationTest
     post client_messages_path(@client), params: {
       message: { to: "maya@example.com", subject: "Hi", body: "  " }
     }
-    assert_redirected_to client_path(@client)
+    assert_redirected_to client_path(@client, new_thread: 1)
     follow_redirect!
     assert_select ".flash-alert", text: /Could not send/
     draft = Draft.where(owner: @client).last
@@ -45,7 +45,7 @@ class MessagesRequestsTest < ActionDispatch::IntegrationTest
           files: [ fixture_file_upload("test/fixtures/files/sample.txt", "text/plain") ] }
       }
     end
-    assert_redirected_to client_path(@client)
+    assert_redirected_to client_path(@client, new_thread: 1)
     follow_redirect!
     assert_select "[aria-label='Draft attachments'] li", count: 2
     files = draft.reload.files.index_by { |file| file.filename.to_s }
@@ -54,6 +54,45 @@ class MessagesRequestsTest < ActionDispatch::IntegrationTest
     assert_equal File.read(Rails.root.join("test/fixtures/files/sample.txt")), files["sample.txt"].download
     post client_messages_path(@client), params: { message: { to: @client.email, subject: "Hi", body: "Corrected" } }
     assert_equal [ "sample.txt", "saved.txt" ], Message.last.files.map { |file| file.filename.to_s }.sort
+  end
+
+  test "validation failure reopens the submitted older conversation" do
+    older = @client.conversations.create!(subject_line: "Older", last_message_at: 2.days.ago)
+    newer = @client.conversations.create!(subject_line: "Newer", last_message_at: 1.day.ago)
+    other_draft = newer.create_draft!(owner: @client, subject: "Other subject", body: "Other words")
+    sign_in
+    post client_messages_path(@client), params: {
+      conversation_id: older.id,
+      message: { to: "secondary@example.com", cc: "cc@example.com", subject: "Correct this reply", body: "  ",
+        files: [ fixture_file_upload("test/fixtures/files/sample.txt", "text/plain") ] }
+    }
+    assert_redirected_to inbox_thread_path(older)
+    follow_redirect!
+    assert_select "input[name=conversation_id][value=?]", older.id.to_s
+    assert_select "input[name='message[to]'][value='secondary@example.com']"
+    assert_select "input[name='message[cc]'][value='cc@example.com']"
+    assert_select "input[name='message[subject]'][value='Correct this reply']"
+    assert_select "[aria-label='Draft attachments'] li", text: /sample.txt/
+    assert_equal "  ", older.reload.draft.body
+    assert_equal "Other words", other_draft.reload.body
+  end
+
+  test "validation failure reopens a new-message draft despite existing conversations" do
+    conversation = @client.conversations.create!(subject_line: "Existing")
+    other_draft = conversation.create_draft!(owner: @client, subject: "Existing reply", body: "Other words")
+    sign_in
+    post client_messages_path(@client), params: {
+      message: { to: "new@example.com", subject: "New message attempt", body: "  ",
+        files: [ fixture_file_upload("test/fixtures/files/sample.txt", "text/plain") ] }
+    }
+    assert_redirected_to client_path(@client, new_thread: 1)
+    follow_redirect!
+    assert_select "input[name=conversation_id][value]", count: 0
+    assert_select "input[name='message[to]'][value='new@example.com']"
+    assert_select "input[name='message[subject]'][value='New message attempt']"
+    assert_select "[aria-label='Draft attachments'] li", text: /sample.txt/
+    assert_equal "  ", Draft.find_by!(owner: @client, conversation_id: nil).body
+    assert_equal "Other words", other_draft.reload.body
   end
 
   test "converted leads stay read-only for sends" do
