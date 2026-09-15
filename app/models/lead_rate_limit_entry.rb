@@ -1,0 +1,2 @@
+class LeadRateLimitEntry < ApplicationRecord
+end

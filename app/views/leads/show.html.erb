@@ -130,6 +130,8 @@
     <% end %>
   </section>
 
+  <%= render "leads/inquiry", lead: @lead %>
+
   <section class="card card-pad" aria-labelledby="people-heading">
     <div class="card-header">
       <h2 class="card-title" id="people-heading">People</h2>
@@ -202,7 +204,7 @@
         <% @events.each do |event| %>
           <li class="flex items-start gap-3">
             <% if event.kind == "automation" %>
-              <%= render "shared/icon", name: :bolt, class: "h-4 w-4 mt-0.5 text-info" %>
+              <%= render "shared/icon", name: automation_icon(automation_caller(event)), class: "h-4 w-4 mt-0.5 text-info" %>
             <% end %>
             <%= status_badge event.kind %>
             <div class="min-w-0">

@@ -9,8 +9,13 @@ class Lead < ApplicationRecord
   # A card glows stale after this long with no touch.
   STALE_AFTER = 7.days
   FIT_BANDS = %w[strong possible weak].freeze
+  BUDGET_BANDS = %w[discuss under_2000 2000_4000 4000_7000 7000_plus].freeze
+  PLACEMENTS = %w[contact landing trip_page].freeze
+  SUSPECTED_SPAM_TAG = "suspected_spam"
 
-  encrypts :phone
+  encrypts :phone, :phone_raw
+
+  serialize :metadata, coder: JSON
 
   belongs_to :referred_by_organization, class_name: "Organization", optional: true
   belongs_to :converted_client, class_name: "Client", optional: true
@@ -19,6 +24,7 @@ class Lead < ApplicationRecord
   has_many :tasks, as: :subject, dependent: :destroy
   has_many :taggings, as: :taggable, dependent: :destroy
   has_many :tags, -> { order(:name) }, through: :taggings
+  has_many :lead_notifications, dependent: :destroy
   has_many :activity_events, as: :subject, dependent: :destroy
 
   accepts_nested_attributes_for :people, allow_destroy: true,
@@ -54,8 +60,16 @@ class Lead < ApplicationRecord
   validate :lost_reason_required_when_lost
   validates :expected_value_minor,
     numericality: { only_integer: true, greater_than_or_equal_to: 0, allow_nil: true }
+  validates :budget_band, inclusion: { in: BUDGET_BANDS }, allow_blank: true
+  validates :placement, inclusion: { in: PLACEMENTS }, allow_blank: true
+  validates :spam_score, numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }
+  validates :travel_month, numericality: { only_integer: true, greater_than_or_equal_to: 1, less_than_or_equal_to: 12, allow_nil: true }
+  validates :travel_year, numericality: { only_integer: true, greater_than_or_equal_to: 2020, less_than_or_equal_to: 2100, allow_nil: true }
+  validates :party_size, numericality: { only_integer: true, greater_than_or_equal_to: 1, less_than_or_equal_to: 20, allow_nil: true }
+  validates :reference, uniqueness: { allow_nil: true }
 
   after_create :stamp_activity
+  after_create :assign_reference
   after_save :sync_fts_later
   after_destroy :remove_fts_row
 
@@ -110,6 +124,18 @@ class Lead < ApplicationRecord
       CREATE VIRTUAL TABLE IF NOT EXISTS leads_fts
       USING fts5(name, email, phone_tail, tags, notes, tokenize='porter unicode61');
     SQL
+  end
+
+  def self.build_reference(id)
+    crc = Zlib.crc32(id.to_s)
+    alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+    code = +""
+    4.times { code.prepend(alphabet[crc % alphabet.length]); crc /= alphabet.length }
+    "SH-#{code}"
+  end
+
+  def suspected_spam?
+    tags.any? { |tag| tag.name == SUSPECTED_SPAM_TAG }
   end
 
   def converted?
@@ -323,6 +349,21 @@ class Lead < ApplicationRecord
 
   def stamp_activity
     update_column(:last_activity_at, Time.current)
+  end
+
+  def assign_reference
+    return if reference.present?
+
+    attempt = 0
+    loop do
+      candidate = self.class.build_reference(attempt.zero? ? id : "#{id}:#{attempt}")
+      begin
+        self.class.transaction(requires_new: true) { update_column(:reference, candidate) }
+        break
+      rescue ActiveRecord::RecordNotUnique
+        attempt += 1
+      end
+    end
   end
 
   def sync_fts_later

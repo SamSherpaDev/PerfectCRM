@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_14_211513) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_14_211517) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -106,8 +106,43 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_211513) do
     t.index ["linkable_type", "linkable_id"], name: "index_email_identities_on_linkable_type_and_linkable_id"
   end
 
+  create_table "lead_notifications", force: :cascade do |t|
+    t.datetime "available_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.datetime "created_at", null: false
+    t.datetime "delivered_at"
+    t.string "event", null: false
+    t.integer "lead_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["available_at"], name: "index_lead_notifications_on_available_at", where: "delivered_at IS NULL"
+    t.index ["lead_id"], name: "index_lead_notifications_on_lead_id"
+  end
+
+  create_table "lead_rate_limit_entries", force: :cascade do |t|
+    t.datetime "expires_at", null: false
+    t.string "key", null: false
+    t.index ["expires_at"], name: "index_lead_rate_limit_entries_on_expires_at"
+    t.index ["key"], name: "index_lead_rate_limit_entries_on_key"
+  end
+
+  create_table "lead_webhook_deliveries", force: :cascade do |t|
+    t.integer "attempts", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.text "error"
+    t.string "event", null: false
+    t.integer "http_status"
+    t.integer "lead_id"
+    t.string "status", default: "pending", null: false
+    t.datetime "updated_at", null: false
+    t.string "url", null: false
+    t.index ["created_at"], name: "index_lead_webhook_deliveries_on_created_at"
+    t.index ["lead_id"], name: "index_lead_webhook_deliveries_on_lead_id"
+  end
+
   create_table "leads", force: :cascade do |t|
+    t.string "budget_band"
     t.string "campaign_name"
+    t.datetime "consent_contact_at"
+    t.string "consent_text_version"
     t.datetime "converted_at"
     t.integer "converted_client_id"
     t.string "country"
@@ -123,16 +158,29 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_211513) do
     t.datetime "last_touch_at"
     t.text "lost_note"
     t.string "lost_reason"
+    t.text "message"
+    t.text "metadata"
     t.string "name", null: false
     t.integer "notes_count", default: 0, null: false
+    t.integer "party_size"
     t.integer "perfectbook_contact_id"
     t.string "phone"
+    t.string "phone_raw"
+    t.string "placement"
+    t.datetime "received_at"
+    t.string "reference"
     t.integer "referred_by_organization_id"
     t.string "source", default: "manual", null: false
+    t.integer "spam_score", default: 0, null: false
     t.datetime "stage_changed_at"
     t.string "state"
     t.string "status", default: "new", null: false
+    t.boolean "timing_unknown"
+    t.integer "travel_month"
+    t.integer "travel_year"
+    t.string "trip_handle"
     t.string "trip_interest"
+    t.string "trip_title"
     t.datetime "updated_at", null: false
     t.index ["converted_client_id"], name: "index_leads_on_converted_client_id"
     t.index ["email"], name: "index_leads_on_email", unique: true, where: "email IS NOT NULL AND email != '' AND converted_client_id IS NULL AND status != 'lost'"
@@ -140,6 +188,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_211513) do
     t.index ["last_activity_at"], name: "index_leads_on_last_activity_at"
     t.index ["last_touch_at"], name: "index_leads_on_last_touch_at"
     t.index ["perfectbook_contact_id"], name: "index_leads_on_perfectbook_contact_id", unique: true, where: "perfectbook_contact_id IS NOT NULL AND converted_client_id IS NULL AND status != 'lost'"
+    t.index ["reference"], name: "index_leads_on_reference", unique: true, where: "reference IS NOT NULL AND reference != ''"
     t.index ["referred_by_organization_id"], name: "index_leads_on_referred_by_organization_id"
     t.index ["status"], name: "index_leads_on_status"
   end
@@ -357,15 +406,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_211513) do
     t.string "appearance", default: "paper", null: false
     t.datetime "created_at", null: false
     t.boolean "digest_enabled", default: true, null: false
+    t.string "lead_webhook_url"
     t.string "mailbox_app_password"
     t.text "mailbox_last_error"
     t.datetime "mailbox_last_error_at"
     t.datetime "mailbox_last_sync_at"
     t.string "mailbox_login"
     t.boolean "pipeline_digest", default: true, null: false
+    t.datetime "relay_last_used_at"
+    t.text "relay_secret"
     t.integer "singleton_key", default: 1, null: false
+    t.string "site_key"
+    t.datetime "site_key_last_used_at"
     t.datetime "updated_at", null: false
     t.index ["singleton_key"], name: "index_settings_on_singleton_key", unique: true
+    t.index ["site_key"], name: "index_settings_on_site_key", unique: true, where: "site_key IS NOT NULL AND site_key != ''"
     t.check_constraint "singleton_key = 1", name: "settings_singleton"
   end
 
@@ -439,6 +494,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_211513) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "clients", "organizations", column: "referred_by_organization_id"
+  add_foreign_key "lead_notifications", "leads"
+  add_foreign_key "lead_webhook_deliveries", "leads"
   add_foreign_key "leads", "clients", column: "converted_client_id"
   add_foreign_key "leads", "organizations", column: "referred_by_organization_id"
   add_foreign_key "messages", "conversations"

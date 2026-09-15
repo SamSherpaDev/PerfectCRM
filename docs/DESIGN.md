@@ -177,7 +177,7 @@ What the design prepares, so that the ecosystem plugs in without a redesign:
 - **Fit is a first-class field**, not a note: a 0 to 100 score, a word band, and a one-line reason, all from Panda AI through n8n, shown in the table, the tiles and the stream. While unanswered the field shows "Scoring". Panda AI has no logo in the CRM until it exists; it is named in text with the robot icon.
 - **Automation events are a timeline kind.** Anything n8n or Panda AI does lands on the stream as an `automation` event with the machine's name in the meta line, a bolt or robot icon, and the dashed edge. The captain can always tell what a machine did.
 - **Automations have limits the UI states.** Settings lists what automations may do (create leads, score them, move between New, Chatting and Lost) and what stays manual (Quoted, Nudged, Won, Convert). These are the permissions the inbound API enforces.
-- **The inbound API is visible.** Settings shows the token version, the last call and a Rotate token button, the same way the PerfectBook read link is shown. The Leads page's Automations card lists each automation with its last run and an Automated or Manual badge.
+- **The inbound API is visible.** Settings shows the public site key, masked relay secret, last use, and separate rotation controls. Credential behavior is defined in the [website intake contract](leads-intake.md). The Leads page's Automations card lists each automation with its last run and an Automated or Manual badge.
 - **Outbound is symmetric.** When the captain changes a stage, sends a quote or converts a lead, n8n is told, so Panda AI and the ad platforms can learn from outcomes. Nothing in the UI changes for this; it is a design commitment the ship crew builds against.
 
 ### 4.13 Thinking orbs

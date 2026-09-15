@@ -127,6 +127,85 @@
     <% end %>
   </section>
 
+  <section class="card card-pad mt-6" aria-labelledby="automations-heading">
+    <h2 class="section-title" id="automations-heading">Automations</h2>
+    <%= card_caption "The website form, Panda AI scoring, and the n8n webhooks. Automations may create leads, score them, and move them between New, Chatting and Lost. Quoted, Nudged, conversion to client, and everything after stay manual." %>
+
+    <div class="mt-4 space-y-4">
+      <div class="setting">
+        <div>
+          <p class="font-medium text-sm">Site key</p>
+          <p class="hint">Public identifier the storefront form sends with every inquiry. Last used <%= @settings.site_key_last_used_at ? time_24_12(@settings.site_key_last_used_at) : "never" %>.</p>
+          <p class="mono mt-1 text-xs"><%= @settings.site_key %></p>
+        </div>
+        <%= button_to "Rotate", rotate_site_key_settings_path, method: :post, class: "btn-secondary btn btn-sm", form: { data: { turbo_confirm: "Rotate the site key? Update the storefront block right after." } } %>
+      </div>
+
+      <div class="setting">
+        <div>
+          <p class="font-medium text-sm">Relay secret</p>
+          <p class="hint">Signs server calls from n8n and Panda AI, and signs the webhooks sent to n8n. Last used <%= @settings.relay_last_used_at ? time_24_12(@settings.relay_last_used_at) : "never" %>.</p>
+          <% if @fresh_relay_secret %>
+            <p class="mono mt-1 text-xs" role="status">New secret (shown once): <%= @fresh_relay_secret %></p>
+          <% else %>
+            <p class="mono mt-1 text-xs"><%= @settings.masked_relay_secret %></p>
+          <% end %>
+        </div>
+        <%= button_to "Rotate", rotate_relay_secret_settings_path, method: :post, class: "btn-secondary btn btn-sm", form: { data: { turbo_confirm: "Rotate the relay secret? Update n8n and Panda AI right after." } } %>
+      </div>
+    </div>
+
+    <%= form_with model: @settings, url: settings_path, method: :patch, class: "mt-4 space-y-4" do |form| %>
+      <p class="hint">One copy of every website inquiry goes to info@sherpaholidays.com, with Reply-To the visitor.</p>
+      <div>
+        <%= form.label :lead_webhook_url, "n8n webhook URL", class: "label" %>
+        <%= form.url_field :lead_webhook_url, class: "input mono text-xs", placeholder: "https://n8n.example.com/webhook/lead" %>
+        <p class="hint">Each new lead and each details answer is posted here, signed with the relay secret. Empty means disabled.</p>
+      </div>
+      <div>
+        <%= form.submit "Save automations", class: "btn-primary btn btn-sm" %>
+      </div>
+    <% end %>
+
+    <div class="mt-6">
+      <h3 class="card-title">Recent automation activity</h3>
+      <%= card_caption "The last 50 machine events and webhook deliveries, newest first." %>
+      <% if @automation_events.any? || @webhook_deliveries.any? %>
+        <ul class="mt-2 space-y-3">
+          <% @automation_events.each do |event| %>
+            <li class="flex items-start gap-3">
+              <%= render "shared/icon", name: automation_icon(automation_caller(event)), class: "h-4 w-4 mt-0.5 text-info" %>
+              <div class="min-w-0">
+                <p class="text-sm text-ink"><%= event.summary %></p>
+                <p class="text-xs muted"><%= time_24_12(event.occurred_at) %></p>
+              </div>
+              <%= badge "Automated", :info, dot: true %>
+            </li>
+          <% end %>
+          <% @webhook_deliveries.each do |delivery| %>
+            <li class="flex items-start gap-3">
+              <%= render "shared/icon", name: :external, class: "h-4 w-4 mt-0.5 muted" %>
+              <div class="min-w-0">
+                <p class="text-sm text-ink"><%= delivery.event %> to <%= delivery.url %></p>
+                <p class="text-xs muted"><%= time_24_12(delivery.created_at) %><% if delivery.lead %> · <%= link_to delivery.lead.reference || delivery.lead.name, lead_path(delivery.lead), class: "link-quiet" %><% end %></p>
+              </div>
+              <%= status_badge(delivery.status == "delivered" ? "sent" : delivery.status == "failed" ? "error" : "pending") %>
+            </li>
+          <% end %>
+        </ul>
+      <% else %>
+        <div class="empty-inline">
+          <%= sketch :enso, class: "enso" %>
+          <p class="text-sm text-ink">No automation activity yet.</p>
+          <p class="text-xs muted">Website inquiries, Panda AI verdicts, and webhook deliveries will appear here.</p>
+        </div>
+      <% end %>
+      <% if @honeypot_dropped.to_i.positive? %>
+        <p class="hint mt-3"><%= @honeypot_dropped %> spam-bot submission<%= "s" unless @honeypot_dropped.to_i == 1 %> quietly dropped at the door.</p>
+      <% end %>
+    </div>
+  </section>
+
   <section class="card card-pad" aria-labelledby="export-heading">
     <h2 class="section-title" id="export-heading">Export everything</h2>
     <%= card_caption "A zip of leads, clients, people, organizations, notes, tags, and timeline events as CSV. Opens cleanly in Excel." %>

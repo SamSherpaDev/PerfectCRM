@@ -1,16 +1,23 @@
 class SettingsController < ApplicationController
   def edit
-    @settings = Setting.current
+    @settings = Setting.current.ensure_intake_credentials!
     @perfectbook_configured = PerfectBook.configured?
     @perfectbook_last_success = PerfectBook::SyncState.last_success_at
     @perfectbook_last_error = PerfectBook::SyncState.last_error_row
     @mailbox_address = Mail.mailbox_address
     @mail_sync = MailSyncState.find_by(folder: Mail::FOLDER)
     @imports = MailImport.ordered.limit(5)
+    load_automation_log
+    # Shown once, right after rotation; never rendered again.
+    @fresh_relay_secret = session.delete(:fresh_relay_secret)
   end
 
   def update
     @settings = Setting.current
+    load_automation_log
+    if params.dig(:setting, :lead_webhook_url)
+      return update_automations
+    end
     setting_params = params[:setting] || {}
     if setting_params.key?(:appearance) || setting_params.key?("appearance")
       update_appearance(setting_params[:appearance] || setting_params["appearance"])
@@ -24,6 +31,19 @@ class SettingsController < ApplicationController
     else
       redirect_to edit_settings_path, status: :see_other
     end
+  end
+
+  def rotate_site_key
+    Setting.current.ensure_intake_credentials!.rotate_site_key!
+    redirect_to edit_settings_path, notice: "Site key rotated. Update the storefront block.", status: :see_other
+  end
+
+  def rotate_relay_secret
+    secret = Setting.current.ensure_intake_credentials!.rotate_relay_secret!
+    session[:fresh_relay_secret] = secret
+    redirect_to edit_settings_path,
+      notice: "Relay secret rotated. Copy it now: it is shown once.",
+      status: :see_other
   end
 
   # Tests the PerfectBook read API with a cheap one-row read. Never renders
@@ -99,6 +119,23 @@ class SettingsController < ApplicationController
     respond_to do |format|
       format.turbo_stream { render turbo_stream: turbo_stream.update("appearance-status", "Settings saved.") }
       format.html { redirect_to edit_settings_path, notice: "Settings saved.", status: :see_other }
+    end
+  end
+
+  def load_automation_log
+    @automation_events = ActivityEvent.where(kind: "automation").newest_first.limit(50).includes(:subject)
+    @webhook_deliveries = LeadWebhookDelivery.newest_first.limit(50).includes(:lead)
+    @honeypot_dropped = Rails.cache.read("intake:honeypot:dropped") || 0
+  end
+
+  def update_automations
+    @settings.lead_webhook_url = params.dig(:setting, :lead_webhook_url).to_s.strip.presence
+    if @settings.save
+      redirect_to edit_settings_path, notice: "Automations saved.", status: :see_other
+    else
+      redirect_to edit_settings_path,
+        alert: @settings.errors.full_messages.to_sentence,
+        status: :see_other
     end
   end
 end

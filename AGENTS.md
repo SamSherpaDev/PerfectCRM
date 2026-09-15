@@ -39,8 +39,8 @@ When updating this file, preserve this bar for all agents and keep entries conci
   lives in `Lead#convert_to_client!`, person ownership in `Person`, and
   nested email reassignment in `NestedPeople`.
 - Search uses the models' `*.search` APIs; `ensure_fts!` recreates missing
-  FTS tables because `schema.rb` does not dump virtual tables. It does not
-  repopulate existing records; `sync_fts!` indexes each record.
+  FTS tables. It does not repopulate existing records; `sync_fts!` indexes
+  each record.
 - `TaggedRecord` validates pending tags before saving and assigns them in
   `after_save`; assigning through-tags before the parent saves trips
   Tagging uniqueness.
@@ -64,3 +64,7 @@ When updating this file, preserve this bar for all agents and keep entries conci
   rules live in the model, the landing queries in `Today::Summary`,
   automatic proposals in `Tasks::Automatic` (idempotent per booking),
   and the digest in `TodayDigestJob` + `CaptainDigestMailer`.
+- Website leads intake: public endpoints under `app/controllers/api/v1/leads/`
+  (intake, details, verdict), contract in `docs/leads-intake.md`; automation
+  settings on the Settings "Automations" card; `Leads` service module holds
+  the relay HMAC, source, scoring, and rate-limit rules.

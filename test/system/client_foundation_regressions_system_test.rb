@@ -16,6 +16,52 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
     page.current_window.resize_to(390, 844)
   end
 
+  test "website inquiry budget bands are readable on a phone" do
+    lead = Lead.create!(name: "Website inquiry", budget_band: "4000_7000")
+    {
+      "4000_7000" => "4,000-7,000 per person",
+      "under_2000" => "Under 2,000 per person",
+      "2000_4000" => "2,000-4,000 per person",
+      "7000_plus" => "7,000+ per person",
+      "discuss" => "To discuss"
+    }.each do |band, label|
+      lead.update!(budget_band: band)
+      visit lead_path(lead)
+      within "section[aria-labelledby='inquiry-heading']" do
+        assert_selector "dd", exact_text: label
+      end
+      capture("inquiry-budget-#{band}-phone")
+    end
+  end
+
+  test "captain configures automations and rotates credentials on a phone" do
+    visit edit_settings_path
+    fill_in "n8n webhook URL", with: "https://n8n.example.com/webhook/leads"
+    click_button "Save automations"
+    assert_field "n8n webhook URL", with: "https://n8n.example.com/webhook/leads"
+    old_key = Setting.current.site_key
+    within "section[aria-labelledby='automations-heading']" do
+      accept_confirm { all("button", text: "Rotate").first.click }
+    end
+    assert_no_text old_key
+    assert_text Setting.current.site_key
+    within "section[aria-labelledby='automations-heading']" do
+      accept_confirm { all("button", text: "Rotate").last.click }
+    end
+    assert_text "New secret (shown once)"
+    secret = Setting.current.relay_secret
+    assert_text secret
+    capture("automation-rotation-phone")
+    visit edit_settings_path
+    assert_no_text secret
+    assert_text Setting.current.masked_relay_secret
+    fill_in "n8n webhook URL", with: ""
+    click_button "Save automations"
+    assert_field "n8n webhook URL", with: ""
+    assert_not Setting.current.webhooks_enabled?
+    capture("automation-disabled-phone")
+  end
+
   test "traveler emails can be reassigned and duplicates show errors for both owner types" do
     [ Client, Lead ].each do |model|
       record = model.create!(name: "Everest family")
@@ -127,6 +173,9 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
       assert_equal [ "Match Alpha", "Match Zulu" ], all("main a").map(&:text).select { |text| text.start_with?("Match") }
     end
     client = Client.create!(name: "=SUM(1,2)", phone: "+123456", tag_list: "@tag")
+    inquiry = Lead.create!(name: "Website traveler", message: "Spring adventure", trip_title: "Nepal",
+      travel_month: 4, travel_year: 2027, timing_unknown: true, party_size: 2,
+      budget_band: "4000_7000", metadata: { attribution: { gclid: "export-click" } })
     client.notes.create!(body: "=1+1")
     visit edit_settings_path
     assert_link "Export everything"
@@ -148,6 +197,10 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
       end
     end
     assert_equal %w[activity_events.csv clients.csv leads.csv notes.csv organizations.csv people.csv taggings.csv tags.csv], tables.keys.sort
+    inquiry_row = tables["leads.csv"].find { |r| r["id"] == inquiry.id.to_s }
+    assert_equal [ "Spring adventure", "Nepal", "4", "2027", "true", "2", "4000_7000", inquiry.reference ],
+      inquiry_row.values_at("message", "trip_title", "travel_month", "travel_year", "timing_unknown", "party_size", "budget_band", "reference")
+    assert_equal "export-click", JSON.parse(inquiry_row["metadata"]).dig("attribution", "gclid")
     row = tables["clients.csv"].find { |r| r["id"] == client.id.to_s }
     assert_equal "'=SUM(1,2)", row["name"]
     assert_equal "'+123456", row["phone"]
