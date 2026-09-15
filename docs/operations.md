@@ -68,8 +68,10 @@ are not repeated here. This file covers only what differs for the CRM.
 | `PERFECTBOOK_BASE_URL`, `PERFECTBOOK_API_TOKEN` | [PerfectBook connection setup](../README.md#perfectbook-connection) | CRM `.env.app`; token also in PerfectBook's `.env.app` and password manager |
 
 Preserve the Active Record encryption keys with database backups and supply the
-same keys when restoring. Losing or replacing them makes the saved mailbox app
-password unreadable.
+same keys when restoring. Losing or replacing them makes encrypted values
+unreadable, including the mailbox app password, lead phone fields, and relay
+secret. For relay credential setup and rotation, see the
+[website intake contract](leads-intake.md#relay-mode-n8n-panda-ai-any-server).
 
 ## PerfectBook connection
 

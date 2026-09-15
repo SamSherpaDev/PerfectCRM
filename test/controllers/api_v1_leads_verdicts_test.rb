@@ -242,5 +242,4 @@ class ApiV1LeadsVerdictsTest < ActionDispatch::IntegrationTest
     assert_equal before, @lead.stage_changed_at
     assert_nil @lead.fit_score
   end
-
 end

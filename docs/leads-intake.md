@@ -18,7 +18,7 @@ Bodies are `application/json`, max 32 KB. Error bodies are
 `{ "error": "bad_request" | "forbidden" | "unauthorized" | "validation" |
 "rate_limited" | "not_found" | "expired" | "converted" | "server" }`;
 validation errors add a `fields` map from payload key (or model attribute
-for save failures) to `invalid` / `taken`. A converted verdict instead returns
+for save failures) to `invalid` / `taken` / `required`. A converted verdict instead returns
 `{ "error": "validation", "fields": { "base": "converted" } }`.
 
 ## Browser mode (the storefront form)
@@ -192,9 +192,9 @@ verdicts and repeated statuses leave stage timing unchanged.
 
 Notification intent is saved in `lead_notifications` in the same transaction
 as the inquiry or details update. Intake and details replays re-check pending
-rows. Solid Queue retries failed deliveries every five minutes. In production,
-a recurring minute-by-minute drain recovers lost enqueues and expired delivery
-claims.
+rows. The outbox makes failed deliveries eligible for retry after five minutes.
+In production, a recurring minute-by-minute drain enqueues eligible rows in
+Solid Queue and recovers lost enqueues and expired delivery claims.
 Delivery is at least once: a crash after sending but before recording completion
 can resend a notification. Each webhook attempt remains in the delivery log.
 Rate-limit admission uses a primary-database transaction shared across workers.
