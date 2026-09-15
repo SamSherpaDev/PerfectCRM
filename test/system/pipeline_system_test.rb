@@ -235,6 +235,16 @@ class PipelineSystemTest < ApplicationSystemTestCase
     page.current_window.resize_to(1400, 900)
     visit pipeline_path
     assert_selector ".col-sum", text: "NPR 140,000.00 · $2,500.00"
+    assert page.evaluate_script(<<~JS), "Won currency totals must fit inside their column"
+      (() => {
+        const column = document.querySelector('.board [data-stage="won"]')
+        const bounds = column.getBoundingClientRect()
+        const range = document.createRange()
+        range.selectNodeContents(column.querySelector('.col-sum'))
+        return Array.from(range.getClientRects()).every(rect =>
+          rect.left >= bounds.left && rect.right <= bounds.right)
+      })()
+    JS
     assert_text "Available once mail is connected"
     assert_text "Asks by source this month"
     capture_pipeline("desktop-board", ".board")
