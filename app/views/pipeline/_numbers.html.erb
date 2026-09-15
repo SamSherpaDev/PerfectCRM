@@ -28,22 +28,22 @@
           <% if report.median_first_response_time %>
             <%= report.median_first_response_time.inspect %>
           <% else %>
-            —
+            -
           <% end %>
         </dd>
-        <p class="hint">Appears once mail sync lands and replies can be timed.</p>
+        <p class="hint">Available once mail is connected</p>
       </div>
       <div>
         <dt class="label">Repeat and referral rate</dt>
         <% rr = report.repeat_referral_rate %>
         <dd class="mt-1 font-display text-[24px] leading-none text-ink">
-          <%= rr[:rate].nil? ? "—" : number_to_percentage(rr[:rate] * 100, precision: 0) %>
+          <%= rr[:rate].nil? ? "-" : number_to_percentage(rr[:rate] * 100, precision: 0) %>
         </dd>
         <p class="hint">
           <% if rr[:converted].zero? %>
             No conversions this year yet.
           <% else %>
-            <%= rr[:repeat] + rr[:referral] %> of <%= rr[:converted] %> converted this year came back or were referred.
+            <%= rr[:qualifying] %> of <%= rr[:converted] %> converted this year came back or were referred.
           <% end %>
         </p>
       </div>

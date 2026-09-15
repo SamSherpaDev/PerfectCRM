@@ -62,11 +62,11 @@ class PipelineRequestsTest < ActionDispatch::IntegrationTest
     assert_equal "dates", lead.lost_reason
   end
 
-  test "move to won converts and lands on the client" do
+  test "move to won opens conversion review" do
     lead = Lead.create!(name: "Winner", source: "manual", status: "quoted")
     patch pipeline_move_path, params: { lead_id: lead.id, to: "won" }
-    assert lead.reload.converted?
-    assert_redirected_to client_path(lead.reload.converted_client)
+    assert_not lead.reload.converted?
+    assert_redirected_to lead_path(lead)
   end
 
   test "converted leads refuse moves" do

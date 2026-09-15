@@ -9,11 +9,13 @@ class Leads::Transition
   AUTOMATION_ONLY_ERROR = "Automations may only set new, chatting, or lost. Quoted, nudged, and won stay yours."
   LOST_REASON_ERROR = "Pick a reason. Every lost lead needs one."
 
-  def self.call(lead, to:, actor: :captain, lost_reason: nil, lost_note: nil)
-    new(lead, to.to_s, actor.to_sym, lost_reason, lost_note).call
+  def self.call(lead, to:, actor: :captain, lost_reason: nil, lost_note: nil, attributes: {}, expected_client_id: "new")
+    new(lead, to.to_s, actor.to_sym, lost_reason, lost_note, attributes, expected_client_id).call
   end
 
-  def initialize(lead, to, actor, lost_reason, lost_note)
+  def initialize(lead, to, actor, lost_reason, lost_note, attributes, expected_client_id)
+    @attributes = attributes
+    @expected_client_id = expected_client_id
     @lead = lead
     @to = to
     @actor = actor
@@ -37,7 +39,7 @@ class Leads::Transition
         @lead.errors.add(:status, AUTOMATION_ONLY_ERROR)
         raise ActiveRecord::RecordInvalid, @lead
       end
-      client = @lead.convert_to_client!
+      client = @lead.convert_to_client!(expected_client_id: @expected_client_id)
       notify_tasks(@lead, from: from, to: "won")
       return Result.new(record: @lead, from: from, to: "won", converted_client: client)
     end
@@ -57,6 +59,7 @@ class Leads::Transition
     end
 
     @lead.with_lock do
+      @lead.assign_attributes(@attributes)
       @lead.status = @to
       @lead.stage_changed_at = Time.current
       if @to == "lost"

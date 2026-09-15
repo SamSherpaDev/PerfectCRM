@@ -33,7 +33,8 @@ export default class extends Controller {
   dragend() {
     this.element.querySelectorAll(".kcard-dragging").forEach((el) => el.classList.remove("kcard-dragging"))
     this.columnTargets.forEach((el) => el.classList.remove("col-drop-target"))
-    this.ghost()?.remove()
+    this._ghost?.remove()
+    this._ghost = null
     this.dragged = null
   }
 
@@ -64,9 +65,6 @@ export default class extends Controller {
     if (type === "lead" && to === "lost") {
       this.openLostSheet(id, name)
       return
-    }
-    if (type === "lead" && to === "won") {
-      if (!window.confirm(`Convert ${name} to a client? Their whole timeline moves with them. This cannot be undone.`)) return
     }
     this.submitMove(type, id, to)
   }
@@ -115,16 +113,17 @@ export default class extends Controller {
 
   showGhost(column) {
     const list = column.querySelector(".col-cards")
-    if (!list || list.querySelector(".kcard-ghost")) return
-    const ghost = document.createElement("div")
-    ghost.className = "kcard kcard-ghost"
-    ghost.setAttribute("aria-hidden", "true")
-    ghost.innerHTML = "<span class='kcard-name'>Drop here</span>"
-    list.appendChild(ghost)
-    this._ghost = ghost
+    if (!list) return
+    if (!this._ghost) {
+      this._ghost = document.createElement("div")
+      this._ghost.className = "kcard kcard-ghost"
+      this._ghost.setAttribute("aria-hidden", "true")
+      this._ghost.innerHTML = "<span class='kcard-name'>Drop here</span>"
+    }
+    list.appendChild(this._ghost)
   }
 
-  ghost() {
-    return this._ghost
+  disconnect() {
+    this.dragend()
   }
 }

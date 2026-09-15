@@ -63,11 +63,7 @@
             <span class="col-name"><%= PipelineController::STAGE_LABELS.fetch(column.stage) %></span>
             <span class="col-count"><%= pluralize(column.count, "card") %></span>
           </div>
-          <% if Pipeline::Board::LEAD_STAGES.include?(column.stage) %>
-            <p class="col-sum"><%= column.value_minor.positive? ? "#{money(column.value_minor)} out" : "No value set" %></p>
-          <% else %>
-            <p class="col-sum"><%= column.count.zero? ? "No clients here" : "Converted clients live here" %></p>
-          <% end %>
+          <p class="col-sum"><%= money(column.value_minor) %></p>
           <div class="col-cards">
             <% column.records.each do |record| %>
               <% kind = Pipeline::Board::LEAD_STAGES.include?(column.stage) ? "lead" : "client" %>
@@ -96,11 +92,7 @@
           <span>
             <span class="block text-[14.5px] font-medium text-ink"><%= PipelineController::STAGE_LABELS.fetch(column.stage) %></span>
             <span class="block text-[12px] muted">
-              <% if Pipeline::Board::LEAD_STAGES.include?(column.stage) %>
-                <%= column.value_minor.positive? ? "#{money(column.value_minor)} out" : "No value set" %>
-              <% else %>
-                Converted clients
-              <% end %>
+              <%= money(column.value_minor) %>
             </span>
           </span>
           <span class="stage-count"><%= column.count %></span>

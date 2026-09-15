@@ -81,6 +81,48 @@ class PipelineSystemTest < ApplicationSystemTestCase
     assert_no_overflow("pipeline stage open at 390px")
   end
 
+  test "dragging between columns keeps one ghost and clears it on cancel and drop" do
+    Lead.create!(name: "Dragged traveler")
+    page.current_window.resize_to(1400, 900)
+    visit pipeline_path
+    assert_selector "article.kcard", text: "Dragged traveler"
+    page.execute_script <<~JS
+      const card = document.querySelector('.board [data-pipeline-target="card"]')
+      const columns = document.querySelectorAll('.board [data-pipeline-target="column"]')
+      card.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: new DataTransfer() }))
+      columns[1].dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true }))
+      columns[2].dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true }))
+    JS
+    assert_selector ".kcard-ghost", count: 1
+    assert_selector '[data-stage="quoted"] .kcard-ghost', count: 1
+    page.execute_script "document.querySelector('.board [data-pipeline-target=card]').dispatchEvent(new DragEvent('dragend', { bubbles: true }))"
+    assert_no_selector ".kcard-ghost"
+    page.execute_script <<~JS
+      const card = document.querySelector('.board [data-pipeline-target="card"]')
+      const column = document.querySelector('.board [data-pipeline-target="column"]')
+      card.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: new DataTransfer() }))
+      column.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true }))
+      column.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true }))
+    JS
+    assert_no_selector ".kcard-ghost"
+  end
+
+  test "suggested message copy button copies the rendered follow-up" do
+    template = Template.create!(name: "Follow-up", purpose: "itinerary_follow_up",
+      subject: "Your {{trip}}", body: "Hi {{first_name}}")
+    lead = Lead.create!(name: "Tashi Sherpa", trip_interest: "Annapurna")
+    visit lead_path(lead, template: template.id, nudge: 1)
+    assert_selector "h2", text: "Suggested message"
+    page.execute_script <<~JS
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+        writeText: async (text) => { window.copiedMessage = text }
+      } })
+    JS
+    click_button "Copy message"
+    assert_text "Message copied."
+    assert_equal "Your Annapurna\n\nHi Tashi", page.evaluate_script("window.copiedMessage")
+  end
+
   private
 
   def assert_no_overflow(context)

@@ -12,6 +12,26 @@
   <%= render "shared/flash" %>
   <%= render "tasks/suggested_message", subject: @lead %>
 
+  <% if params[:nudge] == "1" %>
+    <section class="card card-pad" aria-labelledby="suggested-message-heading" data-controller="copy-message">
+      <h2 class="card-title" id="suggested-message-heading">Suggested message</h2>
+      <%= card_caption "Review and copy your follow-up, or open it in your email app." %>
+      <% if @suggested_message %>
+        <p class="mt-3 font-medium"><%= @suggested_message[:subject] %></p>
+        <p class="mt-2 whitespace-pre-wrap text-sm"><%= @suggested_message[:body] %></p>
+        <textarea class="sr-only" aria-label="Message to copy" readonly data-copy-message-target="text"><%= @suggested_message.values.join("\n\n") %></textarea>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <button type="button" class="btn-secondary btn btn-sm" data-action="copy-message#copy">Copy message</button>
+          <%= mail_to @lead.display_email, "Open email", subject: @suggested_message[:subject], body: @suggested_message[:body], class: "btn-primary btn btn-sm" if @lead.display_email.present? %>
+        </div>
+        <p class="hint" role="status" data-copy-message-target="status"></p>
+      <% else %>
+        <p class="mt-3 text-sm">Add an active itinerary follow-up template to suggest a message.</p>
+        <%= link_to "Open templates", templates_path, class: "link" %>
+      <% end %>
+    </section>
+  <% end %>
+
   <% if @lead.converted? %>
     <div class="callout-neutral callout" role="note">
       Became a client on <%= date_short(@lead.converted_at) %>.

@@ -32,7 +32,7 @@ class ExportsRequestsTest < ActionDispatch::IntegrationTest
     end
 
     clients = CSV.parse(files["clients.csv"].delete_prefix("\uFEFF"), headers: true)
-    assert_equal %w[id name email phone country state kind source campaign_name referred_by_organization perfectbook_contact_id archived_at notes_count last_activity_at created_at updated_at],
+    assert_equal %w[id name email phone country state kind source campaign_name referred_by_organization perfectbook_contact_id pipeline_stage archived_at notes_count last_activity_at created_at updated_at],
       clients.headers
     assert_equal "Tashi", clients.first["name"]
     assert_equal "tashi@example.com", clients.first["email"]

@@ -4,11 +4,15 @@
 class Pipeline::Report
   def value_by_stage
     sums = Lead.where(converted_client_id: nil).group(:status).sum(:expected_value_minor)
-    Lead::STATUSES.index_with { |status| sums.fetch(status, 0).to_i }
+    values = Pipeline::Board::STAGES.index_with { |stage| sums.fetch(stage, 0).to_i }
+    Client.active.includes(:perfectbook_bookings, :converted_leads).each do |client|
+      values[client.pipeline_stage] += client.pipeline_value_minor
+    end
+    values
   end
 
   def pipeline_total
-    value_by_stage.values.sum
+    value_by_stage.slice(*Lead::STATUSES.excluding("lost")).values.sum
   end
 
   # First outbound after first inbound per thread; nil until mail lands.
@@ -23,11 +27,13 @@ class Pipeline::Report
     year = Time.current.beginning_of_year
     converted = Lead.converted.where("converted_at >= ?", year)
     total = converted.count
-    return { rate: nil, converted: 0, repeat: 0, referral: 0 } if total.zero?
+    return { rate: nil, converted: 0, repeat: 0, referral: 0, qualifying: 0 } if total.zero?
 
-    repeat = converted.count { |lead| returning_client?(lead) }
+    returning_ids = converted.select { |lead| returning_client?(lead) }.map(&:id)
+    repeat = returning_ids.size
     referral = converted.where(source: "referral").count
-    { rate: (repeat + referral).fdiv(total), converted: total, repeat: repeat, referral: referral }
+    qualifying = (returning_ids | converted.where(source: "referral").pluck(:id)).size
+    { rate: qualifying.fdiv(total), converted: total, repeat: repeat, referral: referral, qualifying: qualifying }
   end
 
   def inquiries_by_source_this_month
@@ -51,7 +57,8 @@ class Pipeline::Report
     return false if client.nil?
 
     client.activity_events.where(kind: "conversion")
-      .where("summary LIKE ?", "Returned as a lead from %").exists?
+      .where("summary LIKE ?", "Returned as a lead from %")
+      .where("json_extract(metadata, '$.lead_id') = ?", lead.id).exists?
   end
 
   def helpers_money(minor)

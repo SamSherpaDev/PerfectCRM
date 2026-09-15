@@ -26,15 +26,16 @@ class Pipeline::Board
           count: scope.count, value_minor: scope.sum(:expected_value_minor).to_i)
       else
         scope = filtered_clients(Client.in_stage(stage))
-        Column.new(stage: stage, records: scope.ordered.includes(:tags, :people).to_a,
-          count: scope.count, value_minor: 0)
+        records = scope.ordered.includes(:tags, :people, :perfectbook_bookings, :converted_leads).to_a
+        Column.new(stage: stage, records: records,
+          count: records.size, value_minor: records.sum(&:pipeline_value_minor))
       end
     end
   end
 
   def trip_options
-    Lead.where(converted_client_id: nil).where.not(trip_interest: [ nil, "" ])
-      .distinct.order(:trip_interest).pluck(:trip_interest)
+    (Lead.where.not(trip_interest: [ nil, "" ]).distinct.pluck(:trip_interest) +
+      PerfectBook::Booking.where.not(trip_name: [ nil, "" ]).distinct.pluck(:trip_name)).uniq.sort
   end
 
   def advisor_options
@@ -53,6 +54,11 @@ class Pipeline::Board
   def filtered_clients(scope)
     scope = scope.where(source: filters[:source]) if filters[:source]
     scope = scope.where(referred_by_organization_id: filters[:advisor]) if filters[:advisor]
+    if filters[:trip]
+      lead_clients = Lead.converted.where(trip_interest: filters[:trip]).select(:converted_client_id)
+      booking_contacts = PerfectBook::Booking.where(trip_name: filters[:trip]).select(:perfectbook_contact_id)
+      scope = scope.where(id: lead_clients).or(scope.where(perfectbook_contact_id: booking_contacts))
+    end
     scope
   end
 end

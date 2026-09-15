@@ -36,9 +36,7 @@ class PipelineController < ApplicationController
       return redirect_to pipeline_path(filter_params), alert: "Converted leads stay read-only."
     end
     if to == "won"
-      result = Leads::Transition.call(lead, to: "won", actor: :captain)
-      return redirect_to result.converted_client,
-        notice: "Lead converted. Their timeline moved with them."
+      return redirect_to lead_path(lead), notice: "Review the client before converting."
     end
     Leads::Transition.call(lead, to: to, actor: :captain,
       lost_reason: params[:lost_reason], lost_note: params[:lost_note])

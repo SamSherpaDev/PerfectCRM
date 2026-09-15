@@ -382,3 +382,5 @@ The Docker image is built by GitHub Actions and published to
 secrets inventory, backups, and the restore drill. Production credential and
 bucket templates are in `.env.app.example` and `.env.litestream.example`;
 backup cron variables are documented in the runbook.
+
+TODO perfectcrm-mail-out-65: connect pipeline suggested messages to the reply box and sending; copying or opening email does not mark a lead as contacted.

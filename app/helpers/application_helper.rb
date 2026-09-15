@@ -112,6 +112,10 @@ module ApplicationHelper
 
   # Model constants live behind helpers because bare `Template` in a view
   # resolves to ActionView::Template, not the model.
+  def pipeline_nudge_template
+    @pipeline_nudge_template ||= ::Template.active.itinerary_follow_up.ordered.first
+  end
+
   def template_purpose_options
     ::Template.purposes.keys.map { |key| [ ::Template::PURPOSE_LABELS.fetch(key), key ] }
   end

@@ -31,6 +31,8 @@ class Lead < ApplicationRecord
 
   before_validation :normalize_email
   before_validation :normalize_external_ref
+  normalizes :lost_reason, with: ->(value) { value.to_s.strip.presence }
+
   before_validation :normalize_trip_interest
   before_create :stamp_stage
   validate :no_changes_when_converted, on: :update
@@ -145,6 +147,7 @@ class Lead < ApplicationRecord
         referred_by_organization: referred_by_organization,
         perfectbook_contact_id: perfectbook_contact_id
       )
+      client.update!(pipeline_stage: "won")
       people.find_each do |person|
         next if person.email.present? && client.people.exists?(email: person.email)
 

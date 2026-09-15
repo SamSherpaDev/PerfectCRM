@@ -16,7 +16,6 @@
       <div class="absolute right-0 z-10 mt-1 flex min-w-36 flex-col rounded-control border border-edge bg-paper-2 py-1 shadow-raise">
         <% move_targets.each do |target, label| %>
           <% link_data = { turbo_method: :patch, action: "click->pipeline#move", record_type: kind, record_id: record.id, record_name: record.name, to: target } %>
-          <% link_data[:turbo_confirm] = "Convert #{record.name} to a client? Their whole timeline moves with them. This cannot be undone." if target == "won" && kind == "lead" %>
           <%= link_to label, pipeline_move_path(**filters, kind == "lead" ? :lead_id : :client_id => record.id, to: target),
             data: link_data,
             class: "px-3 py-2 text-left text-[13px] text-ink-2 no-underline hover:bg-paper-3 hover:text-ink" %>
@@ -66,7 +65,7 @@
   <% if stale %>
     <div class="mt-1 flex items-center justify-between gap-2">
       <%= badge "Stale · #{time_ago_in_words(record.last_touch)} quiet", :warning %>
-      <%= link_to "Nudge", lead_path(record), class: "link text-[12px]", title: "Open the lead to write the follow-up" %>
+      <%= link_to "Nudge", lead_path(record, template: pipeline_nudge_template&.id, nudge: 1), class: "link text-[12px]", title: "Open the lead to write the follow-up" %>
     </div>
   <% end %>
 </article>

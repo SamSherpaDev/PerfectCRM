@@ -38,13 +38,13 @@ end
 module ClientExport
   def self.to_csv
     ExportCSV.generate do |csv|
-      csv << %w[id name email phone country state kind source campaign_name referred_by_organization perfectbook_contact_id archived_at notes_count last_activity_at created_at updated_at]
+      csv << %w[id name email phone country state kind source campaign_name referred_by_organization perfectbook_contact_id pipeline_stage archived_at notes_count last_activity_at created_at updated_at]
       Client.ordered.includes(:referred_by_organization).find_each do |client|
         csv << [
           client.id, client.name, client.email, client.phone,
           client.country, client.state, client.kind, client.source, client.campaign_name,
           client.referred_by_organization&.name, client.perfectbook_contact_id,
-          client.archived_at&.iso8601, client.notes_count,
+          client.pipeline_stage, client.archived_at&.iso8601, client.notes_count,
           client.last_activity_at&.iso8601, client.created_at.iso8601, client.updated_at.iso8601
         ]
       end
@@ -71,12 +71,14 @@ end
 module LeadExport
   def self.to_csv
     ExportCSV.generate do |csv|
-      csv << %w[id name email phone country state kind source campaign_name external_ref fit_score fit_band fit_reason status converted_client_id converted_at referred_by_organization perfectbook_contact_id notes_count last_activity_at created_at updated_at]
+      csv << %w[id name email phone country state kind source campaign_name external_ref fit_score fit_band fit_reason status trip_interest expected_value_minor lost_reason lost_note stage_changed_at last_touch_at converted_client_id converted_at referred_by_organization perfectbook_contact_id notes_count last_activity_at created_at updated_at]
       Lead.ordered.includes(:referred_by_organization).find_each do |lead|
         csv << [
           lead.id, lead.name, lead.email, lead.phone,
           lead.country, lead.state, lead.kind, lead.source, lead.campaign_name, lead.external_ref,
           lead.fit_score, lead.fit_band, lead.fit_reason, lead.status,
+          lead.trip_interest, lead.expected_value_minor, lead.lost_reason, lead.lost_note,
+          lead.stage_changed_at&.iso8601, lead.last_touch_at&.iso8601,
           lead.converted_client_id, lead.converted_at&.iso8601,
           lead.referred_by_organization&.name, lead.perfectbook_contact_id,
           lead.notes_count, lead.last_activity_at&.iso8601,

@@ -8,6 +8,9 @@ class Client < ApplicationRecord
   encrypts :phone
 
   belongs_to :referred_by_organization, class_name: "Organization", optional: true
+  has_many :converted_leads, class_name: "Lead", foreign_key: :converted_client_id
+  has_many :perfectbook_bookings, class_name: "PerfectBook::Booking",
+    primary_key: :perfectbook_contact_id, foreign_key: :perfectbook_contact_id
   has_many :people, -> { order(:created_at, :id) }, dependent: :destroy, inverse_of: :client
   has_many :notes, as: :notable, dependent: :destroy
   has_many :tasks, as: :subject, dependent: :destroy
@@ -93,6 +96,14 @@ class Client < ApplicationRecord
 
   def unarchive!
     update!(archived_at: nil)
+  end
+
+  def pipeline_value_minor
+    if perfectbook_bookings.any?
+      perfectbook_bookings.sum { |booking| booking.total_minor.to_i }
+    else
+      converted_leads.sum { |lead| lead.expected_value_minor.to_i }
+    end
   end
 
   def display_email
