@@ -90,5 +90,4 @@ class ReturningLeadsTest < ActionDispatch::IntegrationTest
     assert_redirected_to client_path(client)
     assert_equal [ first.id, second.id ], Lead.where(converted_client_id: client.id).order(:id).pluck(:id)
   end
-
 end
