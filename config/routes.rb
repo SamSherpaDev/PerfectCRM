@@ -53,6 +53,7 @@ Rails.application.routes.draw do
     resources :notes, only: %i[create]
   end
   get "pipeline", to: "pipeline#show"
+  patch "pipeline/move", to: "pipeline#move", as: :pipeline_move
   resources :quotes, only: %i[index]
   resources :templates, except: :show do
     collection do

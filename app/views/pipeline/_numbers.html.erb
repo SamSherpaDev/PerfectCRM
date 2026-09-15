@@ -1,0 +1,68 @@
+<%# The four numbers a solo operator reads. locals: (report:) %>
+<section class="card card-pad" aria-labelledby="numbers-heading">
+  <div class="card-header">
+    <h2 class="card-title" id="numbers-heading">Numbers</h2>
+  </div>
+  <%= card_caption "What the pipeline is worth, how fast you answer, and where asks come from." %>
+  <% values = report.value_by_stage %>
+  <dl class="mt-2 grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
+    <div>
+      <dt class="label">Pipeline value by stage</dt>
+      <dd class="mt-1 space-y-1">
+        <% Pipeline::Board::STAGES.each do |stage| %>
+          <div class="flex items-baseline justify-between gap-3">
+            <span class="muted"><%= PipelineController::STAGE_LABELS.fetch(stage) %></span>
+            <span class="num font-display text-[17px] text-ink"><%= money(values.fetch(stage, 0).to_i) %></span>
+          </div>
+        <% end %>
+        <div class="flex items-baseline justify-between gap-3 border-t border-rule-2 pt-1">
+          <span class="font-medium text-ink">Out in total</span>
+          <span class="num font-display text-[19px] text-ink"><%= money(report.pipeline_total) %></span>
+        </div>
+      </dd>
+    </div>
+    <div class="space-y-4">
+      <div>
+        <dt class="label">Median first reply</dt>
+        <dd class="mt-1 font-display text-[24px] leading-none text-ink">
+          <% if report.median_first_response_time %>
+            <%= report.median_first_response_time.inspect %>
+          <% else %>
+            —
+          <% end %>
+        </dd>
+        <p class="hint">Appears once mail sync lands and replies can be timed.</p>
+      </div>
+      <div>
+        <dt class="label">Repeat and referral rate</dt>
+        <% rr = report.repeat_referral_rate %>
+        <dd class="mt-1 font-display text-[24px] leading-none text-ink">
+          <%= rr[:rate].nil? ? "—" : number_to_percentage(rr[:rate] * 100, precision: 0) %>
+        </dd>
+        <p class="hint">
+          <% if rr[:converted].zero? %>
+            No conversions this year yet.
+          <% else %>
+            <%= rr[:repeat] + rr[:referral] %> of <%= rr[:converted] %> converted this year came back or were referred.
+          <% end %>
+        </p>
+      </div>
+      <div>
+        <dt class="label">Asks by source this month</dt>
+        <dd class="mt-1 space-y-1">
+          <% sources = report.inquiries_by_source_this_month %>
+          <% if sources.any? %>
+            <% sources.sort_by { |_, count| -count }.each do |source, count| %>
+              <div class="flex items-baseline justify-between gap-3">
+                <span class="muted"><%= source.humanize %></span>
+                <span class="num text-ink"><%= count %></span>
+              </div>
+            <% end %>
+          <% else %>
+            <span class="muted">No asks yet this month.</span>
+          <% end %>
+        </dd>
+      </div>
+    </div>
+  </dl>
+</section>

@@ -1,7 +1,153 @@
 <% content_for :title, "Pipeline · PerfectCRM" %>
-<div class="page">
-  <%= render layout: "shared/page_header", locals: { eyebrow: "Enquiries", title: "Pipeline", subtitle: "From first hello to booked, nothing slips through." } do %><% end %>
+<div class="page" data-controller="pipeline" data-pipeline-move-url-value="<%= pipeline_move_path %>" data-pipeline-auto-lost-value="<%= @lost_lead.present? %>"
+  data-action="dragstart->pipeline#dragstart dragend->pipeline#dragend dragover->pipeline#dragover dragleave->pipeline#dragleave drop->pipeline#drop">
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Enquiries", title: "Pipeline", subtitle: "Leads and clients on one trail, from first hello to home again." } do %><% end %>
   <%= render "shared/flash" %>
 
-  <%= render "shared/empty_state", title: "Pipeline opens soon", body: "Enquiries will move through stages — new, quoted, following up, booked — so the next step is always clear.", scene: :pass %>
+  <section class="card card-pad" aria-labelledby="filters-heading">
+    <h2 class="card-title section-title" id="filters-heading">Filters</h2>
+    <%= card_caption "Narrow the board to one source, trip, or referrer." %>
+    <%= form_with url: pipeline_path, method: :get, class: "mt-3 flex flex-col gap-2 sm:flex-row sm:items-end" do %>
+      <div class="flex-1">
+        <%= label_tag :source, "Source", class: "label" %>
+        <%= select_tag :source, options_for_select([ [ "Every source", "" ] ] + Lead::SOURCES.map { |s| [ s.humanize, s ] }, @filters[:source]), class: "select" %>
+      </div>
+      <div class="flex-1">
+        <%= label_tag :trip, "Trip", class: "label" %>
+        <%= select_tag :trip, options_for_select([ [ "Every trip", "" ] ] + @board.trip_options.map { |t| [ t, t ] }, @filters[:trip]), class: "select" %>
+      </div>
+      <div class="flex-1">
+        <%= label_tag :advisor, "Referred by", class: "label" %>
+        <%= select_tag :advisor, options_for_select([ [ "Everyone", "" ] ] + @board.advisor_options.map { |o| [ o.name, o.id ] }, @filters[:advisor]), class: "select" %>
+      </div>
+      <div class="flex gap-2">
+        <%= submit_tag "Filter", class: "btn-secondary btn btn-sm" %>
+        <% if @filters.any? %>
+          <%= link_to "Clear", pipeline_path, class: "btn-ghost btn btn-sm" %>
+        <% end %>
+      </div>
+    <% end %>
+  </section>
+
+  <%# Trail: one drawn rule, seven dots, group labels. Desktop only; the phone uses the stage list. %>
+  <section class="card card-pad hidden md:block" aria-label="Trail">
+    <div class="card-header">
+      <h2 class="card-title">Trail</h2>
+    </div>
+    <%= card_caption "Leads walk New to Nudged, become clients at Won, and rest at Post-trip. Lost steps off the path." %>
+    <div class="trail-groups mt-2" aria-hidden="true">
+      <span class="trail-group" style="grid-column: span 4">Leads</span>
+      <span class="trail-group" style="grid-column: span 2">Clients</span>
+      <span class="trail-group" style="grid-column: span 1">Off the path</span>
+    </div>
+    <ol class="mt-3 grid gap-3" style="grid-template-columns: repeat(7, minmax(0, 1fr))">
+      <% Pipeline::Board::STAGES.each do |stage| %>
+        <li class="flex flex-col items-center gap-1.5 text-center">
+          <span class="block h-3 w-3 rounded-full border-[1.5px] border-ink-4 bg-paper-2 shadow-raise-sm" aria-hidden="true"></span>
+          <span class="text-[12px] text-ink-3"><%= PipelineController::STAGE_LABELS.fetch(stage) %></span>
+        </li>
+      <% end %>
+    </ol>
+  </section>
+
+  <%# Board: seven columns with counts and money. Desktop and tablet; scrolls inside its card. %>
+  <section class="card card-pad hidden md:block" aria-label="Board">
+    <div class="card-header">
+      <h2 class="card-title">Board</h2>
+    </div>
+    <%= card_caption "Drag a card between stages, or open Move on the card. Dropping on Won converts; Lost asks why." %>
+    <div class="board mt-2">
+      <% @columns.each do |column| %>
+        <div data-pipeline-target="column" data-stage="<%= column.stage %>">
+          <div class="col-head">
+            <span class="col-name"><%= PipelineController::STAGE_LABELS.fetch(column.stage) %></span>
+            <span class="col-count"><%= pluralize(column.count, "card") %></span>
+          </div>
+          <% if Pipeline::Board::LEAD_STAGES.include?(column.stage) %>
+            <p class="col-sum"><%= column.value_minor.positive? ? "#{money(column.value_minor)} out" : "No value set" %></p>
+          <% else %>
+            <p class="col-sum"><%= column.count.zero? ? "No clients here" : "Converted clients live here" %></p>
+          <% end %>
+          <div class="col-cards">
+            <% column.records.each do |record| %>
+              <% kind = Pipeline::Board::LEAD_STAGES.include?(column.stage) ? "lead" : "client" %>
+              <% targets = (kind == "lead" ? Lead::STATUSES + [ "won" ] : Client::PIPELINE_STAGES) - [ column.stage ] %>
+              <%= render "pipeline/card", record: record, kind: kind,
+                move_targets: targets.map { |t| [ t, PipelineController::STAGE_LABELS.fetch(t) ] }.to_h,
+                filters: @filters %>
+            <% end %>
+            <% if column.records.empty? %>
+              <p class="px-1 py-3 text-[12px] muted">Nothing here. Enjoy the quiet.</p>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  </section>
+
+  <%# Stage list: the phone board. One row per stage; cards open beneath. %>
+  <section class="space-y-3 md:hidden" aria-label="Stages">
+    <h2 class="section-title">Stages</h2>
+    <p class="card-caption px-0">Seven stages with counts and money. Tap a stage to see its cards.</p>
+    <% @columns.each do |column| %>
+      <details class="card overflow-hidden" <%= "open" if column.records.any? && column.stage == "new" %>>
+        <summary class="stage-row cursor-pointer list-none" aria-label="<%= PipelineController::STAGE_LABELS.fetch(column.stage) %>, <%= pluralize(column.count, "card") %>">
+          <%= render "shared/icon", name: :list, class: "h-4 w-4 text-seal" %>
+          <span>
+            <span class="block text-[14.5px] font-medium text-ink"><%= PipelineController::STAGE_LABELS.fetch(column.stage) %></span>
+            <span class="block text-[12px] muted">
+              <% if Pipeline::Board::LEAD_STAGES.include?(column.stage) %>
+                <%= column.value_minor.positive? ? "#{money(column.value_minor)} out" : "No value set" %>
+              <% else %>
+                Converted clients
+              <% end %>
+            </span>
+          </span>
+          <span class="stage-count"><%= column.count %></span>
+          <%= render "shared/icon", name: :arrow_down, class: "h-4 w-4 text-ink-4" %>
+        </summary>
+        <div class="space-y-2 border-t border-rule-2 p-3">
+          <% column.records.each do |record| %>
+            <% kind = Pipeline::Board::LEAD_STAGES.include?(column.stage) ? "lead" : "client" %>
+            <% targets = (kind == "lead" ? Lead::STATUSES + [ "won" ] : Client::PIPELINE_STAGES) - [ column.stage ] %>
+            <%= render "pipeline/card", record: record, kind: kind,
+              move_targets: targets.map { |t| [ t, PipelineController::STAGE_LABELS.fetch(t) ] }.to_h,
+              filters: @filters %>
+          <% end %>
+          <% if column.records.empty? %>
+            <p class="px-1 py-3 text-[12px] muted">Nothing here. Enjoy the quiet.</p>
+          <% end %>
+        </div>
+      </details>
+    <% end %>
+  </section>
+
+  <%= render "pipeline/numbers", report: @report %>
+
+  <%# Lost sheet: every loss needs a reason. Opens on a lost drop, or after a rejected move. %>
+  <dialog id="lost-sheet" class="card card-pad m-auto w-[calc(100%-2rem)] max-w-md" data-pipeline-target="lostDialog" aria-labelledby="lost-heading">
+    <h2 class="card-title" id="lost-heading" data-pipeline-target="lostHeading">Why did this lead go quiet?</h2>
+    <%= card_caption "A reason keeps the numbers honest. They can step back to New any time." %>
+    <%= form_with url: pipeline_move_path, method: :patch, class: "mt-3 space-y-3" do %>
+      <%= hidden_field_tag :to, "lost" %>
+      <%= hidden_field_tag :lead_id, @lost_lead&.id, data: { pipeline_target: "lostLead" } %>
+      <% @filters.each do |key, value| %>
+        <%= hidden_field_tag key, value %>
+      <% end %>
+      <div>
+        <%= label_tag :lost_reason, "Reason", class: "label" %>
+        <%= select_tag :lost_reason, options_for_select([ [ "Pick a reason", "" ] ] + Lead::LOST_REASONS.map { |r| [ r.humanize, r ] }), required: true, class: "select" %>
+      </div>
+      <div>
+        <%= label_tag :lost_note, "Note (optional)", class: "label" %>
+        <%= text_area_tag :lost_note, nil, rows: 2, class: "textarea", placeholder: "What happened, in one line…" %>
+      </div>
+      <div class="flex justify-end gap-2">
+        <%= link_to "Cancel", pipeline_path(**@filters), class: "btn-ghost btn btn-sm" %>
+        <%= submit_tag "Mark lost", class: "btn-primary btn btn-sm" %>
+      </div>
+    <% end %>
+  </dialog>
+  <% if @lost_lead %>
+  <% end %>
 </div>

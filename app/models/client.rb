@@ -1,6 +1,9 @@
 class Client < ApplicationRecord
   KINDS = %w[individual company].freeze
   SOURCES = %w[website email instagram whatsapp referral repeat other google_ads meta_ads website_form manual].freeze
+  # Clients continue the trail where leads leave off: won at conversion,
+  # post_trip once their departure ends (per the mirrored booking).
+  PIPELINE_STAGES = %w[won post_trip].freeze
 
   encrypts :phone
 
@@ -27,6 +30,7 @@ class Client < ApplicationRecord
     format: { with: URI::MailTo::EMAIL_REGEXP, allow_blank: true }
   validates :perfectbook_contact_id, uniqueness: { allow_nil: true },
     numericality: { only_integer: true, greater_than: 0, allow_nil: true }
+  validates :pipeline_stage, inclusion: { in: PIPELINE_STAGES }
 
   after_create :stamp_activity
   after_save :sync_fts_later
@@ -34,6 +38,7 @@ class Client < ApplicationRecord
 
   scope :active, -> { where(archived_at: nil) }
   scope :archived, -> { where.not(archived_at: nil) }
+  scope :in_stage, ->(stage) { active.where(pipeline_stage: stage) }
   scope :ordered, -> { order(Arel.sql("COALESCE(last_activity_at, updated_at) DESC")) }
   scope :by_name, -> { order(:name) }
 

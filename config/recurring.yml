@@ -31,3 +31,6 @@ production:
   mail_sync:
     class: Mail::SyncJob
     schedule: every 5 minutes
+  pipeline_digest:
+    class: PipelineDigestJob
+    schedule: every monday at 7am

@@ -13,6 +13,7 @@ module ApplicationHelper
     "soft-deleted" => :danger,
     "connected" => :success, "pulling" => :info, "error" => :danger, "disconnected" => :neutral,
     "new" => :info, "chatting" => :neutral, "nudged" => :warning, "lost" => :neutral,
+    "won" => :success, "post_trip" => :info, "stage_change" => :info,
     "converted" => :success, "conversion" => :success, "automation" => :info
   }.freeze
 

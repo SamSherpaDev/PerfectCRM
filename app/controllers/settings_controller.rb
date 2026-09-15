@@ -18,6 +18,9 @@ class SettingsController < ApplicationController
       raw = setting_params[:digest_enabled].nil? ? setting_params["digest_enabled"] : setting_params[:digest_enabled]
       @settings.update!(digest_enabled: ActiveModel::Type::Boolean.new.cast(raw))
       redirect_to edit_settings_path, notice: "Settings saved.", status: :see_other
+    elsif setting_params.key?(:pipeline_digest)
+      @settings.update!(pipeline_digest: setting_params[:pipeline_digest] == "1")
+      redirect_to edit_settings_path, notice: "Settings saved.", status: :see_other
     else
       redirect_to edit_settings_path, status: :see_other
     end

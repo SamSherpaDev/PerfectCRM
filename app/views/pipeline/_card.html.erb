@@ -1,0 +1,72 @@
+<%# Pipeline card: name, source, trip interest, age in stage, value, fit. Sentence case. %>
+<%# locals: (record:, kind:, move_targets:, filters: {}) %>
+<%
+  stale = kind == "lead" && record.stale?
+  article_classes = [ "kcard", ("kcard-stale" if stale) ].compact.join(" ")
+%>
+<article class="<%= article_classes %>"
+  data-pipeline-target="card" draggable="true"
+  data-record-type="<%= kind %>" data-record-id="<%= record.id %>"
+  data-stage="<%= kind == "lead" ? record.status : record.pipeline_stage %>"
+  data-record-name="<%= record.name %>">
+  <div class="flex items-start justify-between gap-2">
+    <%= link_to record.name, kind == "lead" ? lead_path(record) : client_path(record), class: "link-quiet kcard-name" %>
+    <details class="relative shrink-0">
+      <summary class="link-quiet cursor-pointer list-none text-[12px]" aria-label="Move <%= record.name %> to another stage">Move</summary>
+      <div class="absolute right-0 z-10 mt-1 flex min-w-36 flex-col rounded-control border border-edge bg-paper-2 py-1 shadow-raise">
+        <% move_targets.each do |target, label| %>
+          <% link_data = { turbo_method: :patch, action: "click->pipeline#move", record_type: kind, record_id: record.id, record_name: record.name, to: target } %>
+          <% link_data[:turbo_confirm] = "Convert #{record.name} to a client? Their whole timeline moves with them. This cannot be undone." if target == "won" && kind == "lead" %>
+          <%= link_to label, pipeline_move_path(**filters, kind == "lead" ? :lead_id : :client_id => record.id, to: target),
+            data: link_data,
+            class: "px-3 py-2 text-left text-[13px] text-ink-2 no-underline hover:bg-paper-3 hover:text-ink" %>
+        <% end %>
+      </div>
+    </details>
+  </div>
+
+  <p class="kcard-trip">
+    <% if kind == "lead" %>
+      <%= record.trip_interest.presence || "No trip named yet" %>
+    <% else %>
+      <%= record.pipeline_stage == "post_trip" ? "Back home" : "Booked with PerfectBook" %>
+    <% end %>
+  </p>
+
+  <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] muted">
+    <span class="inline-flex items-center gap-1">
+      <% if kind == "lead" %>
+        <%= render "shared/icon", name: lead_source_icon(record.source), class: "h-3.5 w-3.5" %>
+        <%= record.source.humanize %>
+      <% else %>
+        <%= record.source.present? ? record.source.humanize : "Client" %>
+      <% end %>
+    </span>
+    <% if kind == "lead" && (record.fit_score.present? || record.fit_band.present?) %>
+      <span class="mt-0.5 block" title="Panda AI fit: <%= record.fit_label %>" role="img" aria-label="Fit <%= record.fit_label %>" style="max-width: 96px">
+        <span class="bar block <%= lead_fit_bar_class(record.fit_band) %>" aria-hidden="true"><span class="bar-fill" style="width: <%= record.fit_score.to_i %>%"></span></span>
+        <span class="mt-0.5 block whitespace-nowrap text-[11.5px] muted"><%= record.fit_label %></span>
+      </span>
+    <% end %>
+  </div>
+
+  <div class="kcard-meta">
+    <span>
+      <% if kind == "lead" %>
+        <%= record.stage_age_days.zero? ? "New in stage" : "#{record.stage_age_days}d in stage" %>
+      <% else %>
+        <%= record.pipeline_stage.humanize %>
+      <% end %>
+    </span>
+    <% if kind == "lead" && record.expected_value_minor.present? %>
+      <span><%= money(record.expected_value_minor) %></span>
+    <% end %>
+  </div>
+
+  <% if stale %>
+    <div class="mt-1 flex items-center justify-between gap-2">
+      <%= badge "Stale · #{time_ago_in_words(record.last_touch)} quiet", :warning %>
+      <%= link_to "Nudge", lead_path(record), class: "link text-[12px]", title: "Open the lead to write the follow-up" %>
+    </div>
+  <% end %>
+</article>

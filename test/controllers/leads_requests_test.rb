@@ -25,7 +25,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
 
   test "index tabs filter by status" do
     Lead.create!(name: "Newbie", source: "manual", status: "new")
-    Lead.create!(name: "Lostie", source: "manual", status: "lost")
+    Lead.create!(name: "Lostie", source: "manual", status: "lost", lost_reason: "no_reply")
     get leads_path(tab: "lost")
     assert_response :success
     assert_select "a", text: "Lostie"
@@ -105,6 +105,23 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     assert_redirected_to client_path(Client.last)
     post convert_lead_path(lead)
     assert_redirected_to lead_path(lead)
+  end
+
+  test "edit form stage changes run through Transition" do
+    lead = Lead.create!(name: "Staged", source: "manual", status: "new")
+    patch lead_path(lead), params: { lead: { name: "Staged", status: "chatting" } }
+    assert_redirected_to lead_path(lead)
+    assert_equal "chatting", lead.reload.status
+    assert lead.activity_events.exists?(kind: "stage_change")
+
+    patch lead_path(lead), params: { lead: { name: "Staged", status: "lost" } }
+    assert_response :unprocessable_entity
+    assert_equal "chatting", lead.reload.status
+
+    patch lead_path(lead), params: { lead: { name: "Staged", status: "lost", lost_reason: "dates" } }
+    assert_redirected_to lead_path(lead)
+    assert_equal "lost", lead.reload.status
+    assert_equal "dates", lead.lost_reason
   end
 
   test "edit is blocked after conversion" do

@@ -39,6 +39,25 @@
         <dt>Stage</dt>
         <dd><%= status_badge(@lead.converted? ? "converted" : @lead.status) %></dd>
       </div>
+      <% if @lead.status == "lost" %>
+        <div>
+          <dt>Lost reason</dt>
+          <dd>
+            <%= @lead.lost_reason.to_s.humanize %>
+            <% if @lead.lost_note.present? %>
+              <p class="mt-1 text-xs muted"><%= @lead.lost_note %></p>
+            <% end %>
+          </dd>
+        </div>
+      <% end %>
+      <div>
+        <dt>Trip interest</dt>
+        <dd><%= @lead.trip_interest.presence || "—" %></dd>
+      </div>
+      <div>
+        <dt>Expected value</dt>
+        <dd class="num font-display text-[17px] text-ink"><%= @lead.expected_value_minor.present? ? money(@lead.expected_value_minor) : "—" %></dd>
+      </div>
       <div>
         <dt>Email</dt>
         <dd><%= @lead.email.presence || "—" %></dd>

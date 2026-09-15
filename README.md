@@ -345,6 +345,34 @@ domain or a PerfectBook partner match. Public email providers (Gmail,
 Googlemail, Yahoo, Hotmail, Outlook, Live, iCloud, Me, AOL, Proton, Protonmail)
 are exempt. Import respects the same exact parsed mailbox-address rule.
 
+## Pipeline
+
+The board at `/pipeline` draws leads and clients on one trail: `new`,
+`chatting`, `quoted`, `nudged` (leads), `won`, `post_trip` (clients), and
+`lost`. Each column shows its count and, for lead stages, the summed
+expected value. Cards show source, trip interest, days in stage, expected
+value, and the fit bar when scored; cards quiet for 7 days (`Lead::STALE_AFTER`,
+measured from `last_touch_at`) glow stale with a one-tap Nudge back to the
+record. Drag cards between stages (a Move menu on every card covers
+keyboard and touch); dropping a lead on Won converts it with the usual
+confirmation, and Lost always opens the required-reason sheet (`lost_reason`
+plus an optional note; lost leads can step back to New). Filters narrow the
+board by source, trip interest, and referrer. On the phone the board becomes
+a stage list with counts and money; tapping a stage opens its cards.
+
+Every stage change goes through `Leads::Transition` (leads) or the
+pipeline move (clients, `won` ↔ `post_trip`), records a `stage_change`
+ActivityEvent, and calls `Tasks::OnStageChange` when the tasks lane lands.
+Automations may only set `new`, `chatting`, or `lost`; `quoted`, `nudged`,
+and conversion stay manual, enforced in the service. `Lead#record_touch!`
+maintains `last_touch_at` from notes today and mail sync when it lands.
+
+The Numbers card reads pipeline value by stage, median first reply (blank
+until mail sync lands), repeat-and-referral rate among this year's
+conversions, and asks by source this month. A one-line digest mails every
+Monday at 7am (`PipelineDigestJob`, `config/recurring.yml`) behind the
+Settings toggle; it folds into the tasks digest when that lane lands.
+
 ## Production shape
 
 The Docker image is built by GitHub Actions and published to

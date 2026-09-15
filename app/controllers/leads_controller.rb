@@ -58,7 +58,23 @@ class LeadsController < ApplicationController
   end
 
   def update
-    if @lead.update(lead_params)
+    attrs = lead_params.to_h
+    target_status = attrs.delete("status")
+    # Stage changes always run through Transition so the automation
+    # boundary, the lost-reason rule, and the timeline event hold here too.
+    if target_status.present? && target_status != @lead.status
+      lost_reason = attrs.delete("lost_reason")
+      lost_note = attrs.delete("lost_note")
+      begin
+        Leads::Transition.call(@lead, to: target_status, actor: :captain,
+          lost_reason: lost_reason, lost_note: lost_note)
+      rescue ActiveRecord::RecordInvalid
+        @lead.assign_attributes(attrs)
+        @lead.people.build unless @lead.people.any?(&:new_record?)
+        return render :edit, status: :unprocessable_entity
+      end
+    end
+    if @lead.update(attrs)
       redirect_to @lead, notice: "Lead saved."
     else
       @lead.people.build unless @lead.people.any?(&:new_record?)
@@ -106,6 +122,7 @@ class LeadsController < ApplicationController
       :name, :email, :phone, :country, :state, :kind, :source, :campaign_name,
       :external_ref, :fit_score, :fit_band, :fit_reason, :status,
       :referred_by_organization_id, :perfectbook_contact_id, :tag_list,
+      :trip_interest, :expected_value_dollars, :lost_reason, :lost_note,
       people_attributes: %i[id name email phone role _destroy]
     )
   end
