@@ -1,0 +1,88 @@
+<% content_for :title, "Quote #{@quote.reference} · Sherpa Holidays" %>
+<div class="w-full max-w-xl">
+  <div class="card card-pad">
+    <div class="text-center">
+      <%= sketch :everest, class: "sk mx-auto h-20 w-full max-w-md" %>
+      <p class="eyebrow mt-2">Sherpa Holidays · family-run Himalayan adventure travel</p>
+      <h1 class="font-display mt-2 text-3xl text-ink">Your quote is ready, <%= @quote.owner_name %></h1>
+      <p class="mt-1 text-sm muted">Quote <%= @quote.reference %> · no account needed · just tap below</p>
+    </div>
+    <%= render "shared/flash" %>
+
+    <% if @quote.status == "accepted" %>
+      <div class="callout-neutral callout mt-4" role="status">
+        <p class="font-medium">Accepted - thank you!</p>
+        <p class="text-sm">Sam will be in touch shortly to confirm your booking.</p>
+      </div>
+    <% elsif @quote.status == "superseded" %>
+      <div class="callout-neutral callout mt-4" role="status">
+        <% revision = @quote.revisions.ordered.first %>
+        <% if revision&.sent_at.present? && !revision.draft? %>
+          <p class="font-medium">A newer quote exists.</p>
+          <%= link_to "View the newer quote", public_quote_path(revision.accept_token), class: "link" %>
+        <% else %>
+          <p class="font-medium">A newer quote is on its way</p>
+        <% end %>
+      </div>
+    <% elsif @quote.expired? %>
+      <div class="callout-warning callout mt-4" role="status">
+        <p class="font-medium">This quote expired on <%= date_short(@quote.valid_until) %>.</p>
+        <p class="text-sm">Reply to <%= mail_to "info@sherpaholidays.com" %> and Sam will refresh it for you.</p>
+      </div>
+    <% end %>
+
+    <div class="mt-6">
+      <h2 class="font-display text-xl text-ink"><%= @quote.subject_label %></h2>
+      <p class="mt-1 text-sm muted">
+        <% details = [] %>
+        <% details << @quote.departure_label if @quote.departure_label.present? %>
+        <% if @quote.departure_start_on && @quote.departure_end_on %>
+          <% details << "#{@quote.departure_start_on.strftime('%-d %b')} – #{@quote.departure_end_on.strftime('%-d %b %Y')}" %>
+        <% end %>
+        <% details << pluralize(@quote.party_size, "guest") if @quote.party_size %>
+        <%= details.join(" · ") %>
+      </p>
+    </div>
+
+    <ul class="mt-4 divide-y divide-rule-2 border-y border-rule-2">
+      <% @quote.lines.each do |line| %>
+        <li class="flex items-baseline justify-between gap-4 py-2.5">
+          <span class="text-sm text-ink-2"><%= line.description %> <span class="muted">× <%= line.quantity %></span></span>
+          <span class="shrink-0 font-display tabular-nums text-ink"><%= money_in(line.total_minor, @quote.currency) %></span>
+        </li>
+      <% end %>
+    </ul>
+
+    <div class="mt-4 text-center">
+      <p class="text-xs muted"><%= @quote.party_size ? "Total for #{pluralize(@quote.party_size, 'guest')}" : "Total" %></p>
+      <p class="font-display text-3xl tabular-nums text-ink"><%= money_in(@quote.subtotal_minor, @quote.currency) %></p>
+      <% if @quote.deposit_minor.to_i.positive? %>
+        <p class="mt-1 text-sm muted">Deposit <%= money_in(@quote.deposit_minor, @quote.currency) %> to hold your seats · balance <%= money_in(@quote.balance_due_minor, @quote.currency) %><% if @quote.balance_due_on %> due <%= date_short(@quote.balance_due_on) %><% end %></p>
+      <% end %>
+      <% if @quote.valid_until && !@quote.expired? %>
+        <p class="mt-1 text-xs muted">Valid until <%= date_short(@quote.valid_until) %></p>
+      <% end %>
+    </div>
+
+    <% if @quote.included.present? %>
+      <div class="mt-6">
+        <h3 class="label">What is included</h3>
+        <p class="mt-1 text-sm text-ink-2 whitespace-pre-line"><%= @quote.included %></p>
+      </div>
+    <% end %>
+    <% if @quote.notes.present? %>
+      <div class="mt-4 rounded-control bg-paper-3 px-4 py-3 shadow-press">
+        <h3 class="label">A note from Sam</h3>
+        <p class="mt-1 text-sm text-ink-2 whitespace-pre-line"><%= @quote.notes %></p>
+      </div>
+    <% end %>
+
+    <% if @quote.acceptable? %>
+      <div class="mt-6 flex flex-col gap-2">
+        <%= button_to "Accept this quote", accept_public_quote_path(@quote.accept_token), method: :post, class: "btn btn-primary min-h-11 w-full" %>
+        <%= link_to "Ask a question", "mailto:info@sherpaholidays.com?subject=#{CGI.escape("Question about quote #{@quote.reference}")}", class: "btn btn-secondary w-full" %>
+      </div>
+      <p class="mt-2 text-center text-xs muted">Accepting tells Sam to hold your seats. The booking is confirmed together.</p>
+    <% end %>
+  </div>
+</div>

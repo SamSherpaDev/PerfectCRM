@@ -1,12 +1,3 @@
-<%# Slot for PerfectBook booking cards. Filled by the later crm-pb-link task. %>
-<section class="card card-pad" aria-labelledby="perfectbook-heading">
-  <div class="card-header">
-    <h2 class="card-title" id="perfectbook-heading">Bookings in PerfectBook</h2>
-  </div>
-  <%= card_caption "Trips, balances, and invoice status stay in PerfectBook. They will show here with a link." %>
-  <div class="empty-inline">
-    <%= sketch :enso, class: "enso" %>
-    <p class="text-sm text-ink">Not connected yet.</p>
-    <p class="text-xs muted">Booking cards will appear here once PerfectBook is connected.</p>
-  </div>
-</section>
+<%# Slot: PerfectBook booking cards (crm-pb-link). %>
+<%= render "shared/perfectbook_bookings", record: client,
+  bookings: perfectbook_bookings_for(client), refresh_path: refresh_bookings_client_path(client) %>

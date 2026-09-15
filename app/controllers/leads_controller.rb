@@ -2,7 +2,7 @@ class LeadsController < ApplicationController
   include RecordHistory
   include ReplyBox
 
-  before_action :set_lead, only: %i[show edit update convert]
+  before_action :set_lead, only: %i[show edit update convert refresh_bookings]
   before_action :block_converted_edit, only: %i[edit update]
 
   TABS = %w[new chatting quoted nudged lost converted].freeze
@@ -104,6 +104,15 @@ class LeadsController < ApplicationController
     redirect_to client, notice: "Lead converted. Their timeline moved with them."
   rescue ActiveRecord::RecordInvalid => e
     redirect_to @lead, alert: e.record.errors.full_messages.to_sentence.presence || "Could not convert."
+  end
+
+  def refresh_bookings
+    if @lead.perfectbook_contact_id.present?
+      PerfectBook::SyncBookingsJob.perform_later(perfectbook_contact_id: @lead.perfectbook_contact_id)
+      redirect_to @lead, notice: "Refreshing bookings from PerfectBook."
+    else
+      redirect_to @lead, alert: "Link a PerfectBook contact first."
+    end
   end
 
   private

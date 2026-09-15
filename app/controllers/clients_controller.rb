@@ -2,7 +2,7 @@ class ClientsController < ApplicationController
   include RecordHistory
   include ReplyBox
 
-  before_action :set_client, only: %i[show edit update archive unarchive]
+  before_action :set_client, only: %i[show edit update archive unarchive refresh_bookings]
 
   def index
     @tab = %w[clients organizations archived].include?(params[:tab]) ? params[:tab] : "clients"
@@ -69,6 +69,15 @@ class ClientsController < ApplicationController
   def unarchive
     @client.unarchive!
     redirect_to @client, notice: "Client restored."
+  end
+
+  def refresh_bookings
+    if @client.perfectbook_contact_id.present?
+      PerfectBook::SyncBookingsJob.perform_later(perfectbook_contact_id: @client.perfectbook_contact_id)
+      redirect_to @client, notice: "Refreshing bookings from PerfectBook."
+    else
+      redirect_to @client, alert: "Link a PerfectBook contact first."
+    end
   end
 
   # Target of PerfectBook's "Open in PerfectCRM" links.

@@ -81,6 +81,12 @@ gem "googleauth", require: "googleauth/id_tokens"
 # CSV imports (Ruby 3.4 no longer defaults the csv gem).
 gem "csv"
 
+# Quote PDFs attached to quote emails (Washi-styled, matching PerfectBook's invoice PDF).
+# Prawn 2.4 requires matrix but does not declare it as a dependency.
+gem "matrix"
+gem "prawn"
+gem "prawn-table"
+
 # Packages CSV exports in a zip archive.
 gem "rubyzip", require: "zip"
 

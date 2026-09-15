@@ -51,9 +51,8 @@ configuration lives in `config/environments/development.rb`.
 On desktop, hover or focus the icon rail to reveal navigation labels and Sign
 out. On mobile, use Open menu to show the drawer. The rail holds **Today**
 (root), **Inbox**, **Leads**, **Clients**, **Pipeline**, **Quotes**, **Templates**, and
-**Settings**. Quotes renders a branded empty state until its
-feature lands. See [Today and follow-ups](#today-and-follow-ups), [Mail](#mail),
-[Replying](#replying), [Templates](#templates), and [Pipeline](#pipeline) for the live features. Settings provides appearance,
+**Settings**. See [Today and follow-ups](#today-and-follow-ups), [Mail](#mail),
+[Replying](#replying), [Templates](#templates), [Pipeline](#pipeline), and [Quotes](#quotes) for the live features. Settings provides appearance,
 morning and pipeline digests, connections, history import, automation settings, email sender settings, and export controls.
 
 On phones (under 750px) a bottom tab bar holds **Today**, **Inbox**,
@@ -178,10 +177,9 @@ document. The CRM mirrors contacts, the trip and departure catalog, and
 customer booking and invoice status. It never stores passport, visa,
 insurance, or date-of-birth data. Production polling is scheduled in
 [`config/recurring.yml`](config/recurring.yml); these recurring jobs are
-not scheduled in development. `PerfectBook::Catalog` and the
-`perfectbook_contact_url` and `perfectbook_booking_url` helpers support
-the future quote builder and client booking cards; those screens are not
-implemented yet.
+not scheduled in development. `PerfectBook::Catalog` feeds the quote
+builder, and the `perfectbook_contact_url` and `perfectbook_booking_url`
+helpers power the client booking cards; see "Quotes" below.
 
 Configure with `PERFECTBOOK_BASE_URL` (defaults to
 `https://perfectbook.sherpaholidays.com`) and `PERFECTBOOK_API_TOKEN`
@@ -201,6 +199,74 @@ also filter the token (`config/initializers/filter_parameter_logging.rb`).
 
 Settings → PerfectBook connection shows configured/unconfigured, the last
 successful sync, the last error, and a Test connection button.
+
+## Quotes
+
+Quotes are built from the mirrored trip catalog and sent as email plus a
+Washi-styled PDF (`QuotePdf`, via `prawn`), always from
+`info@sherpaholidays.com` through the app's Gmail SMTP settings. The
+builder (`/quotes/new?client_id=` or `?lead_id=`) picks a trip, then a
+departure with seats from the latest PerfectBook sync. Prices stay the
+captain's to enter because PerfectBook exposes no catalog price, and prefill
+from the newest earlier
+sent or accepted quote by the same captain, preferring the same departure
+and falling back to the same trip (`Quote.last_unit_for_trip`). In the new
+builder, changing the trip or departure preserves entered lines, edited
+descriptions and prices, and notes; untouched catalog labels and prefilled
+prices refresh for the selection. Enter prices and deposits without commas
+(for example, `1500.00`). Trip and departure
+lines snapshot catalog names and dates at build time, so later
+PerfectBook edits never rewrite history; custom lines cover permits,
+single supplements, and extra nights. Revisions chain through
+`parent` with a bumped `version` and supersede the old accept link; duplicates
+start fresh. Only drafts can be edited, including their trip and departure.
+Drafts are private: the old public page says a newer quote is on its way,
+and links to the revision only once it has been sent. Accepted quotes
+cannot be revised. Inclusions are entered per quote; “Remember these
+inclusions for this trip” saves CRM-owned preferences separately from the
+trip mirror. Remembered inclusions load on the initial trip selection when
+the field is untouched. New quotes default to two guests and a valid-until
+date 14 days from today. Drafts may omit these fields; sending requires a
+positive party size, at least one line, a recipient email, and a valid-until
+date of today or later. Drafts can retain past dates, but these must be
+updated before sending. Validation errors appear in the builder. Sending a quote
+moves a lead from New or Chatting to Quoted (`Quote#deliver!`). If the
+email cannot be queued, the quote remains a draft and shows a retry message;
+saved edits are retained. Edits commit before email enqueueing. After a lead
+converts, its quotes use the client's current contact details and record new
+quote activity on the client timeline.
+
+Each quote carries an unguessable tap-to-accept link (`/q/:token`, no
+sign-in). Public views are rate-limited and logged through `QuoteView`.
+After `valid_until`, the page remains readable but acceptance is disabled.
+Accepting records `accepted_at`, queues an email to the captain at
+`info@`, writes the timeline, and stages an intake payload on the quote
+page in the "Create booking in PerfectBook" panel. Its "Open PerfectBook
+booking page" button opens
+PerfectBook's new-booking page with the intake details in query parameters
+and a copyable version alongside for manual entry. Both use the intake details
+saved at acceptance, so later client edits do not change the staged intake.
+The captain reviews
+and creates the actual booking in PerfectBook. If the acceptance notice
+cannot be queued, acceptance is rolled back and the client is asked to retry.
+A direct post replaces the manual intake step once
+PerfectBook ships its enquiry-creation endpoint (see
+`TODO(pb-inquiry-intake)` in `Quote#perfectbook_intake_url`).
+
+Client and lead pages (when linked to a PerfectBook contact) show
+"Bookings in PerfectBook": each mirrored booking with ref, trip, dates,
+status, total, paid, balance due, invoice badge and number, and "Open in
+PerfectBook", plus a Refresh button that re-pulls just that contact
+(`PerfectBook::SyncBookingsJob` with `perfectbook_contact_id`). Refresh
+runs in the background; reload the page after the sync completes.
+PerfectBook's API exposes no document-status fields yet, so there is no
+received/missing line; each booking links "Nudge for missing documents"
+to an editable copy of the document-request template with client, trip,
+dates, and booking reference. Check what is missing in PerfectBook, edit
+the request, and copy it into an email; this page does not send it.
+Document status arrives with the PerfectBook update.
+TODO(pb-api-documents): consume the PerfectBook booking API
+document-status/checklist follow-up when it becomes available.
 
 ## Checks
 
@@ -222,8 +288,9 @@ Today (the root route) is the captain's morning screen: four tiles
 waiting, Follow-ups as one-tap check rows, Departing soon (trips leaving
 in the next 14 days), and Back from the mountains (returned in the last
 7 days). Returned bookings linked to a local record offer Create review
-ask. Waiting-on-you threads and the quotes count read zero until the
-mail and quotes tasks land (marked TODO in `app/services/today/summary.rb`).
+ask. Waiting-on-you threads and the quotes count still read zero pending
+their Today integration (marked TODO in `app/services/today/summary.rb`);
+use [Quotes](#quotes) to track sent quotes.
 
 Tasks belong to clients, leads, or organizations. Today lists overdue tasks
 and those due through the next 7 days, using the Pacific date. Tap the

@@ -1,7 +1,7 @@
 # Everything the Today view and the morning digest need, in one place.
 #
-# Waiting-on-you threads and quotes-out counts read from the mail and quote
-# models once those tasks land; until then they render zero (marked TODO).
+# Waiting-on-you threads and quotes-out counts await their Today integration
+# (marked TODO below); see README.md, "Today and follow-ups".
 # Departure windows read the mirrored PerfectBook bookings.
 module Today
   class Summary
@@ -22,7 +22,7 @@ module Today
       []
     end
 
-    # TODO(quotes): count open quotes once the Quote model lands.
+    # TODO(quotes): wire the existing Quote model into this count.
     def quotes_out
       0
     end

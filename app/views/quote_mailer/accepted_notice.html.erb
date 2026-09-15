@@ -1,0 +1,2 @@
+<p><%= @quote.owner_name %> just accepted quote <strong><%= @quote.reference %></strong> (<%= @quote.subject_label %>, <%= money_in(@quote.subtotal_minor, @quote.currency) %>).</p>
+<p><%= link_to "Open the quote", quote_url(@quote) %> · then create the booking in PerfectBook.</p>

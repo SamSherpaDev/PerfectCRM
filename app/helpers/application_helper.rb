@@ -16,7 +16,9 @@ module ApplicationHelper
     "won" => :success, "post_trip" => :info, "stage_change" => :info,
     "converted" => :success, "conversion" => :success, "automation" => :info,
     "queued" => :neutral, "sending" => :info, "failed" => :danger,
-    "received" => :brand, "complete" => :success
+    "received" => :brand, "complete" => :success,
+    "draft" => :neutral, "viewed" => :info, "accepted" => :success,
+    "superseded" => :neutral, "expired" => :warning
   }.freeze
 
   # USD amounts from integer cents: "$1,234.56", "-$12.00".
@@ -212,5 +214,21 @@ module ApplicationHelper
 
   def perfectbook_booking_url(booking)
     booking.deep_link
+  end
+
+  # Prefilled PerfectBook new-booking page for an accepted quote. Built from
+  # the ENV base URL plus escaped query params (see Quote#perfectbook_intake_url).
+  def quote_intake_url(quote)
+    quote.perfectbook_intake_url
+  end
+
+  # Mirrored PerfectBook bookings for a client or lead, oldest trip first.
+  # Reads the local mirror only; the sync jobs keep it fresh.
+  def perfectbook_bookings_for(record)
+    contact_id = record.try(:perfectbook_contact_id)
+    return PerfectBook::Booking.none if contact_id.blank?
+
+    PerfectBook::Booking.where(perfectbook_contact_id: contact_id)
+      .order(Arel.sql("start_date IS NULL, start_date ASC"))
   end
 end

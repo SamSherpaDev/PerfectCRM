@@ -1,0 +1,32 @@
+<%# locals: (quotes:, show_owner: false) %>
+<%# One quotes table for the index, client, and lead pages. %>
+<% if quotes.any? %>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th scope="col">Quote</th>
+          <% if local_assigns.fetch(:show_owner, false) %><th scope="col">For</th><% end %>
+          <th scope="col">Trip</th>
+          <th scope="col" class="text-right">Total</th>
+          <th scope="col">Status</th>
+          <th scope="col" class="text-right">Valid until</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% quotes.each do |quote| %>
+          <tr>
+            <td><%= link_to quote.reference, quote_path(quote), class: "link font-medium" %><% if quote.version.to_i > 1 %> <span class="text-xs muted">v<%= quote.version %></span><% end %></td>
+            <% if local_assigns.fetch(:show_owner, false) %><td><%= quote.owner_name %></td><% end %>
+            <td><%= quote.subject_label %></td>
+            <td class="text-right font-display tabular-nums"><%= money_in(quote.subtotal_minor, quote.currency) %></td>
+            <td><%= status_badge(quote.expired? ? "expired" : quote.status) %></td>
+            <td class="text-right muted"><%= date_short(quote.valid_until) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% else %>
+  <%= render "shared/empty_state", title: "No quotes yet", scene: :cairn, body: "Trip quotes built from the PerfectBook catalog will live here." %>
+<% end %>
