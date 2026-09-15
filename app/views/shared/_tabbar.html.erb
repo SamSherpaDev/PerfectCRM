@@ -1,8 +1,6 @@
-<%# Phone bottom tab bar (docs/DESIGN.md 4.1): five items — Today, Inbox, Leads,
-    Clients, More. Visible under 750px via .tabbar CSS; the rail hides there.
-    More opens the drawer (Pipeline, Quotes, Templates, Settings) and is lit
-    when any of those is open. Hidden on thread/quote views where a docked
-    box takes its place (add .tabbar-hidden to <body> there when built). %>
+<%# Phone navigation usage: README.md, Navigation; visual contract: docs/DESIGN.md 4.1.
+    Future thread/quote views can add .tabbar-hidden to <body> when a docked
+    box takes its place. %>
 <% more_active = %w[pipeline quotes templates settings].include?(controller_name) %>
 <nav class="tabbar" aria-label="Primary">
   <%= link_to root_path, class: ("on" if controller_name == "today"), aria: ({ current: "page" } if controller_name == "today") do %>

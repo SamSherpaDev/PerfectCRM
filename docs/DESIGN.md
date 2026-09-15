@@ -294,6 +294,8 @@ The port lives in [thinking_orbs.js](../app/javascript/thinking_orbs.js), with i
 
 Mount through the `orb` helper in [ApplicationHelper](../app/helpers/application_helper.rb), or a canvas with `data-controller="orb"`, `data-orb-state-value="composing"` or `"shaping"`, and `data-orb-size-value="20"` or `"64"`. The [orb controller](../app/javascript/controllers/orb_controller.js) disposes the previous mount before replacing it and releases its resources on disconnect.
 
+Supply a specific accessible name with `orb(:shaping, label: "Panda AI is scoring this lead")`, or `data-orb-label-value` on a manually mounted canvas. This label persists across state changes; without it, the controller updates the default accessible name to match the state.
+
 ## Appendix C: CRM-only CSS (beyond PerfectBook's application.css)
 
 The CRM layer in [application.css](../app/assets/tailwind/application.css) owns the shipped component rules and responsive overrides. It uses the shared `--pb-*` tokens in the same file. [The design preview](../app/views/design/show.html.erb) demonstrates the kit; see [README navigation](../README.md#navigation) for access.

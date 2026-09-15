@@ -1,6 +1,7 @@
 // Thinking-orb mount (docs/DESIGN.md 4.13): thin Stimulus wrapper around the
 // vanilla port in `thinking_orbs.js`. Takes `state` (composing, shaping)
 // and `size` (20, 64) values and mounts on a <canvas data-controller="orb">.
+// Optional accessible-label configuration is documented in DESIGN.md Appendix B.
 import { Controller } from "@hotwired/stimulus"
 import { mountThinkingOrb } from "thinking_orbs"
 
