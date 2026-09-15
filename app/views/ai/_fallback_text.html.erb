@@ -1,0 +1,8 @@
+<%# Plain fallback when AI is off or failing: the captain keeps working. %>
+<% case fallback.to_s
+   when "off" %>AI drafts are off. Add a provider key in Settings → AI assistance, or keep writing by hand.
+<% when "opt_out" %>AI is off for this client. Turn it back on from their page to draft here.
+<% when "over_cap" %>Today's AI cost cap is reached. Raise it in Settings → AI assistance, or keep writing by hand.
+<% when "rate_limited" %>AI is busy — try again in a minute.
+<% else %>AI could not finish just now. Try again, or keep writing by hand.
+<% end %>

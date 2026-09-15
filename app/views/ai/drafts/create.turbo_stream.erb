@@ -1,0 +1,4 @@
+<%= turbo_stream.replace "ai-draft-#{@conversation.id}" do %>
+  <%= render "ai/draft_block", conversation: @conversation,
+        draft_text: @draft_text, fallback: @fallback %>
+<% end %>

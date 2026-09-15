@@ -68,3 +68,10 @@ When updating this file, preserve this bar for all agents and keep entries conci
   (intake, details, verdict), contract in `docs/leads-intake.md`; automation
   settings on the Settings "Automations" card; `Leads` service module holds
   the relay HMAC, source, scoring, and rate-limit rules.
+- AI assistance: see README.md, "AI assistance"; provider-neutral
+  `Ai::Client` (OpenAI-compatible + Anthropic adapters) with versioned
+  prompts in `config/ai_prompts.yml`, per-call `AiCall` log (90-day
+  retention via `Ai::PruneCallsJob`), kill switch + per-record
+  `ai_opt_out`, two-way `Ai::Scrub` guard. Approval-only: nothing sends
+  or creates without the captain. Thread panel in `app/views/ai/` hangs
+  off the `data-assist` hook the reply box owns.

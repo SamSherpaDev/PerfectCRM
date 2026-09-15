@@ -407,6 +407,40 @@ Settings → Monday pipeline note controls delivery to info@sherpaholidays.com;
 it is enabled by default. It is separate from the morning digest described
 in [Today and follow-ups](#today-and-follow-ups); combining them is pending.
 
+## AI assistance
+
+Approval-only help on every thread: Draft a reply (dashed-edge AI draft block
+the captain edits before Send), three-bullet Thread summaries cached until new
+mail arrives, Suggested next actions the captain accepts with one tap (creates
+a Task), and Triage classification (new_inquiry, returning_client, operator,
+vendor_or_spam, other) with a one-line reason and a suggested lead source on
+the triage card. Nothing is ever sent or created without his tap; prices,
+availability promises, and legal or refund language stay human. While working,
+each surface shows the thinking orb (composing for drafts and summaries,
+shaping for triage and suggestions); when AI is off or failing, a plain
+fallback keeps the captain writing by hand.
+
+Setup (captain, about 5 minutes): pick a provider in Settings → AI assistance
+(OpenAI-compatible covers OpenAI and OpenRouter via the base URL; Anthropic is
+the other choice), enter the model name, paste the provider key, write the
+short voice guide (his templates are the style examples), and turn on Enable
+AI assistance. Leaving the key blank when saving preserves the saved key.
+The key is stored encrypted; production encryption keys must be configured
+and preserved (see Secrets inventory). The daily cost cap stops AI for the day
+when estimated spend reaches it; the per-minute limit paces bursts. Turn off
+Enable AI assistance any time to stop every call immediately (kill switch);
+to exclude one record, tick Opt out of AI assistance on that client, lead, or
+organization.
+
+Prompts live in `config/ai_prompts.yml` under version control; the version is
+logged on every call. Every attempt is logged to `ai_calls` (purpose, prompt
+version, model, token counts, cost estimate, latency, status, redacted request
+and response) and pruned after 90 days (`Ai::PruneCallsJob`). Triage
+confirmations are logged for later prompt tuning. Zero-retention posture: only
+message text and CRM facts reach the provider — never attachments, document
+bytes, or PDF titles. Passport numbers, dates of birth, and card numbers are
+redacted before sending and filtered out of replies, both ways.
+
 ## Production shape
 
 The Docker image is built by GitHub Actions and published to

@@ -10,6 +10,8 @@ class SettingsController < ApplicationController
     load_automation_log
     # Shown once, right after rotation; never rendered again.
     @fresh_relay_secret = session.delete(:fresh_relay_secret)
+    @ai_calls_today = AiCall.today.count
+    @ai_cost_today = AiCall.daily_cost_cents
   end
 
   def update
@@ -74,12 +76,7 @@ class SettingsController < ApplicationController
     if @settings.save
       redirect_to edit_settings_path, notice: "Mailbox saved.", status: :see_other
     else
-      @perfectbook_configured = PerfectBook.configured?
-      @perfectbook_last_success = PerfectBook::SyncState.last_success_at
-      @perfectbook_last_error = PerfectBook::SyncState.last_error_row
-      @mailbox_address = Mail.mailbox_address
-      @mail_sync = MailSyncState.find_by(folder: Mail::FOLDER)
-      @imports = MailImport.ordered.limit(5)
+      load_settings_supporting_data!
       render :edit, status: :unprocessable_entity
     end
   end
@@ -93,18 +90,43 @@ class SettingsController < ApplicationController
     redirect_to edit_settings_path, alert: "Mailbox is unreachable right now. Check the login and app password.", status: :see_other
   end
 
+  # AI assistance: provider, model, key (stored encrypted), voice guide,
+  # kill switch, rate limit, and daily cost cap. Leaving the key blank
+  # preserves the saved key. See README "AI assistance".
+  def ai
+    @settings = Setting.current
+    attrs = params.require(:setting).permit(:ai_enabled, :ai_provider, :ai_model,
+      :ai_base_url, :ai_voice_guide, :ai_daily_cost_cap_cents, :ai_rate_limit_per_minute)
+    @settings.assign_attributes(attrs)
+    key = params.dig(:setting, :ai_api_key).to_s.strip
+    @settings.ai_api_key = key if key.present?
+    @settings.ai_provider = "openai_compatible" if @settings.ai_provider.blank?
+    if @settings.save
+      redirect_to edit_settings_path, notice: "AI assistance saved.", status: :see_other
+    else
+      load_settings_supporting_data!
+      render :edit, status: :unprocessable_entity
+    end
+  end
+
   private
+
+  def load_settings_supporting_data!
+    @perfectbook_configured = PerfectBook.configured?
+    @perfectbook_last_success = PerfectBook::SyncState.last_success_at
+    @perfectbook_last_error = PerfectBook::SyncState.last_error_row
+    @mailbox_address = Mail.mailbox_address
+    @mail_sync = MailSyncState.find_by(folder: Mail::FOLDER)
+    @imports = MailImport.ordered.limit(5)
+    @ai_calls_today = AiCall.today.count
+    @ai_cost_today = AiCall.daily_cost_cents
+  end
 
   def update_appearance(value)
     value = value.to_s
     unless Setting::APPEARANCES.include?(value)
       @settings.errors.add(:appearance, "is not included in the list")
-      @perfectbook_configured = PerfectBook.configured?
-      @perfectbook_last_success = PerfectBook::SyncState.last_success_at
-      @perfectbook_last_error = PerfectBook::SyncState.last_error_row
-      @mailbox_address = Mail.mailbox_address
-      @mail_sync = MailSyncState.find_by(folder: Mail::FOLDER)
-      @imports = MailImport.ordered.limit(5)
+      load_settings_supporting_data!
       return respond_to do |format|
         format.turbo_stream do
           render turbo_stream: turbo_stream.update("appearance-status", "Appearance could not be saved. Choose Paper or Night."), status: :unprocessable_entity

@@ -1,0 +1,21 @@
+<%# Three-bullet summary atop the timeline. Cached per conversation; a new
+    arrival clears it (see Message#bump_conversation) so the next tap rebuilds. %>
+<%= turbo_frame_tag "ai-summary-#{conversation.id}" do %>
+  <section class="card card-pad ai-summary" aria-labelledby="ai-summary-heading-<%= conversation.id %>">
+    <h2 class="card-title" id="ai-summary-heading-<%= conversation.id %>">Thread summary</h2>
+    <%= card_caption "Three bullets, newest first. Cached until new mail arrives." %>
+    <% if defined?(fallback) && fallback.present? %>
+      <p class="hint mt-2" role="status"><%= render "ai/fallback_text", fallback: fallback %></p>
+    <% elsif conversation.ai_summary.present? %>
+      <div class="mt-2 whitespace-pre-line text-ink-2 text-[13.5px]"><%= conversation.ai_summary %></div>
+      <p class="hint mt-2">Summarized <%= time_ago_in_words(conversation.ai_summary_at) %> ago · AI draft, yours to edit</p>
+    <% end %>
+    <div class="mt-3 flex flex-wrap items-center gap-2">
+      <%= button_to "Summarize thread", ai_conversation_summary_path(conversation),
+            method: :post, class: "btn-secondary btn btn-sm",
+            data: { turbo_frame: "ai-summary-#{conversation.id}", ai_assist_target: "button", ai_state: "composing" },
+            form: { data: { action: "submit->ai-assist#working" } } %>
+      <span data-ai-assist-target="orbSlot" hidden></span>
+    </div>
+  </section>
+<% end %>

@@ -10,9 +10,10 @@
 
   <% if @conversation.triage? %>
     <% sender = @conversation.messages.inbound.order(sent_at: :desc).first&.from_address.presence || @conversation.other_participants.reject { |value| value == Mail.mailbox_address }.first %>
-    <div class="triage-card" role="note" aria-label="Suggested client">
+    <div class="triage-card" role="note" aria-label="Suggested client" data-controller="ai-assist">
       <p class="font-semibold text-ink">Suggested client · <%= sender %></p>
       <p class="mt-1 text-[13px]">No record matches this sender yet. Link it, create it, or ignore it - the choice is remembered for later mail.</p>
+      <%= render "ai/triage_block", conversation: @conversation, fallback: nil %>
       <div class="mt-3 flex flex-wrap gap-2">
         <%= form_with url: link_conversation_path(@conversation), method: :post, class: "flex flex-wrap items-end gap-2" do |form| %>
           <%= form.label :linkable_id, "Link to existing", class: "label" %>
@@ -31,6 +32,7 @@
   <% Note.where(notable: @conversation).newest_first.each do |note| %>
     <p class="triage-card mt-3"><%= note.body %></p>
   <% end %>
+  <%= render "ai/panel" %>
   <div id="thread-newest"></div>
   <div class="stream mt-4" role="log" aria-label="Thread messages, newest first">
     <% @messages.each do |message| %>

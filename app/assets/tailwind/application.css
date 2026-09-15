@@ -2103,3 +2103,23 @@
 @media (min-width: 768px) {
   .pipeline-move-menu { position: absolute; }
 }
+
+/* AI assistance (docs/DESIGN.md 4.4 AI draft, 4.13 orbs): approval-only
+   drafts, summaries, suggestions, and triage. The .draft dashed-edge block
+   is owned by the reply-box rules above; these rules only space the panel
+   and keep the inline orb beside its sentence. */
+.ai-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ai-triage .orb, .ai-summary .orb {
+  display: inline-block;
+  margin-right: 4px;
+  vertical-align: -4px;
+}
+[data-ai-assist-target="orbSlot"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}

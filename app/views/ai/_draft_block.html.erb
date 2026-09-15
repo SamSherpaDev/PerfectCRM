@@ -1,0 +1,32 @@
+<%# Dashed-edge AI draft block (docs/DESIGN.md 2.2): a machine wrote this.
+    The captain edits here before Send; there is no auto-send path. %>
+<%= turbo_frame_tag "ai-draft-#{conversation.id}" do %>
+  <section class="card card-pad ai-draft-card mt-4" aria-labelledby="ai-draft-heading-<%= conversation.id %>">
+    <h2 class="card-title" id="ai-draft-heading-<%= conversation.id %>">Draft a reply</h2>
+    <%= card_caption "Built from this thread, the client record, mirrored booking facts, and your templates. Nothing sends by itself." %>
+    <% if defined?(fallback) && fallback.present? %>
+      <p class="hint mt-2" role="status"><%= render "ai/fallback_text", fallback: fallback %></p>
+    <% elsif defined?(draft_text) && draft_text.present? %>
+      <div class="draft mt-3">
+        <p class="tag"><%= render "shared/icon", name: :sparkle, class: "h-3.5 w-3.5" %><span>AI draft, yours to edit</span></p>
+        <label class="label mt-2" for="ai-draft-body-<%= conversation.id %>">Edit before sending</label>
+        <textarea id="ai-draft-body-<%= conversation.id %>" class="textarea mt-1" rows="6"
+          data-ai-assist-target="draftBody"><%= draft_text %></textarea>
+        <div class="mt-2 flex flex-wrap gap-2">
+          <button type="button" class="btn-secondary btn btn-sm" data-action="ai-assist#copy">Copy draft</button>
+          <%= button_to "Try again", ai_conversation_draft_path(conversation), method: :post,
+                class: "btn-ghost btn btn-sm", data: { turbo_frame: "ai-draft-#{conversation.id}" },
+                form: { data: { action: "submit->ai-assist#working" } } %>
+        </div>
+        <p class="hint mt-2" role="status" data-ai-assist-target="copyStatus"></p>
+      </div>
+    <% end %>
+    <div class="mt-3 flex flex-wrap items-center gap-2">
+      <%= button_to "Draft a reply", ai_conversation_draft_path(conversation),
+            method: :post, class: "btn-secondary btn btn-sm",
+            data: { turbo_frame: "ai-draft-#{conversation.id}" },
+            form: { data: { action: "submit->ai-assist#working" } } %>
+      <span data-ai-assist-target="orbSlot" hidden></span>
+    </div>
+  </section>
+<% end %>

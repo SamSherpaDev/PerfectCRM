@@ -1,0 +1,35 @@
+<%# Triage classification line on the triage card: category, one-line reason,
+    and the suggested lead source. Confirmations are logged for tuning. %>
+<%= turbo_frame_tag "ai-triage-#{conversation.id}" do %>
+  <div class="ai-triage mt-3 rounded-control border border-edge bg-paper-2 px-4 py-3" role="note" aria-label="AI triage">
+    <% if conversation.ai_triage.present? %>
+      <p class="text-sm text-ink-2">
+        <%= orb(:shaping, size: 20, label: "Triage suggestion") %>
+        <strong class="font-medium text-ink"><%= conversation.ai_triage.humanize %></strong>
+        · <%= conversation.ai_triage_reason %>
+        <% if conversation.ai_triage_suggested_source.present? %>
+          · suggested source: <%= conversation.ai_triage_suggested_source.humanize %>
+        <% end %>
+      </p>
+      <% if conversation.ai_triage_confirmed.present? %>
+        <p class="hint mt-1">Confirmed as <%= conversation.ai_triage_confirmed.humanize %>.</p>
+      <% else %>
+        <%= form_with url: ai_confirm_conversation_triage_path(conversation), method: :post, class: "mt-2 flex flex-wrap gap-2" do |form| %>
+          <%= form.hidden_field :category, value: conversation.ai_triage %>
+          <%= form.submit "Confirm #{conversation.ai_triage.humanize}", class: "btn-secondary btn btn-sm" %>
+        <% end %>
+      <% end %>
+    <% else %>
+      <% if defined?(fallback) && fallback.present? %>
+        <p class="hint" role="status"><%= render "ai/fallback_text", fallback: fallback %></p>
+      <% end %>
+      <div class="mt-1 flex flex-wrap items-center gap-2">
+        <%= button_to "Classify with AI", ai_conversation_triage_path(conversation),
+              method: :post, class: "btn-secondary btn btn-sm",
+              data: { turbo_frame: "ai-triage-#{conversation.id}" },
+              form: { data: { action: "submit->ai-assist#working" } } %>
+        <span data-ai-assist-target="orbSlot" hidden></span>
+      </div>
+    <% end %>
+  </div>
+<% end %>

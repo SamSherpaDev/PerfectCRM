@@ -98,6 +98,10 @@
         <%= form.label :tag_list, "Tags", class: "label" %>
         <%= form.text_field :tag_list, class: "input", placeholder: "everest-interested, honeymoon" %>
       </div>
+      <div class="sm:col-span-2 flex flex-wrap items-center gap-3">
+        <%= form.check_box :ai_opt_out, class: "checkbox" %>
+        <%= form.label :ai_opt_out, "Opt out of AI assistance", class: "text-sm text-ink-2" %>
+      </div>
     </div>
   </section>
 
