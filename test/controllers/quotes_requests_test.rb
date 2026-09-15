@@ -360,4 +360,68 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
     assert_equal "Everest", quote.lines.first.snapshot_trip_name
   end
 
+  test "queue rejection leaves an existing draft retryable with no sent activity" do
+    lead = Lead.create!(name: "Pasang", email: "pasang@example.com", status: "chatting")
+    quote = Quote.create!(lead: lead)
+    quote.lines.create!(kind: "custom", description: "Trek", quantity: 1, unit_minor: 150000)
+    reject = ->(_job) { raise ActiveJob::EnqueueError, "Queue unavailable" }
+    assert_no_enqueued_emails do
+      QuoteMailer.delivery_job.queue_adapter.stub(:enqueue, reject) do
+        post send_quote_quote_path(quote)
+      end
+    end
+    assert_redirected_to quote_path(quote)
+    assert_equal "draft", quote.reload.status
+    assert_nil quote.sent_at
+    assert_nil quote.sent_by_email
+    assert_equal "chatting", lead.reload.status
+    assert_equal 0, lead.activity_events.where(kind: "quote").count
+    follow_redirect!
+    assert_includes response.body, "Please try sending again"
+    assert_enqueued_emails 1 do
+      post send_quote_quote_path(quote)
+    end
+    assert_equal "sent", quote.reload.status
+    assert_equal "quoted", lead.reload.status
+    assert_equal 1, lead.activity_events.where(kind: "quote").count
+  end
+
+  test "queue rejection during edit and send preserves the saved edits as a draft" do
+    quote = Quote.create!(client: @client, notes: "Original")
+    quote.lines.create!(kind: "custom", description: "Trek", quantity: 1, unit_minor: 150000)
+    reject = ->(_job) { raise SolidQueue::Job::EnqueueError, "Queue database unavailable" }
+    QuoteMailer.delivery_job.queue_adapter.stub(:enqueue, reject) do
+      patch quote_path(quote), params: { send_now: "1", quote: { notes: "Updated note" } }
+    end
+    assert_redirected_to quote_path(quote)
+    assert_equal "draft", quote.reload.status
+    assert_equal "Updated note", quote.notes
+    assert_nil quote.sent_at
+    assert_equal 0, @client.activity_events.where(kind: "quote").count
+    assert_enqueued_emails 1 do
+      post send_quote_quote_path(quote)
+    end
+    assert_equal "sent", quote.reload.status
+  end
+
+  test "queue rejection during creation keeps the new draft for retry" do
+    reject = ->(_job) { raise ActiveJob::EnqueueError, "Queue unavailable" }
+    QuoteMailer.delivery_job.queue_adapter.stub(:enqueue, reject) do
+      post quotes_path, params: { client_id: @client.id, send_now: "1", quote: {
+        notes: "New journey", lines_attributes: {
+          "0" => { kind: "custom", description: "Trek", quantity: "1", unit_dollars: "1500" }
+        }
+      } }
+    end
+    quote = Quote.order(:id).last
+    assert_redirected_to quote_path(quote)
+    assert_equal "draft", quote.status
+    assert_equal "New journey", quote.notes
+    assert_equal 150000, quote.subtotal_minor
+    assert_enqueued_emails 1 do
+      post send_quote_quote_path(quote)
+    end
+    assert_equal "sent", quote.reload.status
+  end
+
 end
