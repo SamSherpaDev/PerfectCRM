@@ -13,7 +13,7 @@
   <% if @conversations.any? %>
     <ul class="mt-4 space-y-3">
       <% @conversations.each do |conversation| %>
-        <% last = conversation.messages.first %>
+        <% last = @latest_messages[conversation.id] %>
         <li class="card card-pad">
           <div class="flex items-start gap-2.5">
             <% if conversation.unread_count.to_i > 0 %>
@@ -27,7 +27,7 @@
               <p class="mt-1 truncate text-sm muted"><%= conversation.other_participants.first(3).join(", ") %></p>
               <p class="mt-1 text-sm text-ink-2"><%= last&.preview_text(120) %></p>
               <div class="mt-2 flex flex-wrap items-center gap-2">
-                <% if conversation.messages.any? { |message| Array(message.held_attachments).any? || message.files.any? { |file| file.blob.metadata["sensitive"] } } %>
+                <% if @document_thread_ids.include?(conversation.id) %>
                   <%= badge "Review sensitive document", :warning %>
                 <% end %>
                 <% if conversation.linkable %>

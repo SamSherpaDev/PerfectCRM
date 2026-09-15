@@ -70,25 +70,23 @@ module Mail
       text_body = nil
       html_body = nil
       attachments = []
-      if mail.multipart?
-        text_part = mail.text_part
-        html_part = mail.html_part
-        text_body = text_part&.decoded.to_s.presence
-        html_body = html_part&.decoded.to_s.presence
-        Array(mail.attachments).each do |part|
+      read_part = lambda do |part|
+        disposition = part.content_disposition.to_s.split(";").first.to_s.strip
+        if part.attachment? || disposition.casecmp?("attachment")
           attachments << {
             filename: part.filename.to_s.presence || "attachment",
             content_type: part.mime_type.to_s.presence || "application/octet-stream",
             data: part.body.decoded
           }
-        end
-      else
-        if mail.mime_type == "text/html"
-          html_body = mail.decoded.to_s
+        elsif part.multipart?
+          part.parts.each { |child| read_part.call(child) }
+        elsif part.mime_type == "text/html"
+          html_body ||= part.decoded.to_s.presence
         else
-          text_body = mail.decoded.to_s
+          text_body ||= part.decoded.to_s.presence
         end
       end
+      read_part.call(mail)
       Parsed.new(
         headers: { "from" => from, "to" => to, "cc" => cc,
           "bcc" => Array(mail.bcc).map(&:downcase),

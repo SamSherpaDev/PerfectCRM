@@ -104,4 +104,40 @@ class InboxRequestsTest < ActionDispatch::IntegrationTest
     assert_select "a", text: "Unknown waiting", count: 0
   end
 
+  test "single part sensitive attachment never appears as message body" do
+    raw = "From: sender@example.com\r\nTo: info@sherpaholidays.com\r\nSubject: Document\r\nContent-Type: text/plain\r\nContent-Disposition: attachment; filename=insurance.txt\r\n\r\nPRIVATE INSURANCE CONTENT"
+    result = Mail::Ingester.ingest(parsed: Mail::Ingester.parse_raw(raw), gmail: {})
+    get inbox_thread_path(result[:conversation])
+    assert_response :success
+    assert_not_includes response.body, "PRIVATE INSURANCE CONTENT"
+    assert_select "span", text: "held: collect in PerfectBook"
+    assert_nil result[:message].reload.text_body
+    assert_nil result[:message].html_body
+    assert_empty result[:message].files
+  end
+
+  test "inbox loads only latest messages while finding older document flags" do
+    client = Client.create!(name: "History", email: "history-load@example.com")
+    conversation = Conversation.create!(subject: "Long thread", linkable: client)
+    30.times do |index|
+      conversation.messages.create!(direction: "in", from_address: client.email, sent_at: index.minutes.ago,
+        text_body: index.zero? ? "Latest preview" : "Old body #{index}",
+        held_attachments: index == 29 ? [ { "filename" => "insurance.txt", "status" => "held: collect in PerfectBook" } ] : [])
+    end
+    instantiated = Hash.new(0)
+    subscriber = ->(*args) do
+      payload = args.last
+      instantiated[payload[:class_name]] += payload[:record_count]
+    end
+    ActiveSupport::Notifications.subscribed(subscriber, "instantiation.active_record") do
+      get inbox_path(tab: "all")
+    end
+    assert_response :success
+    assert_select "p", text: "Latest preview"
+    assert_select "span", text: "Review sensitive document"
+    assert_equal 1, instantiated["Message"]
+    assert_equal 0, instantiated["ActiveStorage::Attachment"]
+    assert_equal 0, instantiated["ActiveStorage::Blob"]
+  end
+
 end

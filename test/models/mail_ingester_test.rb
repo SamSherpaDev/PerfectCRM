@@ -221,6 +221,25 @@ class MailIngesterTest < ActiveSupport::TestCase
     assert_equal data, result[:message].files.first.download
   end
 
+  test "attachment disposition is screened independently of MIME nesting" do
+    part = "Content-Type: text/plain\r\nContent-Disposition: attachment; filename=insurance.txt\r\n\r\nPRIVATE DOCUMENT"
+    [ part, "Content-Type: multipart/mixed; boundary=parts\r\n\r\n--parts\r\n#{part}\r\n--parts--" ].each_with_index do |body, index|
+      raw = "From: documents@example.com\r\nTo: info@sherpaholidays.com\r\nMessage-ID: <disposition#{index}@test>\r\n#{body}"
+      result = nil
+      assert_no_difference("ActiveStorage::Blob.count") { result = ingest_raw(raw) }
+      assert_nil result[:message].text_body
+      assert_nil result[:message].html_body
+      assert_equal "insurance.txt", result[:message].held_attachments.first["filename"]
+    end
+  end
+
+  test "ordinary single part attachment stays a downloadable file" do
+    raw = "From: documents@example.com\r\nTo: info@sherpaholidays.com\r\nContent-Type: text/plain\r\nContent-Disposition: attachment; filename=itinerary.txt\r\n\r\nOrdinary itinerary"
+    result = ingest_raw(raw)
+    assert_nil result[:message].text_body
+    assert_equal "Ordinary itinerary", result[:message].files.first.download
+  end
+
   private
 
   def pdf_with_title(title)
