@@ -378,13 +378,13 @@ export function mountThinkingOrb(canvas, { state = "composing", size = 64 } = {}
 
   let raf = 0
   let running = false
-  let visible = true
+  let visible = typeof IntersectionObserver === "undefined"
   const loop = () => {
     paint(now())
     if (running) raf = requestAnimationFrame(loop)
   }
   const begin = () => {
-    if (running || reducedQuery?.matches) return
+    if (running || reducedQuery?.matches || !visible || document.visibilityState === "hidden") return
     running = true
     raf = requestAnimationFrame(loop)
   }
@@ -431,21 +431,17 @@ export function mountThinkingOrb(canvas, { state = "composing", size = 64 } = {}
   reducedQuery?.addEventListener?.("change", onMotion)
 
   let intersection = null
-  if (reducedQuery?.matches) {
-    paint(STATIC_T)
+  paint(reducedQuery?.matches ? STATIC_T : now())
+  document.addEventListener("visibilitychange", onVisibility)
+  if (typeof IntersectionObserver !== "undefined") {
+    intersection = new IntersectionObserver(([entry]) => {
+      visible = entry.isIntersecting
+      if (visible && document.visibilityState !== "hidden") begin()
+      else finish()
+    })
+    intersection.observe(canvas)
   } else {
-    paint(now())
-    document.addEventListener("visibilitychange", onVisibility)
-    if (typeof IntersectionObserver !== "undefined") {
-      intersection = new IntersectionObserver(([entry]) => {
-        visible = entry.isIntersecting
-        if (visible && document.visibilityState !== "hidden") begin()
-        else finish()
-      })
-      intersection.observe(canvas)
-    } else {
-      begin()
-    }
+    begin()
   }
 
   return () => {

@@ -35,12 +35,12 @@ export default class extends Controller {
   }
 
   mount() {
+    this.disconnect()
     this.destroy = mountThinkingOrb(this.element, { state: this.orbState(), size: this.sizeValue })
   }
 
   remount() {
     if (!this.element.isConnected) return
-    this.disconnect()
     this.mount()
   }
 }
