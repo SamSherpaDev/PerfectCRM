@@ -17,7 +17,10 @@ class OutboundSensitiveUploadsTest < ActionDispatch::IntegrationTest
       [ "traveler-id.png", "image/png", "ID bytes" ],
       [ "date-of-birth.txt", "text/plain", "birth bytes" ],
       [ "document.txt", "application/x-passport", "typed bytes" ],
-      [ "document.pdf", "application/pdf", pdf_with_title("Passport copy") ]
+      [ "document.pdf", "application/pdf", pdf_with_title("Passport copy") ],
+      [ "correspondence.eml", "application/octet-stream", enclosed_email("passport.pdf", "application/pdf", "passport bytes") ],
+      [ "correspondence.dat", "message/rfc822", enclosed_email("passport.pdf", "application/pdf", "passport bytes") ],
+      [ "forward.eml", "message/rfc822", enclosed_email("inner.eml", "message/rfc822", enclosed_email("passport.pdf", "application/pdf", "passport bytes")) ]
     ]
     examples.each do |filename, type, bytes|
       %i[send draft recovery].each do |action|
@@ -46,7 +49,32 @@ class OutboundSensitiveUploadsTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "ordinary attached emails remain intact" do
+    bytes = enclosed_email("itinerary.txt", "text/plain", "Meet at the airport")
+    Tempfile.create("ordinary-email") do |file|
+      file.binmode
+      file.write(bytes)
+      file.rewind
+      upload = Rack::Test::UploadedFile.new(file.path, "message/rfc822", true, original_filename: "correspondence.eml")
+      assert_difference("Message.count", 1) do
+        post client_messages_path(@client), params: { message: { to: @client.email, subject: "Itinerary", body: "See attached", files: [ upload ] } }
+      end
+      assert_equal "correspondence.eml", Message.last.files.first.filename.to_s
+      assert_equal bytes, Message.last.files.first.download
+    end
+  end
+
   private
+
+  def enclosed_email(filename, content_type, bytes)
+    mail = ::Mail.new
+    mail.from = "sender@example.com"
+    mail.to = "info@sherpaholidays.com"
+    mail.subject = "Correspondence"
+    mail.body = "See enclosed"
+    mail.attachments[filename] = { mime_type: content_type, content: bytes }
+    mail.encoded
+  end
 
   def pdf_with_title(title)
     encoded_title = "FEFF" + title.encode("UTF-16BE").unpack1("H*")

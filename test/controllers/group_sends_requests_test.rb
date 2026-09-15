@@ -60,11 +60,11 @@ class GroupSendsRequestsTest < ActionDispatch::IntegrationTest
     assert_redirected_to group_send_path(group)
     follow_redirect!
     assert_select "h1", "Send summary"
-    mine = group.messages.find_by("to_addrs LIKE ?", "%maya@example.com%")
+    mine = group.messages.find { |message| message.to_list.include?("maya@example.com") }
     assert_equal "Hi Maya", mine.subject
     assert_includes mine.text_body, "Maya Gurung"
     assert_equal @client, mine.owner
-    other = group.messages.find_by("to_addrs LIKE ?", "%stranger@example.com%")
+    other = group.messages.find { |message| message.to_list.include?("stranger@example.com") }
     assert_nil other.owner
   end
 

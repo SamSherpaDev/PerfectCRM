@@ -20,7 +20,9 @@ module Outbound
         else
           next false
         end
-        !Message.sensitive_attachment?(filename, upload.content_type, data: data)
+        _ordinary, held = ::Mail::Ingester.partition_attachments(
+          [ { filename: filename, content_type: upload.content_type, data: data } ])
+        held.empty?
       end
     end
   end
