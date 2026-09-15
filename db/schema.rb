@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_14_202007) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_14_202008) do
   create_table "perfectbook_bookings", force: :cascade do |t|
     t.integer "balance_due_minor"
     t.datetime "created_at", null: false
@@ -126,6 +126,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_14_202007) do
     t.datetime "updated_at", null: false
     t.index ["singleton_key"], name: "index_settings_on_singleton_key", unique: true
     t.check_constraint "singleton_key = 1", name: "settings_singleton"
+  end
+
+  create_table "templates", force: :cascade do |t|
+    t.datetime "archived_at"
+    t.text "body", default: "", null: false
+    t.string "channel", default: "email", null: false
+    t.datetime "created_at", null: false
+    t.datetime "last_used_at"
+    t.string "name", null: false
+    t.integer "position", default: 0, null: false
+    t.integer "purpose", default: 8, null: false
+    t.string "subject", default: "", null: false
+    t.datetime "updated_at", null: false
+    t.integer "usage_count", default: 0, null: false
+    t.index ["archived_at"], name: "index_templates_on_archived_at"
+    t.index ["position"], name: "index_templates_on_position"
+    t.index ["purpose"], name: "index_templates_on_purpose"
   end
 
   create_table "users", force: :cascade do |t|

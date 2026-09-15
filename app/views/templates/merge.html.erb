@@ -1,0 +1,49 @@
+<% content_for :title, "Merge preview · PerfectCRM" %>
+<div class="page">
+  <%= render layout: "shared/page_header", locals: { back: [ "Templates", templates_path ], eyebrow: "Group departures", title: "Merge preview", subtitle: "One message, personally addressed to each traveler. Nothing sends from here." } do %><% end %>
+  <%= render "shared/flash" %>
+
+  <div class="card card-pad">
+    <%= form_with url: merge_templates_path, method: :post, data: { turbo: false } do |form| %>
+      <div class="grid gap-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+        <div>
+          <%= form.label :template_id, "Template", class: "label" %>
+          <%= form.select :template_id, options_from_collection_for_select(@templates, :id, :name, @selected&.id), {}, class: "select" %>
+          <p class="hint">Placeholders fill per recipient: {{first_name}} and {{full_name}} from each line below.</p>
+        </div>
+        <div>
+          <%= form.label :recipients, "Recipients", class: "label" %>
+          <%= form.text_area :recipients, value: @recipient_lines, rows: 5, class: "textarea mono",
+                placeholder: "Maya Gurung <maya@example.com>&#10;Pemba Sherpa <pemba@example.com>".html_safe %>
+          <p class="hint">One per line: name and email, or just an email.</p>
+        </div>
+      </div>
+      <div class="mt-5">
+        <%= form.submit "Preview merge", class: "btn btn-primary" %>
+      </div>
+    <% end %>
+  </div>
+
+  <% if @batch %>
+    <section class="card card-pad" aria-label="Merged messages" aria-live="polite">
+      <div class="card-header">
+        <h2 class="card-title"><%= pluralize(@batch.size, "message") %> ready</h2>
+        <span class="badge badge-brand">Nothing sent</span>
+      </div>
+      <%= card_caption "Each traveler gets their own rendered copy of “#{@selected.name}”. Sending arrives with the mail task." %>
+      <% if @batch.messages.any? %>
+        <ul class="space-y-4">
+          <% @batch.messages.each do |message| %>
+            <li class="rounded-control border border-edge bg-paper-2 px-4 py-3 shadow-raise-sm">
+              <p class="text-sm font-medium text-ink">To <%= message.name %> <span class="font-normal muted">&lt;<%= message.email %>&gt;</span></p>
+              <p class="mt-1 text-[13px] font-medium text-ink-2"><%= highlight_missing(ERB::Util.html_escape(message.subject)) %></p>
+              <div class="mt-1 text-sm leading-relaxed text-ink-2">
+                <%= plain_preview(message.body) %>
+              </div>
+            </li>
+          <% end %>
+        </ul>
+      <% end %>
+    </section>
+  <% end %>
+</div>

@@ -1,0 +1,8 @@
+<% content_for :title, "Template picker · PerfectCRM" %>
+<div class="page-narrow">
+  <%= render layout: "shared/page_header", locals: { back: [ "Templates", templates_path ], eyebrow: "Reusable words", title: "Pick a template", subtitle: "Search, tap insert, and the words land ready to send." } do %><% end %>
+  <%= render "shared/flash" %>
+  <div class="card card-pad">
+    <%= render "picker", templates: @templates, query: @query %>
+  </div>
+</div>
