@@ -1,6 +1,6 @@
 <% content_for :title, "Merge preview · PerfectCRM" %>
 <div class="page">
-  <%= render layout: "shared/page_header", locals: { back: [ "Templates", templates_path ], eyebrow: "Group departures", title: "Merge preview", subtitle: "One message, personally addressed to each traveler. Nothing sends from here." } do %><% end %>
+  <%= render layout: "shared/page_header", locals: { back: [ "Templates", templates_path ], eyebrow: "Group departures", title: "Merge preview", subtitle: "Preview personal emails for each traveler, then send when ready." } do %><% end %>
   <%= render "shared/flash" %>
 
   <div class="card card-pad">
@@ -68,7 +68,7 @@
           <%= badge "Not complete", :warning %>
         <% end %>
       </div>
-      <%= card_caption "Each traveler gets their own rendered copy of “#{@selected.name}”. Sending arrives with the mail task." %>
+      <%= card_caption "Each traveler gets their own rendered copy of “#{@selected.name}”. Review the messages and fix any recipient errors before sending." %>
       <% if @batch.messages.any? %>
         <ul class="space-y-4">
           <% @batch.messages.each do |message| %>
