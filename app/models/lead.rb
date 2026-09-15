@@ -19,6 +19,8 @@ class Lead < ApplicationRecord
 
   include TaggedRecord
 
+  before_save :reject_converted_write, prepend: true
+
   before_validation :normalize_email
   before_validation :normalize_external_ref
   validate :no_changes_when_converted, on: :update
@@ -197,6 +199,13 @@ class Lead < ApplicationRecord
   end
 
   private
+
+  def reject_converted_write
+    return unless persisted? && self.class.lock.find(id).converted?
+
+    errors.add(:base, "Converted leads stay read-only")
+    throw :abort
+  end
 
   def normalize_email
     normalized = email.to_s.strip.downcase

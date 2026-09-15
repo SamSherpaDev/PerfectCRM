@@ -4,6 +4,8 @@ class Note < ApplicationRecord
 
   validates :body, presence: true, length: { maximum: 10_000 }
 
+  before_save :reject_converted_lead_write, prepend: true
+
   after_create :bump_counters
   after_destroy :unbump_counters
   after_save :refresh_notable_search
@@ -12,6 +14,13 @@ class Note < ApplicationRecord
   scope :newest_first, -> { order(created_at: :desc) }
 
   private
+
+  def reject_converted_lead_write
+    return unless notable.is_a?(Lead) && notable.persisted? && Lead.lock.find(notable.id).converted?
+
+    errors.add(:base, "Converted leads stay read-only")
+    throw :abort
+  end
 
   def bump_counters
     if notable.is_a?(Client)

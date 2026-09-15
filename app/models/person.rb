@@ -39,14 +39,16 @@ class Person < ApplicationRecord
       return
     end
 
+    excluded_ids = [ id, *owner&.people&.select(&:marked_for_destruction?)&.map(&:id) ].compact
+
     if client_id.present? || (client.present? && client.persisted?)
       owner_id = client_id.presence || client.id
-      if Person.where("lower(email) = ?", email.downcase).where(client_id: owner_id).where.not(id: id).exists?
+      if Person.where("lower(email) = ?", email.downcase).where(client_id: owner_id).where.not(id: excluded_ids).exists?
         errors.add(:email, "has already been taken")
       end
     elsif lead_id.present? || (lead.present? && lead.persisted?)
       owner_id = lead_id.presence || lead.id
-      if Person.where("lower(email) = ?", email.downcase).where(lead_id: owner_id).where.not(id: id).exists?
+      if Person.where("lower(email) = ?", email.downcase).where(lead_id: owner_id).where.not(id: excluded_ids).exists?
         errors.add(:email, "has already been taken")
       end
     end

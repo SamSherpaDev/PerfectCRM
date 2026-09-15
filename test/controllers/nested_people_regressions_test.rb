@@ -34,3 +34,22 @@ class NestedPeopleRegressionsTest < ActionDispatch::IntegrationTest
     end
   end
 end
+
+class NestedPeopleReplacementTest < ActionDispatch::IntegrationTest
+  include GoogleSignInTestHelper
+
+  setup { sign_in }
+
+  test "a removed person can be replaced with the same email" do
+    [ Client, Lead ].each do |model|
+      record = model.create!(name: "Travelers")
+      original = record.people.create!(name: "Original", email: "same@example.com")
+      patch polymorphic_path(record), params: { model.model_name.param_key => {
+        people_attributes: { "0" => { id: original.id, _destroy: "1" }, "1" => { name: "Replacement", email: " SAME@example.com " } }
+      } }
+      assert_response :redirect
+      assert_equal [ [ "Replacement", "same@example.com" ] ], record.people.reload.pluck(:name, :email)
+      assert_not Person.exists?(original.id)
+    end
+  end
+end
