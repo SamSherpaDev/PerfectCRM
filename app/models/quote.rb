@@ -39,6 +39,8 @@ class Quote < ApplicationRecord
   validates :deposit_minor, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
   validates :party_size, numericality: { only_integer: true, greater_than: 0, allow_nil: true }
   validates :party_size, :valid_until, presence: true, on: :send
+  validates :valid_until, comparison: { greater_than_or_equal_to: -> { Date.current },
+    message: "must be today or later" }, allow_nil: true, on: :send
   validate :exactly_one_owner
   validate :totals_cover_deposit
 

@@ -483,6 +483,33 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
     assert_equal "sent", quote.reload.status
   end
 
+  test "past dated drafts and duplicates require a current date before sending" do
+    travel_to Time.zone.local(2026, 9, 15, 12) do
+      original = Quote.create!(client: @client, party_size: 2, valid_until: Date.yesterday)
+      original.lines.create!(kind: "custom", description: "Trek", quantity: 1, unit_minor: 150000)
+
+      [ original, original.duplicate! ].each do |quote|
+        assert quote.valid?
+        assert_no_enqueued_emails { post send_quote_quote_path(quote) }
+        assert_response :unprocessable_entity
+        assert_select "dd", text: /Valid until must be today or later/
+        assert_equal "draft", quote.reload.status
+        assert_nil quote.sent_at
+        assert_equal 0, @client.activity_events.where(kind: "quote").count
+      end
+
+      [ original, original.duplicate! ].zip([ Date.current, Date.tomorrow ]).each do |quote, date|
+        assert_enqueued_emails 1 do
+          patch quote_path(quote), params: { send_now: "1", quote: { valid_until: date } }
+        end
+        assert_redirected_to quote_path(quote)
+        assert_equal "sent", quote.reload.status
+        get public_quote_path(quote.accept_token)
+        assert_select "form[action=?]", accept_public_quote_path(quote.accept_token)
+      end
+    end
+  end
+
   test "catalog preview retains invalid entered money and never persists a quote" do
     PerfectBook::Trip.create!(perfectbook_id: 42, name: "Everest", active: true, synced_at: Time.current)
     assert_no_difference "Quote.count" do
