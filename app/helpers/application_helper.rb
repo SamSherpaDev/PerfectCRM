@@ -86,7 +86,7 @@ module ApplicationHelper
     state = ORB_LABELS.key?(state.to_s) ? state.to_s : "composing"
     size = size.to_i == 64 ? 64 : 20
     tag.canvas(role: "img", "aria-label": label || ORB_LABELS.fetch(state),
-      class: "orb", data: { controller: "orb", orb_state_value: state, orb_size_value: size })
+      class: "orb", data: { controller: "orb", orb_state_value: state, orb_size_value: size, orb_label_value: label })
   end
 
   # Plain rendered text (merge results) to safe preview HTML: escape, keep

@@ -4,6 +4,44 @@ require_relative "../support/google_sign_in_test_helper"
 class OrbLifecycleTest < ApplicationSystemTestCase
   include GoogleSignInTestHelper
 
+  test "orb labels preserve custom names while defaults follow state" do
+    OmniAuth.config.mock_auth[:google_oauth2] = OmniAuth::AuthHash.new(
+      provider: "google_oauth2", uid: "google-captain",
+      extra: { id_token: JWT.encode(@claims, @key, "RS256") }
+    )
+    Google::Auth::IDTokens.stub(:oidc_key_source, @source) do
+      visit "/auth/google_oauth2/callback"
+      assert_selector "h1", text: "Today"
+    end
+    helpers = ApplicationController.helpers
+    markup = helpers.orb(:shaping, label: "Panda AI is scoring this lead") +
+      helpers.orb(:shaping) + helpers.orb(:shaping, label: "Shaping…")
+    page.execute_script(<<~JS, markup)
+      const holder = document.createElement('div');
+      holder.id = 'orb-labels';
+      holder.innerHTML = arguments[0];
+      document.body.append(holder);
+    JS
+    settle_browser
+    assert_selector "#orb-labels canvas:nth-child(1)[aria-label='Panda AI is scoring this lead']"
+    assert_selector "#orb-labels canvas:nth-child(2)[aria-label='Shaping…']"
+    page.execute_script(<<~JS)
+      document.querySelectorAll('#orb-labels canvas').forEach(canvas => {
+        canvas.dataset.orbStateValue = 'composing';
+      });
+    JS
+    assert_selector "#orb-labels canvas:nth-child(2)[aria-label='Composing…']"
+    assert_selector "#orb-labels canvas:nth-child(1)[aria-label='Panda AI is scoring this lead']"
+    assert_selector "#orb-labels canvas:nth-child(3)[aria-label='Shaping…']"
+    page.execute_script("window.labelOrbs = document.querySelector('#orb-labels'); window.labelOrbs.remove()")
+    settle_browser
+    page.execute_script("document.body.append(window.labelOrbs)")
+    settle_browser
+    assert_selector "#orb-labels canvas:nth-child(1)[aria-label='Panda AI is scoring this lead']"
+    assert_selector "#orb-labels canvas:nth-child(2)[aria-label='Composing…']"
+    assert_selector "#orb-labels canvas:nth-child(3)[aria-label='Shaping…']"
+  end
+
   test "orbs respect motion changes visibility and Turbo removal" do
     OmniAuth.config.mock_auth[:google_oauth2] = OmniAuth::AuthHash.new(
       provider: "google_oauth2", uid: "google-captain",

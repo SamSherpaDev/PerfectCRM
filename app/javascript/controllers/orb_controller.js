@@ -7,12 +7,9 @@ import { mountThinkingOrb } from "thinking_orbs"
 const LABELS = { composing: "Composing…", shaping: "Shaping…" }
 
 export default class extends Controller {
-  static values = { state: String, size: Number }
+  static values = { state: String, size: Number, label: String }
 
   connect() {
-    if (!this.element.getAttribute("aria-label")) {
-      this.element.setAttribute("aria-label", LABELS[this.orbState()] ?? "Thinking…")
-    }
     this.mount()
   }
 
@@ -22,7 +19,7 @@ export default class extends Controller {
   }
 
   stateValueChanged() {
-    this.element.setAttribute("aria-label", LABELS[this.orbState()] ?? "Thinking…")
+    this.element.setAttribute("aria-label", this.hasLabelValue ? this.labelValue : LABELS[this.orbState()])
     this.remount()
   }
 
