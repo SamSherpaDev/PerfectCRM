@@ -3,6 +3,8 @@
 # returns instantly. A failure marks the message failed and keeps the
 # draft — the captain's words are never lost.
 class MessagesController < ApplicationController
+  include DraftParameters
+
   def create
     owner = find_owner
     return render_not_found unless owner
@@ -75,14 +77,6 @@ class MessagesController < ApplicationController
     else
       draft.save
     end
-  end
-
-  def draft_attributes
-    permitted = params.fetch(:message, {}).permit(:to, :cc, :bcc, :subject, :body, :template_id)
-    {
-      to_addrs: permitted[:to], cc_addrs: permitted[:cc], bcc_addrs: permitted[:bcc],
-      subject: permitted[:subject], body: permitted[:body], template_id: permitted[:template_id].presence
-    }
   end
 
   def owner_path_for(owner)

@@ -116,9 +116,7 @@ Resume reply to open the composer; Details holds recipients, subject,
 booking choice, and attachments. New message starts a separate conversation
 regardless of subject. Saved attachments accompany newly uploaded files;
 a successful delivery clears the submitted draft only if it has not been
-edited since submission. `reply_box/_assist` (with
-its `data-assist` hook) is the reserved slot where AI drafts will appear
-for approval; nothing sends without the captain pressing Send.
+edited since submission. Nothing sends without the captain pressing Send.
 
 Template inserts and group sends resolve identity from the recipient's
 actual email, preferring their own mirrored PerfectBook contact and bookings.

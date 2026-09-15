@@ -251,6 +251,31 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     page.save_screenshot(File.join(ENV.fetch("OUTBOUND_EVIDENCE_DIR"), "#{name}.png"))
   end
 
+  test "validation recovery preserves selected booking for template inserts" do
+    @client.update!(perfectbook_contact_id: 4242)
+    [ [ 9001, "October", "2026-10-01", 12300 ], [ 9002, "May", "2027-05-01", 45600 ] ].each do |id, trip, date, balance|
+      PerfectBook::Booking.create!(perfectbook_id: id, perfectbook_contact_id: 4242,
+        trip_name: trip, start_date: date, balance_due_minor: balance, synced_at: Time.current)
+    end
+    @template.update!(body: "{{trip}} {{balance_due}}")
+    sign_in_browser
+    page.current_window.resize_to(1400, 1000)
+    visit client_path(@client, new_thread: 1)
+    [ [ 9001, "October $123.00" ], [ 9002, "May $456.00" ] ].each do |id, expected|
+      find("#message_perfectbook_booking_id option[value='#{id}']").select_option
+      fill_in "Subject", with: "Booking question"
+      fill_in "Message", with: "  "
+      click_button "Send"
+      assert_text "Could not send"
+      assert_equal id.to_s, find_field("Placeholders fill from").value
+      assert_equal id, Draft.find_by!(owner: @client, conversation_id: nil).perfectbook_booking_id
+      fill_in "Message", with: ""
+      click_button "Quick hello", match: :first
+      assert_field "Message", with: expected
+    end
+    assert_equal 0, Message.count
+  end
+
   private
 
   def sign_in_browser
