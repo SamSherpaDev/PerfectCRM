@@ -98,9 +98,9 @@
     <div class="mt-4 flex flex-wrap gap-2">
       <% if @settings.mailbox_connected? %>
         <%= link_to "Test connection", mailbox_test_settings_path, data: { turbo_method: :post }, class: "btn-secondary btn btn-sm" %>
-        <%= button_to "Reconnect mailbox", mailbox_connect_settings_path, method: :post, class: "btn-secondary btn btn-sm" %>
+        <%= button_to "Reconnect mailbox", mailbox_connect_settings_path, method: :post, data: { turbo: false }, class: "btn-secondary btn btn-sm" %>
       <% elsif @graph_configured %>
-        <%= button_to "Connect mailbox", mailbox_connect_settings_path, method: :post, class: "btn-primary btn btn-sm" %>
+        <%= button_to "Connect mailbox", mailbox_connect_settings_path, method: :post, data: { turbo: false }, class: "btn-primary btn btn-sm" %>
       <% else %>
         <p class="hint">Add <span class="mono">MS_GRAPH_CLIENT_ID</span>, <span class="mono">MS_GRAPH_CLIENT_SECRET</span> and <span class="mono">MS_GRAPH_TENANT_ID</span> to <span class="mono">.env.app</span> first — see README “Mail” — then connect here.</p>
       <% end %>

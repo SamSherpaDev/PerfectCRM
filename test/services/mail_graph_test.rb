@@ -387,6 +387,9 @@ class MailGraphTest < ActiveSupport::TestCase
     notice = MailSyncState.for("inbox").last_notice.to_s
     assert_match(/Import history/i, notice)
     assert_match(/#{5.days.ago.to_date}/, notice)
+    # The backfill judges from a listing with no delivery header, so the
+    # notice must not promise it recovers hidden-copy mail.
+    assert_match(/hidden copy is not recovered/i, notice)
 
     # Sync resumes from now rather than staying stuck on the dead token.
     assert MailSyncState.for("inbox").delta_link.present?

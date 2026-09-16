@@ -122,7 +122,9 @@ Outlook is watched without reconnecting the mailbox. When Microsoft expires a
 folder's sync token, sync re-primes it and re-reads the window back to that
 folder's last successful sync, so nothing in the gap is lost; that catch-up is
 capped at 24 hours, and a longer gap is reported on the Settings mailbox card
-with the date to import from rather than walked automatically. The backfill decides what to keep from the folder
+with the date to import from rather than walked automatically. That import
+recovers mail naming the mailbox in From, To, Cc or Bcc; mail delivered only as
+a hidden copy is not among it, and the notice says so. The backfill decides what to keep from the folder
 listing, which returns From, To, Cc and Bcc, and opens only the messages that
 match; Microsoft documents `internetMessageHeaders` as retrievable with
 `$select` on a get of a single message, not on a listing, so mail that names

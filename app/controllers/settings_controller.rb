@@ -63,7 +63,9 @@ class SettingsController < ApplicationController
   # is fixed to MAILBOX_ADDRESS so personal mail can never drift in; only
   # the Microsoft grant connects it. "Connect mailbox" sends the captain
   # to Microsoft, and /auth/microsoft/callback stores the refresh token
-  # encrypted on Setting (see Mail::GraphAuth).
+  # encrypted on Setting (see Mail::GraphAuth). The button that reaches
+  # here opts out of Turbo: this answers with a cross-origin redirect, and
+  # only a native form submission can follow one.
   def mailbox_connect
     state = SecureRandom.hex(24)
     session[:microsoft_auth_state] = state

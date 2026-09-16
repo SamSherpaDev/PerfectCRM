@@ -384,12 +384,18 @@ module Mail
         "#{folder.name}: Microsoft expired this folder's sync token; mail since #{since.utc.iso8601} was re-read to fill the gap.")
     end
 
+    # The notice says exactly what an import can and cannot bring back. The
+    # backfill judges from the folder listing, which carries no delivery
+    # header, so mail that reached the mailbox only as a hidden copy is not
+    # among what it recovers - and promising otherwise would send the
+    # captain looking for mail that is not going to appear.
     def report_long_gap(folder, since, delta_link)
       ::MailSyncState.record_success!(folder.id, delta_link: delta_link)
       ::MailSyncState.record_notice!(folder.id,
         "#{folder.name}: Microsoft expired this folder's sync token, and the gap back to " \
-        "#{since.utc.iso8601} is longer than #{RECOVERY_WINDOW.inspect}. Watching from now; run Import history " \
-        "since #{since.to_date} to bring in what arrived in between.")
+        "#{since.utc.iso8601} is longer than #{RECOVERY_WINDOW.inspect}. Watching from now. " \
+        "Import history since #{since.to_date} brings back mail naming #{Mail.mailbox_address} in " \
+        "From, To, Cc or Bcc; mail that reached the mailbox only as a hidden copy is not recovered that way.")
       nil
     end
 

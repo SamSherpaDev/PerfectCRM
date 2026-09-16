@@ -17,6 +17,23 @@ class MailboxSettingsTest < ActionDispatch::IntegrationTest
     assert_no_match(/App passwords/, response.body)
   end
 
+  # The rendered page is the contract the browser acts on, and Turbo's
+  # documented opt-out is what makes the browser submit natively. Without it
+  # Turbo Drive follows the cross-origin 302 below with fetch, CORS rejects
+  # it, and the one button that connects the mailbox does nothing at all.
+  test "both mailbox connect buttons opt out of Turbo so the browser navigates" do
+    get edit_settings_path
+    assert_select "form[action=?]", mailbox_connect_settings_path do
+      assert_select "[data-turbo='false']", count: 1
+    end
+
+    Setting.current.update!(ms_graph_refresh_token: "refresh-9")
+    get edit_settings_path
+    assert_select "form[action=?]", mailbox_connect_settings_path do
+      assert_select "[data-turbo='false']", count: 1
+    end
+  end
+
   test "connect redirects to Microsoft with the delegated scopes" do
     post mailbox_connect_settings_path
     assert_response :redirect

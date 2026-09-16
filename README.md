@@ -455,7 +455,11 @@ window since its last successful sync is re-read, so the gap is filled rather
 than dropped - up to 24 hours. A longer outage than that is reported on the
 Settings mailbox card, naming the date to import from, instead of the app
 quietly opening months of mail: sync resumes from now and the depth of the
-catch-up stays the captain's choice through Import history, with a preview. Sync is incremental by per-folder delta link, threaded on
+catch-up stays the captain's choice through Import history, with a preview.
+That import brings back mail naming the mailbox in From, To, Cc or Bcc; mail
+that reached it only as a hidden copy is not recovered that way, because the
+backfill judges from a folder listing that carries no delivery header, and the
+notice says so rather than promising a completeness it cannot deliver. Sync is incremental by per-folder delta link, threaded on
 the Graph conversation id with a
 Message-ID/In-Reply-To/References fallback. Read-only Graph access: only
 GET requests, never moves, deletes, or flags server mail. Categories
