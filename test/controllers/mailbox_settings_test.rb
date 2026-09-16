@@ -121,4 +121,31 @@ class MailboxSettingsTest < ActionDispatch::IntegrationTest
     end
     assert_match(/Reconnect mailbox/, response.body)
   end
+
+  # Microsoft can accept a grant again without a reconnect; a Test connection
+  # that proves it must not leave the card saying Reconnect needed.
+  test "a working Test connection after a revoked grant shows Connected right away" do
+    mailbox = FakeMailbox.new
+    Setting.current.update!(ms_graph_refresh_token: "refresh-0", mailbox_watched_since: Time.current.change(usec: 0),
+      mailbox_last_error: nil, mailbox_last_error_at: nil)
+    mailbox.refuse_grant!
+    fetcher = Mail::GraphFetcher.new(transport: mailbox.transport)
+    Mail::GraphFetcher.stub(:new, fetcher) do
+      post mailbox_test_settings_path
+      assert_match(/Reconnect the mailbox/i, flash[:alert].to_s)
+
+      mailbox.transport.on_post("oauth2/v2.0/token") do |_url, _params|
+        { status: 200, json: { "access_token" => "access-new", "refresh_token" => "refresh-new", "expires_in" => 3600 } }
+      end
+      post mailbox_test_settings_path
+    end
+    assert_redirected_to edit_settings_path
+    assert_equal "Mailbox connection works.", flash[:notice]
+
+    follow_redirect!
+    assert_select "#mailbox-heading + p + dl .badge" do |badges|
+      assert_equal [ "Connected" ], badges.map { |badge| badge.text.strip }
+    end
+    assert_select "#mailbox-heading + p + dl dd", text: "None"
+  end
 end

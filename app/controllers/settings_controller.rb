@@ -79,6 +79,12 @@ class SettingsController < ApplicationController
 
   def mailbox_test
     Mail::GraphFetcher.new.test_connection
+    # A token refresh plus /me just proved the grant works, so a recorded
+    # revocation no longer holds.
+    settings = Setting.current
+    if settings.mailbox_grant_revoked?
+      settings.update_columns(mailbox_last_error: nil, mailbox_last_error_at: nil, updated_at: Time.current)
+    end
     redirect_to edit_settings_path, notice: "Mailbox connection works.", status: :see_other
   rescue Mail::NotConfiguredError
     redirect_to edit_settings_path, alert: "Connect the mailbox first.", status: :see_other
