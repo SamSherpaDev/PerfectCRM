@@ -61,7 +61,7 @@ class MailIngesterTest < ActiveSupport::TestCase
     end
   end
 
-  test "threads on X-GM-THRID and falls back to In-Reply-To" do
+  test "threads on the provider thread id and falls back to In-Reply-To" do
     first = ingest_raw(mail_raw(from: "b@example.com", message_id: "<first@test>"),
       provider: { thread_id: "thread-9", message_id: "901" })
     second = ingest_raw(mail_raw(from: "info@sherpaholidays.com", to: "b@example.com", message_id: "<second@test>"),

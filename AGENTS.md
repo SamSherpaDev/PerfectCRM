@@ -66,8 +66,8 @@ When updating this file, preserve this bar for all agents and keep entries conci
   `Mail::ImportJob`; contract in README.md, "Mail". Delegated OAuth only
   (refresh token encrypted on `Setting`, `Mail::GraphAuth`); sync takes only
   mail received since the first connect (`Setting#mailbox_watched_since`).
-  Keep-only-info@ rule lives in `Mail.keeps?`; inside `module Mail` always write `::Message` and
-  `::Conversation` because `Mail::Message` is the mail gem.
+  Keep-only-info@ rule lives in `Mail.keeps?`; inside `module Mail` always
+  write `::Message` and `::Conversation` because `Mail::Message` is the mail gem.
 - Outbound email: see README.md, "Replying"; recipient context is shared
   through `TemplateContext.resolve_recipient` for reply and group rendering.
 - Views cannot name the `Template` model bare: the
