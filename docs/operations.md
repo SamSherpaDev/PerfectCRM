@@ -118,7 +118,10 @@ folders: every mail folder, child folders included, so mail a server-side rule
 files away and correspondence already archived are both covered. Deleted Items,
 Junk Email, Drafts, Outbox, and Conversation History are left out, children and
 all. The folder list is re-read on every sync run, so a folder created in
-Outlook is watched without reconnecting the mailbox. When Microsoft expires a
+Outlook is watched from then on without reconnecting the mailbox. Live sync
+only takes mail received since a folder was first watched, so reading,
+flagging, or moving older mail never brings it in; that stays for Import
+history. When Microsoft expires a
 folder's sync token, sync re-primes it and re-reads the window back to that
 folder's last successful sync, so nothing in the gap is lost; that catch-up is
 capped at 24 hours, and a longer gap is reported on the Settings mailbox card

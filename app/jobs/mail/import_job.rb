@@ -26,16 +26,14 @@ class Mail::ImportJob < ApplicationJob
         conversation = result[:conversation]
         apply_import_choice(conversation, parsed, choices, mail_import)
         # Progress counts every in-scope message the run accounted for, so a
-        # finished import reaches the total the preview promised. Linked and
-        # unlinked count only what this run stored, so mail the CRM already
-        # held is visible as the difference rather than as new work.
-        stored = result[:status] == :stored
-        linked = stored && conversation&.linked?
+        # finished import reaches the total the preview promised.
+        kept = counted && result[:status] != :filtered
+        linked = kept && conversation&.linked?
         progress = progress.merge("history_cursor" => tally.cursor, "history_counted" => tally.seen)
         mail_import.update!(preview_json: progress,
-          processed_messages: mail_import.processed_messages + (counted && result[:status] != :filtered ? 1 : 0),
-          linked_messages: mail_import.linked_messages + (counted && linked ? 1 : 0),
-          skipped_messages: mail_import.skipped_messages + (counted && stored && !linked ? 1 : 0))
+          processed_messages: mail_import.processed_messages + (kept ? 1 : 0),
+          linked_messages: mail_import.linked_messages + (linked ? 1 : 0),
+          skipped_messages: mail_import.skipped_messages + (kept && !linked ? 1 : 0))
       end
     end
     mail_import.update!(status: "done", finished_at: Time.current)

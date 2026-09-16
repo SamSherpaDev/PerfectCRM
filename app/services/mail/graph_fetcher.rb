@@ -13,10 +13,12 @@
 # reaches no folder's delta reaches no timeline. Only folders that hold no
 # correspondence are left out (SKIPPED_FOLDERS). The folder list is re-read
 # on every run, so a folder created in Outlook starts being watched without
-# a reconnect. Delta quirks handled: @removed entries are skipped, and
-# entries already stored (a read-state toggle, or a replay after an
-# uncommitted link) are skipped before their message is fetched, so nothing
-# is downloaded twice.
+# a reconnect. Delta quirks handled: @removed entries are skipped, and so,
+# before their message is fetched, are entries already stored (a replay
+# after an uncommitted link) and entries received before the folder was
+# first watched. Graph reports read-state toggles, flags and moves as delta
+# changes too, so an old message the captain touches or files away is not
+# new mail: it belongs to Import history and the depth he chose there.
 #
 # Privacy: the info@ hard filter (Mail.keeps?, enforced again in the
 # ingester) decides what is stored, and no attachment bytes move until it
@@ -41,8 +43,7 @@
 # initial delta call that is drained but NOT ingested, so ongoing sync
 # starts from now and history stays for the import screen, where the
 # captain chooses depth with a preview. A folder that appears later is
-# primed the same way rather than backfilled unasked, and says so through a
-# MailSyncState notice so the captain can import its past mail deliberately.
+# primed the same way rather than backfilled unasked.
 #
 # Nothing here is allowed to fail quietly: a folder whose sync raises is
 # recorded against that folder and the run carries on with the rest before
@@ -128,16 +129,12 @@ module Mail
       return enum_for(:fetch_new) unless block_given?
 
       graph = client
-      folders = mail_folders(graph)
-      states = register_folders(folders)
       failure = nil
       begin
-        folders.each do |folder|
-          state = states.fetch(folder)
+        mail_folders(graph).each do |folder|
+          state = ::MailSyncState.for(folder.id)
           if state.delta_link.blank?
-            announce = state.announce?
             prime_folder(graph, folder)
-            announce_new_folder(folder) if announce
             next
           end
           drain_delta(graph, folder, state) do |parsed, provider|
@@ -249,37 +246,12 @@ module Mail
       found
     end
 
-    # Every folder the enumeration just returned gets its row here, in one
-    # transaction, before any of them is primed. That is what makes the
-    # three folder states a lookup instead of a guess: a row exists for
-    # every folder the mailbox has ever shown us, so a folder without one is
-    # genuinely new, and a run that dies part-way through priming can no
-    # longer leave a folder that was always there row-less for the next run
-    # to greet as new.
-    def register_folders(folders)
-      ::MailSyncState.transaction do
-        enumerated_before = ::MailSyncState.exists?
-        folders.index_with do |folder|
-          ::MailSyncState.for(folder.id, discovered: enumerated_before)
-        end
-      end
-    end
-
-    # A folder that shows up after the mailbox is already syncing is watched
-    # from now, never backfilled on its own: it can hold years of archived
-    # mail, and choosing that depth is the import screen's job. Saying so
-    # here is what keeps the choice in front of the captain.
-    def announce_new_folder(folder)
-      ::MailSyncState.record_discovery!(folder.id,
-        "New folder #{folder.name}: watched from now. Run Import history to bring in mail it already holds.")
-    end
-
     def folder_params
       URI.encode_www_form("$select" => FOLDER_SELECT, "$top" => PAGE_SIZE)
     end
 
     def delta_url(folder)
-      "#{GraphClient::BASE}/me/mailFolders/#{folder}/messages/delta?$select=#{URI.encode_www_form_component("id")}"
+      "#{GraphClient::BASE}/me/mailFolders/#{folder}/messages/delta?$select=#{URI.encode_www_form_component("id,receivedDateTime")}"
     end
 
     # The resume timestamp belongs to the folder its cursor names. Applying
@@ -362,9 +334,10 @@ module Mail
     end
 
     # Drains one folder's delta, committing the new link at the end.
-    # Entries already stored are skipped before their message is fetched:
-    # Graph reports every change (a read-state toggle counts), and an
-    # uncommitted link replays the whole page on the next run.
+    # Graph reports every change (a read-state toggle, a flag, a move in),
+    # and an uncommitted link replays the whole page on the next run, so
+    # only mail received since the folder was first watched and not yet
+    # stored is fetched at all.
     def drain_delta(client, folder, state)
       folder_id = folder.id
       url = state.delta_link
@@ -374,6 +347,7 @@ module Mail
         Array(last_page["value"]).each do |entry|
           next if entry["@removed"]
           next if entry["id"].blank?
+          next if received_before_watch?(entry, state)
           next if ::Message.exists?(provider_message_id: entry["id"])
 
           loaded = load_message(client, entry["id"])
@@ -393,6 +367,11 @@ module Mail
       # discards the overlap. Bounded by the last successful sync, so a
       # stale token still cannot backfill the whole mailbox unasked.
       recover_gap(client, folder, state.last_sync_at) { |*loaded| yield(*loaded) }
+    end
+
+    def received_before_watch?(entry, state)
+      received = parse_time(entry["receivedDateTime"])
+      received.present? && received < state.watched_since
     end
 
     # The gap the dead token covered is read BEFORE the replacement link is

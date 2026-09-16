@@ -44,11 +44,8 @@ class MailImportJobTest < ActiveSupport::TestCase
       assert_no_difference("Message.count") { Mail::ImportJob.new.perform(import.id, fetcher: fetcher) }
     end
     assert result[:conversation].reload.linked?
-    # The mail was already in the CRM: it counts as processed so the bar can
-    # finish, but as already held rather than as newly linked work.
-    assert_equal 0, import.reload.linked_messages
+    assert_equal 1, import.reload.linked_messages
     assert_equal 1, import.processed_messages
-    assert_equal 1, import.already_held_messages
     assert_equal 1, import.created_clients
   end
 
@@ -64,8 +61,8 @@ class MailImportJobTest < ActiveSupport::TestCase
     assert_no_difference("Message.count") { Mail::ImportJob.new.perform(import.id, fetcher: fetcher) }
     assert_equal "done", import.reload.status
     assert_equal 2, import.processed_messages
-    assert_equal 2, import.already_held_messages
     assert_equal 0, import.linked_messages
+    assert_equal 2, import.skipped_messages
     assert_equal 100, import.progress_pct
   end
 
@@ -99,7 +96,7 @@ class MailImportJobTest < ActiveSupport::TestCase
     # already counted, so only the new one moves the counters.
     assert_difference("Message.count", 1) { Mail::ImportJob.new.perform(import.id, fetcher: fetcher) }
     assert_equal 3, import.reload.processed_messages
-    assert_equal 0, import.already_held_messages
+    assert_equal 3, import.skipped_messages
     assert_equal 100, import.progress_pct
   end
 

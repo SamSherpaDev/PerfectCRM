@@ -10,34 +10,17 @@ class MailSyncState < ApplicationRecord
   scope :recently_noticed, -> { where(last_notice_at: ATTENTION_WINDOW.ago..).order(last_notice_at: :desc) }
   scope :recently_errored, -> { where(last_error_at: ATTENTION_WINDOW.ago..).order(last_error_at: :desc) }
 
-  # discovered: marks a folder first seen once the mailbox had already been
-  # enumerated, so it is one Outlook gained rather than one the first
-  # enumeration found. Recorded at creation and never inferred again.
-  def self.for(folder, discovered: false)
-    find_or_create_by!(folder: folder.to_s) do |state|
-      state.discovered_at = Time.current if discovered
-    end
+  def self.for(folder)
+    find_or_create_by!(folder: folder.to_s)
   end
 
-  # A watched folder is in exactly one of three states, each read from
-  # stored facts rather than from how far some earlier run happened to get:
-  #
-  #   :watched - primed, with a delta link driving incremental sync.
-  #   :new     - the mailbox gained it after it had been enumerated once,
-  #              so the mail already in it needs a deliberate import.
-  #   :pending - enumerated with the rest but not primed yet, so it holds
-  #              no link; it was always there and is not news.
-  def folder_state
-    return :watched if delta_link.present?
-
-    discovered_at.present? ? :new : :pending
-  end
-
-  # Said once, and only for a folder that is genuinely new. Discovery and
-  # announcement are separate facts so a failed setup keeps the first and
-  # leaves the second, and the notice survives to the run that succeeds.
-  def announce?
-    folder_state == :new && announced_at.nil?
+  # Live sync covers mail received from the moment a folder is first
+  # watched; anything older is Import history's to bring in. Graph reports
+  # receivedDateTime to the second, so the boundary is kept to the second
+  # too, or mail landing in the same second as the first watch would read
+  # as older than it.
+  def watched_since
+    created_at.change(usec: 0)
   end
 
   def self.record_success!(folder, delta_link:)
@@ -52,14 +35,6 @@ class MailSyncState < ApplicationRecord
   def self.record_notice!(folder, message)
     state = self.for(folder)
     state.update!(last_notice: message.to_s.truncate(500), last_notice_at: Time.current)
-    state
-  end
-
-  # The captain has now been told about this folder, so retrying its setup
-  # can never announce it twice.
-  def self.record_discovery!(folder, message)
-    state = record_notice!(folder, message)
-    state.update!(announced_at: Time.current)
     state
   end
 

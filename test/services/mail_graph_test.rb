@@ -101,16 +101,28 @@ class MailGraphTest < ActiveSupport::TestCase
       message_id: "<oldfiled@test>"))
     assert_empty fetcher.fetch_new.to_a
     assert MailSyncState.for("operators").delta_link.present?
-    # Priming is silent about the mail already in there unless it says so,
-    # and the captain has to be told to import it deliberately.
-    notice = MailSyncState.for("operators").last_notice
-    assert_match(/Operators/, notice.to_s)
-    assert_match(/Import history/i, notice.to_s)
-    assert_includes MailSyncState.recently_noticed.map(&:folder), "operators"
+    assert_empty MailSyncState.recently_noticed
 
     @mailbox.add("operators", graph_message(id: "new-filed", from: "operator@example.com",
       message_id: "<newfiled@test>"))
     assert_equal [ "new-filed" ], fetcher.fetch_new.to_a.map { |item| item.provider[:message_id] }
+  end
+
+  test "old mail touched or moved after connect stays for Import history" do
+    fetcher.fetch_new.to_a # prime
+    # Reading, flagging, or filing a message from before the connect puts it
+    # in that folder's delta as a change, alongside genuinely new mail.
+    @mailbox.add("archive", graph_message(id: "filed-2019", from: "operator@example.com",
+      message_id: "<filed2019@test>", received: "2019-03-01T10:00:00Z"))
+    @mailbox.add("inbox", graph_message(id: "read-last-year", from: "client@example.com",
+      message_id: "<readlastyear@test>", received: 1.year.ago.utc.iso8601))
+    @mailbox.add("inbox", graph_message(id: "arrived-now", from: "client@example.com",
+      message_id: "<arrivednow@test>"))
+
+    fetches_before = @mailbox.message_fetches
+    items = fetcher.fetch_new.to_a
+    assert_equal [ "arrived-now" ], items.map { |item| item.provider[:message_id] }
+    assert_equal fetches_before + 1, @mailbox.message_fetches
   end
 
   test "first connect primes every folder and stores nothing" do
@@ -404,74 +416,6 @@ class MailGraphTest < ActiveSupport::TestCase
     @mailbox.expire_delta!("inbox")
 
     assert_empty fetcher.fetch_new.to_a
-  end
-
-  test "a new folder whose first setup fails is still announced once it works" do
-    fetcher.fetch_new.to_a # prime everything that exists now
-    @mailbox.add_folder("operators", display_name: "Operators")
-    broken = true
-    @transport.on_get("mailFolders/operators/messages/delta") do |_url, token:, params:, headers:|
-      next { status: 503, json: { "error" => { "code" => "ServiceUnavailable" } } } if broken
-
-      { status: 200, json: { "value" => [], "@odata.deltaLink" => "https://graph.microsoft.com/v1.0/me/mailFolders/operators/messages/delta?$deltatoken=99" } }
-    end
-
-    assert_raises(Mail::ConnectionError) { fetcher.fetch_new.to_a }
-    assert_match(/Operators/, MailSyncState.for("operators").last_error.to_s)
-    assert_nil MailSyncState.for("operators").last_notice
-
-    # The transient failure must not cost the captain the one message that
-    # tells him this folder's existing mail needs a deliberate import.
-    broken = false
-    fetcher.fetch_new.to_a
-    assert MailSyncState.for("operators").delta_link.present?
-    assert_match(/Import history/i, MailSyncState.for("operators").last_notice.to_s)
-
-    # And it is said once, however many runs follow.
-    announced_at = MailSyncState.for("operators").announced_at
-    fetcher.fetch_new.to_a
-    assert_equal announced_at.to_i, MailSyncState.for("operators").announced_at.to_i
-  end
-
-  test "folders a first connect never reached are not greeted as new later" do
-    # The first run enumerates every folder but dies before it can prime the
-    # ones sorted after Inbox - a revoked grant, a worker restart, anything.
-    stop = true
-    @transport.on_get("mailFolders/clients/messages/delta") do |_url, token:, params:, headers:|
-      next { status: 200, json: { "value" => [], "@odata.deltaLink" => "https://graph.microsoft.com/v1.0/me/mailFolders/clients/messages/delta?$deltatoken=97" } } unless stop
-
-      raise Mail::GrantRevokedError, "grant revoked mid-connect"
-    end
-
-    assert_raises(Mail::GrantRevokedError) { fetcher.fetch_new.to_a }
-    assert MailSyncState.for("archive").delta_link.present?
-    assert_nil MailSyncState.for("inbox").delta_link
-
-    # Inbox and Sent Items existed all along; being unreached is not news.
-    stop = false
-    fetcher.fetch_new.to_a
-    assert MailSyncState.for("inbox").delta_link.present?
-    assert_equal %i[watched watched], [ MailSyncState.for("inbox"), MailSyncState.for("sentitems") ].map(&:folder_state)
-    assert_empty MailSyncState.recently_noticed.map(&:folder)
-  end
-
-  test "a folder that failed to set up on the first connect is never called new" do
-    broken = true
-    @transport.on_get("mailFolders/sentitems/messages/delta") do |_url, token:, params:, headers:|
-      next { status: 503, json: { "error" => { "code" => "ServiceUnavailable" } } } if broken
-
-      { status: 200, json: { "value" => [], "@odata.deltaLink" => "https://graph.microsoft.com/v1.0/me/mailFolders/sentitems/messages/delta?$deltatoken=98" } }
-    end
-
-    assert_raises(Mail::ConnectionError) { fetcher.fetch_new.to_a }
-    assert_match(/Sent Items/, MailSyncState.for("sentitems").last_error.to_s)
-
-    # Sent Items has existed all along; a failed first prime must not make
-    # the next run report it as a folder Outlook has just gained.
-    broken = false
-    fetcher.fetch_new.to_a
-    assert MailSyncState.for("sentitems").delta_link.present?
-    assert_nil MailSyncState.for("sentitems").last_notice
   end
 
   test "a run that stops at its cap still raises the folder failure it recorded" do

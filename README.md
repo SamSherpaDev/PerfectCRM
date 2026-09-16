@@ -447,8 +447,8 @@ every mail folder, child folders included (Microsoft 365 has no All Mail
 equivalent, and a server-side rule can file mail so it never touches the Inbox);
 Deleted Items, Junk Email, Drafts, Outbox, and Conversation History are left out.
 The folder list is re-read each run, so a folder created in Outlook is watched
-without a reconnect, and says so on the Settings mailbox card so its past mail
-can be brought in with a history import rather than appearing unasked. One
+without a reconnect, primed from now like a first connect; its past mail stays
+for Import history. One
 folder's failure is recorded against that folder and never stops the rest of the
 run. If Microsoft expires a folder's sync token, the folder is re-primed and the
 window since its last successful sync is re-read, so the gap is filled rather
@@ -466,7 +466,10 @@ GET requests, never moves, deletes, or flags server mail. Categories
 arrive as an initial read-only label snapshot on each message; later
 server-side label changes are not refreshed. A first connect primes the
 delta links without ingesting anything, so ongoing sync starts from now
-and past mail stays for Import history.
+and past mail stays for Import history. Microsoft reports read-state
+toggles, flags, and moves as changes too, so sync only takes mail received
+since a folder was first watched: touching or filing away older mail never
+brings it in behind the depth chosen in Import history.
 
 Every kept message lands on the right client, lead, or organization
 timeline (`Conversation` + `Message`, attachments via Active Storage on
@@ -541,8 +544,7 @@ earlier mail vanished. Because Graph promises no order among messages sharing a
 received timestamp, a resume replays that whole second and dedupes on the
 provider message id rather than risk dropping mail; preview and import both
 count each message once, so a replay never counts twice. Import progress counts
-the same in-scope messages as preview, and mail the CRM already held is reported
-as "already in the CRM" rather than as newly linked. Microsoft Graph throttling
+the same in-scope messages as preview. Microsoft Graph throttling
 (429) is waited out for a bounded number of Retry-After delays instead of
 failing the run. Preview counts both inbound and
 outbound mail together and shows counterparties, remembered matches, duplicates,

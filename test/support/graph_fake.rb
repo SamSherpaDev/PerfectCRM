@@ -82,8 +82,9 @@ module GraphMessageBuilder
 
   def graph_message(id:, from:, to: [ "info@sherpaholidays.com" ], cc: [], bcc: [],
       subject: "Hello", message_id: nil, conversation: "conv-1", categories: [],
-      received: "2026-09-15T10:00:00Z", sent: nil, headers: [], attachments: [],
+      received: nil, sent: nil, headers: [], attachments: [],
       body: "Hi there", body_type: "text", preview: nil)
+    received ||= Time.current.utc.iso8601
     {
       "id" => id,
       "internetMessageId" => message_id,
