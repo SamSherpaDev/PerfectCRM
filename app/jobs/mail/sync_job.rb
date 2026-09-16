@@ -6,6 +6,11 @@
 # mail that does not mention the info@ mailbox without storing it.
 class Mail::SyncJob < ApplicationJob
   queue_as :default
+  # Walking every folder, re-reading a window after a token expiry, and
+  # waiting out a throttle can all outlast the 5-minute schedule. Two runs
+  # draining the same uncommitted delta link would race each other onto the
+  # same provider_message_id, so only one runs at a time.
+  limits_concurrency to: 1, key: "mail-sync"
 
   def perform(fetcher: nil, limit: 200)
     fetcher ||= Mail::GraphFetcher.new

@@ -10,8 +10,20 @@ class MailSyncState < ApplicationRecord
   scope :recently_noticed, -> { where(last_notice_at: ATTENTION_WINDOW.ago..).order(last_notice_at: :desc) }
   scope :recently_errored, -> { where(last_error_at: ATTENTION_WINDOW.ago..).order(last_error_at: :desc) }
 
-  def self.for(folder)
-    find_or_create_by!(folder: folder.to_s)
+  # discovered: marks a folder first seen while the mailbox was already
+  # syncing, so it is one Outlook gained rather than one the first connect
+  # found. Recorded at creation and never inferred again.
+  def self.for(folder, discovered: false)
+    find_or_create_by!(folder: folder.to_s) do |state|
+      state.discovered_at = Time.current if discovered
+    end
+  end
+
+  # Whether the captain still needs telling about this folder. Discovery and
+  # announcement are tracked apart so a failed setup keeps the first and
+  # leaves the second, and the notice survives to the run that succeeds.
+  def announce?
+    discovered_at.present? && announced_at.nil?
   end
 
   def self.record_success!(folder, delta_link:)
@@ -26,6 +38,14 @@ class MailSyncState < ApplicationRecord
   def self.record_notice!(folder, message)
     state = self.for(folder)
     state.update!(last_notice: message.to_s.truncate(500), last_notice_at: Time.current)
+    state
+  end
+
+  # The captain has now been told about this folder, so retrying its setup
+  # can never announce it twice.
+  def self.record_discovery!(folder, message)
+    state = record_notice!(folder, message)
+    state.update!(announced_at: Time.current)
     state
   end
 

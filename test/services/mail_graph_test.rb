@@ -350,11 +350,9 @@ class MailGraphTest < ActiveSupport::TestCase
     assert_empty fetcher.fetch_new.to_a
   end
 
-  test "a folder that failed to set up is not later called newly created" do
-    fetcher.fetch_new.to_a # prime everything
+  test "a new folder whose first setup fails is still announced once it works" do
+    fetcher.fetch_new.to_a # prime everything that exists now
     @mailbox.add_folder("operators", display_name: "Operators")
-    # The first sight of the folder fails to prime, so its row exists but
-    # holds no link: the next run must not mistake that for a new folder.
     broken = true
     @transport.on_get("mailFolders/operators/messages/delta") do |_url, token:, params:, headers:|
       next { status: 503, json: { "error" => { "code" => "ServiceUnavailable" } } } if broken
@@ -366,10 +364,36 @@ class MailGraphTest < ActiveSupport::TestCase
     assert_match(/Operators/, MailSyncState.for("operators").last_error.to_s)
     assert_nil MailSyncState.for("operators").last_notice
 
+    # The transient failure must not cost the captain the one message that
+    # tells him this folder's existing mail needs a deliberate import.
     broken = false
     fetcher.fetch_new.to_a
     assert MailSyncState.for("operators").delta_link.present?
-    assert_nil MailSyncState.for("operators").last_notice
+    assert_match(/Import history/i, MailSyncState.for("operators").last_notice.to_s)
+
+    # And it is said once, however many runs follow.
+    announced_at = MailSyncState.for("operators").announced_at
+    fetcher.fetch_new.to_a
+    assert_equal announced_at.to_i, MailSyncState.for("operators").announced_at.to_i
+  end
+
+  test "a folder that failed to set up on the first connect is never called new" do
+    broken = true
+    @transport.on_get("mailFolders/sentitems/messages/delta") do |_url, token:, params:, headers:|
+      next { status: 503, json: { "error" => { "code" => "ServiceUnavailable" } } } if broken
+
+      { status: 200, json: { "value" => [], "@odata.deltaLink" => "https://graph.microsoft.com/v1.0/me/mailFolders/sentitems/messages/delta?$deltatoken=98" } }
+    end
+
+    assert_raises(Mail::ConnectionError) { fetcher.fetch_new.to_a }
+    assert_match(/Sent Items/, MailSyncState.for("sentitems").last_error.to_s)
+
+    # Sent Items has existed all along; a failed first prime must not make
+    # the next run report it as a folder Outlook has just gained.
+    broken = false
+    fetcher.fetch_new.to_a
+    assert MailSyncState.for("sentitems").delta_link.present?
+    assert_nil MailSyncState.for("sentitems").last_notice
   end
 
   test "one folder's failure is recorded and the folders after it still sync" do
@@ -391,6 +415,20 @@ class MailGraphTest < ActiveSupport::TestCase
     # The card shows one line, so it has to say which folder failed.
     assert_match(/Archive/, recorded)
     assert_nil MailSyncState.for("inbox").last_error
+  end
+
+  test "the failure a partial run raises names the folder it came from" do
+    fetcher.fetch_new.to_a # prime
+    @mailbox.add("archive", graph_message(id: "broken", from: "operator@example.com", message_id: "<broken2@test>"))
+    @mailbox.transport.on_get("/me/messages/broken") do |*|
+      { status: 503, json: { "error" => { "code" => "ServiceUnavailable" } } }
+    end
+
+    # SyncJob copies this message onto the mailbox card, where an unnamed
+    # failure reads as the whole mailbox being down.
+    error = assert_raises(Mail::ConnectionError) { fetcher.fetch_new.to_a }
+    assert_match(/Archive/, error.message)
+    assert_match(/503/, error.message)
   end
 
   test "history walk pages both folders with a received-date filter" do

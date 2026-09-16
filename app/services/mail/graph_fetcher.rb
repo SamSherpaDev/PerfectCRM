@@ -120,14 +120,10 @@ module Mail
       established = ::MailSyncState.where.not(delta_link: nil).exists?
       failure = nil
       mail_folders(graph).each do |folder|
-        state = ::MailSyncState.for(folder.id)
-        # A folder Outlook has only just gained has no row until this run
-        # made one; a folder that failed to set up earlier already has one,
-        # and must not be announced to the captain as newly created.
-        discovered = established && state.previously_new_record?
+        state = ::MailSyncState.for(folder.id, discovered: established)
         if state.delta_link.blank?
           prime_folder(graph, folder)
-          announce_new_folder(folder) if discovered
+          announce_new_folder(folder) if state.announce?
           next
         end
         drain_delta(graph, folder, state) do |parsed, provider|
@@ -136,8 +132,12 @@ module Mail
       rescue NotConfiguredError, GrantRevokedError
         raise
       rescue GraphError => e
-        ::MailSyncState.record_error!(folder.id, "#{folder.name}: #{e.message}")
-        failure ||= e
+        # The captain reads one error line, so it has to name its folder
+        # wherever it surfaces: against the folder here, and in the failure
+        # the run raises, which is what SyncJob copies onto the mailbox card.
+        message = "#{folder.name}: #{e.message}"
+        ::MailSyncState.record_error!(folder.id, message)
+        failure ||= e.class.new(message)
       end
       raise failure if failure
     end
@@ -209,7 +209,7 @@ module Mail
     # mail, and choosing that depth is the import screen's job. Saying so
     # here is what keeps the choice in front of the captain.
     def announce_new_folder(folder)
-      ::MailSyncState.record_notice!(folder.id,
+      ::MailSyncState.record_discovery!(folder.id,
         "New folder #{folder.name}: watched from now. Run Import history to bring in mail it already holds.")
     end
 
