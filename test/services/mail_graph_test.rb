@@ -341,6 +341,36 @@ class MailGraphTest < ActiveSupport::TestCase
       fetcher.fetch_new.to_a.map { |item| item.provider[:message_id] }.sort
   end
 
+  test "a hidden-Bcc arrival inside the gap survives a token expiry" do
+    fetcher.fetch_new.to_a # prime
+    synced_at = MailSyncState.for("inbox").last_sync_at
+    # Delivered by Bcc: the listing shows only the visible recipient, and
+    # the mailbox appears solely in a delivery header the listing cannot
+    # carry. Gap recovery is this message's last chance to be read.
+    @mailbox.add("inbox", graph_message(id: "bcc-gap", from: "operator@example.com",
+      to: "manifest@example.com", message_id: "<bccgap@test>",
+      received: (synced_at + 1.minute).utc.iso8601,
+      headers: [ { "name" => "Delivered-To", "value" => "info@sherpaholidays.com" } ]))
+    @mailbox.expire_delta!("inbox")
+
+    items = fetcher.fetch_new.to_a
+    assert_equal [ "bcc-gap" ], items.map { |item| item.provider[:message_id] }
+    assert_equal :stored, Mail::Ingester.ingest(parsed: items.first.parsed, provider: items.first.provider)[:status]
+  end
+
+  test "gap recovery still leaves personal mail unstored" do
+    fetcher.fetch_new.to_a # prime
+    synced_at = MailSyncState.for("inbox").last_sync_at
+    @mailbox.add("inbox", graph_message(id: "private-gap", from: "friend@gmail.com",
+      to: "captain@gmail.com", message_id: "<privategap@test>",
+      received: (synced_at + 1.minute).utc.iso8601))
+    @mailbox.expire_delta!("inbox")
+
+    assert_no_difference([ "Conversation.count", "Message.count" ]) do
+      assert_empty fetcher.fetch_new.to_a
+    end
+  end
+
   test "mail older than the last sync is not dragged in by a token expiry" do
     fetcher.fetch_new.to_a # prime
     @mailbox.add("inbox", graph_message(id: "ancient", from: "old@example.com",

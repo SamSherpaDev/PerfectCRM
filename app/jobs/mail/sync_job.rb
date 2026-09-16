@@ -6,11 +6,20 @@
 # mail that does not mention the info@ mailbox without storing it.
 class Mail::SyncJob < ApplicationJob
   queue_as :default
-  # Walking every folder, re-reading a window after a token expiry, and
-  # waiting out a throttle can all outlast the 5-minute schedule. Two runs
-  # draining the same uncommitted delta link would race each other onto the
-  # same provider_message_id, so only one runs at a time.
-  limits_concurrency to: 1, key: "mail-sync"
+
+  # Solid Queue frees the semaphore after this long whether the holder has
+  # finished or not, so the window has to outlive a run that is still
+  # working rather than stuck - otherwise two runs drain the same
+  # uncommitted delta link and race each other onto one provider_message_id.
+  # The bound that actually moves is the throttle: one request can sleep
+  # THROTTLE_WAITS * MAX_WAIT_SECONDS before giving up, and a run meets it
+  # once per phase - enumerating folders, draining each folder's delta, and
+  # re-walking a gap after a token expiry. Ten of those allowances covers
+  # that comfortably and follows GraphClient if its bounds change.
+  THROTTLE_ALLOWANCE = (Mail::GraphClient::THROTTLE_WAITS * Mail::GraphClient::MAX_WAIT_SECONDS).seconds
+  CONCURRENCY_WINDOW = THROTTLE_ALLOWANCE * 10
+
+  limits_concurrency to: 1, key: "mail-sync", duration: CONCURRENCY_WINDOW
 
   def perform(fetcher: nil, limit: 200)
     fetcher ||= Mail::GraphFetcher.new

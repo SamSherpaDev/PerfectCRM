@@ -112,6 +112,16 @@ class MailSyncJobTest < ActiveSupport::TestCase
     assert_nil Setting.current.mailbox_last_error_at
   end
 
+  test "the concurrency guard outlives the longest a run can legitimately take" do
+    # Solid Queue frees the semaphore when the window lapses, so a window
+    # shorter than a working run reads as protection while two runs still
+    # drain the same uncommitted position.
+    assert_equal 1, Mail::SyncJob.concurrency_limit
+    assert Mail::SyncJob.new.concurrency_key.present?
+    assert_operator Mail::SyncJob.concurrency_duration, :>, Mail::SyncJob::THROTTLE_ALLOWANCE
+    assert_operator Mail::SyncJob.concurrency_duration, :>, 5.minutes
+  end
+
   test "unconfigured mailbox no-ops" do
     Setting.current.update!(ms_graph_refresh_token: nil)
     assert_equal false, Mail::SyncJob.new.perform(fetcher: fetcher)

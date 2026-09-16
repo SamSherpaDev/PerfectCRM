@@ -230,8 +230,9 @@ module Mail
     end
 
     # Recipient fields as the folder listing returns them. The delivery
-    # headers are missing here by design (see the note at the top), so a
-    # hidden-Bcc arrival is picked up by live sync rather than the backfill.
+    # headers are missing here by design (see the note at the top), so this
+    # rule alone cannot see a hidden-Bcc arrival: the backfill accepts that
+    # and leaves such mail to live sync, which reads the full headers.
     def listed_recipients(entry)
       {
         "from" => addresses_of(entry["from"]),
@@ -251,15 +252,22 @@ module Mail
       "#{GraphClient::BASE}/me/mailFolders/#{folder}/messages?#{URI.encode_www_form(params)}"
     end
 
-    # Pages one folder's message listing from a floor, judging each entry on
-    # the recipient fields the listing carries so only keepers are opened.
-    def walk_folder(client, folder, floor, skip_stored: false)
+    # Pages one folder's message listing from a floor.
+    #
+    # screen_listing is the backfill's deliberately narrower rule: judge
+    # from the recipient fields the listing carries and never open what it
+    # rejects, so a mailbox-wide walk costs no personal message bodies. Gap
+    # recovery turns it off, because a listing cannot carry a delivery
+    # header and this is live sync's own window - the mail it covers gets
+    # no second chance, so a hidden-Bcc arrival must be judged the way live
+    # sync judges it, on load_message's full header check.
+    def walk_folder(client, folder, floor, screen_listing: true, skip_stored: false)
       url = history_url(folder, floor)
       loop do
         page = client.get_json(url)
         Array(page["value"]).each do |entry|
           next if entry["@removed"] || entry["id"].blank?
-          next unless Mail.keeps?(listed_recipients(entry))
+          next if screen_listing && !Mail.keeps?(listed_recipients(entry))
           next if skip_stored && ::Message.exists?(provider_message_id: entry["id"])
 
           loaded = load_message(client, entry["id"])
@@ -333,7 +341,7 @@ module Mail
     # losing whatever it had not reached yet.
     def recover_gap(client, folder, since)
       delta_link = drain_prime(client, folder.id)
-      walk_folder(client, folder.id, since, skip_stored: true) do |parsed, provider, _entry|
+      walk_folder(client, folder.id, since, screen_listing: false, skip_stored: true) do |parsed, provider, _entry|
         yield(parsed, provider)
       end
       ::MailSyncState.record_success!(folder.id, delta_link: delta_link)
