@@ -9,15 +9,29 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     @client = Client.create!(name: "Maya", email: "maya@example.com", perfectbook_contact_id: 11)
   end
 
-  test "today renders the four tiles with sentence-case labels" do
+  test "today renders the six tiles with sentence-case labels" do
     get root_path
     assert_response :success
     assert_select "h1", "Today"
-    assert_select ".stat", count: 4
+    assert_select ".stat", count: 6
     assert_select ".stat", text: /Waiting on you/
     assert_select ".stat", text: /Follow-ups due/
     assert_select ".stat", text: /Quotes out/
     assert_select ".stat", text: /Overdue/
+    assert_select ".stat", text: /New leads/
+    assert_select ".stat", text: /Active clients/
+  end
+
+  test "today counts new leads and active clients" do
+    Lead.create!(name: "Priya", email: "priya@example.com")
+    Lead.create!(name: "Ken", email: "ken@example.com", status: "chatting")
+    Lead.create!(name: "Ana", email: "ana@example.com", status: "lost", lost_reason: "price")
+    Client.create!(name: "Retired Ray", email: "ray@example.com").archive!
+
+    get root_path
+    assert_response :success
+    assert_equal "1", stat_value("New leads")
+    assert_equal "1", stat_value("Active clients")
   end
 
   test "today lists follow-ups with one-tap complete and nudge" do
@@ -66,7 +80,7 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     get root_path
     assert_response :success
     assert_select "a[href=?]", inbox_thread_path(convo), text: "Maya"
-    assert_select ".stat-value", text: "1", count: 2
+    assert_select ".stat-value", text: "1", count: 3
     assert_select "p", text: /No replies waiting/, count: 0
   end
 
@@ -75,5 +89,13 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "p", text: /Nothing owed this week/
     assert_select "p", text: /No replies waiting/
+  end
+
+  private
+
+  def stat_value(label)
+    tile = css_select(".stat").find { |stat| stat.css("p").any? { |line| line.text == label } }
+    assert tile, "no counts tile labeled #{label}"
+    tile.at_css(".stat-value").text
   end
 end

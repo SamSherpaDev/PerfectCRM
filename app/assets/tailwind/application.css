@@ -314,6 +314,7 @@
   .stat:nth-child(3) .stat-value { animation-delay: 0.12s; }
   .stat:nth-child(4) .stat-value { animation-delay: 0.18s; }
   .stat:nth-child(5) .stat-value { animation-delay: 0.24s; }
+  .stat:nth-child(6) .stat-value { animation-delay: 0.3s; }
   .panel {
     @apply card p-5;
   }
