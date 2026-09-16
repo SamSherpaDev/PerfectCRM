@@ -474,6 +474,22 @@ class MailGraphTest < ActiveSupport::TestCase
     assert_nil MailSyncState.for("sentitems").last_notice
   end
 
+  test "a run that stops at its cap still raises the folder failure it recorded" do
+    fetcher.fetch_new.to_a # prime
+    @mailbox.add("archive", graph_message(id: "broken3", from: "operator@example.com", message_id: "<broken3@test>"))
+    @mailbox.add("inbox", graph_message(id: "plenty", from: "client@example.com", message_id: "<plenty@test>"))
+    @mailbox.transport.on_get("/me/messages/broken3") do |*|
+      { status: 503, json: { "error" => { "code" => "ServiceUnavailable" } } }
+    end
+
+    # archive fails, inbox yields, and the caller stops on its own limit
+    # before the walk ends - the recorded failure must not be stepped over.
+    error = assert_raises(Mail::ConnectionError) do
+      fetcher.fetch_new { |_item| break }
+    end
+    assert_match(/Archive/, error.message)
+  end
+
   test "one folder's failure is recorded and the folders after it still sync" do
     fetcher.fetch_new.to_a # prime
     @mailbox.add("archive", graph_message(id: "broken", from: "operator@example.com", message_id: "<broken@test>"))
@@ -547,6 +563,28 @@ class MailGraphTest < ActiveSupport::TestCase
     # into Sent Items, where older replies still need importing.
     rest = fetcher.fetch_history(since: Time.utc(2026, 9, 1), cursor: items.first.cursor).to_a
     assert_equal %w[r-in r-out], rest.map { |item| item.provider[:message_id] }
+  end
+
+  test "a resume whose folder vanished carries on rather than starting over" do
+    # archive sorts before clients, which sorts before inbox.
+    @mailbox.add("archive", graph_message(id: "in-archive", from: "operator@example.com",
+      message_id: "<inarchive@test>", received: "2026-09-10T10:00:00Z"))
+    @mailbox.add("clients", graph_message(id: "in-clients", from: "traveler@example.com",
+      message_id: "<inclients@test>", received: "2026-09-11T10:00:00Z"))
+    @mailbox.add("inbox", graph_message(id: "in-inbox", from: "client@example.com",
+      message_id: "<ininbox@test>", received: "2026-09-12T10:00:00Z"))
+
+    items = fetcher.fetch_history.to_a
+    assert_equal %w[in-archive in-clients in-inbox], items.map { |item| item.provider[:message_id] }
+
+    # The walk died in Clients; the captain then deleted that folder and
+    # resumed. Everything before it was already read, so the resume must
+    # pick up after it, not re-walk Archive from the top.
+    cursor = items[1].cursor
+    @mailbox.remove_folder("clients")
+    rest = fetcher.fetch_history(cursor: cursor).to_a
+    assert_equal %w[in-inbox], rest.map { |item| item.provider[:message_id] }
+    assert_match(/no longer in the mailbox/i, MailSyncState.for("clients").last_notice.to_s)
   end
 
   test "resuming replays the cursor second so same-second mail is never dropped" do

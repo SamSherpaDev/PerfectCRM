@@ -181,6 +181,13 @@ class FakeMailbox
       "wellKnownName" => well_known, "childFolderCount" => 0 }
   end
 
+  # Drops a folder, as deleting or moving one in Outlook would.
+  def remove_folder(id)
+    @folders.reject! { |folder| folder["id"] == id }
+    @child_folders.each_value { |children| children.reject! { |folder| folder["id"] == id } }
+    @child_folders.delete(id)
+  end
+
   # Which Microsoft account the delegated grant belongs to (/me).
   def signed_in_as(address, upn: nil)
     @account = { "id" => "other", "mail" => address, "userPrincipalName" => upn || address }

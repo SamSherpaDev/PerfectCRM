@@ -122,6 +122,20 @@ class MailSyncJobTest < ActiveSupport::TestCase
     assert_operator Mail::SyncJob.concurrency_duration, :>, 5.minutes
   end
 
+  test "a capped run with a broken folder is reported, not recorded as clean" do
+    Mail::SyncJob.new.perform(fetcher: fetcher) # prime
+    @mailbox.add("archive", sync_message(id: "bad", from: "operator@example.com"))
+    @mailbox.add("inbox", sync_message(id: "good", from: "client@example.com"))
+    @mailbox.transport.on_get("/me/messages/bad") do |*|
+      { status: 503, json: { "error" => { "code" => "ServiceUnavailable" } } }
+    end
+
+    # The cap is reached after the healthy folder yields, which used to let
+    # the run finish "successfully" and clear the error it had just recorded.
+    assert_raises(Mail::ConnectionError) { Mail::SyncJob.new.perform(fetcher: fetcher, limit: 1) }
+    assert_match(/Archive/, Setting.current.reload.mailbox_last_error.to_s)
+  end
+
   test "unconfigured mailbox no-ops" do
     Setting.current.update!(ms_graph_refresh_token: nil)
     assert_equal false, Mail::SyncJob.new.perform(fetcher: fetcher)

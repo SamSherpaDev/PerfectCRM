@@ -131,28 +131,35 @@ module Mail
       folders = mail_folders(graph)
       states = register_folders(folders)
       failure = nil
-      folders.each do |folder|
-        state = states.fetch(folder)
-        if state.delta_link.blank?
-          announce = state.announce?
-          prime_folder(graph, folder)
-          announce_new_folder(folder) if announce
-          next
+      begin
+        folders.each do |folder|
+          state = states.fetch(folder)
+          if state.delta_link.blank?
+            announce = state.announce?
+            prime_folder(graph, folder)
+            announce_new_folder(folder) if announce
+            next
+          end
+          drain_delta(graph, folder, state) do |parsed, provider|
+            yield Fetched.new(parsed: parsed, provider: provider, folder: folder.id)
+          end
+        rescue NotConfiguredError, GrantRevokedError
+          raise
+        rescue GraphError => e
+          # The captain reads one error line, so it has to name its folder
+          # wherever it surfaces: against the folder here, and in the failure
+          # the run raises, which is what SyncJob copies onto the mailbox card.
+          message = "#{folder.name}: #{e.message}"
+          ::MailSyncState.record_error!(folder.id, message)
+          failure ||= e.class.new(message)
         end
-        drain_delta(graph, folder, state) do |parsed, provider|
-          yield Fetched.new(parsed: parsed, provider: provider, folder: folder.id)
-        end
-      rescue NotConfiguredError, GrantRevokedError
-        raise
-      rescue GraphError => e
-        # The captain reads one error line, so it has to name its folder
-        # wherever it surfaces: against the folder here, and in the failure
-        # the run raises, which is what SyncJob copies onto the mailbox card.
-        message = "#{folder.name}: #{e.message}"
-        ::MailSyncState.record_error!(folder.id, message)
-        failure ||= e.class.new(message)
+      ensure
+        # Runs on a caller's break as well as on normal completion, so a run
+        # that stops at its own cap can never step over a folder failure this
+        # run already recorded and report itself as clean. An exception
+        # already on its way out wins: it is the more specific failure.
+        raise failure if failure && $!.nil?
       end
-      raise failure if failure
     end
 
     # History walk for preview/import: $filter=receivedDateTime ge {date}
@@ -163,7 +170,9 @@ module Mail
     # folder and replays that whole second, because Graph promises no order
     # among messages sharing a receivedDateTime and a resume that assumed
     # one would drop the mail it ordered differently. The replayed messages
-    # dedupe on the provider message id.
+    # dedupe on the provider message id. A cursor whose folder has since
+    # vanished resumes at the next folder in walk order, never at the start
+    # (see resume_position).
     def fetch_history(since: nil, cursor: nil)
       raise NotConfiguredError, "Mailbox is not connected." unless configured?
       return enum_for(:fetch_history, since: since, cursor: cursor) unless block_given?
@@ -171,7 +180,7 @@ module Mail
       resume = parse_cursor(cursor)
       graph = client
       folders = mail_folders(graph)
-      resumed_at = resume ? folders.index { |folder| folder.id == resume[:folder] } : nil
+      resumed_at = resume_position(folders, resume)
       folders.each_with_index do |folder, position|
         next if resumed_at && position < resumed_at
 
@@ -186,6 +195,29 @@ module Mail
 
     def client
       GraphClient.new(transport: @transport) { GraphAuth.access_token!(transport: @transport) }
+    end
+
+    # Where a resumed walk picks up. Folders are walked in id order, so a
+    # cursor whose folder is no longer enumerated - deleted, filed under a
+    # skipped folder, or moved, which changes its Graph id - still has a
+    # place in that order: the next folder along, since everything before it
+    # was already read. Treating "not found" as "start again" would silently
+    # re-walk and re-count the whole range, which on the captain's import is
+    # both the most expensive mistake available and the least visible.
+    def resume_position(folders, resume)
+      return nil if resume.nil?
+
+      found = folders.index { |folder| folder.id == resume[:folder] }
+      return found if found
+
+      report_vanished_resume_folder(resume[:folder])
+      folders.index { |folder| folder.id > resume[:folder] } || folders.length
+    end
+
+    def report_vanished_resume_folder(folder_id)
+      ::MailSyncState.record_notice!(folder_id,
+        "The folder a history import had reached is no longer in the mailbox, so the import resumed at the " \
+        "next one. Mail that was still waiting in it was not brought in; run Import history again if you need it.")
     end
 
     def delta_headers
