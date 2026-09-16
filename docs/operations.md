@@ -108,34 +108,11 @@ SMTP settings and is unchanged by this setup.
 6. **Connect in Settings.** Settings → Mailbox → Connect mailbox → approve
    as info@sherpaholidays.com → Test connection. Approving while signed in
    to any other Microsoft account is refused by name and stores nothing, so
-   sign out of Microsoft first if the browser holds a personal account. The
-   first connect records when watching began and starts a sync straight
-   away; only mail received from then on is synced, and past mail stays for
-   Settings → Import history, where the captain previews a depth and commits.
+   sign out of Microsoft first if the browser holds a personal account.
 
-Live sync and the history backfill in Settings → Import history read the same
-folders: every mail folder, child folders included, so mail a server-side rule
-files away and correspondence already archived are both covered. Deleted Items,
-Junk Email, Drafts, Outbox, and Conversation History are left out, children and
-all. The folder list is re-read on every sync run, so a folder created in
-Outlook is watched without reconnecting the mailbox. Live sync takes mail
-received since the mailbox was first connected, in every folder however late
-it appears, so reading, flagging, or moving older mail never brings it in;
-that stays for Import history. When Microsoft expires a
-folder's sync token, sync re-primes it and re-reads the window back to that
-folder's last successful sync, so nothing in the gap is lost; that catch-up is
-capped at 24 hours, and a longer gap is reported on the Settings mailbox card
-with the date to import from rather than walked automatically. That import
-recovers mail naming the mailbox in From, To, Cc or Bcc; mail delivered only as
-a hidden copy is not among it, and the notice says so. The backfill decides what to keep from the folder
-listing, which returns From, To, Cc and Bcc, and opens only the messages that
-match; Microsoft documents `internetMessageHeaders` as retrievable with
-`$select` on a get of a single message, not on a listing, so mail that names
-the mailbox only in a delivery header (a hidden Bcc) is caught by live sync,
-which applies the full header check, rather than by the backfill.
-
-If access is revoked or the grant expires, sync records the error and
-Settings offers Reconnect mailbox; reconnecting replaces the grant.
+For which folders are read, what the first connect takes, token-expiry
+recovery, the history backfill, and reconnecting after a revoked grant, see
+[Mail](../README.md#mail).
 
 ## PerfectBook connection
 

@@ -438,39 +438,43 @@ in Settings → Mailbox → Test connection. The grant is only stored when
 Microsoft confirms it belongs to `MAILBOX_ADDRESS`; approving as another
 account is refused by name. Full steps live in
 [Microsoft 365 mailbox](docs/operations.md#microsoft-365-mailbox).
-Reconnecting replaces the grant; if access is revoked, sync records the
-error and Settings offers Reconnect mailbox instead of failing silently.
 Production encryption keys must be configured and preserved; see
 [Secrets inventory](docs/operations.md#secrets-inventory).
+
+The Settings → Mailbox card shows the address, a Connected, Reconnect needed,
+or Not connected status, the last sync and last error, and sync notices from
+the past week under Worth a look, with Test connection and Reconnect mailbox
+once connected. If access is revoked or expires, sync or Test connection
+records it and the status reads Reconnect needed instead of failing silently.
+Reconnect mailbox replaces the grant; a clean sync or a working Test
+connection also clears the error.
+
 Production sync runs every 5 minutes (`Mail::SyncJob` in `config/recurring.yml`) over
 every mail folder, child folders included (Microsoft 365 has no All Mail
 equivalent, and a server-side rule can file mail so it never touches the Inbox);
-Deleted Items, Junk Email, Drafts, Outbox, and Conversation History are left out.
-The folder list is re-read each run, so a folder created in Outlook is watched
-without a reconnect; like every folder, it gives up mail received since the
-mailbox was connected, and older mail in it stays for Import history. One
-folder's failure is recorded against that folder and never stops the rest of the
-run. If Microsoft expires a folder's sync token, the folder is re-primed and the
-window since its last successful sync is re-read, so the gap is filled rather
-than dropped - up to 24 hours. A longer outage than that is reported on the
-Settings mailbox card, naming the date to import from, instead of the app
+Deleted Items, Junk Email, Drafts, Outbox, and Conversation History are left
+out, children and all. The folder list is re-read each run, so a folder created
+in Outlook is watched without a reconnect. Connecting records when watching
+began (a reconnect keeps it) and starts a sync straight away. Sync only takes
+mail received since that first connect, in every folder, however late the
+folder appears or its first sync runs; past mail stays for Import history.
+Because Microsoft reports read-state toggles, flags, and moves as changes too,
+touching or filing away older mail never brings it in behind the depth chosen
+there. Sync is incremental by per-folder delta link, threaded on the Graph
+conversation id with a Message-ID/In-Reply-To/References fallback. Read-only
+Graph access: only GET requests, never moves, deletes, or flags server mail.
+Categories arrive as an initial read-only label snapshot on each message;
+later server-side label changes are not refreshed.
+
+One folder's failure is recorded against that folder and never stops the rest
+of the run. If Microsoft expires a folder's sync token, the folder is re-primed
+and the window since its last successful sync is re-read, so the gap is filled
+rather than dropped - up to 24 hours. A longer outage than that is reported on
+the Settings mailbox card, naming the date to import from, instead of the app
 quietly opening months of mail: sync resumes from now and the depth of the
 catch-up stays the captain's choice through Import history, with a preview.
-That import brings back mail naming the mailbox in From, To, Cc or Bcc; mail
-that reached it only as a hidden copy is not recovered that way, because the
-backfill judges from a folder listing that carries no delivery header, and the
-notice says so rather than promising a completeness it cannot deliver. Sync is incremental by per-folder delta link, threaded on
-the Graph conversation id with a
-Message-ID/In-Reply-To/References fallback. Read-only Graph access: only
-GET requests, never moves, deletes, or flags server mail. Categories
-arrive as an initial read-only label snapshot on each message; later
-server-side label changes are not refreshed. Connecting records when
-watching began (a reconnect keeps it) and starts a sync straight away, so
-ongoing sync starts from now and past mail stays for Import history. Sync only
-takes mail received since that first connect, in every folder: mail that
-arrives before a folder's first sync is still taken, and because Microsoft
-reports read-state toggles, flags, and moves as changes too, touching or filing
-away older mail never brings it in behind the depth chosen in Import history.
+The notice also says that import cannot recover mail that reached the mailbox
+only as a hidden copy (see the backfill rule below).
 
 Every kept message lands on the right client, lead, or organization
 timeline (`Conversation` + `Message`, attachments via Active Storage on
@@ -527,10 +531,8 @@ holding nor removing a file changes the mailbox.
 
 Settings → Import history backfills past mail: all, since a date, or last
 N months (no 90-day cap), as requested by the captain. The backfill walks the
-same folders as live sync: every mail folder, child folders included, because
-archived and filed mail is exactly what needs converting. Deleted Items, Junk
-Email, Drafts, Outbox, and Conversation History are left out, children and all.
-Preview scans the whole selected range in a background job, paging each folder
+same folders as live sync, because archived and filed mail is exactly what
+needs converting. Preview scans the whole selected range in a background job, paging each folder
 by received date with a resumable cursor.
 It matches on the four recipient fields a folder listing returns
 (From, To, Cc, Bcc) and opens only the messages that match, so no personal

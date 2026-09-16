@@ -13,7 +13,9 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
   # a full core-count herd times out binding it (locking port 9514) and
   # every test in the herd errors. CI runners have few cores and keep
   # min(nprocessors) behavior unchanged.
-  parallelize(workers: [ Etc.nprocessors, 8 ].min)  # Chromedriver refuses to start as root or inside minimal containers without
+  parallelize(workers: [ Etc.nprocessors, 8 ].min)
+
+  # Chromedriver refuses to start as root or inside minimal containers without
   # these flags (see the release-readiness audit: ECONNREFUSED in sandbox).
   CONTAINER_CHROME_ARGS = %w[no-sandbox disable-dev-shm-usage].freeze
 

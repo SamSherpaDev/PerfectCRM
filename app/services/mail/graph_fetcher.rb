@@ -491,8 +491,8 @@ module Mail
     end
 
     # A forwarded message (attached email) becomes an .eml entry so the
-    # ingester's existing recursive screening handles it exactly like an
-    # IMAP forward: safe enclosures stay downloadable inside the .eml,
+    # ingester's existing recursive screening handles it exactly like any
+    # other attached email: safe enclosures stay downloadable inside the .eml,
     # sensitive enclosures become held placeholders, and a mixed forward
     # keeps its safe files while holding the rest.
     def forwarded_entry(client, message_id, attachment, name)
