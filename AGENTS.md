@@ -27,9 +27,8 @@ When updating this file, preserve this bar for all agents and keep entries conci
   Rail order: Today, Inbox, Leads, Clients, Pipeline, Quotes, Templates,
   Settings; phone tab bar: Today, Inbox, Leads, Clients, More.
 - Today's counts strip carries six `.stat` tiles, two rows of three on
-  desktop; a tile that links to a filtered list wraps `.stat h-full` in the
-  kit's `.stat-link`. `docs/DESIGN.md` section 5 still reads "four equal
-  tiles" from the four-tile era.
+  desktop. `docs/DESIGN.md` section 5 still reads "four equal tiles" from
+  the four-tile era.
 - Timezone `America/Los_Angeles` (`config/application.rb`).
 - Leads convert to clients one way only, by the captain; no reverse action,
   by hand or automation (DESIGN.md 4.11).

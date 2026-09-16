@@ -299,15 +299,17 @@ bash test/deploy/test_deploy.sh
 
 ## Today and follow-ups
 
-Today (the root route) is the captain's morning screen: four tiles
-(Waiting on you, Follow-ups due, Quotes out, Overdue), then Replies
-waiting, Follow-ups as one-tap check rows, Departing soon (trips leaving
-in the next 14 days), and Back from the mountains (returned in the last
-7 days). Returned bookings linked to a local record offer Create review
-ask. Waiting on you counts linked threads where the client wrote last
-(same rule as the Inbox tab; unknown senders wait in triage), Replies
-waiting lists the newest five with reply links, and Quotes out counts live
-sent and viewed quotes whose valid-until has not passed.
+Today (the root route) is the captain's morning screen: six tiles
+(Waiting on you, Follow-ups due, Quotes out, Overdue, New leads, Active
+clients), then Replies waiting, Follow-ups as one-tap check rows,
+Departing soon (trips leaving in the next 14 days), and Back from the
+mountains (returned in the last 7 days). Returned bookings linked to a
+local record offer Create review ask. Waiting on you counts linked threads
+where the client wrote last (same rule as the Inbox tab; unknown senders
+wait in triage), Replies waiting lists the newest five with reply links,
+Quotes out counts live sent and viewed quotes whose valid-until has not
+passed, New leads counts leads still in the New stage, and Active clients
+counts clients that are not archived.
 
 Tasks belong to clients, leads, or organizations. Today lists overdue tasks
 and those due through the next 7 days, using the Pacific date. Tap the

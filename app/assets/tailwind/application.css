@@ -310,12 +310,11 @@
     @apply font-display text-[2rem] tabular-nums text-ink leading-none tracking-tight whitespace-nowrap;
     animation: pb-settle 0.5s ease-out both;
   }
-  /* A tile is either the .stat itself or a .stat-link wrapping one. */
-  :is(.stat, .stat-link):nth-child(2) .stat-value { animation-delay: 0.06s; }
-  :is(.stat, .stat-link):nth-child(3) .stat-value { animation-delay: 0.12s; }
-  :is(.stat, .stat-link):nth-child(4) .stat-value { animation-delay: 0.18s; }
-  :is(.stat, .stat-link):nth-child(5) .stat-value { animation-delay: 0.24s; }
-  :is(.stat, .stat-link):nth-child(6) .stat-value { animation-delay: 0.3s; }
+  .stat:nth-child(2) .stat-value { animation-delay: 0.06s; }
+  .stat:nth-child(3) .stat-value { animation-delay: 0.12s; }
+  .stat:nth-child(4) .stat-value { animation-delay: 0.18s; }
+  .stat:nth-child(5) .stat-value { animation-delay: 0.24s; }
+  .stat:nth-child(6) .stat-value { animation-delay: 0.3s; }
   .panel {
     @apply card p-5;
   }

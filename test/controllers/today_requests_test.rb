@@ -22,7 +22,7 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     assert_select ".stat", text: /Active clients/
   end
 
-  test "today counts new leads and active clients and links to their lists" do
+  test "today counts new leads and active clients" do
     Lead.create!(name: "Priya", email: "priya@example.com")
     Lead.create!(name: "Ken", email: "ken@example.com", status: "chatting")
     Lead.create!(name: "Ana", email: "ana@example.com", status: "lost", lost_reason: "price")
@@ -30,14 +30,8 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
 
     get root_path
     assert_response :success
-    assert_select "a.stat-link[href=?]", leads_path(tab: "new") do
-      assert_select ".stat-value", text: "1"
-      assert_select "p", text: "New leads"
-    end
-    assert_select "a.stat-link[href=?]", clients_path(tab: "clients") do
-      assert_select ".stat-value", text: "1"
-      assert_select "p", text: "Active clients"
-    end
+    assert_equal "1", stat_value("New leads")
+    assert_equal "1", stat_value("Active clients")
   end
 
   test "today lists follow-ups with one-tap complete and nudge" do
@@ -95,5 +89,13 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "p", text: /Nothing owed this week/
     assert_select "p", text: /No replies waiting/
+  end
+
+  private
+
+  def stat_value(label)
+    tile = css_select(".stat").find { |stat| stat.css("p").any? { |line| line.text == label } }
+    assert tile, "no counts tile labeled #{label}"
+    tile.at_css(".stat-value").text
   end
 end
