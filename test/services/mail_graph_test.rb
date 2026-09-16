@@ -632,7 +632,7 @@ class MailGraphTest < ActiveSupport::TestCase
   end
 
   test "a throttle is never retried instantly, whatever Retry-After says" do
-    [ "0", 1.minute.ago.httpdate, "soon please", nil ].each do |header|
+    [ "0", 4.seconds.from_now.httpdate, "soon please", nil ].each do |header|
       @transport.on_get("/me/messages/instant") do |_url, token:, params:, headers:|
         { status: 429, json: { "error" => { "code" => "ApplicationThrottled" } }, retry_after: header }
       end
@@ -640,18 +640,19 @@ class MailGraphTest < ActiveSupport::TestCase
       client = throttle_client
       assert_raises(Mail::ConnectionError) { client.get_json("/me/messages/instant") }
       assert_equal Mail::GraphClient::THROTTLE_WAITS, client.waits.length
-      assert client.waits.all?(&:positive?), "Retry-After #{header.inspect} waited #{client.waits.inspect}"
+      assert_equal [ Mail::GraphClient::DEFAULT_WAIT_SECONDS ] * Mail::GraphClient::THROTTLE_WAITS, client.waits,
+        "Retry-After #{header.inspect} waited #{client.waits.inspect}"
     end
   end
 
-  test "an HTTP-date Retry-After is honoured rather than ignored" do
+  test "a non-integer Retry-After falls back to the default wait" do
     @transport.on_get("/me/messages/dated") do |_url, token:, params:, headers:|
       { status: 429, json: {}, retry_after: 4.seconds.from_now.httpdate }
     end
 
     client = throttle_client
     assert_raises(Mail::ConnectionError) { client.get_json("/me/messages/dated") }
-    assert client.waits.all? { |wait| (3..5).cover?(wait) }, client.waits.inspect
+    assert_equal [ Mail::GraphClient::DEFAULT_WAIT_SECONDS ] * Mail::GraphClient::THROTTLE_WAITS, client.waits
   end
 
   test "history walks archived and nested folders but not the ones without correspondence" do

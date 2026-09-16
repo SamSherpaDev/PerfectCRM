@@ -122,28 +122,17 @@ module Mail
       end
     end
 
-    # Graph sends Retry-After in seconds, but RFC 7231 also permits an
-    # HTTP-date and a gateway in front of Graph may use it. One rule governs
-    # every form: the wait is never zero and never longer than the cap. A
-    # zero wait would spend all three retries in microseconds and press
-    # harder on the throttle being ridden out, so anything asking for it -
-    # a literal 0, a date already past through ordinary clock skew, or a
-    # value that does not parse at all - waits the default instead.
+    # Graph sends Retry-After in seconds. Anything else - blank, zero, or
+    # a spelling we do not recognize - waits the default instead, so the
+    # wait is never zero and a throttle is ridden out, not pressed on.
     def wait_seconds(retry_after)
-      seconds = requested_seconds(retry_after)
-      return DEFAULT_WAIT_SECONDS if seconds.nil? || seconds <= 0
+      value = retry_after.to_s.strip
+      return DEFAULT_WAIT_SECONDS unless value.match?(/\A\d+\z/)
+
+      seconds = value.to_i
+      return DEFAULT_WAIT_SECONDS if seconds <= 0
 
       seconds.clamp(1, MAX_WAIT_SECONDS)
-    end
-
-    def requested_seconds(retry_after)
-      value = retry_after.to_s.strip
-      return nil if value.empty?
-      return value.to_i if value.match?(/\A\d+\z/)
-
-      (Time.httpdate(value) - Time.now).ceil
-    rescue ArgumentError
-      nil
     end
 
     def access_token
