@@ -154,6 +154,7 @@ class FakeMailbox
       "userPrincipalName" => "info@sherpaholidays.com" }
     @grant_mode = :ok
     @expired_deltas = Hash.new(false)
+    @delta_select = {}
     install_handlers
   end
 
@@ -285,20 +286,30 @@ class FakeMailbox
         return { status: 410, json: {} }
       end
       from = @link_ack[[ folder, url[/\$deltatoken=(\d+)/, 1].to_i ]] || 0
-      fresh = @messages[folder][from..] || []
+      fresh = delta_entries(folder, @messages[folder][from..] || [])
       { status: 200, json: { "value" => fresh, "@odata.deltaLink" => issue_delta_link(folder) } }
     elsif url.include?("$skiptoken=")
       from = @link_ack[[ folder, url[/\$skiptoken=(\d+)/, 1].to_i ]] || 0
-      rest = @messages[folder][from..] || []
+      rest = delta_entries(folder, @messages[folder][from..] || [])
       { status: 200, json: { "value" => rest, "@odata.deltaLink" => issue_delta_link(folder) } }
     else
-      first = @messages[folder][0..0] || []
+      @delta_select[folder] = URI.decode_www_form(URI.parse(url).query.to_s).to_h["$select"]&.split(",")
+      first = delta_entries(folder, @messages[folder][0..0] || [])
       if @messages[folder].length > 1
         { status: 200, json: { "value" => first, "@odata.nextLink" => issue_skip_link(folder, 1) } }
       else
         { status: 200, json: { "value" => first, "@odata.deltaLink" => issue_delta_link(folder) } }
       end
     end
+  end
+
+  # Delta entries carry only what the folder's initial request selected, as
+  # on Graph, where the links it issues keep that choice without repeating it.
+  def delta_entries(folder, messages)
+    fields = @delta_select[folder]
+    return messages if fields.nil?
+
+    messages.map { |message| message.slice("id", "@removed", *fields) }
   end
 
   def history_get(folder, url)

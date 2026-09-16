@@ -1,7 +1,8 @@
 # Completes the Microsoft 365 "Connect mailbox" flow started in Settings.
 # Verifies the state round-trip, exchanges the code for tokens via
-# Mail::GraphAuth, and lands back in Settings with the result. Approving
-# as the wrong Microsoft account is reported by name rather than stored.
+# Mail::GraphAuth, starts the first sync straight away, and lands back in
+# Settings with the result. Approving as the wrong Microsoft account is
+# reported by name rather than stored.
 class MicrosoftAuthController < ApplicationController
   def callback
     if params[:error].present?
@@ -15,6 +16,7 @@ class MicrosoftAuthController < ApplicationController
     end
 
     Mail::GraphAuth.connect!(code: params[:code], redirect_uri: microsoft_callback_url)
+    Mail::SyncJob.perform_later
     redirect_to edit_settings_path,
       notice: "Mailbox connected. Ongoing sync starts now; past mail stays for Import history.",
       status: :see_other

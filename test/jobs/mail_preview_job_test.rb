@@ -6,7 +6,7 @@ class MailPreviewJobTest < ActiveSupport::TestCase
 
   setup do
     @mailbox = FakeMailbox.new
-    Setting.current.update!(ms_graph_refresh_token: "refresh-0")
+    Setting.current.update!(ms_graph_refresh_token: "refresh-0", mailbox_watched_since: Time.current)
   end
 
   def fetcher

@@ -15,8 +15,8 @@
 # on every run, so a folder created in Outlook starts being watched without
 # a reconnect. Delta quirks handled: @removed entries are skipped, and so,
 # before their message is fetched, are entries already stored (a replay
-# after an uncommitted link) and entries received before the folder was
-# first watched. Graph reports read-state toggles, flags and moves as delta
+# after an uncommitted link) and entries received before the mailbox was
+# connected. Graph reports read-state toggles, flags and moves as delta
 # changes too, so an old message the captain touches or files away is not
 # new mail: it belongs to Import history and the depth he chose there.
 #
@@ -39,11 +39,14 @@
 # undocumented listing $select is not worth downloading every personal
 # message body to compensate.
 #
-# First-run safety: a fresh connect primes each folder's delta link with an
-# initial delta call that is drained but NOT ingested, so ongoing sync
-# starts from now and history stays for the import screen, where the
-# captain chooses depth with a preview. A folder that appears later is
-# primed the same way rather than backfilled unasked.
+# First-run safety: connecting records when the mailbox started being
+# watched (Setting#mailbox_watched_since), and that one moment bounds every
+# folder. A folder's first delta round lists everything it holds; mail
+# received before the connect is skipped unopened, so history stays for the
+# import screen, where the captain chooses depth with a preview, while mail
+# that arrived after the connect is taken however late the round runs. A
+# folder that appears later is read the same way, so mail filed into it
+# after the connect is never dropped for being filed late.
 #
 # Nothing here is allowed to fail quietly: a folder whose sync raises is
 # recorded against that folder and the run carries on with the rest before
@@ -102,7 +105,7 @@ module Mail
     end
 
     def configured?
-      GraphAuth.configured? && ::Setting.current.ms_graph_refresh_token.present?
+      GraphAuth.configured? && ::Setting.current.mailbox_connected?
     end
 
     # Cheap connectivity check for Settings "Test connection".
@@ -116,9 +119,9 @@ module Mail
     # Incremental delta sync across every watched folder. Yields Fetched
     # structs for kept messages only and commits each folder's new deltaLink
     # after a full drain; a mid-folder failure leaves the old link so the
-    # next run replays and skips what it already stored. Folders without a
-    # link are primed, not ingested, so a folder that appears later starts
-    # from now rather than backfilling itself unasked. One folder's failure
+    # next run replays and skips what it already stored. A folder without a
+    # link starts from its first delta round, which yields only mail
+    # received since the mailbox was connected. One folder's failure
     # is recorded against that folder and never starves the folders after
     # it: every folder is attempted, then the first failure is raised so the
     # run reads as partial rather than complete. Callers cap stored volume
@@ -129,15 +132,11 @@ module Mail
       return enum_for(:fetch_new) unless block_given?
 
       graph = client
+      watched_since = ::Setting.current.mailbox_watched_since
       failure = nil
       begin
         mail_folders(graph).each do |folder|
-          state = ::MailSyncState.for(folder.id)
-          if state.delta_link.blank?
-            prime_folder(graph, folder)
-            next
-          end
-          drain_delta(graph, folder, state) do |parsed, provider|
+          drain_delta(graph, folder, ::MailSyncState.for(folder.id), watched_since) do |parsed, provider|
             yield Fetched.new(parsed: parsed, provider: provider, folder: folder.id)
           end
         rescue NotConfiguredError, GrantRevokedError
@@ -313,9 +312,9 @@ module Mail
       end
     end
 
-    # Initial delta call, drained for its deltaLink and never ingested. The
-    # drain is separate from the commit because gap recovery must not
-    # persist the new link until it has actually read the gap.
+    # Initial delta round, drained for a fresh link and never ingested: gap
+    # recovery reads the gap itself, bounded by the last sync, and must not
+    # persist the new link until it has.
     def drain_prime(client, folder)
       url = delta_url(folder)
       delta_link = nil
@@ -328,26 +327,22 @@ module Mail
       delta_link
     end
 
-    def prime_folder(client, folder)
-      ::MailSyncState.for(folder.id).update!(delta_link: drain_prime(client, folder.id),
-        last_sync_at: Time.current, last_error: nil, last_error_at: nil)
-    end
-
-    # Drains one folder's delta, committing the new link at the end.
-    # Graph reports every change (a read-state toggle, a flag, a move in),
-    # and an uncommitted link replays the whole page on the next run, so
-    # only mail received since the folder was first watched and not yet
-    # stored is fetched at all.
-    def drain_delta(client, folder, state)
+    # Drains one folder's delta, committing the new link at the end. A
+    # folder without a link starts from its initial round, which lists
+    # everything the folder holds; Graph then reports every change (a
+    # read-state toggle, a flag, a move in), and an uncommitted link replays
+    # the whole page on the next run. So only mail received since the
+    # mailbox was connected and not yet stored is fetched at all.
+    def drain_delta(client, folder, state, watched_since)
       folder_id = folder.id
-      url = state.delta_link
+      url = state.delta_link.presence || delta_url(folder_id)
       last_page = nil
       loop do
         last_page = client.get_json(url, headers: delta_headers)
         Array(last_page["value"]).each do |entry|
           next if entry["@removed"]
           next if entry["id"].blank?
-          next if received_before_watch?(entry, state)
+          next if entry_time(entry) < watched_since
           next if ::Message.exists?(provider_message_id: entry["id"])
 
           loaded = load_message(client, entry["id"])
@@ -367,11 +362,6 @@ module Mail
       # discards the overlap. Bounded by the last successful sync, so a
       # stale token still cannot backfill the whole mailbox unasked.
       recover_gap(client, folder, state.last_sync_at) { |*loaded| yield(*loaded) }
-    end
-
-    def received_before_watch?(entry, state)
-      received = parse_time(entry["receivedDateTime"])
-      received.present? && received < state.watched_since
     end
 
     # The gap the dead token covered is read BEFORE the replacement link is

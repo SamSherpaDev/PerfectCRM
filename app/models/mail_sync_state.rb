@@ -14,15 +14,6 @@ class MailSyncState < ApplicationRecord
     find_or_create_by!(folder: folder.to_s)
   end
 
-  # Live sync covers mail received from the moment a folder is first
-  # watched; anything older is Import history's to bring in. Graph reports
-  # receivedDateTime to the second, so the boundary is kept to the second
-  # too, or mail landing in the same second as the first watch would read
-  # as older than it.
-  def watched_since
-    created_at.change(usec: 0)
-  end
-
   def self.record_success!(folder, delta_link:)
     state = self.for(folder)
     state.update!(delta_link: delta_link,

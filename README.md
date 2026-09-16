@@ -447,8 +447,8 @@ every mail folder, child folders included (Microsoft 365 has no All Mail
 equivalent, and a server-side rule can file mail so it never touches the Inbox);
 Deleted Items, Junk Email, Drafts, Outbox, and Conversation History are left out.
 The folder list is re-read each run, so a folder created in Outlook is watched
-without a reconnect, primed from now like a first connect; its past mail stays
-for Import history. One
+without a reconnect; like every folder, it gives up mail received since the
+mailbox was connected, and older mail in it stays for Import history. One
 folder's failure is recorded against that folder and never stops the rest of the
 run. If Microsoft expires a folder's sync token, the folder is re-primed and the
 window since its last successful sync is re-read, so the gap is filled rather
@@ -464,12 +464,13 @@ the Graph conversation id with a
 Message-ID/In-Reply-To/References fallback. Read-only Graph access: only
 GET requests, never moves, deletes, or flags server mail. Categories
 arrive as an initial read-only label snapshot on each message; later
-server-side label changes are not refreshed. A first connect primes the
-delta links without ingesting anything, so ongoing sync starts from now
-and past mail stays for Import history. Microsoft reports read-state
-toggles, flags, and moves as changes too, so sync only takes mail received
-since a folder was first watched: touching or filing away older mail never
-brings it in behind the depth chosen in Import history.
+server-side label changes are not refreshed. Connecting records when
+watching began (a reconnect keeps it) and starts a sync straight away, so
+ongoing sync starts from now and past mail stays for Import history. Sync only
+takes mail received since that first connect, in every folder: mail that
+arrives before a folder's first sync is still taken, and because Microsoft
+reports read-state toggles, flags, and moves as changes too, touching or filing
+away older mail never brings it in behind the depth chosen in Import history.
 
 Every kept message lands on the right client, lead, or organization
 timeline (`Conversation` + `Message`, attachments via Active Storage on

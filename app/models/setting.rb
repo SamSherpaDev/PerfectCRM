@@ -18,9 +18,10 @@ class Setting < ApplicationRecord
     find_by(singleton_key: 1) || create_or_find_by!(singleton_key: 1)
   end
 
-  # Delegated Microsoft 365 grant: connected once a refresh token is stored.
+  # Delegated Microsoft 365 grant: connected once a refresh token is stored
+  # along with when the mailbox started being watched.
   def mailbox_connected?
-    ms_graph_refresh_token.present?
+    ms_graph_refresh_token.present? && mailbox_watched_since.present?
   end
 
   def webhooks_enabled?

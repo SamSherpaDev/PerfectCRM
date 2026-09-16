@@ -1,11 +1,11 @@
 require "test_helper"
 require_relative "../support/graph_fake"
 
-def sync_message(id:, from:, to: "info@sherpaholidays.com", message_id: nil, conversation: "sync-conv")
+def sync_message(id:, from:, to: "info@sherpaholidays.com", message_id: nil, conversation: "sync-conv", received: nil)
   GraphMessageBuilder.instance_method(:graph_message).bind_call(
     Object.new.extend(GraphMessageBuilder),
     id: id, from: from, to: to, subject: "Hi",
-    message_id: message_id || "<#{id}@test>", conversation: conversation)
+    message_id: message_id || "<#{id}@test>", conversation: conversation, received: received)
 end
 
 class MailSyncJobTest < ActiveSupport::TestCase
@@ -13,7 +13,7 @@ class MailSyncJobTest < ActiveSupport::TestCase
 
   setup do
     @mailbox = FakeMailbox.new
-    Setting.current.update!(ms_graph_refresh_token: "refresh-0",
+    Setting.current.update!(ms_graph_refresh_token: "refresh-0", mailbox_watched_since: Time.current.change(usec: 0),
       mailbox_last_error: nil, mailbox_last_error_at: nil, mailbox_last_sync_at: nil)
   end
 
@@ -26,7 +26,7 @@ class MailSyncJobTest < ActiveSupport::TestCase
   end
 
   test "first connect stores nothing and later mail syncs incrementally" do
-    @mailbox.add("inbox", sync_message(id: "old", from: "old@example.com"))
+    @mailbox.add("inbox", sync_message(id: "old", from: "old@example.com", received: 1.day.ago.utc.iso8601))
     assert_no_difference([ "Conversation.count", "Message.count" ]) do
       Mail::SyncJob.new.perform(fetcher: fetcher)
     end

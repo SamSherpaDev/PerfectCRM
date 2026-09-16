@@ -27,7 +27,7 @@ class MailboxSettingsTest < ActionDispatch::IntegrationTest
       assert_select "[data-turbo='false']", count: 1
     end
 
-    Setting.current.update!(ms_graph_refresh_token: "refresh-9")
+    Setting.current.update!(ms_graph_refresh_token: "refresh-9", mailbox_watched_since: Time.current)
     get edit_settings_path
     assert_select "form[action=?]", mailbox_connect_settings_path do
       assert_select "[data-turbo='false']", count: 1
@@ -47,7 +47,7 @@ class MailboxSettingsTest < ActionDispatch::IntegrationTest
   end
 
   test "connected settings show status, test, and reconnect" do
-    Setting.current.update!(ms_graph_refresh_token: "refresh-9")
+    Setting.current.update!(ms_graph_refresh_token: "refresh-9", mailbox_watched_since: Time.current)
     get edit_settings_path
     assert_response :success
     assert_match(/Connected/, response.body)

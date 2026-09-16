@@ -7,7 +7,7 @@ class MailGraphTest < ActiveSupport::TestCase
   setup do
     @mailbox = FakeMailbox.new
     @transport = @mailbox.transport
-    Setting.current.update!(ms_graph_refresh_token: "refresh-0",
+    Setting.current.update!(ms_graph_refresh_token: "refresh-0", mailbox_watched_since: Time.current.change(usec: 0),
       mailbox_last_error: nil, mailbox_last_error_at: nil)
   end
 
@@ -44,8 +44,24 @@ class MailGraphTest < ActiveSupport::TestCase
     assert settings.mailbox_connected?
   end
 
+  test "the first connect records when watching began and a reconnect keeps it" do
+    Setting.current.update!(ms_graph_refresh_token: nil, mailbox_watched_since: nil)
+    Mail::GraphAuth.connect!(code: "auth-code",
+      redirect_uri: "https://crm.example/auth/microsoft/callback", transport: @transport)
+    watched_since = Setting.current.reload.mailbox_watched_since
+    assert_in_delta Time.current, watched_since, 2.seconds
+
+    # Access lapsed and the captain reconnected days later: mail that arrived
+    # in between is still new mail, not history.
+    travel 3.days do
+      Mail::GraphAuth.connect!(code: "auth-code-2",
+        redirect_uri: "https://crm.example/auth/microsoft/callback", transport: @transport)
+    end
+    assert_equal watched_since, Setting.current.reload.mailbox_watched_since
+  end
+
   test "connect refuses another Microsoft account and stores nothing" do
-    Setting.current.update!(ms_graph_refresh_token: nil)
+    Setting.current.update!(ms_graph_refresh_token: nil, mailbox_watched_since: nil)
     @mailbox.signed_in_as("sam@personal.example")
 
     error = assert_raises(Mail::WrongMailboxError) do
@@ -56,6 +72,7 @@ class MailGraphTest < ActiveSupport::TestCase
     assert_match(/info@sherpaholidays\.com/, error.message)
     settings = Setting.current.reload
     assert_nil settings.ms_graph_refresh_token
+    assert_nil settings.mailbox_watched_since
     assert_not settings.mailbox_connected?
   end
 
@@ -92,20 +109,28 @@ class MailGraphTest < ActiveSupport::TestCase
     assert_equal %w[filed-live nested-live], items.map { |item| item.provider[:message_id] }.sort
   end
 
-  test "a folder created after the first connect is primed, not backfilled" do
-    @mailbox.add("inbox", graph_message(id: "before", from: "before@example.com", message_id: "<before@test>"))
-    fetcher.fetch_new.to_a # prime every folder that exists now
+  test "a folder created after connect takes the mail received since the connect" do
+    Setting.current.update!(mailbox_watched_since: 2.days.ago.change(usec: 0))
+    fetcher.fetch_new.to_a # every folder that exists now is watched
 
+    # Today the captain creates a folder and files two messages into it: an
+    # old thread from before the connect, and yesterday's client email
+    # rescued from Junk Email, which sync never reads.
     @mailbox.add_folder("operators", display_name: "Operators")
     @mailbox.add("operators", graph_message(id: "old-filed", from: "operator@example.com",
-      message_id: "<oldfiled@test>"))
-    assert_empty fetcher.fetch_new.to_a
+      message_id: "<oldfiled@test>", received: "2019-03-01T10:00:00Z"))
+    @mailbox.add("operators", graph_message(id: "rescued", from: "client@example.com",
+      message_id: "<rescued@test>", received: 1.day.ago.utc.iso8601))
+    assert_equal [ "rescued" ], fetcher.fetch_new.to_a.map { |item| item.provider[:message_id] }
     assert MailSyncState.for("operators").delta_link.present?
     assert_empty MailSyncState.recently_noticed
 
+    # Once the folder is watched, a later rescue into it is still new mail.
+    @mailbox.add("operators", graph_message(id: "rescued-later", from: "client@example.com",
+      message_id: "<rescuedlater@test>", received: 1.day.ago.utc.iso8601))
     @mailbox.add("operators", graph_message(id: "new-filed", from: "operator@example.com",
       message_id: "<newfiled@test>"))
-    assert_equal [ "new-filed" ], fetcher.fetch_new.to_a.map { |item| item.provider[:message_id] }
+    assert_equal %w[rescued-later new-filed], fetcher.fetch_new.to_a.map { |item| item.provider[:message_id] }
   end
 
   test "old mail touched or moved after connect stays for Import history" do
@@ -125,15 +150,21 @@ class MailGraphTest < ActiveSupport::TestCase
     assert_equal fetches_before + 1, @mailbox.message_fetches
   end
 
-  test "first connect primes every folder and stores nothing" do
-    @mailbox.add("inbox", graph_message(id: "old-1", from: "old@example.com", message_id: "<old1@test>"))
-    @mailbox.add("inbox", graph_message(id: "old-2", from: "old@example.com", message_id: "<old2@test>"))
+  test "the first sync leaves mail from before the connect and keeps what came after" do
+    @mailbox.add("inbox", graph_message(id: "old-1", from: "old@example.com", message_id: "<old1@test>",
+      received: 3.days.ago.utc.iso8601))
+    @mailbox.add("inbox", graph_message(id: "old-2", from: "old@example.com", message_id: "<old2@test>",
+      received: 2.days.ago.utc.iso8601))
     @mailbox.add("sentitems", graph_message(id: "old-sent", from: "info@sherpaholidays.com",
-      to: "someone@example.com", message_id: "<oldsent@test>"))
+      to: "someone@example.com", message_id: "<oldsent@test>", received: 1.day.ago.utc.iso8601))
+    # Arrived after the connect, before the first sync reached the folder.
+    @mailbox.add("inbox", graph_message(id: "since-connect", from: "client@example.com",
+      message_id: "<sinceconnect@test>"))
 
-    assert_no_difference([ "Conversation.count", "Message.count" ]) do
-      assert_equal 0, fetcher.fetch_new.to_a.length
-    end
+    items = fetcher.fetch_new.to_a
+    assert_equal [ "since-connect" ], items.map { |item| item.provider[:message_id] }
+    # Nothing from before the connect was even opened.
+    assert_equal 1, @mailbox.message_fetches
     assert MailSyncState.for("inbox").delta_link.present?
     assert MailSyncState.for("sentitems").delta_link.present?
   end

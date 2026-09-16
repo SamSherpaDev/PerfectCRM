@@ -3,6 +3,7 @@ require_relative "../support/google_sign_in_test_helper"
 
 class MicrosoftAuthTest < ActionDispatch::IntegrationTest
   include GoogleSignInTestHelper
+  include ActiveJob::TestHelper
 
   setup do
     sign_in
@@ -11,13 +12,15 @@ class MicrosoftAuthTest < ActionDispatch::IntegrationTest
     assert @state.present?
   end
 
-  test "callback exchanges the code and connects the mailbox" do
+  test "callback connects the mailbox and starts syncing straight away" do
     connected = false
     Mail::GraphAuth.stub(:connect!, ->(**) {
       connected = true
-      Setting.current.update!(ms_graph_refresh_token: "refresh-cb")
+      Setting.current.update!(ms_graph_refresh_token: "refresh-cb", mailbox_watched_since: Time.current)
     }) do
-      get microsoft_callback_path, params: { code: "auth-code", state: @state }
+      assert_enqueued_with(job: Mail::SyncJob) do
+        get microsoft_callback_path, params: { code: "auth-code", state: @state }
+      end
     end
     assert connected
     assert_redirected_to edit_settings_path
@@ -40,7 +43,9 @@ class MicrosoftAuthTest < ActionDispatch::IntegrationTest
     Mail::GraphAuth.stub(:connect!, ->(**) {
       raise Mail::WrongMailboxError, "Microsoft signed in as sam@personal.example, not info@sherpaholidays.com."
     }) do
-      get microsoft_callback_path, params: { code: "auth-code", state: @state }
+      assert_no_enqueued_jobs(only: Mail::SyncJob) do
+        get microsoft_callback_path, params: { code: "auth-code", state: @state }
+      end
     end
     assert_redirected_to edit_settings_path
     assert_match(/sam@personal\.example/, flash[:alert].to_s)

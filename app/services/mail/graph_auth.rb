@@ -51,6 +51,9 @@ module Mail
       # Exchanges the callback code and connects the mailbox, replacing any
       # previous grant. Refuses an account other than MAILBOX_ADDRESS and
       # stores nothing in that case. Clears the last mailbox error on success.
+      # The first connect records when watching began, to the second Graph
+      # reports receivedDateTime in; a reconnect keeps it, so mail that
+      # arrived while access was revoked is still new mail rather than history.
       def connect!(code:, redirect_uri:, transport: GraphTransport.new)
         tokens = post_token(transport,
           grant_type: "authorization_code", code: code,
@@ -58,8 +61,10 @@ module Mail
         raise ConnectionError, "Microsoft returned no refresh token" if tokens[:refresh_token].blank?
 
         verify_mailbox!(transport, tokens[:access_token])
-        ::Setting.current.update!(
+        settings = ::Setting.current
+        settings.update!(
           ms_graph_refresh_token: tokens[:refresh_token],
+          mailbox_watched_since: settings.mailbox_watched_since || Time.current.change(usec: 0),
           mailbox_last_error: nil, mailbox_last_error_at: nil
         )
         tokens
