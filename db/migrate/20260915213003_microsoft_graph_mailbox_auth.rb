@@ -5,7 +5,6 @@
 class MicrosoftGraphMailboxAuth < ActiveRecord::Migration[8.1]
   def up
     add_column :settings, :ms_graph_refresh_token, :text
-    add_column :settings, :ms_graph_connected_at, :datetime
     remove_column :settings, :mailbox_login, :string
     remove_column :settings, :mailbox_app_password, :string
   end
@@ -13,7 +12,6 @@ class MicrosoftGraphMailboxAuth < ActiveRecord::Migration[8.1]
   def down
     add_column :settings, :mailbox_login, :string
     add_column :settings, :mailbox_app_password, :string
-    remove_column :settings, :ms_graph_connected_at, :datetime
     remove_column :settings, :ms_graph_refresh_token, :text
   end
 end

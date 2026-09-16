@@ -113,6 +113,12 @@ SMTP settings and is unchanged by this setup.
    mail stays for Settings → Import history, where the captain previews a
    depth and commits.
 
+Live sync watches Inbox and Sent Items, where new mail arrives. The history
+backfill in Settings → Import history is wider: it walks every mail folder,
+child folders included, so archived and filed correspondence is converted too.
+Deleted Items, Junk Email, Drafts, Outbox, and Conversation History are left
+out, children and all.
+
 If access is revoked or the grant expires, sync records the error and
 Settings offers Reconnect mailbox; reconnecting replaces the grant.
 

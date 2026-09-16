@@ -7,11 +7,17 @@
 #
 # Incremental sync uses the messages delta endpoint per folder, persisting
 # the @odata.deltaLink per folder in MailSyncState. Microsoft 365 has no
-# single All Mail equivalent, so BOTH Inbox and Sent Items are synced: the
-# CRM must keep the captain's own replies on the timeline. Delta quirks
-# handled: @removed entries are skipped, and entries already stored (a
-# read-state toggle, or a replay after an uncommitted link) are skipped
-# before their message is fetched, so nothing is downloaded twice.
+# single All Mail equivalent, so BOTH Inbox and Sent Items are synced: new
+# mail lands there, and the CRM must keep the captain's own replies on the
+# timeline. Delta quirks handled: @removed entries are skipped, and entries
+# already stored (a read-state toggle, or a replay after an uncommitted
+# link) are skipped before their message is fetched, so nothing is
+# downloaded twice.
+#
+# The history backfill is wider than live sync: it walks every mail folder,
+# child folders included, because archiving is one click in Outlook and the
+# captain's past correspondence mostly lives outside the Inbox. Only the
+# folders that hold no correspondence are left out (HISTORY_SKIPPED).
 #
 # Privacy: the info@ hard filter (Mail.keeps?, enforced again in the
 # ingester) runs on message metadata BEFORE any attachment bytes are
@@ -25,7 +31,10 @@
 # captain chooses depth with a preview.
 module Mail
   class GraphFetcher
+    # Where new mail arrives, and so what live delta sync watches.
     FOLDERS = %w[inbox sentitems].freeze
+    # Folders the history backfill leaves out, children included.
+    HISTORY_SKIPPED = %w[deleteditems junkemail drafts outbox conversationhistory].freeze
     PAGE_SIZE = 50
     # How many levels of forwarded (item) attachments are opened and
     # screened. A forward enclosing anything deeper than this cannot be
@@ -37,6 +46,7 @@ module Mail
       ccRecipients bccRecipients subject body receivedDateTime
       sentDateTime hasAttachments isRead internetMessageHeaders
     ].join(",").freeze
+    FOLDER_SELECT = "id,displayName,wellKnownName,childFolderCount".freeze
     ATTACHMENT_SELECT = "id,name,contentType,size,isInline".freeze
     NESTED_ATTACHMENT_SELECT = "id,name,contentType,size,contentBytes".freeze
     NESTED_ITEM_SELECT = "subject,from,toRecipients,body,internetMessageId".freeze
@@ -97,32 +107,35 @@ module Mail
     end
 
     # History walk for preview/import: $filter=receivedDateTime ge {date}
-    # across Inbox and Sent Items, oldest first. Yields Fetched structs with
-    # an opaque cursor ("folder|receivedDateTime|id"); resuming with a cursor
-    # re-walks and skips everything at or before it, so vanished mail cannot
-    # shift the resume point.
+    # over every folder the backfill covers, oldest first. Yields Fetched
+    # structs with an opaque cursor ("folder|receivedDateTime"); resuming
+    # restarts at that folder and replays that whole second, because Graph
+    # promises no order among messages sharing a receivedDateTime and a
+    # resume that assumed one would drop the mail it ordered differently.
+    # The replayed messages dedupe on the provider message id.
     def fetch_history(since: nil, cursor: nil)
       raise NotConfiguredError, "Mailbox is not connected." unless configured?
       return enum_for(:fetch_history, since: since, cursor: cursor) unless block_given?
 
       resume = parse_cursor(cursor)
       graph = client
-      FOLDERS.each do |folder|
-        next if resume && folder_before?(folder, resume[:folder])
+      folders = history_folders(graph)
+      resumed_at = resume ? folders.index(resume[:folder]) : nil
+      folders.each_with_index do |folder, position|
+        next if resumed_at && position < resumed_at
 
         url = history_url(folder, floor_for(folder, since, resume))
         loop do
           page = graph.get_json(url)
           Array(page["value"]).each do |entry|
             next if entry["@removed"] || entry["id"].blank?
-            next if resume && !after_cursor?(folder, entry, resume)
 
             loaded = load_message(graph, entry["id"])
             next if loaded.nil?
 
             parsed, provider = loaded
             yield Fetched.new(parsed: parsed, provider: provider, folder: folder,
-              cursor: "#{folder}|#{entry_time(entry).iso8601(6)}|#{entry["id"]}")
+              cursor: "#{folder}|#{entry_time(entry).iso8601(6)}")
           end
           url = page["@odata.nextLink"]
           break if url.blank?
@@ -138,6 +151,35 @@ module Mail
 
     def delta_headers
       { "Prefer" => "odata.maxpagesize=#{PAGE_SIZE}" }
+    end
+
+    # Every folder the backfill walks, in a stable order so a resumed
+    # import lands in the same place. Skipped folders take their children
+    # with them: a subfolder of Deleted Items is still deleted mail.
+    def history_folders(client)
+      collect_folders(client, "#{GraphClient::BASE}/me/mailFolders?#{folder_params}").sort
+    end
+
+    def collect_folders(client, url)
+      found = []
+      while url.present?
+        page = client.get_json(url)
+        Array(page["value"]).each do |folder|
+          id = folder["id"].to_s
+          next if id.blank? || HISTORY_SKIPPED.include?(folder["wellKnownName"].to_s.downcase)
+
+          found << id
+          next unless folder["childFolderCount"].to_i.positive?
+
+          found.concat(collect_folders(client, "#{GraphClient::BASE}/me/mailFolders/#{id}/childFolders?#{folder_params}"))
+        end
+        url = page["@odata.nextLink"]
+      end
+      found
+    end
+
+    def folder_params
+      URI.encode_www_form("$select" => FOLDER_SELECT, "$top" => PAGE_SIZE)
     end
 
     def delta_url(folder)
@@ -406,24 +448,13 @@ module Mail
     def parse_cursor(cursor)
       return nil if cursor.blank?
 
-      folder, iso, id = cursor.to_s.split("|", 3)
-      return nil unless FOLDERS.include?(folder) && id.present?
+      folder, iso = cursor.to_s.split("|", 2)
+      return nil if folder.blank?
 
       at = parse_time(iso)
       return nil if at.nil?
 
-      { folder: folder, at: at, id: id }
-    end
-
-    def folder_before?(folder, resume_folder)
-      FOLDERS.index(folder) < FOLDERS.index(resume_folder)
-    end
-
-    def after_cursor?(folder, entry, resume)
-      return true unless folder == resume[:folder]
-
-      at = entry_time(entry)
-      at > resume[:at] || (at == resume[:at] && entry["id"].to_s > resume[:id])
+      { folder: folder, at: at }
     end
   end
 end

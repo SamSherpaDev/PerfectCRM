@@ -13,9 +13,10 @@ class MailImportJobTest < ActiveSupport::TestCase
     Mail::GraphFetcher.new(transport: @mailbox.transport)
   end
 
-  def import_raw(id:, from:, to: "info@sherpaholidays.com", folder: "inbox", message_id: nil)
+  def import_raw(id:, from:, to: "info@sherpaholidays.com", folder: "inbox", message_id: nil, received: nil)
     @mailbox.add(folder, graph_message(id: id, from: from, to: to,
-      message_id: message_id || "<#{id}@test>", received: "2026-09-#{10 + id.to_s.length}T10:00:00Z"))
+      message_id: message_id || "<#{id}@test>",
+      received: received || "2026-09-#{10 + id.to_s.length}T10:00:00Z"))
   end
 
   test "import is resumable and respects the info@ rule" do
@@ -48,16 +49,16 @@ class MailImportJobTest < ActiveSupport::TestCase
   end
 
   test "resume uses the cursor when earlier mail disappears" do
-    import_raw(id: "resume1", from: "sender1@example.com")
-    import_raw(id: "resume2", from: "sender2@example.com")
-    import_raw(id: "resume3", from: "sender3@example.com")
+    import_raw(id: "resume1", from: "sender1@example.com", received: "2026-09-11T10:00:00Z")
+    import_raw(id: "resume2", from: "sender2@example.com", received: "2026-09-12T10:00:00Z")
+    import_raw(id: "resume3", from: "sender3@example.com", received: "2026-09-13T10:00:00Z")
     import = MailImport.create!(scope: "all", status: "preview", preview_json: {})
 
     original = Mail::Ingester.method(:ingest)
     Mail::Ingester.stub(:ingest, ->(**args) { args[:parsed].message_id == "resume2@test" ? raise("interrupted") : original.call(**args) }) do
       assert_raises(RuntimeError) { Mail::ImportJob.new.perform(import.id, fetcher: fetcher) }
     end
-    assert_match(/resume1$/, import.reload.preview_json["history_cursor"])
+    assert_equal "inbox|2026-09-11T10:00:00.000000Z", import.reload.preview_json["history_cursor"]
     @mailbox.instance_variable_get(:@messages)["inbox"].reject! { |message| message["id"] == "resume1" }
     assert_difference("Message.count", 2) { Mail::ImportJob.new.perform(import.id, fetcher: fetcher) }
     assert_equal 3, import.reload.processed_messages

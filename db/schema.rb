@@ -591,7 +591,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_213003) do
     t.text "mailbox_last_error"
     t.datetime "mailbox_last_error_at"
     t.datetime "mailbox_last_sync_at"
-    t.datetime "ms_graph_connected_at"
     t.text "ms_graph_refresh_token"
     t.boolean "pipeline_digest", default: true, null: false
     t.datetime "relay_last_used_at"

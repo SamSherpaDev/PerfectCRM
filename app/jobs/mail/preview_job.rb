@@ -10,22 +10,24 @@ class Mail::PreviewJob < ApplicationJob
     fetcher ||= Mail::GraphFetcher.new
     progress = import.preview_json || {}
     progress["counts"] ||= {}
-    progress["scanned"] ||= 0
     progress["kept"] ||= 0
-    # Counting is per provider message id: if the same message is ever
-    # yielded twice in one walk, the preview the captain commits against
-    # still shows it once.
-    counted = Set.new
+    # Counting is per provider message id. Resuming replays the whole
+    # second the cursor names, so the ids counted at that second are
+    # remembered and dropped when the walk moves past it: the preview the
+    # captain commits against counts every message exactly once.
+    counted = Set.new(Array(progress["counted"]))
     fetcher.fetch_history(since: import.cutoff_date&.to_time, cursor: progress["preview_cursor"]) do |item|
+      if item.cursor != progress["preview_cursor"]
+        counted.clear
+        progress["preview_cursor"] = item.cursor
+      end
       next unless counted.add?(item.provider[:message_id].to_s)
 
-      progress["counts"] ||= {}
       progress["kept"] += 1
       Mail.counterparties(item.parsed).each do |email|
         progress["counts"][email] = progress["counts"].fetch(email, 0) + 1
       end
-      progress["scanned"] += 1
-      progress["preview_cursor"] = item.cursor
+      progress["counted"] = counted.to_a
       import.update!(preview_json: progress, total_messages: progress["kept"])
     end
     rows = Mail::ImportPreview.new.build_counts(progress.fetch("counts", {})).map do |row|

@@ -36,7 +36,7 @@ class MailGraphTest < ActiveSupport::TestCase
   end
 
   test "connect refuses another Microsoft account and stores nothing" do
-    Setting.current.update!(ms_graph_refresh_token: nil, ms_graph_connected_at: nil)
+    Setting.current.update!(ms_graph_refresh_token: nil)
     @mailbox.signed_in_as("sam@personal.example")
 
     error = assert_raises(Mail::WrongMailboxError) do
@@ -278,10 +278,10 @@ class MailGraphTest < ActiveSupport::TestCase
     assert_equal %w[h-1 h-2 h-3], items.map { |item| item.provider[:message_id] }
     assert items.all? { |item| item.cursor.present? }
 
-    # Resume cursor skips everything at or before it, across folders.
+    # Resuming replays the cursor's second and everything after it.
     second = items[1]
     rest = fetcher.fetch_history(since: Time.utc(2026, 9, 1), cursor: second.cursor).to_a
-    assert_equal %w[h-3], rest.map { |item| item.provider[:message_id] }
+    assert_equal %w[h-2 h-3], rest.map { |item| item.provider[:message_id] }
 
     # Vanished mail cannot shift the resume point.
     @mailbox.instance_variable_get(:@messages)["inbox"].reject! { |message| message["id"] == "h-1" }
@@ -301,7 +301,37 @@ class MailGraphTest < ActiveSupport::TestCase
     # Resuming after the inbox message must not carry that folder's floor
     # into Sent Items, where older replies still need importing.
     rest = fetcher.fetch_history(since: Time.utc(2026, 9, 1), cursor: items.first.cursor).to_a
-    assert_equal %w[r-out], rest.map { |item| item.provider[:message_id] }
+    assert_equal %w[r-in r-out], rest.map { |item| item.provider[:message_id] }
+  end
+
+  test "resuming replays the cursor second so same-second mail is never dropped" do
+    %w[AAAA ZZZZ].each do |id|
+      @mailbox.add("inbox", graph_message(id: id, from: "#{id.downcase}@example.com",
+        message_id: "<#{id}@test>", received: "2026-09-12T10:00:00Z"))
+    end
+
+    items = fetcher.fetch_history.to_a
+    assert_equal 2, items.length
+    # Graph orders messages sharing a receivedDateTime however it likes, so
+    # resuming from the first one still has to return both.
+    rest = fetcher.fetch_history(cursor: items.first.cursor).to_a
+    assert_equal items.map { |item| item.provider[:message_id] }.sort,
+      rest.map { |item| item.provider[:message_id] }.sort
+  end
+
+  test "history walks archived and nested folders but not the ones without correspondence" do
+    @mailbox.add("archive", graph_message(id: "filed", from: "operator@example.com", message_id: "<filed@test>"))
+    @mailbox.add("clients", graph_message(id: "nested", from: "traveler@example.com", message_id: "<nested@test>"))
+    @mailbox.add("inbox", graph_message(id: "current", from: "client@example.com", message_id: "<current@test>"))
+    @mailbox.add("sentitems", graph_message(id: "replied", from: "info@sherpaholidays.com",
+      to: "client@example.com", message_id: "<replied@test>"))
+    %w[deleteditems junkemail drafts outbox conversationhistory].each do |folder|
+      @mailbox.add(folder, graph_message(id: "#{folder}-1", from: "#{folder}@example.com",
+        message_id: "<#{folder}@test>"))
+    end
+
+    items = fetcher.fetch_history.to_a
+    assert_equal %w[current filed nested replied], items.map { |item| item.provider[:message_id] }.sort
   end
 
   test "a passport inside a forward inside a forward is still held" do

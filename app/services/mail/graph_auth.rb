@@ -60,7 +60,6 @@ module Mail
         verify_mailbox!(transport, tokens[:access_token])
         ::Setting.current.update!(
           ms_graph_refresh_token: tokens[:refresh_token],
-          ms_graph_connected_at: Time.current,
           mailbox_last_error: nil, mailbox_last_error_at: nil
         )
         tokens

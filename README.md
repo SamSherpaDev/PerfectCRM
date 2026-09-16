@@ -443,8 +443,8 @@ error and Settings offers Reconnect mailbox instead of failing silently.
 Production encryption keys must be configured and preserved; see
 [Secrets inventory](docs/operations.md#secrets-inventory).
 Production sync runs every 5 minutes (`Mail::SyncJob` in `config/recurring.yml`) over
-Inbox plus Sent Items (Microsoft 365 has no All Mail equivalent), incremental by
-per-folder delta link, threaded on the Graph conversation id with a
+Inbox plus Sent Items, where new mail arrives (Microsoft 365 has no All Mail
+equivalent), incremental by per-folder delta link, threaded on the Graph conversation id with a
 Message-ID/In-Reply-To/References fallback. Read-only Graph access: only
 GET requests, never moves, deletes, or flags server mail. Categories
 arrive as an initial read-only label snapshot on each message; later
@@ -506,12 +506,17 @@ explicit **Send to PerfectBook** action uploads bytes to PerfectBook; neither
 holding nor removing a file changes the mailbox.
 
 Settings → Import history backfills past mail: all, since a date, or last
-N months (no 90-day cap), as requested by the captain. Preview scans the whole
-selected range in a background job, paging Inbox and Sent Items by received
-date with a resumable cursor. Progress and failures are visible;
+N months (no 90-day cap), as requested by the captain. The backfill is wider
+than live sync: it walks every mail folder, child folders included, because
+archived and filed mail is exactly what needs converting. Deleted Items, Junk
+Email, Drafts, Outbox, and Conversation History are left out, children and all.
+Preview scans the whole selected range in a background job, paging each folder
+by received date with a resumable cursor. Progress and failures are visible;
 commit is available only after the preview completes. Preview and import
 persist the history cursor, so a resume continues where it stopped even if
-earlier mail vanished. Import progress counts the same in-scope messages as preview. Preview counts both inbound and
+earlier mail vanished. Because Graph promises no order among messages sharing a
+received timestamp, a resume replays that whole second and dedupes on the
+provider message id rather than risk dropping mail. Import progress counts the same in-scope messages as preview. Preview counts both inbound and
 outbound mail together and shows counterparties, remembered matches, duplicates,
 and editable creation choices. Choose Client, Organization, Lead, or Skip per
 address. Skip suppresses record creation, not message storage; unmatched threads

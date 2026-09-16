@@ -47,6 +47,12 @@ class MicrosoftAuthTest < ActionDispatch::IntegrationTest
     assert_not Setting.current.reload.mailbox_connected?
   end
 
+  test "the authorization code never reaches the request log" do
+    get microsoft_callback_path, params: { code: "0.AXoAsecret-code", state: "wrong-state" }
+    assert_not_includes request.filtered_path, "0.AXoAsecret-code"
+    assert_includes request.filtered_path, "[FILTERED]"
+  end
+
   test "callback surfaces a Microsoft refusal" do
     get microsoft_callback_path, params: { error: "access_denied", state: @state }
     assert_redirected_to edit_settings_path

@@ -1,7 +1,13 @@
 # Stub Microsoft Graph + identity HTTP for mail tests. FakeMailbox scripts a
-# two-folder mailbox (inbox + sentitems) with delta sync, history listing,
-# message GETs, attachment bytes, and token responses; tests drive it instead
-# of the network. Nothing here touches real Microsoft endpoints.
+# mailbox with folders (Inbox, Sent Items, an archive with a child folder,
+# and Deleted Items), delta sync, history listing, message GETs, attachment
+# bytes, and token responses; tests drive it instead of the network. Nothing
+# here touches real Microsoft endpoints.
+#
+# History listing deliberately returns messages sharing a receivedDateTime
+# in DESCENDING id order, which is what Graph is free to do: it promises
+# $orderby=receivedDateTime and nothing more. A reader that breaks ties on
+# message id fails against this double, which is the point.
 require "json"
 require "uri"
 
@@ -114,9 +120,26 @@ class FakeMailbox
 
   HISTORY_PAGE_SIZE = 2
 
+  DEFAULT_FOLDERS = [
+    { "id" => "inbox", "displayName" => "Inbox", "wellKnownName" => "inbox", "childFolderCount" => 0 },
+    { "id" => "sentitems", "displayName" => "Sent Items", "wellKnownName" => "sentitems", "childFolderCount" => 0 },
+    { "id" => "archive", "displayName" => "Archive", "wellKnownName" => "archive", "childFolderCount" => 1 },
+    { "id" => "deleteditems", "displayName" => "Deleted Items", "wellKnownName" => "deleteditems", "childFolderCount" => 0 },
+    { "id" => "junkemail", "displayName" => "Junk Email", "wellKnownName" => "junkemail", "childFolderCount" => 0 },
+    { "id" => "drafts", "displayName" => "Drafts", "wellKnownName" => "drafts", "childFolderCount" => 0 },
+    { "id" => "outbox", "displayName" => "Outbox", "wellKnownName" => "outbox", "childFolderCount" => 0 },
+    { "id" => "conversationhistory", "displayName" => "Conversation History",
+      "wellKnownName" => "conversationhistory", "childFolderCount" => 0 }
+  ].freeze
+  DEFAULT_CHILD_FOLDERS = {
+    "archive" => [ { "id" => "clients", "displayName" => "Clients", "wellKnownName" => nil, "childFolderCount" => 0 } ]
+  }.freeze
+
   def initialize
     @transport = FakeGraphTransport.new
     @messages = Hash.new { |hash, key| hash[key] = [] }
+    @folders = DEFAULT_FOLDERS.map(&:dup)
+    @child_folders = DEFAULT_CHILD_FOLDERS.transform_values { |list| list.map(&:dup) }
     # Issued sync links map to the mailbox position they represent, so
     # re-requesting an uncommitted link replays (like real delta tokens).
     @link_ack = {}
@@ -199,6 +222,10 @@ class FakeMailbox
       { status: 200, json: @account }
     end
 
+    @transport.on_get("mailFolders") do |url, token:, params:, headers:|
+      { status: 200, json: { "value" => @folders } }
+    end
+
     @transport.on_get("mailFolders/") do |url, token:, params:, headers:|
       route_folder_get(url, headers)
     end
@@ -226,7 +253,9 @@ class FakeMailbox
 
   def route_folder_get(url, headers)
     folder = url[%r{mailFolders/([^/]+)}, 1]
-    if url.include?("/messages/delta")
+    if url.include?("/childFolders")
+      { status: 200, json: { "value" => @child_folders.fetch(folder, []) } }
+    elsif url.include?("/messages/delta")
       delta_get(folder, url)
     else
       history_get(folder, url)
@@ -258,7 +287,12 @@ class FakeMailbox
 
   def history_get(folder, url)
     query = URI.decode_www_form(URI.parse(url).query.to_s).to_h
-    items = @messages[folder].sort_by { |message| [ message["receivedDateTime"].to_s, message["id"].to_s ] }
+    # Ascending by receivedDateTime, descending by id within a second: the
+    # only ordering Graph actually promises, arranged to punish anything
+    # that leans on the id.
+    items = @messages[folder].sort_by { |message| message["receivedDateTime"].to_s }
+      .chunk_while { |a, b| a["receivedDateTime"].to_s == b["receivedDateTime"].to_s }
+      .flat_map { |group| group.sort_by { |message| message["id"].to_s }.reverse }
     if query["$filter"].to_s.include?("receivedDateTime ge")
       floor = query["$filter"][/receivedDateTime ge (\S+)/, 1].to_s
       items = items.select { |message| message["receivedDateTime"].to_s >= floor }

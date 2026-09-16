@@ -6,7 +6,7 @@
   <% if @import.status != "preview" %>
     <% if %w[draft previewing].include?(@import.status) %>
       <meta http-equiv="refresh" content="5">
-      <p class="mt-3">Scanning history: <%= (@import.preview_json || {}).fetch("scanned", 0) %> messages checked, <%= @import.total_messages %> in scope.</p>
+      <p class="mt-3">Scanning history: <%= @import.total_messages %> messages in scope so far.</p>
     <% else %>
       <p class="mt-3"><%= @import.error %></p>
       <%= button_to "Resume preview", preview_mail_import_path(@import), class: "btn-secondary btn" %>
