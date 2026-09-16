@@ -85,6 +85,16 @@
         <dd><%= @settings.mailbox_last_error.presence || @mail_syncs.values.map(&:last_error).compact.first.presence || "None" %></dd>
       </div>
     </dl>
+    <% if @mailbox_notices.any? %>
+      <div class="mt-4">
+        <p class="text-sm font-medium text-ink">Worth a look</p>
+        <ul class="mt-1 space-y-1 text-sm text-ink-2">
+          <% @mailbox_notices.each do |state| %>
+            <li><%= state.last_notice %> <span class="muted"><%= time_24_12(state.last_notice_at) %></span></li>
+          <% end %>
+        </ul>
+      </div>
+    <% end %>
     <div class="mt-4 flex flex-wrap gap-2">
       <% if @settings.mailbox_connected? %>
         <%= link_to "Test connection", mailbox_test_settings_path, data: { turbo_method: :post }, class: "btn-secondary btn btn-sm" %>
@@ -95,7 +105,7 @@
         <p class="hint">Add <span class="mono">MS_GRAPH_CLIENT_ID</span>, <span class="mono">MS_GRAPH_CLIENT_SECRET</span> and <span class="mono">MS_GRAPH_TENANT_ID</span> to <span class="mono">.env.app</span> first — see README “Mail” — then connect here.</p>
       <% end %>
     </div>
-    <p class="hint mt-4">Setup: register the CRM as a Microsoft application, add the delegated mail scopes, paste the credentials into .env.app, then Connect mailbox. Sync runs every 5 minutes over Inbox plus Sent Items, read-only — it never moves, deletes, or flags server mail. A first connect starts from now; past mail stays for Import history. See README “Mail”.</p>
+    <p class="hint mt-4">Setup: register the CRM as a Microsoft application, add the delegated mail scopes, paste the credentials into .env.app, then Connect mailbox. Sync runs every 5 minutes over every mail folder, child folders included, read-only — it never moves, deletes, or flags server mail. A first connect starts from now; past mail stays for Import history. See README “Mail”.</p>
   </section>
 
   <section class="card card-pad mt-6" aria-labelledby="import-heading">

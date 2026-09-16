@@ -133,7 +133,13 @@ module Mail
       return DEFAULT_WAIT_SECONDS if value.empty?
       return value.to_i.clamp(0, MAX_WAIT_SECONDS) if value.match?(/\A\d+\z/)
 
-      (Time.httpdate(value) - Time.now).ceil.clamp(0, MAX_WAIT_SECONDS)
+      seconds = (Time.httpdate(value) - Time.now).ceil
+      # A date already in the past says nothing useful - gateway clock skew
+      # is ordinary - and retrying instantly would burn every wait in
+      # milliseconds, so it is treated as absent rather than as permission.
+      return DEFAULT_WAIT_SECONDS if seconds <= 0
+
+      seconds.clamp(1, MAX_WAIT_SECONDS)
     rescue ArgumentError
       DEFAULT_WAIT_SECONDS
     end

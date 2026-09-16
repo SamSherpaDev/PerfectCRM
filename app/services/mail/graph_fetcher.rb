@@ -37,7 +37,15 @@
 # First-run safety: a fresh connect primes each folder's delta link with an
 # initial delta call that is drained but NOT ingested, so ongoing sync
 # starts from now and history stays for the import screen, where the
-# captain chooses depth with a preview.
+# captain chooses depth with a preview. A folder that appears later is
+# primed the same way rather than backfilled unasked, and says so through a
+# MailSyncState notice so the captain can import its past mail deliberately.
+#
+# Nothing here is allowed to fail quietly: a folder whose sync raises is
+# recorded against that folder and the run carries on with the rest before
+# reporting, and a delta token Graph invalidates (410) is re-primed AND
+# caught up from the last committed sync, so the window the dead token
+# covered is refilled instead of dropped.
 module Mail
   class GraphFetcher
     # Folders neither the live sync nor the backfill reads, children included.
@@ -59,6 +67,7 @@ module Mail
     ITEM_EXPAND = "microsoft.graph.itemAttachment/item".freeze
 
     Fetched = Struct.new(:parsed, :provider, :folder, :cursor, keyword_init: true)
+    Folder = Struct.new(:id, :name, keyword_init: true)
 
     # Attachment bytes are downloaded on first read. The import preview
     # walks the whole mailbox but only reads counterparties, so it pays for
@@ -71,7 +80,6 @@ module Mail
       def to_a
         @entries ||= Array(@materialize.call)
       end
-      alias_method :to_ary, :to_a
     end
 
     def initialize(transport: GraphTransport.new)
@@ -95,24 +103,36 @@ module Mail
     # after a full drain; a mid-folder failure leaves the old link so the
     # next run replays and skips what it already stored. Folders without a
     # link are primed, not ingested, so a folder that appears later starts
-    # from now rather than backfilling itself unasked. Callers cap stored
-    # volume themselves (see SyncJob): stopping early leaves the link
-    # uncommitted for replay.
+    # from now rather than backfilling itself unasked. One folder's failure
+    # is recorded against that folder and never starves the folders after
+    # it: every folder is attempted, then the first failure is raised so the
+    # run reads as partial rather than complete. Callers cap stored volume
+    # themselves (see SyncJob): stopping early leaves the link uncommitted
+    # for replay.
     def fetch_new
       raise NotConfiguredError, "Mailbox is not connected." unless configured?
       return enum_for(:fetch_new) unless block_given?
 
       graph = client
+      established = ::MailSyncState.where.not(delta_link: nil).exists?
+      failure = nil
       mail_folders(graph).each do |folder|
-        state = ::MailSyncState.for(folder)
+        state = ::MailSyncState.for(folder.id)
         if state.delta_link.blank?
-          prime_folder(graph, folder)
+          prime_folder(graph, folder.id)
+          announce_new_folder(folder) if established
           next
         end
-        drain_delta(graph, folder, state) do |parsed, provider|
-          yield Fetched.new(parsed: parsed, provider: provider, folder: folder)
+        drain_delta(graph, folder.id, state) do |parsed, provider|
+          yield Fetched.new(parsed: parsed, provider: provider, folder: folder.id)
         end
+      rescue NotConfiguredError, GrantRevokedError
+        raise
+      rescue GraphError => e
+        ::MailSyncState.record_error!(folder.id, e.message)
+        failure ||= e
       end
+      raise failure if failure
     end
 
     # History walk for preview/import: $filter=receivedDateTime ge {date}
@@ -131,26 +151,13 @@ module Mail
       resume = parse_cursor(cursor)
       graph = client
       folders = mail_folders(graph)
-      resumed_at = resume ? folders.index(resume[:folder]) : nil
+      resumed_at = resume ? folders.index { |folder| folder.id == resume[:folder] } : nil
       folders.each_with_index do |folder, position|
         next if resumed_at && position < resumed_at
 
-        url = history_url(folder, floor_for(folder, since, resume))
-        loop do
-          page = graph.get_json(url)
-          Array(page["value"]).each do |entry|
-            next if entry["@removed"] || entry["id"].blank?
-            next unless Mail.keeps?(listed_recipients(entry))
-
-            loaded = load_message(graph, entry["id"])
-            next if loaded.nil?
-
-            parsed, provider = loaded
-            yield Fetched.new(parsed: parsed, provider: provider, folder: folder,
-              cursor: "#{folder}|#{entry_time(entry).utc.iso8601}")
-          end
-          url = page["@odata.nextLink"]
-          break if url.blank?
+        walk_folder(graph, folder.id, floor_for(folder.id, since, resume)) do |parsed, provider, entry|
+          yield Fetched.new(parsed: parsed, provider: provider, folder: folder.id,
+            cursor: "#{folder.id}|#{entry_time(entry).utc.iso8601}")
         end
       end
     end
@@ -169,7 +176,7 @@ module Mail
     # lands in the same place. Skipped folders take their children with
     # them: a subfolder of Deleted Items is still deleted mail.
     def mail_folders(client)
-      collect_folders(client, "#{GraphClient::BASE}/me/mailFolders?#{folder_params}").sort
+      collect_folders(client, "#{GraphClient::BASE}/me/mailFolders?#{folder_params}").sort_by(&:id)
     end
 
     def collect_folders(client, url)
@@ -180,7 +187,7 @@ module Mail
           id = folder["id"].to_s
           next if id.blank? || SKIPPED_FOLDERS.include?(folder["wellKnownName"].to_s.downcase)
 
-          found << id
+          found << Folder.new(id: id, name: folder["displayName"].to_s.presence || id)
           next unless folder["childFolderCount"].to_i.positive?
 
           found.concat(collect_folders(client, "#{GraphClient::BASE}/me/mailFolders/#{id}/childFolders?#{folder_params}"))
@@ -188,6 +195,15 @@ module Mail
         url = page["@odata.nextLink"]
       end
       found
+    end
+
+    # A folder that shows up after the mailbox is already syncing is watched
+    # from now, never backfilled on its own: it can hold years of archived
+    # mail, and choosing that depth is the import screen's job. Saying so
+    # here is what keeps the choice in front of the captain.
+    def announce_new_folder(folder)
+      ::MailSyncState.record_notice!(folder.id,
+        "New folder #{folder.name}: watched from now. Run Import history to bring in mail it already holds.")
     end
 
     def folder_params
@@ -226,6 +242,26 @@ module Mail
       }
       params["$filter"] = "receivedDateTime ge #{floor.utc.iso8601}" if floor
       "#{GraphClient::BASE}/me/mailFolders/#{folder}/messages?#{URI.encode_www_form(params)}"
+    end
+
+    # Pages one folder's message listing from a floor, judging each entry on
+    # the recipient fields the listing carries so only keepers are opened.
+    def walk_folder(client, folder, floor)
+      url = history_url(folder, floor)
+      loop do
+        page = client.get_json(url)
+        Array(page["value"]).each do |entry|
+          next if entry["@removed"] || entry["id"].blank?
+          next unless Mail.keeps?(listed_recipients(entry))
+
+          loaded = load_message(client, entry["id"])
+          next if loaded.nil?
+
+          yield(*loaded, entry)
+        end
+        url = page["@odata.nextLink"]
+        break if url.blank?
+      end
     end
 
     # Initial delta call: drained for its deltaLink, never ingested.
@@ -267,9 +303,24 @@ module Mail
       delta_link = last_page["@odata.deltaLink"]
       ::MailSyncState.record_success!(folder, delta_link: delta_link.presence || state.delta_link)
     rescue GraphClient::GoneError
-      # Sync token expired server-side: re-prime without ingesting, so a
-      # stale link can never backfill the whole mailbox unasked.
+      # Sync token expired server-side. Re-priming alone would drop every
+      # message that arrived since the last committed link, so the window
+      # between that link and now is walked as well; the ingester's dedupe
+      # discards the overlap. Bounded by the last successful sync, so a
+      # stale token still cannot backfill the whole mailbox unasked.
+      recover_gap(client, folder, state.last_sync_at) { |*loaded| yield(*loaded) }
+    end
+
+    def recover_gap(client, folder, since)
       prime_folder(client, folder)
+      if since.blank?
+        ::MailSyncState.record_notice!(folder, "Microsoft expired this folder's sync token; watching from now.")
+        return
+      end
+
+      walk_folder(client, folder, since) { |parsed, provider, _entry| yield(parsed, provider) }
+      ::MailSyncState.record_notice!(folder,
+        "Microsoft expired this folder's sync token; mail since #{since.utc.iso8601} was re-read to fill the gap.")
     end
 
     # Full message GET (metadata + attachment listing), keeps?-filtered

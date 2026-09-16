@@ -425,7 +425,7 @@ default `info@sherpaholidays.com`, with no additional accepted mailboxes). The C
 reads the Microsoft 365 mailbox through Microsoft Graph with delegated
 OAuth (the captain's own mailbox only; no tenant-wide grant). It keeps
 only messages with an exact parsed mailbox address
-in From, To, Cc, Bcc, Delivered-To, X-Original-To, or X-Envelope-To; a message
+in From, To, Cc, Bcc, Delivered-To, or X-Original-To; a message
 naming the mailbox anywhere else (Reply-To, a list header) is not kept. Personal
 mail is skipped without storing it, before any attachment bytes are fetched. This release reads
 received and sent history; see [Replying](#replying) for composing and
@@ -447,7 +447,12 @@ every mail folder, child folders included (Microsoft 365 has no All Mail
 equivalent, and a server-side rule can file mail so it never touches the Inbox);
 Deleted Items, Junk Email, Drafts, Outbox, and Conversation History are left out.
 The folder list is re-read each run, so a folder created in Outlook is watched
-without a reconnect. Sync is incremental by per-folder delta link, threaded on
+without a reconnect, and says so on the Settings mailbox card so its past mail
+can be brought in with a history import rather than appearing unasked. One
+folder's failure is recorded against that folder and never stops the rest of the
+run. If Microsoft expires a folder's sync token, the folder is re-primed and the
+window since its last successful sync is re-read, so the gap is filled rather
+than dropped. Sync is incremental by per-folder delta link, threaded on
 the Graph conversation id with a
 Message-ID/In-Reply-To/References fallback. Read-only Graph access: only
 GET requests, never moves, deletes, or flags server mail. Categories
@@ -510,13 +515,13 @@ explicit **Send to PerfectBook** action uploads bytes to PerfectBook; neither
 holding nor removing a file changes the mailbox.
 
 Settings → Import history backfills past mail: all, since a date, or last
-N months (no 90-day cap), as requested by the captain. The backfill is wider
-than live sync: it walks every mail folder, child folders included, because
+N months (no 90-day cap), as requested by the captain. The backfill walks the
+same folders as live sync: every mail folder, child folders included, because
 archived and filed mail is exactly what needs converting. Deleted Items, Junk
 Email, Drafts, Outbox, and Conversation History are left out, children and all.
 Preview scans the whole selected range in a background job, paging each folder
-by received date with a resumable cursor. The backfill walks the same folders as
-live sync. It matches on the four recipient fields a folder listing returns
+by received date with a resumable cursor.
+It matches on the four recipient fields a folder listing returns
 (From, To, Cc, Bcc) and opens only the messages that match, so no personal
 message body is ever fetched;
 Microsoft documents the message headers as retrievable only when getting a

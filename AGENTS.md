@@ -62,7 +62,7 @@ When updating this file, preserve this bar for all agents and keep entries conci
   Document hand-off and retention policy: README.md, "Mail"; ingestion
   transaction invariant: `Mail::Ingester.prepare`.
 - Mail inbound: `Conversation`/`Message`/`EmailIdentity` + `Mail::SyncJob`
-  (5 min, read-only Microsoft Graph delta over Inbox + Sent Items) +
+  (5 min, read-only Microsoft Graph delta over every mail folder) +
   `Mail::ImportJob`; contract in README.md, "Mail". Delegated OAuth only
   (refresh token encrypted on `Setting`, `Mail::GraphAuth`); first connect
   primes the delta links without ingesting. Keep-only-info@ rule lives in

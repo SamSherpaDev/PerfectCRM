@@ -1,6 +1,6 @@
-# Polls the Microsoft 365 mailbox every 5 minutes over Inbox + Sent Items
-# (Solid Queue, see config/recurring.yml). Incremental by per-folder delta
-# links, threaded on the Graph conversationId with a
+# Polls the Microsoft 365 mailbox every 5 minutes over every mail folder,
+# child folders included (Solid Queue, see config/recurring.yml).
+# Incremental by per-folder delta links, threaded on the Graph conversationId with a
 # Message-ID/In-Reply-To/References fallback. Read-only Graph access: only
 # GET requests, never moves, deletes, or flags server mail. Skips personal
 # mail that does not mention the info@ mailbox without storing it.
@@ -20,7 +20,8 @@ class Mail::SyncJob < ApplicationJob
       result = Mail::Ingester.ingest(parsed: item.parsed, provider: item.provider)
       stored += 1 if result[:status] == :stored
     end
-    ::Setting.current.update_columns(mailbox_last_sync_at: Time.current, updated_at: Time.current)
+    ::Setting.current.update_columns(mailbox_last_sync_at: Time.current,
+      mailbox_last_error: nil, mailbox_last_error_at: nil, updated_at: Time.current)
     stored
   rescue Mail::NotConfiguredError
     false

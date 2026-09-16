@@ -92,6 +92,12 @@ class MailGraphTest < ActiveSupport::TestCase
       message_id: "<oldfiled@test>"))
     assert_empty fetcher.fetch_new.to_a
     assert MailSyncState.for("operators").delta_link.present?
+    # Priming is silent about the mail already in there unless it says so,
+    # and the captain has to be told to import it deliberately.
+    notice = MailSyncState.for("operators").last_notice
+    assert_match(/Operators/, notice.to_s)
+    assert_match(/Import history/i, notice.to_s)
+    assert_includes MailSyncState.recently_noticed.map(&:folder), "operators"
 
     @mailbox.add("operators", graph_message(id: "new-filed", from: "operator@example.com",
       message_id: "<newfiled@test>"))
@@ -278,18 +284,50 @@ class MailGraphTest < ActiveSupport::TestCase
     assert_equal "nested passport bytes", DocumentHolding.find_by!(message: stored).file.download
   end
 
-  test "expired delta link re-primes without ingesting the mailbox" do
+  test "an expired delta link re-primes and re-reads the gap it would have lost" do
     fetcher.fetch_new.to_a # prime
-    @mailbox.add("inbox", graph_message(id: "veteran", from: "old@example.com", message_id: "<veteran@test>"))
+    synced_at = MailSyncState.for("inbox").last_sync_at
+    assert synced_at.present?
+    # Mail that arrives after the last committed link and before the token
+    # is invalidated is exactly what a bare re-prime would drop.
+    @mailbox.add("inbox", graph_message(id: "in-the-gap", from: "operator@example.com",
+      message_id: "<gap@test>", received: (synced_at + 1.minute).utc.iso8601))
     @mailbox.expire_delta!("inbox")
 
-    assert_no_difference([ "Conversation.count", "Message.count" ]) do
-      fetcher.fetch_new.to_a
-    end
-    # The re-prime consumed history: a later arrival still syncs.
-    @mailbox.add("inbox", graph_message(id: "fresh", from: "new@example.com", message_id: "<fresh@test>"))
     items = fetcher.fetch_new.to_a
-    assert_equal [ "fresh" ], items.map { |item| item.provider[:message_id] }
+    assert_equal [ "in-the-gap" ], items.map { |item| item.provider[:message_id] }
+    assert_match(/sync token/i, MailSyncState.for("inbox").last_notice.to_s)
+
+    # The refreshed link still drives ordinary sync afterwards.
+    @mailbox.add("inbox", graph_message(id: "fresh", from: "new@example.com", message_id: "<fresh@test>"))
+    assert_equal [ "fresh" ], fetcher.fetch_new.to_a.map { |item| item.provider[:message_id] }
+  end
+
+  test "mail older than the last sync is not dragged in by a token expiry" do
+    fetcher.fetch_new.to_a # prime
+    @mailbox.add("inbox", graph_message(id: "ancient", from: "old@example.com",
+      message_id: "<ancient@test>", received: "2024-01-01T10:00:00Z"))
+    @mailbox.expire_delta!("inbox")
+
+    assert_empty fetcher.fetch_new.to_a
+  end
+
+  test "one folder's failure is recorded and the folders after it still sync" do
+    fetcher.fetch_new.to_a # prime
+    @mailbox.add("archive", graph_message(id: "broken", from: "operator@example.com", message_id: "<broken@test>"))
+    @mailbox.add("inbox", graph_message(id: "healthy", from: "client@example.com", message_id: "<healthy@test>"))
+    @mailbox.transport.on_get("/me/messages/broken") do |*|
+      { status: 503, json: { "error" => { "code" => "ServiceUnavailable" } } }
+    end
+
+    stored = []
+    # archive sorts before inbox, so the old behaviour starved the Inbox.
+    assert_raises(Mail::ConnectionError) do
+      fetcher.fetch_new { |item| stored << item.provider[:message_id] }
+    end
+    assert_equal [ "healthy" ], stored
+    assert_match(/503/, MailSyncState.for("archive").last_error.to_s)
+    assert_nil MailSyncState.for("inbox").last_error
   end
 
   test "history walk pages both folders with a received-date filter" do
@@ -383,6 +421,7 @@ class MailGraphTest < ActiveSupport::TestCase
     assert_equal Mail::GraphClient::MAX_WAIT_SECONDS,
       client.send(:wait_seconds, 10.minutes.from_now.httpdate)
     assert_equal 2, client.send(:wait_seconds, 2.seconds.from_now.httpdate)
+    assert_equal Mail::GraphClient::DEFAULT_WAIT_SECONDS, client.send(:wait_seconds, 1.minute.ago.httpdate)
     assert_equal Mail::GraphClient::DEFAULT_WAIT_SECONDS, client.send(:wait_seconds, "soon please")
     assert_equal Mail::GraphClient::DEFAULT_WAIT_SECONDS, client.send(:wait_seconds, nil)
   end

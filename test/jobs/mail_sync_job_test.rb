@@ -101,6 +101,17 @@ class MailSyncJobTest < ActiveSupport::TestCase
     assert_match(/revoked|Reconnect/i, Setting.current.reload.mailbox_last_error.to_s)
   end
 
+  test "a recovered sync clears the error the captain was shown" do
+    Mail::SyncJob.new.perform(fetcher: fetcher) # prime
+    Setting.current.update!(mailbox_last_error: "Microsoft Graph is throttling this mailbox. Try again shortly.",
+      mailbox_last_error_at: Time.current)
+    @mailbox.add("inbox", sync_message(id: "after", from: "after@example.com"))
+
+    assert_equal 1, Mail::SyncJob.new.perform(fetcher: fetcher)
+    assert_nil Setting.current.reload.mailbox_last_error
+    assert_nil Setting.current.mailbox_last_error_at
+  end
+
   test "unconfigured mailbox no-ops" do
     Setting.current.update!(ms_graph_refresh_token: nil)
     assert_equal false, Mail::SyncJob.new.perform(fetcher: fetcher)

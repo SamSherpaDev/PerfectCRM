@@ -47,8 +47,7 @@ module Mail
 
       return skipped(:filtered) unless Mail.keeps?(parsed.headers)
 
-      existing = ::Message.find_by(provider_message_id: provider_message_id) if provider_message_id.present?
-      existing ||= ::Message.find_by(message_id: parsed.message_id) if parsed.message_id.present?
+      existing = self.class.existing_message(parsed: parsed, provider: provider)
       return { status: :duplicate, conversation: existing.conversation, message: existing } if existing
 
       ordinary, held, orphans = prepared || self.class.prepare(parsed: parsed)
@@ -86,6 +85,16 @@ module Mail
         conversation.refresh_counters!
         { status: :stored, conversation: conversation, message: message }
       end
+    end
+
+    # The one dedupe rule: the provider's own message id, then Message-ID.
+    # Callers deciding whether a message is worth downloading ask exactly
+    # the question ingest asks, so the two can never drift apart.
+    def self.existing_message(parsed:, provider:)
+      provider_message_id = provider.transform_keys(&:to_sym)[:message_id]&.to_s.presence
+      found = ::Message.find_by(provider_message_id: provider_message_id) if provider_message_id.present?
+      found ||= ::Message.find_by(message_id: parsed.message_id) if parsed.message_id.present?
+      found
     end
 
     # Parses a raw RFC822 string into a Parsed struct. Used by forward

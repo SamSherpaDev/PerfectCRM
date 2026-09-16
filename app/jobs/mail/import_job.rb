@@ -16,7 +16,11 @@ class Mail::ImportJob < ApplicationJob
       counted = tally.count?(item)
       # Mail the CRM already holds needs no attachment bytes: ingest settles
       # the duplicate before it ever reads what prepare would download.
-      prepared = held_already?(item, parsed) ? nil : Mail::Ingester.prepare(parsed: parsed)
+      prepared = if Mail::Ingester.existing_message(parsed: parsed, provider: item.provider)
+        nil
+      else
+        Mail::Ingester.prepare(parsed: parsed)
+      end
       mail_import.with_lock do
         result = Mail::Ingester.ingest(parsed: parsed, provider: item.provider, prepared: prepared)
         conversation = result[:conversation]
@@ -41,13 +45,6 @@ class Mail::ImportJob < ApplicationJob
   end
 
   private
-
-  def held_already?(item, parsed)
-    provider_id = item.provider[:message_id].to_s
-    return true if provider_id.present? && ::Message.exists?(provider_message_id: provider_id)
-
-    parsed.message_id.present? && ::Message.exists?(message_id: parsed.message_id)
-  end
 
   def apply_import_choice(conversation, parsed, choices, import)
     return if conversation.nil?

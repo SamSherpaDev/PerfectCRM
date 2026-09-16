@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_15_213003) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_15_213004) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -305,6 +305,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_213003) do
     t.string "folder", null: false
     t.text "last_error"
     t.datetime "last_error_at"
+    t.text "last_notice"
+    t.datetime "last_notice_at"
     t.datetime "last_sync_at"
     t.datetime "updated_at", null: false
     t.index ["folder"], name: "index_mail_sync_states_on_folder", unique: true
