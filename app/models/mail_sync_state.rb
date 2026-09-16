@@ -10,20 +10,34 @@ class MailSyncState < ApplicationRecord
   scope :recently_noticed, -> { where(last_notice_at: ATTENTION_WINDOW.ago..).order(last_notice_at: :desc) }
   scope :recently_errored, -> { where(last_error_at: ATTENTION_WINDOW.ago..).order(last_error_at: :desc) }
 
-  # discovered: marks a folder first seen while the mailbox was already
-  # syncing, so it is one Outlook gained rather than one the first connect
-  # found. Recorded at creation and never inferred again.
+  # discovered: marks a folder first seen once the mailbox had already been
+  # enumerated, so it is one Outlook gained rather than one the first
+  # enumeration found. Recorded at creation and never inferred again.
   def self.for(folder, discovered: false)
     find_or_create_by!(folder: folder.to_s) do |state|
       state.discovered_at = Time.current if discovered
     end
   end
 
-  # Whether the captain still needs telling about this folder. Discovery and
-  # announcement are tracked apart so a failed setup keeps the first and
+  # A watched folder is in exactly one of three states, each read from
+  # stored facts rather than from how far some earlier run happened to get:
+  #
+  #   :watched - primed, with a delta link driving incremental sync.
+  #   :new     - the mailbox gained it after it had been enumerated once,
+  #              so the mail already in it needs a deliberate import.
+  #   :pending - enumerated with the rest but not primed yet, so it holds
+  #              no link; it was always there and is not news.
+  def folder_state
+    return :watched if delta_link.present?
+
+    discovered_at.present? ? :new : :pending
+  end
+
+  # Said once, and only for a folder that is genuinely new. Discovery and
+  # announcement are separate facts so a failed setup keeps the first and
   # leaves the second, and the notice survives to the run that succeeds.
   def announce?
-    discovered_at.present? && announced_at.nil?
+    folder_state == :new && announced_at.nil?
   end
 
   def self.record_success!(folder, delta_link:)

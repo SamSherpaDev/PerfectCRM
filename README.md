@@ -452,7 +452,10 @@ can be brought in with a history import rather than appearing unasked. One
 folder's failure is recorded against that folder and never stops the rest of the
 run. If Microsoft expires a folder's sync token, the folder is re-primed and the
 window since its last successful sync is re-read, so the gap is filled rather
-than dropped. Sync is incremental by per-folder delta link, threaded on
+than dropped - up to 24 hours. A longer outage than that is reported on the
+Settings mailbox card, naming the date to import from, instead of the app
+quietly opening months of mail: sync resumes from now and the depth of the
+catch-up stays the captain's choice through Import history, with a preview. Sync is incremental by per-folder delta link, threaded on
 the Graph conversation id with a
 Message-ID/In-Reply-To/References fallback. Read-only Graph access: only
 GET requests, never moves, deletes, or flags server mail. Categories

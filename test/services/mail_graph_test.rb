@@ -371,6 +371,29 @@ class MailGraphTest < ActiveSupport::TestCase
     end
   end
 
+  test "a gap longer than the recovery window is reported instead of walked" do
+    fetcher.fetch_new.to_a # prime
+    # The grant was revoked, sync stopped, and the captain reconnected days
+    # later: the folder's position is stale by far more than one run's worth.
+    MailSyncState.for("inbox").update!(last_sync_at: 5.days.ago)
+    @mailbox.add("inbox", graph_message(id: "long-gap", from: "operator@example.com",
+      message_id: "<longgap@test>", received: 3.days.ago.utc.iso8601))
+    @mailbox.expire_delta!("inbox")
+
+    before = @mailbox.message_fetches
+    assert_empty fetcher.fetch_new.to_a
+    # Nothing in that window was opened; the captain is told where to import from.
+    assert_equal before, @mailbox.message_fetches
+    notice = MailSyncState.for("inbox").last_notice.to_s
+    assert_match(/Import history/i, notice)
+    assert_match(/#{5.days.ago.to_date}/, notice)
+
+    # Sync resumes from now rather than staying stuck on the dead token.
+    assert MailSyncState.for("inbox").delta_link.present?
+    @mailbox.add("inbox", graph_message(id: "after-gap", from: "client@example.com", message_id: "<aftergap@test>"))
+    assert_equal [ "after-gap" ], fetcher.fetch_new.to_a.map { |item| item.provider[:message_id] }
+  end
+
   test "mail older than the last sync is not dragged in by a token expiry" do
     fetcher.fetch_new.to_a # prime
     @mailbox.add("inbox", graph_message(id: "ancient", from: "old@example.com",
@@ -405,6 +428,28 @@ class MailGraphTest < ActiveSupport::TestCase
     announced_at = MailSyncState.for("operators").announced_at
     fetcher.fetch_new.to_a
     assert_equal announced_at.to_i, MailSyncState.for("operators").announced_at.to_i
+  end
+
+  test "folders a first connect never reached are not greeted as new later" do
+    # The first run enumerates every folder but dies before it can prime the
+    # ones sorted after Inbox - a revoked grant, a worker restart, anything.
+    stop = true
+    @transport.on_get("mailFolders/clients/messages/delta") do |_url, token:, params:, headers:|
+      next { status: 200, json: { "value" => [], "@odata.deltaLink" => "https://graph.microsoft.com/v1.0/me/mailFolders/clients/messages/delta?$deltatoken=97" } } unless stop
+
+      raise Mail::GrantRevokedError, "grant revoked mid-connect"
+    end
+
+    assert_raises(Mail::GrantRevokedError) { fetcher.fetch_new.to_a }
+    assert MailSyncState.for("archive").delta_link.present?
+    assert_nil MailSyncState.for("inbox").delta_link
+
+    # Inbox and Sent Items existed all along; being unreached is not news.
+    stop = false
+    fetcher.fetch_new.to_a
+    assert MailSyncState.for("inbox").delta_link.present?
+    assert_equal %i[watched watched], [ MailSyncState.for("inbox"), MailSyncState.for("sentitems") ].map(&:folder_state)
+    assert_empty MailSyncState.recently_noticed.map(&:folder)
   end
 
   test "a folder that failed to set up on the first connect is never called new" do

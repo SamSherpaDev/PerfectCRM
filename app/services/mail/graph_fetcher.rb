@@ -48,12 +48,23 @@
 # recorded against that folder and the run carries on with the rest before
 # reporting, and a delta token Graph invalidates (410) is re-primed AND
 # caught up from the last committed sync, so the window the dead token
-# covered is refilled instead of dropped.
+# covered is refilled instead of dropped. That catch-up is capped at
+# RECOVERY_WINDOW; a longer outage is reported rather than walked, because
+# opening months of the captain's mail on his behalf is the import screen's
+# decision to offer him, not this reader's to take.
 module Mail
   class GraphFetcher
     # Folders neither the live sync nor the backfill reads, children included.
     SKIPPED_FOLDERS = %w[deleteditems junkemail drafts outbox conversationhistory].freeze
     PAGE_SIZE = 50
+    # How far back a 410 recovery will re-read a folder in one run. Sized to
+    # what a run can comfortably finish: it opens every message in the
+    # window, SyncJob stores at most its own cap per run, and the whole run
+    # has to fit inside SyncJob::CONCURRENCY_WINDOW. A day of one mailbox's
+    # mail sits well inside both; a longer gap is the captain's call to make
+    # through Import history, with a preview, rather than an invisible
+    # download of months of his mail.
+    RECOVERY_WINDOW = 24.hours
 
     MESSAGE_SELECT = %w[
       id internetMessageId conversationId categories from toRecipients
@@ -117,13 +128,15 @@ module Mail
       return enum_for(:fetch_new) unless block_given?
 
       graph = client
-      established = ::MailSyncState.where.not(delta_link: nil).exists?
+      folders = mail_folders(graph)
+      states = register_folders(folders)
       failure = nil
-      mail_folders(graph).each do |folder|
-        state = ::MailSyncState.for(folder.id, discovered: established)
+      folders.each do |folder|
+        state = states.fetch(folder)
         if state.delta_link.blank?
+          announce = state.announce?
           prime_folder(graph, folder)
-          announce_new_folder(folder) if state.announce?
+          announce_new_folder(folder) if announce
           next
         end
         drain_delta(graph, folder, state) do |parsed, provider|
@@ -202,6 +215,22 @@ module Mail
         url = page["@odata.nextLink"]
       end
       found
+    end
+
+    # Every folder the enumeration just returned gets its row here, in one
+    # transaction, before any of them is primed. That is what makes the
+    # three folder states a lookup instead of a guess: a row exists for
+    # every folder the mailbox has ever shown us, so a folder without one is
+    # genuinely new, and a run that dies part-way through priming can no
+    # longer leave a folder that was always there row-less for the next run
+    # to greet as new.
+    def register_folders(folders)
+      ::MailSyncState.transaction do
+        enumerated_before = ::MailSyncState.exists?
+        folders.index_with do |folder|
+          ::MailSyncState.for(folder.id, discovered: enumerated_before)
+        end
+      end
     end
 
     # A folder that shows up after the mailbox is already syncing is watched
@@ -339,14 +368,29 @@ module Mail
     # on its run limit - therefore leaves the dead token in place, so the
     # next run meets the same 410 and replays the whole window instead of
     # losing whatever it had not reached yet.
+    #
+    # Past RECOVERY_WINDOW the gap is reported instead of walked: sync
+    # resumes from now so the folder is not stuck on a dead token, and the
+    # captain is told how far back to import.
     def recover_gap(client, folder, since)
       delta_link = drain_prime(client, folder.id)
+      return report_long_gap(folder, since, delta_link) if since < RECOVERY_WINDOW.ago
+
       walk_folder(client, folder.id, since, screen_listing: false, skip_stored: true) do |parsed, provider, _entry|
         yield(parsed, provider)
       end
       ::MailSyncState.record_success!(folder.id, delta_link: delta_link)
       ::MailSyncState.record_notice!(folder.id,
         "#{folder.name}: Microsoft expired this folder's sync token; mail since #{since.utc.iso8601} was re-read to fill the gap.")
+    end
+
+    def report_long_gap(folder, since, delta_link)
+      ::MailSyncState.record_success!(folder.id, delta_link: delta_link)
+      ::MailSyncState.record_notice!(folder.id,
+        "#{folder.name}: Microsoft expired this folder's sync token, and the gap back to " \
+        "#{since.utc.iso8601} is longer than #{RECOVERY_WINDOW.inspect}. Watching from now; run Import history " \
+        "since #{since.to_date} to bring in what arrived in between.")
+      nil
     end
 
     # Full message GET (metadata + attachment listing), keeps?-filtered
