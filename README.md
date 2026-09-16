@@ -98,10 +98,9 @@ unreferenced templates are deleted. For departure merges, see
 
 ## Replying
 
-Replies send as `info@sherpaholidays.com` through Gmail SMTP
-(`smtp.gmail.com:587`, `SMTP_USERNAME`/`SMTP_PASSWORD` plus `MAIL_FROM` in
-`.env.app.example`; use the personal Gmail account receiving the alias
-and its app password), with
+Replies send as `info@sherpaholidays.com` through the Microsoft 365 SMTP
+submission endpoint (`smtp.office365.com:587`, `SMTP_USERNAME`/`SMTP_PASSWORD`
+plus `MAIL_FROM` in `.env.app.example`), with
 `From` and `Reply-To` on the mailbox, `In-Reply-To`/`References` from the
 thread, a generated `Message-ID` that is kept, the signature from Settings → Email replies,
 and uploaded attachments, subject to the [mail document restrictions](#mail).
@@ -210,7 +209,7 @@ successful sync, the last error, and a Test connection button.
 
 Quotes are built from the mirrored trip catalog and sent as email plus a
 Washi-styled PDF (`QuotePdf`, via `prawn`), always from
-`info@sherpaholidays.com` through the app's Gmail SMTP settings. The
+`info@sherpaholidays.com` through the app's SMTP settings. The
 builder (`/quotes/new?client_id=` or `?lead_id=`) picks a trip, then a
 departure with seats from the latest PerfectBook sync. Prices stay the
 captain's to enter because PerfectBook exposes no catalog price, and prefill
@@ -423,25 +422,32 @@ and the allowed automation actions.
 
 Email only, from `info@sherpaholidays.com` (fixed to `MAILBOX_ADDRESS`,
 default `info@sherpaholidays.com`, with no additional accepted mailboxes). The CRM
-connects to the personal Google account that receives this alias by IMAP with
-an app password. It keeps only messages with an exact parsed mailbox address
+reads the Microsoft 365 mailbox through Microsoft Graph with delegated
+OAuth (the captain's own mailbox only; no tenant-wide grant). It keeps
+only messages with an exact parsed mailbox address
 in From, To, Cc, Bcc, Delivered-To, or X-Original-To; personal mail is skipped
-without storing it. This release reads received and sent Gmail history;
-see [Replying](#replying) for composing and sending from CRM.
-[AI assistance](#ai-assistance) can prepare a draft for review.
+without storing it, before any attachment bytes are fetched. This release reads
+received and sent history; see [Replying](#replying) for composing and
+sending from CRM. [AI assistance](#ai-assistance) can prepare a draft for review.
 
-Setup (captain, about 10 minutes): Google Account → Security → turn on
-2-step verification → App passwords → create one named PerfectCRM → paste
-it in Settings → Mailbox with the personal Google account login → Save mailbox
-→ Test connection. Leaving the password blank when saving preserves the saved
-password. Production encryption keys must be configured and preserved; see
+Setup (captain, about 10 minutes): register the CRM as a Microsoft
+application with the delegated mail scopes, add the redirect URI, paste the
+client id, tenant id, and secret into `.env.app`, then click Connect mailbox
+in Settings → Mailbox → Test connection. Full steps live in
+[Microsoft 365 mailbox](docs/operations.md#microsoft-365-mailbox).
+Reconnecting replaces the grant; if access is revoked, sync records the
+error and Settings offers Reconnect mailbox instead of failing silently.
+Production encryption keys must be configured and preserved; see
 [Secrets inventory](docs/operations.md#secrets-inventory).
 Production sync runs every 5 minutes (`Mail::SyncJob` in `config/recurring.yml`) over
-`[Gmail]/All Mail` so sent mail is included, incremental by
-UIDVALIDITY/UID, threaded on `X-GM-THRID`/`X-GM-MSGID` with a
-Message-ID/In-Reply-To/References fallback. Read-only IMAP: it examines
-the folder and never moves, deletes, or flags server mail. Gmail labels
-are an initial read-only snapshot on each message; later Gmail label changes are not refreshed.
+Inbox plus Sent Items (Microsoft 365 has no All Mail equivalent), incremental by
+per-folder delta link, threaded on the Graph conversation id with a
+Message-ID/In-Reply-To/References fallback. Read-only Graph access: only
+GET requests, never moves, deletes, or flags server mail. Categories
+arrive as an initial read-only label snapshot on each message; later
+server-side label changes are not refreshed. A first connect primes the
+delta links without ingesting anything, so ongoing sync starts from now
+and past mail stays for Import history.
 
 Every kept message lands on the right client, lead, or organization
 timeline (`Conversation` + `Message`, attachments via Active Storage on
@@ -494,16 +500,15 @@ This deletes its stored file and removes every message or draft attachment
 sharing that file, records an activity event, and leaves a follow-up note.
 Storage failures preserve the reference and triage retry path. Only the
 explicit **Send to PerfectBook** action uploads bytes to PerfectBook; neither
-holding nor removing a file changes Gmail.
+holding nor removing a file changes the mailbox.
 
 Settings → Import history backfills past mail: all, since a date, or last
 N months (no 90-day cap), as requested by the captain. Preview scans the whole
-selected range in a background job, using server-side address SEARCH where
-supported and a resumable scan otherwise. Progress and failures are visible;
+selected range in a background job, paging Inbox and Sent Items by received
+date with a resumable cursor. Progress and failures are visible;
 commit is available only after the preview completes. Preview and import
-persist UID and UIDVALIDITY checkpoints and reset the scan if the folder is
-rebuilt. Import progress counts the same in-scope messages as preview; filtered
-personal mail advances only the UID checkpoint. Preview counts both inbound and
+persist the history cursor, so a resume continues where it stopped even if
+earlier mail vanished. Import progress counts the same in-scope messages as preview. Preview counts both inbound and
 outbound mail together and shows counterparties, remembered matches, duplicates,
 and editable creation choices. Choose Client, Organization, Lead, or Skip per
 address. Skip suppresses record creation, not message storage; unmatched threads
@@ -586,7 +591,7 @@ and short voice guide (templates are the style examples). Without a key,
 threads show "Add a provider key in Settings to enable drafts".
 Drafts appear in an editable dashed-edge block. Use this draft replaces the
 body in the [reply box](#replying), opening it on phones, for editing and
-review before Send. Copy draft lets the captain use the text in Gmail.
+review before Send. Copy draft lets the captain paste the text into his mail app.
 Leaving the key blank when
 saving preserves the saved key. For encrypted key storage and recovery, see
 the [Secrets inventory](docs/operations.md#secrets-inventory).

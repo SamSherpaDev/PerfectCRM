@@ -13,16 +13,16 @@ def mail_raw(from:, to: "info@sherpaholidays.com", subject: "Hello", message_id:
   headers.join("\r\n")
 end
 
-def ingest_raw(raw, gmail: {})
+def ingest_raw(raw, provider: {})
   parsed = Mail::Ingester.parse_raw(raw)
-  Mail::Ingester.ingest(parsed: parsed, gmail: gmail)
+  Mail::Ingester.ingest(parsed: parsed, provider: provider)
 end
 
 class MailIngesterTest < ActiveSupport::TestCase
   test "keeps mail to info@ and files to the right client" do
     client = Client.create!(name: "Tashi", email: "tashi@example.com")
     result = ingest_raw(mail_raw(from: "tashi@example.com", message_id: "<a1@test>"),
-      gmail: { gm_thrid: "thread-1", gm_msgid: "1001", labels: [ "\\Inbox" ] })
+      provider: { thread_id: "thread-1", message_id: "1001", labels: [ "\\Inbox" ] })
     assert_equal :stored, result[:status]
     assert_equal client, result[:conversation].linkable
     assert_equal "in", result[:message].direction
@@ -32,7 +32,7 @@ class MailIngesterTest < ActiveSupport::TestCase
   test "keeps outbound mail from info@ and links by recipient" do
     client = Client.create!(name: "Maya", email: "maya@example.com")
     raw = mail_raw(from: "info@sherpaholidays.com", to: "maya@example.com", subject: "Re: trip", message_id: "<out1@test>")
-    result = ingest_raw(raw, gmail: { gm_thrid: "thread-2", gm_msgid: "1002" })
+    result = ingest_raw(raw, provider: { thread_id: "thread-2", message_id: "1002" })
     assert_equal :stored, result[:status]
     assert_equal "out", result[:message].direction
     assert_equal client, result[:conversation].linkable
@@ -41,42 +41,42 @@ class MailIngesterTest < ActiveSupport::TestCase
   test "drops personal mail with no info@ trace without storing it" do
     assert_no_difference([ "Conversation.count", "Message.count" ]) do
       result = ingest_raw(mail_raw(from: "friend@example.com", to: "captain@gmail.com", message_id: "<personal@test>"),
-        gmail: { gm_thrid: "thread-x", gm_msgid: "9999" })
+        provider: { thread_id: "thread-x", message_id: "9999" })
       assert_equal :filtered, result[:status]
     end
   end
 
-  test "dedupes on gm_message_id and on Message-ID" do
+  test "dedupes on provider_message_id and on Message-ID" do
     ingest_raw(mail_raw(from: "a@example.com", to: "info@sherpaholidays.com", message_id: "<dup@test>"),
-      gmail: { gm_thrid: "t1", gm_msgid: "555" })
+      provider: { thread_id: "t1", message_id: "555" })
     assert_no_difference("Message.count") do
       again = ingest_raw(mail_raw(from: "a@example.com", to: "info@sherpaholidays.com", message_id: "<other@test>"),
-        gmail: { gm_thrid: "t1", gm_msgid: "555" })
+        provider: { thread_id: "t1", message_id: "555" })
       assert_equal :duplicate, again[:status]
     end
     assert_no_difference("Message.count") do
       again = ingest_raw(mail_raw(from: "a@example.com", to: "info@sherpaholidays.com", message_id: "<dup@test>"),
-        gmail: { gm_thrid: "t-other", gm_msgid: "556" })
+        provider: { thread_id: "t-other", message_id: "556" })
       assert_equal :duplicate, again[:status]
     end
   end
 
   test "threads on X-GM-THRID and falls back to In-Reply-To" do
     first = ingest_raw(mail_raw(from: "b@example.com", message_id: "<first@test>"),
-      gmail: { gm_thrid: "thread-9", gm_msgid: "901" })
+      provider: { thread_id: "thread-9", message_id: "901" })
     second = ingest_raw(mail_raw(from: "info@sherpaholidays.com", to: "b@example.com", message_id: "<second@test>"),
-      gmail: { gm_thrid: "thread-9", gm_msgid: "902" })
+      provider: { thread_id: "thread-9", message_id: "902" })
     assert_equal first[:conversation].id, second[:conversation].id
 
     third = ingest_raw(mail_raw(from: "c@example.com", message_id: "<third@test>", in_reply_to: "<first@test>"),
-      gmail: {})
+      provider: {})
     assert_equal first[:conversation].id, third[:conversation].id
   end
 
   test "unknown senders go to triage and never create records silently" do
     assert_no_difference([ "Client.count", "Lead.count", "Organization.count" ]) do
       result = ingest_raw(mail_raw(from: "newbie@example.com", message_id: "<new@test>"),
-        gmail: { gm_thrid: "triage-1", gm_msgid: "7001" })
+        provider: { thread_id: "triage-1", message_id: "7001" })
       assert_equal :stored, result[:status]
       assert_nil result[:conversation].linkable
       assert result[:conversation].triage?
@@ -87,7 +87,7 @@ class MailIngesterTest < ActiveSupport::TestCase
     client = Client.create!(name: "Linked", email: "linked@example.com")
     EmailIdentity.remember!("stranger@example.com", linkable: client)
     result = ingest_raw(mail_raw(from: "stranger@example.com", message_id: "<s1@test>"),
-      gmail: { gm_thrid: "t-s", gm_msgid: "8001" })
+      provider: { thread_id: "t-s", message_id: "8001" })
     assert_equal client, result[:conversation].linkable
   end
 
@@ -95,13 +95,13 @@ class MailIngesterTest < ActiveSupport::TestCase
     client = Client.create!(name: "Family")
     client.people.create!(name: "Maya", email: "maya-person@example.com")
     result = ingest_raw(mail_raw(from: "maya-person@example.com", message_id: "<p1@test>"),
-      gmail: { gm_thrid: "t-p", gm_msgid: "8002" })
+      provider: { thread_id: "t-p", message_id: "8002" })
     assert_equal client, result[:conversation].linkable
   end
 
   test "sanitizes html bodies on ingest" do
     raw = "From: h@example.com\r\nTo: info@sherpaholidays.com\r\nSubject: x\r\nMessage-ID: <h1@test>\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n<p>hi</p><script>alert(1)</script>"
-    result = ingest_raw(raw, gmail: { gm_thrid: "t-h", gm_msgid: "8003" })
+    result = ingest_raw(raw, provider: { thread_id: "t-h", message_id: "8003" })
     assert_not_includes result[:message].html_body.to_s, "<script"
   end
 
@@ -109,7 +109,7 @@ class MailIngesterTest < ActiveSupport::TestCase
     client = Client.create!(name: "Attach", email: "attach@example.com")
     parsed = Mail::Ingester.parse_raw(mail_raw(from: "attach@example.com", message_id: "<att@test>"))
     parsed.attachments << { filename: "note.txt", content_type: "text/plain", data: "hello file" }
-    result = Mail::Ingester.ingest(parsed: parsed, gmail: { gm_thrid: "t-att", gm_msgid: "8004" })
+    result = Mail::Ingester.ingest(parsed: parsed, provider: { thread_id: "t-att", message_id: "8004" })
     assert result[:message].files.attached?
     assert_equal "note.txt", result[:message].files.first.filename.to_s
   end
@@ -117,7 +117,7 @@ class MailIngesterTest < ActiveSupport::TestCase
     %w[Bcc Delivered-To X-Original-To].each_with_index do |header, index|
       raw = "#{header}: info@sherpaholidays.com\r\n" + mail_raw(from: "sender@example.com", to: "captain@gmail.com", message_id: "<delivery#{index}@test>")
       parsed = Mail::Ingester.parse_raw(raw)
-      assert_equal :stored, Mail::Ingester.ingest(parsed: parsed, gmail: {})[:status]
+      assert_equal :stored, Mail::Ingester.ingest(parsed: parsed, provider: {})[:status]
     end
   end
 
@@ -128,10 +128,10 @@ class MailIngesterTest < ActiveSupport::TestCase
     service = ActiveStorage::Blob.service
     assert_no_difference([ "Message.count", "Conversation.count", "ActiveStorage::Blob.count" ]) do
       service.stub(:upload, ->(*) { raise IOError, "upload failed" }) do
-        assert_raises(IOError) { Mail::Ingester.ingest(parsed: parsed, gmail: { gm_msgid: "retry" }) }
+        assert_raises(IOError) { Mail::Ingester.ingest(parsed: parsed, provider: { message_id: "retry" }) }
       end
     end
-    result = Mail::Ingester.ingest(parsed: parsed, gmail: { gm_msgid: "retry" })
+    result = Mail::Ingester.ingest(parsed: parsed, provider: { message_id: "retry" })
     assert_equal :stored, result[:status]
     assert_equal client, result[:conversation].linkable
     assert_equal "route", result[:message].files.first.download
@@ -156,21 +156,21 @@ class MailIngesterTest < ActiveSupport::TestCase
       "ActiveStorage::Blob.count", "ActiveStorage::Attachment.count", "Note.count" ]) do
       service.stub(:upload, failing_upload) do
         assert_raises(IOError) do
-          Mail::Ingester.ingest(parsed: parsed, gmail: { gm_msgid: "held-retry" })
+          Mail::Ingester.ingest(parsed: parsed, provider: { message_id: "held-retry" })
         end
       end
     end
     assert_equal 3, keys.size
     keys.each { |key| assert_not service.exist?(key) }
 
-    result = Mail::Ingester.ingest(parsed: parsed, gmail: { gm_msgid: "held-retry" })
+    result = Mail::Ingester.ingest(parsed: parsed, provider: { message_id: "held-retry" })
     assert_equal :stored, result[:status]
     message = result[:message].reload
     assert_equal "route bytes", message.files.first.download
     assert_equal [ "passport bytes", "visa bytes" ],
       DocumentHolding.where(message: message).order(:id).map { |holding| holding.file.download }
     assert_equal 2, message.held_attachments.size
-    assert_equal :duplicate, Mail::Ingester.ingest(parsed: parsed, gmail: { gm_msgid: "held-retry" })[:status]
+    assert_equal :duplicate, Mail::Ingester.ingest(parsed: parsed, provider: { message_id: "held-retry" })[:status]
   end
 
   test "ignored identities skip triage on new threads" do
@@ -199,7 +199,7 @@ class MailIngesterTest < ActiveSupport::TestCase
     parsed.attachments = 11.times.map { |i| { filename: "route#{i}.txt", content_type: "text/plain", data: "route" } }
     parsed.attachments << { filename: "passport.pdf", content_type: "application/pdf", data: "passport" }
     parsed.attachments << { filename: "large.txt", content_type: "text/plain", data: "a" * (25.megabytes + 1) }
-    result = Mail::Ingester.ingest(parsed: parsed, gmail: {})
+    result = Mail::Ingester.ingest(parsed: parsed, provider: {})
     assert_equal 11, result[:message].files.count
     assert_equal "passport.pdf", result[:message].held_attachments.first["filename"]
     assert_includes result[:message].attachment_notices.first, "25 MB"
@@ -235,7 +235,7 @@ class MailIngesterTest < ActiveSupport::TestCase
     ]
     parsed = Mail::Ingester.parse_raw(mail_raw(from: "held@example.com", message_id: "<held@test>"))
     parsed.attachments = files
-    result = Mail::Ingester.ingest(parsed: parsed, gmail: {})
+    result = Mail::Ingester.ingest(parsed: parsed, provider: {})
     message = result[:message].reload
     assert_empty message.files
     assert_equal files.map { |file| { "filename" => file[:filename], "byte_size" => file[:data].bytesize,
@@ -254,7 +254,7 @@ class MailIngesterTest < ActiveSupport::TestCase
   test "holding-area bytes purge on expiry and never outlive the 24-hour window" do
     parsed = Mail::Ingester.parse_raw(mail_raw(from: "held@example.com", message_id: "<expiry@test>"))
     parsed.attachments = [ { filename: "passport.pdf", content_type: "application/pdf", data: "passport bytes" } ]
-    result = Mail::Ingester.ingest(parsed: parsed, gmail: {})
+    result = Mail::Ingester.ingest(parsed: parsed, provider: {})
     message = result[:message].reload
     holding = DocumentHolding.find_by!(message: message)
     key = holding.file.blob.key
@@ -273,7 +273,7 @@ class MailIngesterTest < ActiveSupport::TestCase
     data = pdf_with_title("Trip itinerary")
     parsed = Mail::Ingester.parse_raw(mail_raw(from: "route@example.com", message_id: "<ordinary-pdf@test>"))
     parsed.attachments << { filename: "itinerary.pdf", content_type: "application/pdf", data: data }
-    result = Mail::Ingester.ingest(parsed: parsed, gmail: {})
+    result = Mail::Ingester.ingest(parsed: parsed, provider: {})
     assert_empty result[:message].held_attachments
     assert_equal data, result[:message].files.first.download
   end

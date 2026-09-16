@@ -26,12 +26,12 @@ class Message < ApplicationRecord
 
   serialize :to_addresses, coder: JSON
   serialize :cc_addresses, coder: JSON
-  serialize :gmail_labels, coder: JSON
+  serialize :provider_labels, coder: JSON
   serialize :attachment_notices, coder: JSON
   serialize :held_attachments, coder: JSON
 
   validates :direction, inclusion: { in: DIRECTIONS }
-  validates :gm_message_id, uniqueness: { allow_nil: true }
+  validates :provider_message_id, uniqueness: { allow_nil: true }
 
   scope :inbound, -> { where(direction: "in") }
   scope :outbound, -> { where(direction: "out") }
@@ -103,7 +103,7 @@ class Message < ApplicationRecord
   end
 
   def label_list
-    Array(gmail_labels).reject(&:blank?)
+    Array(provider_labels).reject(&:blank?)
   end
 
   def sent?

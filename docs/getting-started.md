@@ -6,8 +6,9 @@ the bottom (Today, Inbox, Leads, Clients, More) reaches everything
 one-handed.
 
 1. **Pick Paper or Night** in Settings → Appearance. It applies instantly.
-2. **Connect the mailbox** using the [Mail setup guide](../README.md#mail):
-   Settings → Mailbox → Save mailbox → Test connection.
+2. **Connect the mailbox** in Settings → Mailbox → Connect mailbox (Microsoft 365),
+   then Test connection. A first connect starts from now; past mail stays
+   for Import history.
 3. **Run the import preview** in Settings → Import history. Start with the
    last 90 days, review the rows, then commit.
 4. **Review triage** in Inbox → Triage. Confirm each unknown sender as a

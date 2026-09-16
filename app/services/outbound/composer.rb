@@ -9,7 +9,7 @@ module Outbound
     end
 
     # The From/Reply-To identity for every CRM send. MAIL_FROM carries the
-    # mailbox (info@ alias delivered into the captain's Gmail); the sender
+    # mailbox (info@sherpaholidays.com on Microsoft 365); the sender
     # name comes from Settings.
     def self.from_address
       ENV.fetch("MAIL_FROM", "info@sherpaholidays.com").strip.presence ||

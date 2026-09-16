@@ -74,6 +74,6 @@ class LeadMailTouchTest < ActiveSupport::TestCase
     sender, recipient = outbound ? [ "info@sherpaholidays.com", lead.email ] : [ lead.email, "info@sherpaholidays.com" ]
     raw = "From: #{sender}\r\nTo: #{recipient}\r\nDate: #{at.rfc2822}\r\nSubject: Trip\r\n\r\nTravel plans"
     Mail::Ingester.ingest(parsed: Mail::Ingester.parse_raw(raw),
-      gmail: { gm_thrid: "touch-thread", gm_msgid: id })
+      provider: { thread_id: "touch-thread", message_id: id })
   end
 end

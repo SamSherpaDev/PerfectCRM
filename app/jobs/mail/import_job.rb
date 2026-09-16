@@ -7,25 +7,19 @@ class Mail::ImportJob < ApplicationJob
     return if mail_import.done?
 
     mail_import.update!(status: "running", started_at: mail_import.started_at || Time.current, error: nil)
-    fetcher ||= Mail::ImapFetcher.new
+    fetcher ||= Mail::GraphFetcher.new
     progress = mail_import.preview_json || {}
     choices = progress.fetch("choices", {})
-    fetcher.fetch_all(since: mail_import.cutoff_date&.to_time, after_uid: progress["import_uid"],
-      uid_validity: progress["import_validity"], on_mailbox: ->(validity) {
-        if progress["import_validity"] != validity
-          progress = progress.merge("import_uid" => 0, "import_validity" => validity)
-          mail_import.update!(preview_json: progress, processed_messages: 0, linked_messages: 0, skipped_messages: 0)
-        end
-      }) do |item|
-      parsed = Mail::Ingester.parse_raw(item.raw)
+    fetcher.fetch_history(since: mail_import.cutoff_date&.to_time, cursor: progress["history_cursor"]) do |item|
+      parsed = item.parsed
       prepared = Mail::Ingester.prepare(parsed: parsed)
       mail_import.with_lock do
-        result = Mail::Ingester.ingest(parsed: parsed, gmail: item.gmail, prepared: prepared)
+        result = Mail::Ingester.ingest(parsed: parsed, provider: item.provider, prepared: prepared)
         conversation = result[:conversation]
         apply_import_choice(conversation, parsed, choices, mail_import)
         linked = conversation&.linked?
         kept = result[:status] != :filtered
-        progress = progress.merge("import_uid" => item.uid, "import_validity" => item.uid_validity)
+        progress = progress.merge("history_cursor" => item.cursor)
         mail_import.update!(preview_json: progress,
           processed_messages: mail_import.processed_messages + (kept ? 1 : 0),
           linked_messages: mail_import.linked_messages + (linked ? 1 : 0),

@@ -21,6 +21,7 @@ Rails.application.routes.draw do
   root "today#show"
   get "sign-in", to: "sessions#new", as: :sign_in
   get "auth/google_oauth2/callback", to: "sessions#create"
+  get "auth/microsoft/callback", to: "microsoft_auth#callback", as: :microsoft_callback
   get "auth/failure", to: "sessions#failure"
   delete "sign-out", to: "sessions#destroy", as: :sign_out
 
@@ -117,7 +118,7 @@ Rails.application.routes.draw do
   end
   resource :settings, only: %i[edit update] do
     post :perfectbook_test, on: :collection
-    patch :mailbox, on: :collection
+    post :mailbox_connect, on: :collection
     post :mailbox_test, on: :collection
     post :rotate_site_key, on: :collection
     post :rotate_relay_secret, on: :collection

@@ -10,7 +10,7 @@ class DocumentUploadOrphanTest < ActiveSupport::TestCase
   end
 
   teardown do
-    message = Message.find_by(gm_message_id: @message_id)
+    message = Message.find_by(provider_message_id: @message_id)
     DocumentHolding.where(message: message).find_each(&:purge!) if message
     message&.conversation&.destroy!
     @import&.destroy!
@@ -42,7 +42,7 @@ class DocumentUploadOrphanTest < ActiveSupport::TestCase
         service.stub(:delete, ->(*) { raise IOError, "deletion unavailable" }) do
           assert_raises(IOError) do
             Message.transaction do
-              Mail::Ingester.ingest(parsed: parsed, gmail: { gm_msgid: @message_id }, prepared: prepared)
+              Mail::Ingester.ingest(parsed: parsed, provider: { message_id: @message_id }, prepared: prepared)
             end
           end
         end
@@ -60,7 +60,7 @@ class DocumentUploadOrphanTest < ActiveSupport::TestCase
     @keys.each { |key| assert_not service.exist?(key) }
     assert_empty DocumentUploadOrphan.where(key: @keys)
 
-    result = Mail::Ingester.ingest(parsed: parsed, gmail: { gm_msgid: @message_id })
+    result = Mail::Ingester.ingest(parsed: parsed, provider: { message_id: @message_id })
     assert_equal :stored, result[:status]
     holdings = DocumentHolding.where(message: result[:message]).order(:id).to_a
     assert_equal [ "passport bytes", "visa bytes" ], holdings.map { |holding| holding.file.download }
@@ -85,11 +85,10 @@ class DocumentUploadOrphanTest < ActiveSupport::TestCase
     mail.message_id = "#{@message_id}@test"
     mail.attachments["passport.pdf"] = { mime_type: "application/pdf", content: "passport bytes" }
     mail.attachments["visa.png"] = { mime_type: "image/png", content: "visa bytes" }
-    item = Struct.new(:raw, :gmail, :uid, :uid_validity).new(
-      mail.to_s, { gm_msgid: @message_id }, 1, 123)
+    item = Struct.new(:parsed, :provider, :cursor).new(
+      Mail::Ingester.parse_raw(mail.to_s), { message_id: @message_id }, "inbox|2026-09-15T10:00:00Z|orphan-1")
     fetcher = Object.new
-    fetcher.define_singleton_method(:fetch_all) do |**options, &block|
-      options[:on_mailbox].call(123)
+    fetcher.define_singleton_method(:fetch_history) do |**options, &block|
       block.call(item)
     end
     @import = MailImport.create!(scope: "all", status: "draft")
@@ -112,7 +111,7 @@ class DocumentUploadOrphanTest < ActiveSupport::TestCase
     end
     assert_equal "failed", @import.reload.status
     assert_equal 0, @import.processed_messages
-    assert_equal 0, @import.preview_json["import_uid"]
+    assert_nil @import.reload.preview_json&.dig("history_cursor")
     assert_equal 2, @keys.size
     assert_equal @keys.sort, DocumentUploadOrphan.where(key: @keys).pluck(:key).sort
     assert service.exist?(@keys.first)
@@ -124,8 +123,8 @@ class DocumentUploadOrphanTest < ActiveSupport::TestCase
     Mail::ImportJob.perform_now(@import.id, fetcher: fetcher)
     assert_equal "done", @import.reload.status
     assert_equal 1, @import.processed_messages
-    assert_equal 1, @import.preview_json["import_uid"]
-    message = Message.find_by!(gm_message_id: @message_id)
+    assert_equal item.cursor, @import.preview_json["history_cursor"]
+    message = Message.find_by!(provider_message_id: @message_id)
     holdings = DocumentHolding.where(message: message).order(:id).to_a
     assert_equal [ "passport bytes", "visa bytes" ], holdings.map { |holding| holding.file.download }
     assert_empty DocumentUploadOrphan.where(key: holdings.map { |holding| holding.file.blob.key })
@@ -138,12 +137,12 @@ class DocumentUploadOrphanTest < ActiveSupport::TestCase
     ActiveStorage::Blob.service.stub(:upload, ->(*) { uploads << true }) do
       assert_raises(ActiveRecord::ActiveRecordError) do
         Message.transaction do
-          Mail::Ingester.ingest(parsed: parsed, gmail: { gm_msgid: @message_id })
+          Mail::Ingester.ingest(parsed: parsed, provider: { message_id: @message_id })
         end
       end
     end
     assert_empty uploads
-    assert_not Message.exists?(gm_message_id: @message_id)
+    assert_not Message.exists?(provider_message_id: @message_id)
   end
 
   test "a swept reservation cannot subsequently upload bytes" do

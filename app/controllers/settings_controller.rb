@@ -5,7 +5,8 @@ class SettingsController < ApplicationController
     @perfectbook_last_success = PerfectBook::SyncState.last_success_at
     @perfectbook_last_error = PerfectBook::SyncState.last_error_row
     @mailbox_address = Mail.mailbox_address
-    @mail_sync = MailSyncState.find_by(folder: Mail::FOLDER)
+    @mail_syncs = MailSyncState.where(folder: Mail::GraphFetcher::FOLDERS).index_by(&:folder)
+    @graph_configured = Mail::GraphAuth.configured?
     @imports = MailImport.ordered.limit(5)
     load_automation_log
     # Shown once, right after rotation; never rendered again.
@@ -37,7 +38,8 @@ class SettingsController < ApplicationController
       @perfectbook_last_success = PerfectBook::SyncState.last_success_at
       @perfectbook_last_error = PerfectBook::SyncState.last_error_row
       @mailbox_address = Mail.mailbox_address
-      @mail_sync = MailSyncState.find_by(folder: Mail::FOLDER)
+      @mail_syncs = MailSyncState.where(folder: Mail::GraphFetcher::FOLDERS).index_by(&:folder)
+      @graph_configured = Mail::GraphAuth.configured?
       @imports = MailImport.ordered.limit(5)
       render :edit, status: :unprocessable_entity
     end
@@ -72,30 +74,31 @@ class SettingsController < ApplicationController
     redirect_to edit_settings_path, alert: "PerfectBook is unreachable right now.", status: :see_other
   end
 
-  # Mailbox connection: the Gmail address is fixed to MAILBOX_ADDRESS so
-  # personal mail can never drift in; only the login + app password are
-  # editable. The password is stored encrypted (Rails encrypts).
-  def mailbox
-    @settings = Setting.current
-    login = params.dig(:setting, :mailbox_login).to_s.strip
-    password = params.dig(:setting, :mailbox_app_password).to_s
-    @settings.mailbox_login = login.presence
-    @settings.mailbox_app_password = password.presence || @settings.mailbox_app_password
-    if @settings.save
-      redirect_to edit_settings_path, notice: "Mailbox saved.", status: :see_other
-    else
-      load_settings_supporting_data!
-      render :edit, status: :unprocessable_entity
-    end
+  # Mailbox connection: delegated Microsoft 365 OAuth. The mailbox address
+  # is fixed to MAILBOX_ADDRESS so personal mail can never drift in; only
+  # the Microsoft grant connects it. "Connect mailbox" sends the captain
+  # to Microsoft, and /auth/microsoft/callback stores the refresh token
+  # encrypted on Setting (see Mail::GraphAuth).
+  def mailbox_connect
+    state = SecureRandom.hex(24)
+    session[:microsoft_auth_state] = state
+    redirect_to Mail::GraphAuth.authorization_url(redirect_uri: microsoft_callback_url, state: state),
+      allow_other_host: true
+  rescue Mail::NotConfiguredError
+    redirect_to edit_settings_path,
+      alert: "Add MS_GRAPH_CLIENT_ID, MS_GRAPH_CLIENT_SECRET and MS_GRAPH_TENANT_ID to .env.app first.",
+      status: :see_other
   end
 
   def mailbox_test
-    Mail::ImapFetcher.new.test_connection
+    Mail::GraphFetcher.new.test_connection
     redirect_to edit_settings_path, notice: "Mailbox connection works.", status: :see_other
-  rescue Mail::ImapFetcher::NotConfiguredError
-    redirect_to edit_settings_path, alert: "Add the mailbox login and app password first.", status: :see_other
-  rescue Mail::ImapFetcher::ConnectionError
-    redirect_to edit_settings_path, alert: "Mailbox is unreachable right now. Check the login and app password.", status: :see_other
+  rescue Mail::NotConfiguredError
+    redirect_to edit_settings_path, alert: "Connect the mailbox first.", status: :see_other
+  rescue Mail::GrantRevokedError
+    redirect_to edit_settings_path, alert: "Mailbox access was revoked or expired. Reconnect the mailbox.", status: :see_other
+  rescue Mail::ConnectionError
+    redirect_to edit_settings_path, alert: "Mailbox is unreachable right now. Try again in a minute.", status: :see_other
   end
 
   # AI assistance: provider, model, key (stored encrypted), voice guide,
@@ -124,7 +127,8 @@ class SettingsController < ApplicationController
     @perfectbook_last_success = PerfectBook::SyncState.last_success_at
     @perfectbook_last_error = PerfectBook::SyncState.last_error_row
     @mailbox_address = Mail.mailbox_address
-    @mail_sync = MailSyncState.find_by(folder: Mail::FOLDER)
+    @mail_syncs = MailSyncState.where(folder: Mail::GraphFetcher::FOLDERS).index_by(&:folder)
+    @graph_configured = Mail::GraphAuth.configured?
     @imports = MailImport.ordered.limit(5)
     @ai_calls_today = AiCall.today.count
     @ai_cost_today = AiCall.daily_cost_cents

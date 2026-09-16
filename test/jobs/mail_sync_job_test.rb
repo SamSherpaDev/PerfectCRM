@@ -1,169 +1,118 @@
 require "test_helper"
+require_relative "../support/graph_fake"
 
-# Fake IMAP server for sync tests: records which read-only methods were
-# called and raises if the fetcher ever tries a write (select/store/copy).
-class FakeImap
-  attr_reader :calls, :folders
-
-  Row = Struct.new(:attr)
-
-  def initialize(messages: {}, uid_validity: 12345)
-    @messages = messages # uid => { raw:, thrid:, msgid:, labels: }
-    @uid_validity = uid_validity
-    @calls = []
-    @responses = { "UIDVALIDITY" => [ uid_validity ] }
-  end
-
-  def responses
-    @responses
-  end
-
-  def examine(folder)
-    @calls << [ :examine, folder ]
-    true
-  end
-
-  def status(folder, keys)
-    @calls << [ :status, folder, keys ]
-    { "UIDVALIDITY" => @uid_validity }
-  end
-
-  def uid_search(criteria)
-    @calls << [ :uid_search, criteria ]
-    @messages.keys.sort
-  end
-
-  def uid_fetch(uids, items)
-    @calls << [ :uid_fetch, uids, items ]
-    Array(uids).filter_map do |uid|
-      data = @messages[uid]
-      next if data.nil?
-
-      Row.new({
-        "RFC822" => data[:raw],
-        "X-GM-THRID" => data[:thrid],
-        "X-GM-MSGID" => data[:msgid],
-        "X-GM-LABELS" => data[:labels] || []
-      })
-    end
-  end
-
-  def logout; end
-  def disconnect; end
-
-  # Write methods must never be called: fail loudly if they are.
-  %i[select store copy move expunge uid_store uid_copy uid_move].each do |name|
-    define_method(name) { |*| raise "read-only violation: #{name} called" }
-  end
-end
-
-def sync_raw(from:, to: "info@sherpaholidays.com", subject: "Hi", message_id:)
-  "From: #{from}\r\nTo: #{to}\r\nSubject: #{subject}\r\nMessage-ID: #{message_id}\r\nDate: Mon, 14 Sep 2026 10:00:00 -0700\r\n\r\nbody"
+def sync_message(id:, from:, to: "info@sherpaholidays.com", message_id: nil, conversation: "sync-conv")
+  GraphMessageBuilder.instance_method(:graph_message).bind_call(
+    Object.new.extend(GraphMessageBuilder),
+    id: id, from: from, to: to, subject: "Hi",
+    message_id: message_id || "<#{id}@test>", conversation: conversation)
 end
 
 class MailSyncJobTest < ActiveSupport::TestCase
+  include GraphMessageBuilder
+
   setup do
-    Setting.current.update!(mailbox_login: "captain@gmail.com", mailbox_app_password: "xxxx-xxxx")
+    @mailbox = FakeMailbox.new
+    Setting.current.update!(ms_graph_refresh_token: "refresh-0",
+      mailbox_last_error: nil, mailbox_last_error_at: nil, mailbox_last_sync_at: nil)
   end
 
-  test "incremental sync stores new mail and advances the cursor" do
-    imap = FakeImap.new(messages: {
-      10 => { raw: sync_raw(from: "a@example.com", message_id: "<a@test>"), thrid: "t-a", msgid: "101" },
-      11 => { raw: sync_raw(from: "b@example.com", message_id: "<b@test>"), thrid: "t-b", msgid: "102" }
-    })
-    assert_difference("Message.count", 2) do
-      Mail::SyncJob.new.perform(fetcher: Mail::ImapFetcher.new(login: "x", password: "y", imap: imap))
-    end
-    assert_equal 11, MailSyncState.for(Mail::FOLDER).last_uid
-
-    imap2 = FakeImap.new(messages: {
-      10 => { raw: sync_raw(from: "a@example.com", message_id: "<a@test>"), thrid: "t-a", msgid: "101" },
-      11 => { raw: sync_raw(from: "b@example.com", message_id: "<b@test>"), thrid: "t-b", msgid: "102" },
-      12 => { raw: sync_raw(from: "c@example.com", message_id: "<c@test>"), thrid: "t-c", msgid: "103" }
-    })
-    # New fetcher sees the stored cursor and only fetches UID 12+.
-    def imap2.uid_search(criteria)
-      @calls << [ :uid_search, criteria ]
-      [ 12 ]
-    end
-    assert_difference("Message.count", 1) do
-      Mail::SyncJob.new.perform(fetcher: Mail::ImapFetcher.new(login: "x", password: "y", imap: imap2))
-    end
+  def fetcher
+    Mail::GraphFetcher.new(transport: @mailbox.transport)
   end
 
-  test "personal mail is skipped without storing and read-only is kept" do
-    imap = FakeImap.new(messages: {
-      20 => { raw: sync_raw(from: "friend@gmail.com", to: "captain@gmail.com", message_id: "<priv@test>"), thrid: "t-p", msgid: "201" }
-    })
+  test "first connect stores nothing and later mail syncs incrementally" do
+    @mailbox.add("inbox", sync_message(id: "old", from: "old@example.com"))
     assert_no_difference([ "Conversation.count", "Message.count" ]) do
-      Mail::SyncJob.new.perform(fetcher: Mail::ImapFetcher.new(login: "x", password: "y", imap: imap))
+      Mail::SyncJob.new.perform(fetcher: fetcher)
     end
-    names = imap.calls.map(&:first)
-    assert_includes names, :examine
-    assert_not_includes names, :select
-    assert_not_includes names, :store
+
+    @mailbox.add("inbox", sync_message(id: "new-a", from: "a@example.com"))
+    @mailbox.add("sentitems", { **sync_message(id: "new-b", from: "info@sherpaholidays.com",
+      to: "a@example.com"), "conversationId" => "other-conv" })
+    assert_difference("Message.count", 2) do
+      assert_equal 2, Mail::SyncJob.new.perform(fetcher: fetcher)
+    end
+    assert Setting.current.reload.mailbox_last_sync_at.present?
+
+    assert_no_difference("Message.count") do
+      assert_equal 0, Mail::SyncJob.new.perform(fetcher: fetcher)
+    end
   end
 
-  test "uidvalidity change resets the cursor" do
-    MailSyncState.for(Mail::FOLDER).update!(uid_validity: 111, last_uid: 50)
-    imap = FakeImap.new(messages: {
-      1 => { raw: sync_raw(from: "a@example.com", message_id: "<reset@test>"), thrid: "t-r", msgid: "301" }
-    }, uid_validity: 222)
-    Mail::SyncJob.new.perform(fetcher: Mail::ImapFetcher.new(login: "x", password: "y", imap: imap))
-    assert_equal 222, MailSyncState.for(Mail::FOLDER).uid_validity
+  test "personal mail is skipped without storing and access stays read-only" do
+    Mail::SyncJob.new.perform(fetcher: fetcher) # prime
+    @mailbox.add("inbox", sync_message(id: "priv", from: "friend@gmail.com", to: "captain@gmail.com"))
+
+    assert_no_difference([ "Conversation.count", "Message.count" ]) do
+      Mail::SyncJob.new.perform(fetcher: fetcher)
+    end
+    methods = @mailbox.requests.map(&:method).uniq
+    assert_includes methods, :get
+    assert_not_includes @mailbox.requests.map(&:url).join(" "), "PATCH"
+    @mailbox.requests.each do |request|
+      assert_includes [ :get, :get_bytes, :post ], request.method
+      refute_match(%r{graph\.microsoft\.com.*(PATCH|DELETE)}i, request.url)
+    end
   end
 
-  test "ingestion failure advances only completed UIDs and resumes" do
-    imap = FakeImap.new(messages: {
-      101 => { raw: sync_raw(from: "one@example.com", message_id: "<checkpoint-one@test>") },
-      102 => { raw: sync_raw(from: "two@example.com", message_id: "<checkpoint-two@test>") }
-    })
-    fetcher = Mail::ImapFetcher.new(login: "x", password: "y", imap: imap)
+  test "mid-folder failure replays and dedupes on resume" do
+    Mail::SyncJob.new.perform(fetcher: fetcher) # prime
+    @mailbox.add("inbox", sync_message(id: "one", from: "one@example.com"))
+    @mailbox.add("inbox", sync_message(id: "two", from: "two@example.com"))
+
     original = Mail::Ingester.method(:ingest)
-    failing = ->(**args) do
+    failing = lambda do |**args|
       raise "interrupted" if args[:parsed].from_addresses == [ "two@example.com" ]
+
       original.call(**args)
     end
     Mail::Ingester.stub(:ingest, failing) do
       assert_raises(RuntimeError) { Mail::SyncJob.new.perform(fetcher: fetcher) }
     end
-    assert_equal 101, MailSyncState.for(Mail::FOLDER).last_uid
-    assert_difference("Message.count", 1) { Mail::SyncJob.new.perform(fetcher: fetcher) }
-    assert_equal 102, MailSyncState.for(Mail::FOLDER).last_uid
+    assert_equal 1, Message.count
+    # The folder link was not committed, so the next run replays both and
+    # dedupes the already-stored one.
+    assert_difference("Message.count", 1) do
+      assert_equal 1, Mail::SyncJob.new.perform(fetcher: fetcher)
+    end
+    assert_equal 2, Message.count
+    assert MailSyncState.for("inbox").delta_link.present?
   end
 
-  test "connection errors are normalized for settings and history" do
-    imap = FakeImap.new
-    def imap.status(*)
-      raise Net::IMAP::Error, "bad credentials"
-    end
-    def imap.examine(*)
-      raise Net::IMAP::Error, "bad credentials"
-    end
-    fetcher = Mail::ImapFetcher.new(login: "x", password: "y", imap: imap)
-    assert_raises(Mail::ImapFetcher::ConnectionError) { fetcher.test_connection }
-    assert_raises(Mail::ImapFetcher::ConnectionError) { fetcher.fetch_all.to_a }
+  test "run limit leaves the folder link for replay without loss" do
+    Mail::SyncJob.new.perform(fetcher: fetcher) # prime
+    @mailbox.add("inbox", sync_message(id: "l1", from: "l1@example.com"))
+    @mailbox.add("inbox", sync_message(id: "l2", from: "l2@example.com"))
+
+    assert_equal 1, Mail::SyncJob.new.perform(fetcher: fetcher, limit: 1)
+    assert_equal 1, Message.count
+    assert_equal 1, Mail::SyncJob.new.perform(fetcher: fetcher, limit: 1)
+    assert_equal 2, Message.count
   end
 
-  test "sync processes and checkpoints each message before fetching the next" do
-    imap = FakeImap.new(messages: {
-      10 => { raw: sync_raw(from: "personal@example.com", to: "captain@gmail.com", message_id: "<stream-personal@test>") },
-      11 => { raw: sync_raw(from: "client@example.com", message_id: "<stream-client@test>") },
-      12 => { raw: sync_raw(from: "last@example.com", message_id: "<stream-last@test>") }
-    })
-    original_fetch = imap.method(:uid_fetch)
-    imap.define_singleton_method(:uid_fetch) do |uids, items|
-      if uids.first > 10
-        raise "previous message not checkpointed" unless MailSyncState.for(Mail::FOLDER).last_uid == uids.first - 1
-        raise "personal mail stored" if Message.exists?(message_id: "stream-personal@test")
-      end
-      if uids == [ 12 ]
-        raise "business message not stored before next fetch" unless Message.exists?(message_id: "stream-client@test")
-      end
-      original_fetch.call(uids, items)
+  test "revoked grant records the error and stops quietly" do
+    Mail::SyncJob.new.perform(fetcher: fetcher) # prime
+    @mailbox.refuse_grant!
+
+    assert_no_difference("Message.count") do
+      assert_equal false, Mail::SyncJob.new.perform(fetcher: fetcher)
     end
-    count = Mail::SyncJob.new.perform(fetcher: Mail::ImapFetcher.new(login: "x", password: "y", imap: imap))
-    assert_equal 2, count
-    assert_equal 12, MailSyncState.for(Mail::FOLDER).last_uid
+    assert_match(/revoked|Reconnect/i, Setting.current.reload.mailbox_last_error.to_s)
+  end
+
+  test "unconfigured mailbox no-ops" do
+    Setting.current.update!(ms_graph_refresh_token: nil)
+    assert_equal false, Mail::SyncJob.new.perform(fetcher: fetcher)
+  end
+
+  test "connection errors are recorded and raised for retry" do
+    fetcher = Mail::GraphFetcher.new(transport: @mailbox.transport)
+    def fetcher.fetch_new(*)
+      raise Mail::ConnectionError, "graph down"
+    end
+    Setting.current.update!(ms_graph_refresh_token: "refresh-0")
+    assert_raises(Mail::ConnectionError) { Mail::SyncJob.new.perform(fetcher: fetcher) }
+    assert_equal "graph down", Setting.current.reload.mailbox_last_error
   end
 end

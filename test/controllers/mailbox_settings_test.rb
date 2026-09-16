@@ -8,28 +8,52 @@ class MailboxSettingsTest < ActionDispatch::IntegrationTest
     sign_in
   end
 
-  test "settings shows the fixed mailbox address and help text" do
+  test "settings shows the fixed mailbox address and connect button" do
     get edit_settings_path
     assert_response :success
     assert_select "h2", text: "Mailbox"
     assert_match Mail.mailbox_address, response.body
-    assert_match(/App passwords/, response.body)
+    assert_match(/Connect mailbox/, response.body)
+    assert_no_match(/App passwords/, response.body)
   end
 
-  test "mailbox login saves and the password stays encrypted" do
-    patch mailbox_settings_path, params: { setting: { mailbox_login: "captain@gmail.com", mailbox_app_password: "abcd-efgh" } }
-    assert_redirected_to edit_settings_path
-    settings = Setting.current.reload
-    assert_equal "captain@gmail.com", settings.mailbox_login
-    raw = Setting.connection.select_value("SELECT mailbox_app_password FROM settings WHERE id = #{settings.id}")
-    assert_not_includes raw.to_s, "abcd-efgh"
-    assert_equal "abcd-efgh", settings.mailbox_app_password
+  test "connect redirects to Microsoft with the delegated scopes" do
+    post mailbox_connect_settings_path
+    assert_response :redirect
+    location = response.headers["Location"]
+    assert_match %r{\Ahttps://login\.microsoftonline\.com/}, location
+    query = URI.decode_www_form(URI.parse(location).query).to_h
+    assert_includes query["scope"].split, "Mail.Read"
+    assert_includes query["scope"].split, "offline_access"
+    assert_equal microsoft_callback_url, query["redirect_uri"]
+    assert session[:microsoft_auth_state].present?
   end
 
-  test "mailbox test without credentials warns" do
-    Setting.current.update!(mailbox_login: nil, mailbox_app_password: nil)
+  test "connected settings show status, test, and reconnect" do
+    Setting.current.update!(ms_graph_refresh_token: "refresh-9")
+    get edit_settings_path
+    assert_response :success
+    assert_match(/Connected/, response.body)
+    assert_match(/Reconnect mailbox/, response.body)
+  end
+
+  test "mailbox test without a grant asks to connect" do
+    Setting.current.update!(ms_graph_refresh_token: nil)
     post mailbox_test_settings_path
     assert_redirected_to edit_settings_path
-    assert_match(/app password/i, flash[:alert].to_s)
+    assert_match(/Connect the mailbox/i, flash[:alert].to_s)
+  end
+
+  test "mailbox test with a revoked grant asks to reconnect" do
+    Setting.current.update!(ms_graph_refresh_token: "refresh-stale")
+    Mail::GraphFetcher.stub(:new, ->(*) {
+      fetcher = Object.new
+      fetcher.define_singleton_method(:test_connection) { raise Mail::GrantRevokedError, "revoked" }
+      fetcher
+    }) do
+      post mailbox_test_settings_path
+    end
+    assert_redirected_to edit_settings_path
+    assert_match(/Reconnect the mailbox/i, flash[:alert].to_s)
   end
 end

@@ -5,9 +5,9 @@ class MailSyncState < ApplicationRecord
     find_or_create_by!(folder: folder.to_s)
   end
 
-  def self.record_success!(folder, uid_validity:, last_uid:)
+  def self.record_success!(folder, delta_link:)
     state = self.for(folder)
-    state.update!(uid_validity: uid_validity, last_uid: last_uid,
+    state.update!(delta_link: delta_link,
       last_sync_at: Time.current, last_error: nil, last_error_at: nil)
     state
   end

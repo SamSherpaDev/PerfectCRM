@@ -1,7 +1,15 @@
 require "mail"
 
 module Mail
-  FOLDER = "[Gmail]/All Mail"
+  # Shared inbound-mail errors. The Microsoft Graph reader raises these so
+  # jobs and controllers handle provider failures uniformly.
+  class GraphError < StandardError; end
+  class NotConfiguredError < GraphError; end
+  # Transient transport/Graph failures: jobs record them and retry.
+  class ConnectionError < GraphError; end
+  # The captain revoked access or the grant expired: jobs record it on
+  # mailbox_last_error and stop quietly so Settings can offer reconnect.
+  class GrantRevokedError < GraphError; end
 
   class << self
     def mailbox_address

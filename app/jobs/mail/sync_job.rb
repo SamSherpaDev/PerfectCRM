@@ -1,27 +1,36 @@
-# Polls Gmail every 5 minutes over [Gmail]/All Mail (Solid Queue, see
-# config/recurring.yml). Incremental by UIDVALIDITY/UID per folder, threaded
-# on X-GM-THRID / X-GM-MSGID with a Message-ID fallback. Read-only IMAP:
-# never moves, deletes, or flags server mail. Skips personal mail that does
-# not mention the info@ mailbox without storing it.
+# Polls the Microsoft 365 mailbox every 5 minutes over Inbox + Sent Items
+# (Solid Queue, see config/recurring.yml). Incremental by per-folder delta
+# links, threaded on the Graph conversationId with a
+# Message-ID/In-Reply-To/References fallback. Read-only Graph access: only
+# GET requests, never moves, deletes, or flags server mail. Skips personal
+# mail that does not mention the info@ mailbox without storing it.
 class Mail::SyncJob < ApplicationJob
   queue_as :default
 
   def perform(fetcher: nil, limit: 200)
-    fetcher ||= Mail::ImapFetcher.new
+    fetcher ||= Mail::GraphFetcher.new
     return false unless fetcher.configured?
 
     stored = 0
-    fetcher.fetch_new(limit: limit) do |item|
-      parsed = Mail::Ingester.parse_raw(item.raw)
-      result = Mail::Ingester.ingest(parsed: parsed, gmail: item.gmail)
+    fetcher.fetch_new do |item|
+      # Cap stored messages per run; replays are free, so the frontier
+      # always advances instead of starving behind already-seen mail.
+      break if stored >= limit
+
+      result = Mail::Ingester.ingest(parsed: item.parsed, provider: item.provider)
       stored += 1 if result[:status] == :stored
-      ::MailSyncState.record_success!(Mail::FOLDER, uid_validity: item.uid_validity, last_uid: item.uid)
     end
     ::Setting.current.update_columns(mailbox_last_sync_at: Time.current, updated_at: Time.current)
     stored
-  rescue Mail::ImapFetcher::NotConfiguredError
+  rescue Mail::NotConfiguredError
     false
-  rescue Mail::ImapFetcher::ConnectionError => e
+  rescue Mail::GrantRevokedError => e
+    # Revoked or expired grant: record it for Settings ("Reconnect mailbox")
+    # and stop quietly instead of retrying a dead grant.
+    ::Setting.current.update_columns(mailbox_last_error: e.message.to_s.truncate(500),
+      mailbox_last_error_at: Time.current, updated_at: Time.current)
+    false
+  rescue Mail::ConnectionError => e
     ::Setting.current.update_columns(mailbox_last_error: e.message.to_s.truncate(500),
       mailbox_last_error_at: Time.current, updated_at: Time.current)
     raise

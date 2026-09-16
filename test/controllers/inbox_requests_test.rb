@@ -89,7 +89,7 @@ class InboxRequestsTest < ActionDispatch::IntegrationTest
     client = Client.create!(name: "Review files", email: "review-files@example.com")
     parsed = Mail::Ingester.parse_raw("From: #{client.email}\r\nTo: info@sherpaholidays.com\r\nSubject: Passport review\r\n\r\nAttached")
     parsed.attachments << { filename: "passport.pdf", content_type: "application/pdf", data: "file" }
-    result = Mail::Ingester.ingest(parsed: parsed, gmail: {})
+    result = Mail::Ingester.ingest(parsed: parsed, provider: {})
     get inbox_path(tab: "triage")
     assert_response :success
     assert_select "a", text: "Passport review"
@@ -111,7 +111,7 @@ class InboxRequestsTest < ActionDispatch::IntegrationTest
 
   test "single part sensitive attachment never appears as message body" do
     raw = "From: sender@example.com\r\nTo: info@sherpaholidays.com\r\nSubject: Document\r\nContent-Type: text/plain\r\nContent-Disposition: attachment; filename=insurance.txt\r\n\r\nPRIVATE INSURANCE CONTENT"
-    result = Mail::Ingester.ingest(parsed: Mail::Ingester.parse_raw(raw), gmail: {})
+    result = Mail::Ingester.ingest(parsed: Mail::Ingester.parse_raw(raw), provider: {})
     get inbox_thread_path(result[:conversation])
     assert_response :success
     assert_not_includes response.body, "PRIVATE INSURANCE CONTENT"
