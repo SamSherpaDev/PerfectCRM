@@ -13,11 +13,14 @@
       <div class="flex gap-2"><dt class="muted">Processed:</dt><dd><%= @import.processed_messages %> / <%= @import.total_messages %></dd></div>
       <div class="flex gap-2"><dt class="muted">Linked:</dt><dd><%= @import.linked_messages %></dd></div>
       <div class="flex gap-2"><dt class="muted">Unlinked:</dt><dd><%= @import.skipped_messages %></dd></div>
+      <% if @import.already_held_messages.positive? %>
+        <div class="flex gap-2"><dt class="muted">Already in the CRM:</dt><dd><%= @import.already_held_messages %></dd></div>
+      <% end %>
       <% if @import.error.present? %><div class="flex gap-2"><dt class="muted">Error:</dt><dd class="text-bad"><%= @import.error %></dd></div><% end %>
       <% if @import.finished_at %><div class="flex gap-2"><dt class="muted">Finished:</dt><dd><%= time_24_12(@import.finished_at) %></dd></div><% end %>
     </dl>
     <% if @import.status == "done" %>
-      <p class="mt-3 text-sm text-good">Done: <%= @import.linked_messages %> messages linked, <%= @import.skipped_messages %> skipped.</p>
+      <p class="mt-3 text-sm text-good">Done: <%= @import.linked_messages %> messages linked, <%= @import.skipped_messages %> skipped<% if @import.already_held_messages.positive? %>, <%= @import.already_held_messages %> already in the CRM<% end %>.</p>
     <% end %>
   </section>
 

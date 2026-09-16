@@ -70,7 +70,35 @@ class MailGraphTest < ActiveSupport::TestCase
     assert_raises(Mail::GrantRevokedError) { fetcher.test_connection }
   end
 
-  test "first connect primes both folders and stores nothing" do
+  test "live sync reads mail filed outside the Inbox" do
+    fetcher.fetch_new.to_a # prime
+    @mailbox.add("archive", graph_message(id: "filed-live", from: "operator@example.com",
+      message_id: "<filedlive@test>"))
+    @mailbox.add("clients", graph_message(id: "nested-live", from: "traveler@example.com",
+      message_id: "<nestedlive@test>"))
+    @mailbox.add("deleteditems", graph_message(id: "binned-live", from: "binned@example.com",
+      message_id: "<binnedlive@test>"))
+
+    items = fetcher.fetch_new.to_a
+    assert_equal %w[filed-live nested-live], items.map { |item| item.provider[:message_id] }.sort
+  end
+
+  test "a folder created after the first connect is primed, not backfilled" do
+    @mailbox.add("inbox", graph_message(id: "before", from: "before@example.com", message_id: "<before@test>"))
+    fetcher.fetch_new.to_a # prime every folder that exists now
+
+    @mailbox.add_folder("operators", display_name: "Operators")
+    @mailbox.add("operators", graph_message(id: "old-filed", from: "operator@example.com",
+      message_id: "<oldfiled@test>"))
+    assert_empty fetcher.fetch_new.to_a
+    assert MailSyncState.for("operators").delta_link.present?
+
+    @mailbox.add("operators", graph_message(id: "new-filed", from: "operator@example.com",
+      message_id: "<newfiled@test>"))
+    assert_equal [ "new-filed" ], fetcher.fetch_new.to_a.map { |item| item.provider[:message_id] }
+  end
+
+  test "first connect primes every folder and stores nothing" do
     @mailbox.add("inbox", graph_message(id: "old-1", from: "old@example.com", message_id: "<old1@test>"))
     @mailbox.add("inbox", graph_message(id: "old-2", from: "old@example.com", message_id: "<old2@test>"))
     @mailbox.add("sentitems", graph_message(id: "old-sent", from: "info@sherpaholidays.com",
@@ -185,7 +213,7 @@ class MailGraphTest < ActiveSupport::TestCase
     fetcher.fetch_new.to_a # prime
     @mailbox.add("inbox", graph_message(id: "bcc-1", from: "operator@example.com", to: "manifest@example.com",
       message_id: "<bcc@test>",
-      headers: [ { "name" => "X-Envelope-To", "value" => "info@sherpaholidays.com" } ]))
+      headers: [ { "name" => "Delivered-To", "value" => "info@sherpaholidays.com" } ]))
 
     items = fetcher.fetch_new.to_a
     assert_equal [ "bcc-1" ], items.map { |item| item.provider[:message_id] }
@@ -348,6 +376,15 @@ class MailGraphTest < ActiveSupport::TestCase
 
     assert_raises(Mail::ConnectionError) { fetcher.fetch_new.to_a }
     assert_equal Mail::GraphClient::THROTTLE_WAITS + 1, throttles
+  end
+
+  test "an HTTP-date Retry-After is honoured instead of collapsing to no wait" do
+    client = Mail::GraphClient.new(transport: @transport) { "token" }
+    assert_equal Mail::GraphClient::MAX_WAIT_SECONDS,
+      client.send(:wait_seconds, 10.minutes.from_now.httpdate)
+    assert_equal 2, client.send(:wait_seconds, 2.seconds.from_now.httpdate)
+    assert_equal Mail::GraphClient::DEFAULT_WAIT_SECONDS, client.send(:wait_seconds, "soon please")
+    assert_equal Mail::GraphClient::DEFAULT_WAIT_SECONDS, client.send(:wait_seconds, nil)
   end
 
   test "history walks archived and nested folders but not the ones without correspondence" do

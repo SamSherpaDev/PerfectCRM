@@ -113,11 +113,12 @@ SMTP settings and is unchanged by this setup.
    mail stays for Settings → Import history, where the captain previews a
    depth and commits.
 
-Live sync watches Inbox and Sent Items, where new mail arrives. The history
-backfill in Settings → Import history is wider: it walks every mail folder,
-child folders included, so archived and filed correspondence is converted too.
-Deleted Items, Junk Email, Drafts, Outbox, and Conversation History are left
-out, children and all. The backfill decides what to keep from the folder
+Live sync and the history backfill in Settings → Import history read the same
+folders: every mail folder, child folders included, so mail a server-side rule
+files away and correspondence already archived are both covered. Deleted Items,
+Junk Email, Drafts, Outbox, and Conversation History are left out, children and
+all. The folder list is re-read on every sync run, so a folder created in
+Outlook is watched without reconnecting the mailbox. The backfill decides what to keep from the folder
 listing, which returns From, To, Cc and Bcc, and opens only the messages that
 match; Microsoft documents `internetMessageHeaders` as retrievable with
 `$select` on a get of a single message, not on a listing, so mail that names

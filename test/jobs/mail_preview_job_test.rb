@@ -130,7 +130,7 @@ class MailPreviewJobTest < ActiveSupport::TestCase
     # a folder listing cannot return, so the backfill leaves it to live sync.
     @mailbox.add("inbox", graph_message(id: "bcc-only", from: "operator@example.com",
       to: "manifest@example.com", message_id: "<bcconly@test>",
-      headers: [ { "name" => "X-Envelope-To", "value" => "info@sherpaholidays.com" } ]))
+      headers: [ { "name" => "Delivered-To", "value" => "info@sherpaholidays.com" } ]))
 
     import = MailImport.create!(scope: "all", status: "draft")
     Mail::PreviewJob.new.perform(import.id, fetcher: fetcher)

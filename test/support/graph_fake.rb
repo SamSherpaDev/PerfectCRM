@@ -175,6 +175,12 @@ class FakeMailbox
     @messages.values.flatten.find { |message| message["id"] == id }
   end
 
+  # Adds a top-level mail folder, as creating one in Outlook would.
+  def add_folder(id, display_name: nil, well_known: nil)
+    @folders << { "id" => id, "displayName" => display_name || id.titleize,
+      "wellKnownName" => well_known, "childFolderCount" => 0 }
+  end
+
   # Which Microsoft account the delegated grant belongs to (/me).
   def signed_in_as(address, upn: nil)
     @account = { "id" => "other", "mail" => address, "userPrincipalName" => upn || address }

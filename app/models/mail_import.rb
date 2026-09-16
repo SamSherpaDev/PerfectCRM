@@ -24,6 +24,12 @@ class MailImport < ApplicationRecord
     ((processed_messages.to_f / total_messages) * 100).round.clamp(0, 100)
   end
 
+  # Mail this run accounted for but did not store, because the CRM already
+  # held it: linked plus unlinked is exactly what the run stored.
+  def already_held_messages
+    [ processed_messages.to_i - linked_messages.to_i - skipped_messages.to_i, 0 ].max
+  end
+
   def done?
     status == "done"
   end

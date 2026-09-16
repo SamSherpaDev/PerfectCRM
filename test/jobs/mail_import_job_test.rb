@@ -44,11 +44,43 @@ class MailImportJobTest < ActiveSupport::TestCase
       assert_no_difference("Message.count") { Mail::ImportJob.new.perform(import.id, fetcher: fetcher) }
     end
     assert result[:conversation].reload.linked?
-    # The mail was already in the CRM, so nothing was imported; the choice
-    # still created the client and linked the thread.
+    # The mail was already in the CRM: it counts as processed so the bar can
+    # finish, but as already held rather than as newly linked work.
     assert_equal 0, import.reload.linked_messages
-    assert_equal 0, import.processed_messages
+    assert_equal 1, import.processed_messages
+    assert_equal 1, import.already_held_messages
     assert_equal 1, import.created_clients
+  end
+
+  test "an import over mail the CRM already holds still finishes at full progress" do
+    %w[held1 held2].each_with_index do |id, index|
+      raw = "From: known#{index}@example.com\r\nTo: info@sherpaholidays.com\r\n" \
+        "Message-ID: <#{id}@test>\r\n\r\nHello"
+      Mail::Ingester.ingest(parsed: Mail::Ingester.parse_raw(raw), provider: {})
+      import_raw(id: id, from: "known#{index}@example.com", received: "2026-09-1#{index + 1}T10:00:00Z")
+    end
+    import = MailImport.create!(scope: "all", status: "preview", total_messages: 2, preview_json: {})
+
+    assert_no_difference("Message.count") { Mail::ImportJob.new.perform(import.id, fetcher: fetcher) }
+    assert_equal "done", import.reload.status
+    assert_equal 2, import.processed_messages
+    assert_equal 2, import.already_held_messages
+    assert_equal 0, import.linked_messages
+    assert_equal 100, import.progress_pct
+  end
+
+  test "an import does not re-download attachments it already holds" do
+    raw = "From: known@example.com\r\nTo: info@sherpaholidays.com\r\nMessage-ID: <dupfile@test>\r\n\r\nHi"
+    Mail::Ingester.ingest(parsed: Mail::Ingester.parse_raw(raw), provider: {})
+    @mailbox.add("inbox", graph_message(id: "dupfile", from: "known@example.com",
+      message_id: "<dupfile@test>",
+      attachments: [ graph_file_attachment(id: "d1", name: "itinerary.txt") ]),
+      file_bytes: { "d1" => "itinerary bytes" })
+    import = MailImport.create!(scope: "all", status: "preview", total_messages: 1, preview_json: {})
+
+    assert_no_difference("Message.count") { Mail::ImportJob.new.perform(import.id, fetcher: fetcher) }
+    assert_equal 0, @mailbox.byte_fetches
+    assert_equal 1, import.reload.processed_messages
   end
 
   test "a resumed import does not count the messages it replays" do
@@ -63,10 +95,11 @@ class MailImportJobTest < ActiveSupport::TestCase
     end
     assert_equal 2, import.reload.processed_messages
 
-    # The resume replays both messages sharing the cursor's second; they are
-    # already stored, so only the new one moves the counters.
+    # The resume replays both messages sharing the cursor's second; they were
+    # already counted, so only the new one moves the counters.
     assert_difference("Message.count", 1) { Mail::ImportJob.new.perform(import.id, fetcher: fetcher) }
     assert_equal 3, import.reload.processed_messages
+    assert_equal 0, import.already_held_messages
     assert_equal 100, import.progress_pct
   end
 

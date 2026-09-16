@@ -10,24 +10,28 @@ class Mail::ImportJob < ApplicationJob
     fetcher ||= Mail::GraphFetcher.new
     progress = mail_import.preview_json || {}
     choices = progress.fetch("choices", {})
+    tally = Mail::HistoryTally.new(cursor: progress["history_cursor"], seen: progress["history_counted"])
     fetcher.fetch_history(since: mail_import.cutoff_date&.to_time, cursor: progress["history_cursor"]) do |item|
       parsed = item.parsed
-      prepared = Mail::Ingester.prepare(parsed: parsed)
+      counted = tally.count?(item)
+      # Mail the CRM already holds needs no attachment bytes: ingest settles
+      # the duplicate before it ever reads what prepare would download.
+      prepared = held_already?(item, parsed) ? nil : Mail::Ingester.prepare(parsed: parsed)
       mail_import.with_lock do
         result = Mail::Ingester.ingest(parsed: parsed, provider: item.provider, prepared: prepared)
         conversation = result[:conversation]
         apply_import_choice(conversation, parsed, choices, mail_import)
-        # Only newly stored mail counts. A resume replays the cursor's whole
-        # second and the CRM may already hold the message from live sync;
-        # either way that work is done, and counting it again would show
-        # the captain more imported than the preview ever found.
+        # Progress counts every in-scope message the run accounted for, so a
+        # finished import reaches the total the preview promised. Linked and
+        # unlinked count only what this run stored, so mail the CRM already
+        # held is visible as the difference rather than as new work.
         stored = result[:status] == :stored
         linked = stored && conversation&.linked?
-        progress = progress.merge("history_cursor" => item.cursor)
+        progress = progress.merge("history_cursor" => tally.cursor, "history_counted" => tally.seen)
         mail_import.update!(preview_json: progress,
-          processed_messages: mail_import.processed_messages + (stored ? 1 : 0),
-          linked_messages: mail_import.linked_messages + (linked ? 1 : 0),
-          skipped_messages: mail_import.skipped_messages + (stored && !linked ? 1 : 0))
+          processed_messages: mail_import.processed_messages + (counted && result[:status] != :filtered ? 1 : 0),
+          linked_messages: mail_import.linked_messages + (counted && linked ? 1 : 0),
+          skipped_messages: mail_import.skipped_messages + (counted && stored && !linked ? 1 : 0))
       end
     end
     mail_import.update!(status: "done", finished_at: Time.current)
@@ -37,6 +41,13 @@ class Mail::ImportJob < ApplicationJob
   end
 
   private
+
+  def held_already?(item, parsed)
+    provider_id = item.provider[:message_id].to_s
+    return true if provider_id.present? && ::Message.exists?(provider_message_id: provider_id)
+
+    parsed.message_id.present? && ::Message.exists?(message_id: parsed.message_id)
+  end
 
   def apply_import_choice(conversation, parsed, choices, import)
     return if conversation.nil?

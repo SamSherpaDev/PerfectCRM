@@ -7,17 +7,16 @@
 #
 # Incremental sync uses the messages delta endpoint per folder, persisting
 # the @odata.deltaLink per folder in MailSyncState. Microsoft 365 has no
-# single All Mail equivalent, so BOTH Inbox and Sent Items are synced: new
-# mail lands there, and the CRM must keep the captain's own replies on the
-# timeline. Delta quirks handled: @removed entries are skipped, and entries
-# already stored (a read-state toggle, or a replay after an uncommitted
-# link) are skipped before their message is fetched, so nothing is
-# downloaded twice.
-#
-# The history backfill is wider than live sync: it walks every mail folder,
-# child folders included, because archiving is one click in Outlook and the
-# captain's past correspondence mostly lives outside the Inbox. Only the
-# folders that hold no correspondence are left out (HISTORY_SKIPPED).
+# single All Mail equivalent, so EVERY mail folder is watched, child folders
+# included, exactly like the history backfill: a server-side rule can file
+# operator mail at delivery so it never touches the Inbox, and mail that
+# reaches no folder's delta reaches no timeline. Only folders that hold no
+# correspondence are left out (SKIPPED_FOLDERS). The folder list is re-read
+# on every run, so a folder created in Outlook starts being watched without
+# a reconnect. Delta quirks handled: @removed entries are skipped, and
+# entries already stored (a read-state toggle, or a replay after an
+# uncommitted link) are skipped before their message is fetched, so nothing
+# is downloaded twice.
 #
 # Privacy: the info@ hard filter (Mail.keeps?, enforced again in the
 # ingester) decides before any body or attachment bytes are fetched. The
@@ -41,10 +40,8 @@
 # captain chooses depth with a preview.
 module Mail
   class GraphFetcher
-    # Where new mail arrives, and so what live delta sync watches.
-    FOLDERS = %w[inbox sentitems].freeze
-    # Folders the history backfill leaves out, children included.
-    HISTORY_SKIPPED = %w[deleteditems junkemail drafts outbox conversationhistory].freeze
+    # Folders neither the live sync nor the backfill reads, children included.
+    SKIPPED_FOLDERS = %w[deleteditems junkemail drafts outbox conversationhistory].freeze
     PAGE_SIZE = 50
 
     MESSAGE_SELECT = %w[
@@ -93,18 +90,20 @@ module Mail
       true
     end
 
-    # Incremental delta sync across both folders. Yields Fetched structs for
-    # kept messages only and commits each folder's new deltaLink after a
-    # full drain; a mid-folder failure leaves the old link so the next run
-    # replays and skips what it already stored. Folders without a link are
-    # primed, not ingested. Callers cap stored volume themselves (see
-    # SyncJob): stopping early leaves the link uncommitted for replay.
+    # Incremental delta sync across every watched folder. Yields Fetched
+    # structs for kept messages only and commits each folder's new deltaLink
+    # after a full drain; a mid-folder failure leaves the old link so the
+    # next run replays and skips what it already stored. Folders without a
+    # link are primed, not ingested, so a folder that appears later starts
+    # from now rather than backfilling itself unasked. Callers cap stored
+    # volume themselves (see SyncJob): stopping early leaves the link
+    # uncommitted for replay.
     def fetch_new
       raise NotConfiguredError, "Mailbox is not connected." unless configured?
       return enum_for(:fetch_new) unless block_given?
 
       graph = client
-      FOLDERS.each do |folder|
+      mail_folders(graph).each do |folder|
         state = ::MailSyncState.for(folder)
         if state.delta_link.blank?
           prime_folder(graph, folder)
@@ -131,7 +130,7 @@ module Mail
 
       resume = parse_cursor(cursor)
       graph = client
-      folders = history_folders(graph)
+      folders = mail_folders(graph)
       resumed_at = resume ? folders.index(resume[:folder]) : nil
       folders.each_with_index do |folder, position|
         next if resumed_at && position < resumed_at
@@ -166,10 +165,10 @@ module Mail
       { "Prefer" => "odata.maxpagesize=#{PAGE_SIZE}" }
     end
 
-    # Every folder the backfill walks, in a stable order so a resumed
-    # import lands in the same place. Skipped folders take their children
-    # with them: a subfolder of Deleted Items is still deleted mail.
-    def history_folders(client)
+    # Every folder the reader watches, in a stable order so a resumed import
+    # lands in the same place. Skipped folders take their children with
+    # them: a subfolder of Deleted Items is still deleted mail.
+    def mail_folders(client)
       collect_folders(client, "#{GraphClient::BASE}/me/mailFolders?#{folder_params}").sort
     end
 
@@ -179,7 +178,7 @@ module Mail
         page = client.get_json(url)
         Array(page["value"]).each do |folder|
           id = folder["id"].to_s
-          next if id.blank? || HISTORY_SKIPPED.include?(folder["wellKnownName"].to_s.downcase)
+          next if id.blank? || SKIPPED_FOLDERS.include?(folder["wellKnownName"].to_s.downcase)
 
           found << id
           next unless folder["childFolderCount"].to_i.positive?
@@ -307,8 +306,7 @@ module Mail
         "cc" => addresses_of(json["ccRecipients"]),
         "bcc" => addresses_of(json["bccRecipients"]),
         "delivered-to" => header_values(json, "Delivered-To"),
-        "x-original-to" => header_values(json, "X-Original-To"),
-        "x-envelope-to" => header_values(json, "X-Envelope-To")
+        "x-original-to" => header_values(json, "X-Original-To")
       }
     end
 

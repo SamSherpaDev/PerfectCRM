@@ -122,12 +122,20 @@ module Mail
       end
     end
 
-    # Graph sends Retry-After in seconds. Anything it asks for is capped, so
-    # one throttled request can never park a job for minutes on end.
+    # Graph sends Retry-After in seconds, but RFC 7231 also permits an
+    # HTTP-date and a gateway in front of Graph may use it. Anything that
+    # parses is capped, so one throttled request can never park a job for
+    # minutes; anything that does not falls back to the default wait, never
+    # to zero, which would burn every retry in milliseconds and press
+    # harder on the throttle being ridden out.
     def wait_seconds(retry_after)
-      return DEFAULT_WAIT_SECONDS if retry_after.to_s.strip.empty?
+      value = retry_after.to_s.strip
+      return DEFAULT_WAIT_SECONDS if value.empty?
+      return value.to_i.clamp(0, MAX_WAIT_SECONDS) if value.match?(/\A\d+\z/)
 
-      retry_after.to_i.clamp(0, MAX_WAIT_SECONDS)
+      (Time.httpdate(value) - Time.now).ceil.clamp(0, MAX_WAIT_SECONDS)
+    rescue ArgumentError
+      DEFAULT_WAIT_SECONDS
     end
 
     def access_token

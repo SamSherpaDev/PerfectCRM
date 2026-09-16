@@ -443,8 +443,12 @@ error and Settings offers Reconnect mailbox instead of failing silently.
 Production encryption keys must be configured and preserved; see
 [Secrets inventory](docs/operations.md#secrets-inventory).
 Production sync runs every 5 minutes (`Mail::SyncJob` in `config/recurring.yml`) over
-Inbox plus Sent Items, where new mail arrives (Microsoft 365 has no All Mail
-equivalent), incremental by per-folder delta link, threaded on the Graph conversation id with a
+every mail folder, child folders included (Microsoft 365 has no All Mail
+equivalent, and a server-side rule can file mail so it never touches the Inbox);
+Deleted Items, Junk Email, Drafts, Outbox, and Conversation History are left out.
+The folder list is re-read each run, so a folder created in Outlook is watched
+without a reconnect. Sync is incremental by per-folder delta link, threaded on
+the Graph conversation id with a
 Message-ID/In-Reply-To/References fallback. Read-only Graph access: only
 GET requests, never moves, deletes, or flags server mail. Categories
 arrive as an initial read-only label snapshot on each message; later
@@ -511,9 +515,10 @@ than live sync: it walks every mail folder, child folders included, because
 archived and filed mail is exactly what needs converting. Deleted Items, Junk
 Email, Drafts, Outbox, and Conversation History are left out, children and all.
 Preview scans the whole selected range in a background job, paging each folder
-by received date with a resumable cursor. The backfill matches on the four
-recipient fields a folder listing returns (From, To, Cc, Bcc) and opens only
-the messages that match, so no personal message body is ever fetched;
+by received date with a resumable cursor. The backfill walks the same folders as
+live sync. It matches on the four recipient fields a folder listing returns
+(From, To, Cc, Bcc) and opens only the messages that match, so no personal
+message body is ever fetched;
 Microsoft documents the message headers as retrievable only when getting a
 single message, so a hidden-Bcc arrival that names the mailbox purely in a
 delivery header is picked up by live sync, which applies the full six-header
@@ -522,10 +527,12 @@ commit is available only after the preview completes. Preview and import
 persist the history cursor, so a resume continues where it stopped even if
 earlier mail vanished. Because Graph promises no order among messages sharing a
 received timestamp, a resume replays that whole second and dedupes on the
-provider message id rather than risk dropping mail; import progress counts only
-newly stored messages, so a replay or mail live sync already holds is not
-counted twice. Microsoft Graph throttling (429) is waited out for a bounded
-number of Retry-After delays instead of failing the run. Import progress counts the same in-scope messages as preview. Preview counts both inbound and
+provider message id rather than risk dropping mail; preview and import both
+count each message once, so a replay never counts twice. Import progress counts
+the same in-scope messages as preview, and mail the CRM already held is reported
+as "already in the CRM" rather than as newly linked. Microsoft Graph throttling
+(429) is waited out for a bounded number of Retry-After delays instead of
+failing the run. Preview counts both inbound and
 outbound mail together and shows counterparties, remembered matches, duplicates,
 and editable creation choices. Choose Client, Organization, Lead, or Skip per
 address. Skip suppresses record creation, not message storage; unmatched threads

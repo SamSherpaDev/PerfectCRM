@@ -17,7 +17,7 @@ module Mail
   # The headers that can name a recipient: the message's own recipient
   # lists plus the delivery headers a hidden Bcc leaves behind. Nothing
   # else decides whether mail is kept.
-  RECIPIENT_HEADERS = %w[from to cc bcc delivered-to x-original-to x-envelope-to].freeze
+  RECIPIENT_HEADERS = %w[from to cc bcc delivered-to x-original-to].freeze
 
   class << self
     def mailbox_address
