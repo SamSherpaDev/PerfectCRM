@@ -17,13 +17,17 @@ class Mail::ImportJob < ApplicationJob
         result = Mail::Ingester.ingest(parsed: parsed, provider: item.provider, prepared: prepared)
         conversation = result[:conversation]
         apply_import_choice(conversation, parsed, choices, mail_import)
-        linked = conversation&.linked?
-        kept = result[:status] != :filtered
+        # Only newly stored mail counts. A resume replays the cursor's whole
+        # second and the CRM may already hold the message from live sync;
+        # either way that work is done, and counting it again would show
+        # the captain more imported than the preview ever found.
+        stored = result[:status] == :stored
+        linked = stored && conversation&.linked?
         progress = progress.merge("history_cursor" => item.cursor)
         mail_import.update!(preview_json: progress,
-          processed_messages: mail_import.processed_messages + (kept ? 1 : 0),
+          processed_messages: mail_import.processed_messages + (stored ? 1 : 0),
           linked_messages: mail_import.linked_messages + (linked ? 1 : 0),
-          skipped_messages: mail_import.skipped_messages + (kept && !linked ? 1 : 0))
+          skipped_messages: mail_import.skipped_messages + (stored && !linked ? 1 : 0))
       end
     end
     mail_import.update!(status: "done", finished_at: Time.current)

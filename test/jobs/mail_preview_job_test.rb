@@ -33,7 +33,7 @@ class MailPreviewJobTest < ActiveSupport::TestCase
     assert_raises(Mail::ConnectionError) { Mail::PreviewJob.new.perform(import.id, fetcher: fetcher) }
     assert_equal "preview_failed", import.reload.status
     assert_equal 1, import.total_messages
-    assert_equal "inbox|2026-09-05T10:00:00.000000Z", import.preview_json["preview_cursor"]
+    assert_equal "inbox|2026-09-05T10:00:00Z", import.preview_json["preview_cursor"]
 
     fail_next = false
     @mailbox.instance_variable_get(:@messages)["inbox"].reject! { |message| message["id"] == "bulk-0" }
@@ -99,30 +99,43 @@ class MailPreviewJobTest < ActiveSupport::TestCase
     assert_equal 0, @mailbox.byte_fetches
   end
 
-  test "preview counts delivery headers and outbound mail but excludes personal mail" do
+  test "preview counts inbound and outbound mail but excludes personal mail" do
     client = Client.create!(name: "Remembered", email: "original@example.com")
     EmailIdentity.remember!("alternate@example.com", linkable: client)
     @mailbox.add("sentitems", graph_message(id: "m-remembered", from: "info@sherpaholidays.com",
       to: "alternate@example.com", message_id: "<remembered@test>"))
+    @mailbox.add("inbox", graph_message(id: "m-cc", from: "agent@example.com",
+      to: "traveller@example.com", cc: [ "info@sherpaholidays.com" ], message_id: "<cc@test>"))
     @mailbox.add("inbox", graph_message(id: "m-personal", from: "friend@example.com",
       to: "captain@gmail.com", message_id: "<personal@test>"))
-    %w[Delivered-To X-Original-To].each_with_index do |header, index|
-      @mailbox.add("inbox", graph_message(id: "m-delivery-#{index}", from: "alias-sender@example.com",
-        to: "captain@gmail.com", message_id: "<delivery#{index}@test>",
-        headers: [ { "name" => header, "value" => "info@sherpaholidays.com" } ]))
+
+    import = MailImport.create!(scope: "all", status: "draft")
+    Mail::PreviewJob.new.perform(import.id, fetcher: fetcher)
+    assert_equal 2, import.reload.total_messages
+    rows = import.preview_rows.index_by { |row| row["email"] }
+    assert_equal 1, rows.fetch("alternate@example.com")["count"]
+    assert rows.fetch("alternate@example.com")["duplicate"]
+    assert_equal client.name, rows.fetch("alternate@example.com")["duplicate_name"]
+    assert_equal 1, rows.fetch("agent@example.com")["count"]
+    assert_not rows.key?("friend@example.com")
+  end
+
+  test "preview never opens a message it is going to discard" do
+    @mailbox.add("inbox", graph_message(id: "keeper", from: "client@example.com", message_id: "<keeper@test>"))
+    3.times do |n|
+      @mailbox.add("inbox", graph_message(id: "chatter-#{n}", from: "friend@example.com",
+        to: "captain@gmail.com", message_id: "<chatter#{n}@test>"))
     end
-    @mailbox.add("inbox", graph_message(id: "m-bcc", from: "alias-sender@example.com",
-      to: "manifest@example.com", message_id: "<bcc-preview@test>",
+    # A hidden-Bcc arrival names the mailbox only in a delivery header, which
+    # a folder listing cannot return, so the backfill leaves it to live sync.
+    @mailbox.add("inbox", graph_message(id: "bcc-only", from: "operator@example.com",
+      to: "manifest@example.com", message_id: "<bcconly@test>",
       headers: [ { "name" => "X-Envelope-To", "value" => "info@sherpaholidays.com" } ]))
 
     import = MailImport.create!(scope: "all", status: "draft")
     Mail::PreviewJob.new.perform(import.id, fetcher: fetcher)
-    assert_equal 4, import.reload.total_messages
-    rows = import.preview_rows.index_by { |row| row["email"] }
-    assert_equal 3, rows.fetch("alias-sender@example.com")["count"]
-    assert_equal 1, rows.fetch("alternate@example.com")["count"]
-    assert rows.fetch("alternate@example.com")["duplicate"]
-    assert_equal client.name, rows.fetch("alternate@example.com")["duplicate_name"]
-    assert_not rows.key?("friend@example.com")
+    assert_equal 1, import.reload.total_messages
+    assert_equal [ "client@example.com" ], import.preview_rows.map { |row| row["email"] }
+    assert_equal 1, @mailbox.message_fetches
   end
 end

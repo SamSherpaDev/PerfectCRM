@@ -10,7 +10,7 @@ module Mail
     OPEN_TIMEOUT = 5
     READ_TIMEOUT = 20
 
-    Response = Struct.new(:status, :body, keyword_init: true) do
+    Response = Struct.new(:status, :body, :retry_after, keyword_init: true) do
       def json
         JSON.parse(body.to_s)
       rescue JSON::ParserError
@@ -35,13 +35,15 @@ module Mail
 
     def get_json(url, token:, params: nil, headers: {})
       get(url, token: token, params: params, headers: headers) do |http_response|
-        Response.new(status: http_response.code.to_i, body: http_response.body.to_s)
+        Response.new(status: http_response.code.to_i, body: http_response.body.to_s,
+          retry_after: http_response["Retry-After"])
       end
     end
 
     def get_bytes(url, token:)
       get(url, token: token) do |http_response|
-        Response.new(status: http_response.code.to_i, body: http_response.body.to_s.b)
+        Response.new(status: http_response.code.to_i, body: http_response.body.to_s.b,
+          retry_after: http_response["Retry-After"])
       end
     end
 

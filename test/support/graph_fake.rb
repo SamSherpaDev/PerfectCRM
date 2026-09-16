@@ -65,9 +65,11 @@ class FakeGraphTransport < Mail::GraphTransport
     return result if result.is_a?(Mail::GraphTransport::Response)
 
     if result.key?(:bytes)
-      Mail::GraphTransport::Response.new(status: result[:status] || 200, body: result[:bytes])
+      Mail::GraphTransport::Response.new(status: result[:status] || 200, body: result[:bytes],
+        retry_after: result[:retry_after])
     else
-      Mail::GraphTransport::Response.new(status: result[:status] || 200, body: JSON.generate(result.fetch(:json, {})))
+      Mail::GraphTransport::Response.new(status: result[:status] || 200,
+        body: JSON.generate(result.fetch(:json, {})), retry_after: result[:retry_after])
     end
   end
 end
@@ -299,7 +301,11 @@ class FakeMailbox
     end
     skip = query["$skip"].to_i
     page = items[skip, HISTORY_PAGE_SIZE] || []
-    value = page.map { |message| { "id" => message["id"], "receivedDateTime" => message["receivedDateTime"] } }
+    # Only what the listing $select asks for: the recipient fields the walk
+    # judges on, and never the body or the message headers.
+    value = page.map do |message|
+      message.slice("id", "receivedDateTime", "from", "toRecipients", "ccRecipients", "bccRecipients")
+    end
     payload = { "value" => value }
     if skip + HISTORY_PAGE_SIZE < items.length
       base = url.split("?").first

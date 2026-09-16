@@ -76,12 +76,6 @@
           <% end %>
         </dd>
       </div>
-      <% Mail::GraphFetcher::FOLDERS.each do |folder| %>
-        <div class="flex gap-2">
-          <dt class="muted">Last <%= folder == "sentitems" ? "Sent Items" : "Inbox" %> sync:</dt>
-          <dd><%= @mail_syncs[folder]&.last_sync_at ? time_24_12(@mail_syncs[folder].last_sync_at) : "Never" %></dd>
-        </div>
-      <% end %>
       <div class="flex gap-2">
         <dt class="muted">Last sync:</dt>
         <dd><%= @settings.mailbox_last_sync_at ? time_24_12(@settings.mailbox_last_sync_at) : "Never" %></dd>

@@ -511,12 +511,21 @@ than live sync: it walks every mail folder, child folders included, because
 archived and filed mail is exactly what needs converting. Deleted Items, Junk
 Email, Drafts, Outbox, and Conversation History are left out, children and all.
 Preview scans the whole selected range in a background job, paging each folder
-by received date with a resumable cursor. Progress and failures are visible;
+by received date with a resumable cursor. The backfill matches on the four
+recipient fields a folder listing returns (From, To, Cc, Bcc) and opens only
+the messages that match, so no personal message body is ever fetched;
+Microsoft documents the message headers as retrievable only when getting a
+single message, so a hidden-Bcc arrival that names the mailbox purely in a
+delivery header is picked up by live sync, which applies the full six-header
+check, rather than by the backfill. Progress and failures are visible;
 commit is available only after the preview completes. Preview and import
 persist the history cursor, so a resume continues where it stopped even if
 earlier mail vanished. Because Graph promises no order among messages sharing a
 received timestamp, a resume replays that whole second and dedupes on the
-provider message id rather than risk dropping mail. Import progress counts the same in-scope messages as preview. Preview counts both inbound and
+provider message id rather than risk dropping mail; import progress counts only
+newly stored messages, so a replay or mail live sync already holds is not
+counted twice. Microsoft Graph throttling (429) is waited out for a bounded
+number of Retry-After delays instead of failing the run. Import progress counts the same in-scope messages as preview. Preview counts both inbound and
 outbound mail together and shows counterparties, remembered matches, duplicates,
 and editable creation choices. Choose Client, Organization, Lead, or Skip per
 address. Skip suppresses record creation, not message storage; unmatched threads

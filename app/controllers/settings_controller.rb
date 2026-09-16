@@ -1,18 +1,9 @@
 class SettingsController < ApplicationController
   def edit
     @settings = Setting.current.ensure_intake_credentials!
-    @perfectbook_configured = PerfectBook.configured?
-    @perfectbook_last_success = PerfectBook::SyncState.last_success_at
-    @perfectbook_last_error = PerfectBook::SyncState.last_error_row
-    @mailbox_address = Mail.mailbox_address
-    @mail_syncs = MailSyncState.where(folder: Mail::GraphFetcher::FOLDERS).index_by(&:folder)
-    @graph_configured = Mail::GraphAuth.configured?
-    @imports = MailImport.ordered.limit(5)
-    load_automation_log
+    load_settings_supporting_data!
     # Shown once, right after rotation; never rendered again.
     @fresh_relay_secret = session.delete(:fresh_relay_secret)
-    @ai_calls_today = AiCall.today.count
-    @ai_cost_today = AiCall.daily_cost_cents
   end
 
   def update
@@ -34,13 +25,7 @@ class SettingsController < ApplicationController
     elsif @settings.update(sender_params)
       redirect_to edit_settings_path, notice: "Settings saved.", status: :see_other
     else
-      @perfectbook_configured = PerfectBook.configured?
-      @perfectbook_last_success = PerfectBook::SyncState.last_success_at
-      @perfectbook_last_error = PerfectBook::SyncState.last_error_row
-      @mailbox_address = Mail.mailbox_address
-      @mail_syncs = MailSyncState.where(folder: Mail::GraphFetcher::FOLDERS).index_by(&:folder)
-      @graph_configured = Mail::GraphAuth.configured?
-      @imports = MailImport.ordered.limit(5)
+      load_settings_supporting_data!
       render :edit, status: :unprocessable_entity
     end
   end

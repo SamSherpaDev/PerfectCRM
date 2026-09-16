@@ -20,10 +20,20 @@
 # folders that hold no correspondence are left out (HISTORY_SKIPPED).
 #
 # Privacy: the info@ hard filter (Mail.keeps?, enforced again in the
-# ingester) runs on message metadata BEFORE any attachment bytes are
-# fetched, so personal mail costs one metadata GET and zero attachment
-# downloads. Attachment bytes come from the attachments endpoint one file
-# at a time, lazily, only when a kept message is actually being stored.
+# ingester) decides before any body or attachment bytes are fetched. The
+# history walk judges straight off the folder listing, which carries the
+# recipient fields, so personal mail in a folder costs nothing beyond its
+# row in that listing. Live sync judges off the message metadata GET, which
+# also carries the delivery headers. Attachment bytes come from the
+# attachments endpoint one file at a time, lazily, only when a kept message
+# is actually being stored.
+#
+# That split narrows the backfill on purpose: Microsoft documents
+# internetMessageHeaders as retrievable with $select on a GET of a single
+# message, not on a folder listing, so the walk matches on from, To, Cc and
+# Bcc and live sync applies the full six-header check. Guessing at an
+# undocumented listing $select is not worth downloading every personal
+# message body to compensate.
 #
 # First-run safety: a fresh connect primes each folder's delta link with an
 # initial delta call that is drained but NOT ingested, so ongoing sync
@@ -36,20 +46,20 @@ module Mail
     # Folders the history backfill leaves out, children included.
     HISTORY_SKIPPED = %w[deleteditems junkemail drafts outbox conversationhistory].freeze
     PAGE_SIZE = 50
-    # How many levels of forwarded (item) attachments are opened and
-    # screened. A forward enclosing anything deeper than this cannot be
-    # screened whole, so it is held as sensitive instead of stored.
-    RECURSION_LIMIT = 3
 
     MESSAGE_SELECT = %w[
       id internetMessageId conversationId categories from toRecipients
       ccRecipients bccRecipients subject body receivedDateTime
       sentDateTime hasAttachments isRead internetMessageHeaders
     ].join(",").freeze
+    # The folder listing carries enough to judge a message without opening
+    # it: everything Mail.keeps? looks at bar the delivery headers.
+    HISTORY_SELECT = "id,receivedDateTime,from,toRecipients,ccRecipients,bccRecipients".freeze
     FOLDER_SELECT = "id,displayName,wellKnownName,childFolderCount".freeze
     ATTACHMENT_SELECT = "id,name,contentType,size,isInline".freeze
-    NESTED_ATTACHMENT_SELECT = "id,name,contentType,size,contentBytes".freeze
-    NESTED_ITEM_SELECT = "subject,from,toRecipients,body,internetMessageId".freeze
+    # The documented shape for reading a forwarded message: one level, no
+    # $select inside the cast.
+    ITEM_EXPAND = "microsoft.graph.itemAttachment/item".freeze
 
     Fetched = Struct.new(:parsed, :provider, :folder, :cursor, keyword_init: true)
 
@@ -107,12 +117,14 @@ module Mail
     end
 
     # History walk for preview/import: $filter=receivedDateTime ge {date}
-    # over every folder the backfill covers, oldest first. Yields Fetched
-    # structs with an opaque cursor ("folder|receivedDateTime"); resuming
-    # restarts at that folder and replays that whole second, because Graph
-    # promises no order among messages sharing a receivedDateTime and a
-    # resume that assumed one would drop the mail it ordered differently.
-    # The replayed messages dedupe on the provider message id.
+    # over every folder the backfill covers, oldest first. Messages are
+    # judged from the listing and only the keepers are opened, so no
+    # personal message body is ever fetched. Yields Fetched structs with an
+    # opaque cursor ("folder|receivedDateTime"); resuming restarts at that
+    # folder and replays that whole second, because Graph promises no order
+    # among messages sharing a receivedDateTime and a resume that assumed
+    # one would drop the mail it ordered differently. The replayed messages
+    # dedupe on the provider message id.
     def fetch_history(since: nil, cursor: nil)
       raise NotConfiguredError, "Mailbox is not connected." unless configured?
       return enum_for(:fetch_history, since: since, cursor: cursor) unless block_given?
@@ -129,13 +141,14 @@ module Mail
           page = graph.get_json(url)
           Array(page["value"]).each do |entry|
             next if entry["@removed"] || entry["id"].blank?
+            next unless Mail.keeps?(listed_recipients(entry))
 
             loaded = load_message(graph, entry["id"])
             next if loaded.nil?
 
             parsed, provider = loaded
             yield Fetched.new(parsed: parsed, provider: provider, folder: folder,
-              cursor: "#{folder}|#{entry_time(entry).iso8601(6)}")
+              cursor: "#{folder}|#{entry_time(entry).utc.iso8601}")
           end
           url = page["@odata.nextLink"]
           break if url.blank?
@@ -194,9 +207,21 @@ module Mail
       floors.compact.max
     end
 
+    # Recipient fields as the folder listing returns them. The delivery
+    # headers are missing here by design (see the note at the top), so a
+    # hidden-Bcc arrival is picked up by live sync rather than the backfill.
+    def listed_recipients(entry)
+      {
+        "from" => addresses_of(entry["from"]),
+        "to" => addresses_of(entry["toRecipients"]),
+        "cc" => addresses_of(entry["ccRecipients"]),
+        "bcc" => addresses_of(entry["bccRecipients"])
+      }
+    end
+
     def history_url(folder, floor)
       params = {
-        "$select" => "id,receivedDateTime",
+        "$select" => HISTORY_SELECT,
         "$orderby" => "receivedDateTime asc",
         "$top" => PAGE_SIZE
       }
@@ -337,34 +362,26 @@ module Mail
     # ingester's existing recursive screening handles it exactly like an
     # IMAP forward: safe enclosures stay downloadable inside the .eml,
     # sensitive enclosures become held placeholders, and a mixed forward
-    # keeps its safe files while holding the rest. Forwards enclosed in
-    # forwards are opened the same way, up to RECURSION_LIMIT levels.
+    # keeps its safe files while holding the rest.
     def forwarded_entry(client, message_id, attachment, name)
       nested = client.get_json("/me/messages/#{message_id}/attachments/#{attachment["id"]}",
-        params: { "$expand" => item_expand(RECURSION_LIMIT) })
+        params: { "$expand" => ITEM_EXPAND })
       item = nested["item"]
       return nil if item.blank?
 
-      eml, screened = build_forward_mime(item, 1)
+      eml, screened = build_forward_mime(item)
       { filename: eml_name(name), content_type: "message/rfc822", data: eml, sensitive: !screened }
     rescue GraphClient::NotFoundError
       nil
     end
 
-    # One nested $expand asking for the forwarded item, its attachments,
-    # and any forward enclosed in those, RECURSION_LIMIT levels deep.
-    def item_expand(levels)
-      deeper = levels > 1 ? ";$expand=#{item_expand(levels - 1)}" : ""
-      "microsoft.graph.itemAttachment/item(" \
-        "$select=#{NESTED_ITEM_SELECT};" \
-        "$expand=microsoft.graph.message/attachments($select=#{NESTED_ATTACHMENT_SELECT}#{deeper}))"
-    end
-
-    # Rebuilds one forwarded message as MIME. Returns the bytes and whether
-    # everything inside could be read: an enclosure Graph would not hand
-    # over (no bytes, or nested deeper than RECURSION_LIMIT) cannot be
-    # screened, so its forward is reported unscreened and held whole.
-    def build_forward_mime(item, depth)
+    # Rebuilds one forwarded message as MIME from whatever Graph handed
+    # back. Returns the bytes and whether everything inside could be read:
+    # an enclosure with no bytes, a forward enclosed in this one, or a
+    # missing attachment list on a forward that says it has attachments all
+    # mean the contents could not be screened, and an unscreened forward is
+    # held whole rather than stored as a download.
+    def build_forward_mime(item)
       body = item["body"] || {}
       from = addresses_of(item["from"]).first
       to = addresses_of(item["toRecipients"])
@@ -378,28 +395,17 @@ module Mail
       else
         mail.body = body["content"].to_s
       end
-      screened = true
-      Array(item["attachments"]).each do |nested|
-        name = nested["name"].to_s.presence || "attachment"
-        if nested["@odata.type"].to_s.include?("itemAttachment")
-          enclosed = nested["item"]
-          if depth >= RECURSION_LIMIT || enclosed.blank?
-            screened = false
-            next
-          end
-
-          inner, inner_screened = build_forward_mime(enclosed, depth + 1)
-          screened &&= inner_screened
-          mail.add_file(filename: eml_name(name), content: inner)
-        else
-          content = nested["contentBytes"].to_s
-          if content.blank?
-            screened = false
-            next
-          end
-
-          mail.add_file(filename: name, content: Base64.decode64(content))
+      enclosures = Array(item["attachments"])
+      screened = !(item["hasAttachments"] && enclosures.empty?)
+      enclosures.each do |nested|
+        content = nested["contentBytes"].to_s
+        if content.blank?
+          screened = false
+          next
         end
+
+        mail.add_file(filename: nested["name"].to_s.presence || "attachment",
+          content: Base64.decode64(content))
       end
       [ mail.to_s, screened ]
     end

@@ -319,6 +319,37 @@ class MailGraphTest < ActiveSupport::TestCase
       rest.map { |item| item.provider[:message_id] }.sort
   end
 
+  test "a throttled request waits for Retry-After and then succeeds" do
+    fetcher.fetch_new.to_a # prime
+    @mailbox.add("inbox", graph_message(id: "slow", from: "client@example.com", message_id: "<slow@test>"))
+    throttles = 0
+    @transport.on_get("/me/messages/slow") do |_url, token:, params:, headers:|
+      throttles += 1
+      if throttles <= 2
+        { status: 429, json: { "error" => { "code" => "ApplicationThrottled" } }, retry_after: "0" }
+      else
+        { status: 200, json: @mailbox.find("slow") }
+      end
+    end
+
+    items = fetcher.fetch_new.to_a
+    assert_equal [ "slow" ], items.map { |item| item.provider[:message_id] }
+    assert_equal 3, throttles
+  end
+
+  test "a throttle that will not let up gives up as a connection error" do
+    fetcher.fetch_new.to_a # prime
+    @mailbox.add("inbox", graph_message(id: "blocked", from: "client@example.com", message_id: "<blocked@test>"))
+    throttles = 0
+    @transport.on_get("/me/messages/blocked") do |_url, token:, params:, headers:|
+      throttles += 1
+      { status: 429, json: { "error" => { "code" => "ApplicationThrottled" } }, retry_after: "0" }
+    end
+
+    assert_raises(Mail::ConnectionError) { fetcher.fetch_new.to_a }
+    assert_equal Mail::GraphClient::THROTTLE_WAITS + 1, throttles
+  end
+
   test "history walks archived and nested folders but not the ones without correspondence" do
     @mailbox.add("archive", graph_message(id: "filed", from: "operator@example.com", message_id: "<filed@test>"))
     @mailbox.add("clients", graph_message(id: "nested", from: "traveler@example.com", message_id: "<nested@test>"))
@@ -334,7 +365,7 @@ class MailGraphTest < ActiveSupport::TestCase
     assert_equal %w[current filed nested replied], items.map { |item| item.provider[:message_id] }.sort
   end
 
-  test "a passport inside a forward inside a forward is still held" do
+  test "a forward enclosing another forward is held whole, passport and all" do
     fetcher.fetch_new.to_a # prime
     innermost = {
       "subject" => "Documents", "internetMessageId" => "<innermost@test>",
@@ -365,9 +396,31 @@ class MailGraphTest < ActiveSupport::TestCase
     items = fetcher.fetch_new.to_a
     result = Mail::Ingester.ingest(parsed: items.first.parsed, provider: items.first.provider)
     stored = result[:message]
+    # Graph hands back one level of a forwarded message, so what the inner
+    # forward encloses cannot be screened; the whole forward is held rather
+    # than stored, and the passport never becomes a download.
     assert_empty stored.files
-    assert_equal [ "passport.pdf" ], stored.held_attachments.map { |entry| entry["filename"] }
-    assert_equal "deep passport bytes", DocumentHolding.find_by!(message: stored).file.download
+    assert_equal [ "forwarded.eml" ], stored.held_attachments.map { |entry| entry["filename"] }
+    assert_not_includes DocumentHolding.find_by!(message: stored).file.download, "deep passport bytes"
+  end
+
+  test "a forward that says it has attachments Graph did not return is held whole" do
+    fetcher.fetch_new.to_a # prime
+    withheld = {
+      "subject" => "Fwd: paperwork", "internetMessageId" => "<withheld@test>",
+      "from" => graph_address("agent@example.com"),
+      "toRecipients" => [ graph_address("info@sherpaholidays.com") ],
+      "body" => { "contentType" => "text", "content" => "Documents attached" },
+      "hasAttachments" => true
+    }
+    message = graph_message(id: "fwd-withheld", from: "agent@example.com", message_id: "<fwdwithheld@test>",
+      attachments: [ graph_item_attachment(id: "outer-h", name: "forwarded") ])
+    @mailbox.add("inbox", message, nested: { "outer-h" => withheld })
+
+    items = fetcher.fetch_new.to_a
+    stored = Mail::Ingester.ingest(parsed: items.first.parsed, provider: items.first.provider)[:message]
+    assert_empty stored.files
+    assert_equal [ "forwarded.eml" ], stored.held_attachments.map { |entry| entry["filename"] }
   end
 
   test "a forward whose enclosure cannot be read is held instead of stored" do

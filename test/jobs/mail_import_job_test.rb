@@ -44,8 +44,30 @@ class MailImportJobTest < ActiveSupport::TestCase
       assert_no_difference("Message.count") { Mail::ImportJob.new.perform(import.id, fetcher: fetcher) }
     end
     assert result[:conversation].reload.linked?
-    assert_equal 1, import.reload.linked_messages
+    # The mail was already in the CRM, so nothing was imported; the choice
+    # still created the client and linked the thread.
+    assert_equal 0, import.reload.linked_messages
+    assert_equal 0, import.processed_messages
     assert_equal 1, import.created_clients
+  end
+
+  test "a resumed import does not count the messages it replays" do
+    import_raw(id: "first", from: "first@example.com", received: "2026-09-11T10:00:00Z")
+    import_raw(id: "second", from: "second@example.com", received: "2026-09-11T10:00:00Z")
+    import_raw(id: "third", from: "third@example.com", received: "2026-09-12T10:00:00Z")
+    import = MailImport.create!(scope: "all", status: "preview", total_messages: 3, preview_json: {})
+
+    original = Mail::Ingester.method(:ingest)
+    Mail::Ingester.stub(:ingest, ->(**args) { args[:parsed].message_id == "third@test" ? raise("interrupted") : original.call(**args) }) do
+      assert_raises(RuntimeError) { Mail::ImportJob.new.perform(import.id, fetcher: fetcher) }
+    end
+    assert_equal 2, import.reload.processed_messages
+
+    # The resume replays both messages sharing the cursor's second; they are
+    # already stored, so only the new one moves the counters.
+    assert_difference("Message.count", 1) { Mail::ImportJob.new.perform(import.id, fetcher: fetcher) }
+    assert_equal 3, import.reload.processed_messages
+    assert_equal 100, import.progress_pct
   end
 
   test "resume uses the cursor when earlier mail disappears" do
@@ -58,7 +80,7 @@ class MailImportJobTest < ActiveSupport::TestCase
     Mail::Ingester.stub(:ingest, ->(**args) { args[:parsed].message_id == "resume2@test" ? raise("interrupted") : original.call(**args) }) do
       assert_raises(RuntimeError) { Mail::ImportJob.new.perform(import.id, fetcher: fetcher) }
     end
-    assert_equal "inbox|2026-09-11T10:00:00.000000Z", import.reload.preview_json["history_cursor"]
+    assert_equal "inbox|2026-09-11T10:00:00Z", import.reload.preview_json["history_cursor"]
     @mailbox.instance_variable_get(:@messages)["inbox"].reject! { |message| message["id"] == "resume1" }
     assert_difference("Message.count", 2) { Mail::ImportJob.new.perform(import.id, fetcher: fetcher) }
     assert_equal 3, import.reload.processed_messages

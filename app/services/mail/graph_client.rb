@@ -6,9 +6,22 @@
 # and replaying the walk would double-count what it already yielded. A
 # second 401 means the grant itself is gone, so callers see
 # GrantRevokedError and can offer Reconnect mailbox.
+#
+# Throttling (429) is a wait, not a failure: Outlook throttles reads per app
+# per mailbox and a history backfill is long enough to meet it routinely, so
+# the Retry-After Graph sends is honoured for a bounded number of waits
+# before the run gives up. Without that a throttle would surface to the
+# captain as a failed import he has to restart by hand.
 module Mail
   class GraphClient
     BASE = "https://graph.microsoft.com/v1.0"
+
+    # How many throttled waits one request rides out, how long a single wait
+    # may last whatever Retry-After asks for, and what to wait when Graph
+    # sends no Retry-After at all.
+    THROTTLE_WAITS = 3
+    MAX_WAIT_SECONDS = 60
+    DEFAULT_WAIT_SECONDS = 5
 
     # 401 from Graph, handled entirely inside this class: invalid_grant
     # means the grant is dead, anything else is worth one forced refresh.
@@ -23,6 +36,17 @@ module Mail
       end
     end
 
+    # 429, handled entirely inside this class: waited out, never raised to
+    # callers as-is.
+    class ThrottledError < GraphError
+      attr_reader :retry_after
+
+      def initialize(message = "Microsoft Graph is throttling this mailbox", retry_after: nil)
+        @retry_after = retry_after
+        super(message)
+      end
+    end
+
     # 404: the message vanished between listing and fetch (deleted or moved
     # by the captain mid-run). Callers skip it; it is not an error.
     class NotFoundError < GraphError; end
@@ -30,6 +54,7 @@ module Mail
     class GoneError < GraphError; end
 
     REVOKED = "Mailbox access was revoked or expired. Reconnect the mailbox in Settings.".freeze
+    THROTTLED = "Microsoft Graph is throttling this mailbox. Try again shortly.".freeze
 
     def initialize(transport: GraphTransport.new, &token_source)
       @transport = transport
@@ -49,6 +74,8 @@ module Mail
           raise NotFoundError, "Not found: #{url}"
         when 410
           raise GoneError, "The sync token expired"
+        when 429
+          raise ThrottledError.new(retry_after: response.retry_after)
         else
           raise ConnectionError, "Microsoft Graph returned #{response.status}"
         end
@@ -65,6 +92,8 @@ module Mail
           raise UnauthorizedError, "Microsoft rejected the access token"
         when 404
           raise NotFoundError, "Not found: #{url}"
+        when 429
+          raise ThrottledError.new(retry_after: response.retry_after)
         else
           raise ConnectionError, "Microsoft Graph returned #{response.status}"
         end
@@ -74,16 +103,31 @@ module Mail
     private
 
     def with_token
-      attempts = 0
+      refreshed = false
+      waits = 0
       begin
-        attempts += 1
         yield access_token
       rescue UnauthorizedError => e
-        raise GrantRevokedError, REVOKED if e.invalid_grant? || attempts > 1
+        raise GrantRevokedError, REVOKED if e.invalid_grant? || refreshed
 
+        refreshed = true
         @access_token = nil
         retry
+      rescue ThrottledError => e
+        raise ConnectionError, THROTTLED if waits >= THROTTLE_WAITS
+
+        waits += 1
+        sleep wait_seconds(e.retry_after)
+        retry
       end
+    end
+
+    # Graph sends Retry-After in seconds. Anything it asks for is capped, so
+    # one throttled request can never park a job for minutes on end.
+    def wait_seconds(retry_after)
+      return DEFAULT_WAIT_SECONDS if retry_after.to_s.strip.empty?
+
+      retry_after.to_i.clamp(0, MAX_WAIT_SECONDS)
     end
 
     def access_token

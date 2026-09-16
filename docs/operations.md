@@ -117,7 +117,12 @@ Live sync watches Inbox and Sent Items, where new mail arrives. The history
 backfill in Settings → Import history is wider: it walks every mail folder,
 child folders included, so archived and filed correspondence is converted too.
 Deleted Items, Junk Email, Drafts, Outbox, and Conversation History are left
-out, children and all.
+out, children and all. The backfill decides what to keep from the folder
+listing, which returns From, To, Cc and Bcc, and opens only the messages that
+match; Microsoft documents `internetMessageHeaders` as retrievable with
+`$select` on a get of a single message, not on a listing, so mail that names
+the mailbox only in a delivery header (a hidden Bcc) is caught by live sync,
+which applies the full header check, rather than by the backfill.
 
 If access is revoked or the grant expires, sync records the error and
 Settings offers Reconnect mailbox; reconnecting replaces the grant.
