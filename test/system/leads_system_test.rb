@@ -31,7 +31,11 @@ class LeadsSystemTest < ApplicationSystemTestCase
     assert_no_overflow("lead page")
 
     fill_in "Add a note", with: "Clicked the Everest ad"
-    click_button "Save note"
+    # The fixed phone tab bar can cover the button's click point after the
+    # auto-scroll; center it first (same pattern as inbox_system_test.rb).
+    save_note = find_button("Save note")
+    save_note.scroll_to(save_note, align: :center)
+    save_note.click
     assert_text "Clicked the Everest ad"
     assert_no_overflow("lead page after note")
 
