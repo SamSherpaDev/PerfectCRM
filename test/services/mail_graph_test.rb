@@ -15,6 +15,15 @@ class MailGraphTest < ActiveSupport::TestCase
     Mail::GraphFetcher.new(transport: @transport)
   end
 
+  # A client that records what it would have waited instead of sleeping, so
+  # the throttle behaviour can be asserted without a test that naps.
+  def throttle_client
+    client = Mail::GraphClient.new(transport: @transport) { "token" }
+    client.define_singleton_method(:waits) { @waits ||= [] }
+    client.define_singleton_method(:sleep) { |seconds| waits << seconds }
+    client
+  end
+
   test "authorization url carries the delegated scopes and state" do
     url = Mail::GraphAuth.authorization_url(redirect_uri: "https://crm.example/auth/microsoft/callback", state: "s3cr3t")
     assert_match %r{\Ahttps://login\.microsoftonline\.com/test-tenant/oauth2/v2\.0/authorize\?}, url
@@ -297,10 +306,39 @@ class MailGraphTest < ActiveSupport::TestCase
     items = fetcher.fetch_new.to_a
     assert_equal [ "in-the-gap" ], items.map { |item| item.provider[:message_id] }
     assert_match(/sync token/i, MailSyncState.for("inbox").last_notice.to_s)
+    assert_match(/Inbox/, MailSyncState.for("inbox").last_notice.to_s)
 
     # The refreshed link still drives ordinary sync afterwards.
     @mailbox.add("inbox", graph_message(id: "fresh", from: "new@example.com", message_id: "<fresh@test>"))
     assert_equal [ "fresh" ], fetcher.fetch_new.to_a.map { |item| item.provider[:message_id] }
+  end
+
+  test "a gap recovery that stops early keeps the dead token so it replays" do
+    fetcher.fetch_new.to_a # prime
+    synced_at = MailSyncState.for("inbox").last_sync_at
+    link_before = MailSyncState.for("inbox").delta_link
+    2.times do |n|
+      @mailbox.add("inbox", graph_message(id: "gap-#{n}", from: "operator#{n}@example.com",
+        message_id: "<gap#{n}@test>", received: (synced_at + (n + 1).minutes).utc.iso8601))
+    end
+    @mailbox.expire_delta!("inbox")
+
+    # The caller stops on its own limit part-way through the gap.
+    seen = []
+    fetcher.fetch_new do |item|
+      break if seen.length >= 1
+
+      seen << item.provider[:message_id]
+    end
+    assert_equal [ "gap-0" ], seen
+    # Nothing was committed, so the next run meets the same expiry and
+    # replays the whole window rather than losing what it never reached.
+    assert_equal link_before, MailSyncState.for("inbox").delta_link
+    assert_equal synced_at.to_i, MailSyncState.for("inbox").last_sync_at.to_i
+
+    @mailbox.expire_delta!("inbox")
+    assert_equal %w[gap-0 gap-1].sort,
+      fetcher.fetch_new.to_a.map { |item| item.provider[:message_id] }.sort
   end
 
   test "mail older than the last sync is not dragged in by a token expiry" do
@@ -310,6 +348,28 @@ class MailGraphTest < ActiveSupport::TestCase
     @mailbox.expire_delta!("inbox")
 
     assert_empty fetcher.fetch_new.to_a
+  end
+
+  test "a folder that failed to set up is not later called newly created" do
+    fetcher.fetch_new.to_a # prime everything
+    @mailbox.add_folder("operators", display_name: "Operators")
+    # The first sight of the folder fails to prime, so its row exists but
+    # holds no link: the next run must not mistake that for a new folder.
+    broken = true
+    @transport.on_get("mailFolders/operators/messages/delta") do |_url, token:, params:, headers:|
+      next { status: 503, json: { "error" => { "code" => "ServiceUnavailable" } } } if broken
+
+      { status: 200, json: { "value" => [], "@odata.deltaLink" => "https://graph.microsoft.com/v1.0/me/mailFolders/operators/messages/delta?$deltatoken=99" } }
+    end
+
+    assert_raises(Mail::ConnectionError) { fetcher.fetch_new.to_a }
+    assert_match(/Operators/, MailSyncState.for("operators").last_error.to_s)
+    assert_nil MailSyncState.for("operators").last_notice
+
+    broken = false
+    fetcher.fetch_new.to_a
+    assert MailSyncState.for("operators").delta_link.present?
+    assert_nil MailSyncState.for("operators").last_notice
   end
 
   test "one folder's failure is recorded and the folders after it still sync" do
@@ -326,7 +386,10 @@ class MailGraphTest < ActiveSupport::TestCase
       fetcher.fetch_new { |item| stored << item.provider[:message_id] }
     end
     assert_equal [ "healthy" ], stored
-    assert_match(/503/, MailSyncState.for("archive").last_error.to_s)
+    recorded = MailSyncState.for("archive").last_error.to_s
+    assert_match(/503/, recorded)
+    # The card shows one line, so it has to say which folder failed.
+    assert_match(/Archive/, recorded)
     assert_nil MailSyncState.for("inbox").last_error
   end
 
@@ -385,45 +448,56 @@ class MailGraphTest < ActiveSupport::TestCase
       rest.map { |item| item.provider[:message_id] }.sort
   end
 
-  test "a throttled request waits for Retry-After and then succeeds" do
-    fetcher.fetch_new.to_a # prime
-    @mailbox.add("inbox", graph_message(id: "slow", from: "client@example.com", message_id: "<slow@test>"))
+  test "a throttled request waits the time Graph asks for and then succeeds" do
     throttles = 0
     @transport.on_get("/me/messages/slow") do |_url, token:, params:, headers:|
       throttles += 1
       if throttles <= 2
-        { status: 429, json: { "error" => { "code" => "ApplicationThrottled" } }, retry_after: "0" }
+        { status: 429, json: { "error" => { "code" => "ApplicationThrottled" } }, retry_after: "7" }
       else
-        { status: 200, json: @mailbox.find("slow") }
+        { status: 200, json: { "id" => "slow" } }
       end
     end
 
-    items = fetcher.fetch_new.to_a
-    assert_equal [ "slow" ], items.map { |item| item.provider[:message_id] }
-    assert_equal 3, throttles
+    client = throttle_client
+    assert_equal "slow", client.get_json("/me/messages/slow")["id"]
+    assert_equal [ 7, 7 ], client.waits
   end
 
-  test "a throttle that will not let up gives up as a connection error" do
-    fetcher.fetch_new.to_a # prime
-    @mailbox.add("inbox", graph_message(id: "blocked", from: "client@example.com", message_id: "<blocked@test>"))
+  test "a throttle that will not let up gives up, capped and bounded" do
     throttles = 0
     @transport.on_get("/me/messages/blocked") do |_url, token:, params:, headers:|
       throttles += 1
-      { status: 429, json: { "error" => { "code" => "ApplicationThrottled" } }, retry_after: "0" }
+      { status: 429, json: { "error" => { "code" => "ApplicationThrottled" } }, retry_after: "3600" }
     end
 
-    assert_raises(Mail::ConnectionError) { fetcher.fetch_new.to_a }
+    client = throttle_client
+    assert_raises(Mail::ConnectionError) { client.get_json("/me/messages/blocked") }
     assert_equal Mail::GraphClient::THROTTLE_WAITS + 1, throttles
+    assert_equal [ Mail::GraphClient::MAX_WAIT_SECONDS ] * Mail::GraphClient::THROTTLE_WAITS, client.waits
   end
 
-  test "an HTTP-date Retry-After is honoured instead of collapsing to no wait" do
-    client = Mail::GraphClient.new(transport: @transport) { "token" }
-    assert_equal Mail::GraphClient::MAX_WAIT_SECONDS,
-      client.send(:wait_seconds, 10.minutes.from_now.httpdate)
-    assert_equal 2, client.send(:wait_seconds, 2.seconds.from_now.httpdate)
-    assert_equal Mail::GraphClient::DEFAULT_WAIT_SECONDS, client.send(:wait_seconds, 1.minute.ago.httpdate)
-    assert_equal Mail::GraphClient::DEFAULT_WAIT_SECONDS, client.send(:wait_seconds, "soon please")
-    assert_equal Mail::GraphClient::DEFAULT_WAIT_SECONDS, client.send(:wait_seconds, nil)
+  test "a throttle is never retried instantly, whatever Retry-After says" do
+    [ "0", 1.minute.ago.httpdate, "soon please", nil ].each do |header|
+      @transport.on_get("/me/messages/instant") do |_url, token:, params:, headers:|
+        { status: 429, json: { "error" => { "code" => "ApplicationThrottled" } }, retry_after: header }
+      end
+
+      client = throttle_client
+      assert_raises(Mail::ConnectionError) { client.get_json("/me/messages/instant") }
+      assert_equal Mail::GraphClient::THROTTLE_WAITS, client.waits.length
+      assert client.waits.all?(&:positive?), "Retry-After #{header.inspect} waited #{client.waits.inspect}"
+    end
+  end
+
+  test "an HTTP-date Retry-After is honoured rather than ignored" do
+    @transport.on_get("/me/messages/dated") do |_url, token:, params:, headers:|
+      { status: 429, json: {}, retry_after: 4.seconds.from_now.httpdate }
+    end
+
+    client = throttle_client
+    assert_raises(Mail::ConnectionError) { client.get_json("/me/messages/dated") }
+    assert client.waits.all? { |wait| (3..5).cover?(wait) }, client.waits.inspect
   end
 
   test "history walks archived and nested folders but not the ones without correspondence" do

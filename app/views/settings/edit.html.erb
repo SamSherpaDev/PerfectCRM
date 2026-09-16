@@ -82,7 +82,7 @@
       </div>
       <div class="flex gap-2">
         <dt class="muted">Last error:</dt>
-        <dd><%= @settings.mailbox_last_error.presence || @mail_syncs.values.map(&:last_error).compact.first.presence || "None" %></dd>
+        <dd><%= @settings.mailbox_last_error.presence || @mailbox_error&.last_error.presence || "None" %></dd>
       </div>
     </dl>
     <% if @mailbox_notices.any? %>

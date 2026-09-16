@@ -1,12 +1,14 @@
 class MailSyncState < ApplicationRecord
-  # How long a notice stays on the Settings mailbox card. Long enough for
-  # the captain to act on a new folder, short enough that the card does not
-  # accumulate history he has already dealt with.
-  NOTICE_WINDOW = 7.days
+  # How long a notice or a failure stays on the Settings mailbox card. Long
+  # enough for the captain to act on it, short enough that the card does not
+  # keep reporting trouble that sync has since recovered from - or trouble
+  # in a folder he has since deleted, whose row nothing will ever clear.
+  ATTENTION_WINDOW = 7.days
 
   validates :folder, presence: true, uniqueness: true
 
-  scope :recently_noticed, -> { where(last_notice_at: NOTICE_WINDOW.ago..).order(last_notice_at: :desc) }
+  scope :recently_noticed, -> { where(last_notice_at: ATTENTION_WINDOW.ago..).order(last_notice_at: :desc) }
+  scope :recently_errored, -> { where(last_error_at: ATTENTION_WINDOW.ago..).order(last_error_at: :desc) }
 
   def self.for(folder)
     find_or_create_by!(folder: folder.to_s)

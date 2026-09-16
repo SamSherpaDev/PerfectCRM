@@ -123,25 +123,27 @@ module Mail
     end
 
     # Graph sends Retry-After in seconds, but RFC 7231 also permits an
-    # HTTP-date and a gateway in front of Graph may use it. Anything that
-    # parses is capped, so one throttled request can never park a job for
-    # minutes; anything that does not falls back to the default wait, never
-    # to zero, which would burn every retry in milliseconds and press
-    # harder on the throttle being ridden out.
+    # HTTP-date and a gateway in front of Graph may use it. One rule governs
+    # every form: the wait is never zero and never longer than the cap. A
+    # zero wait would spend all three retries in microseconds and press
+    # harder on the throttle being ridden out, so anything asking for it -
+    # a literal 0, a date already past through ordinary clock skew, or a
+    # value that does not parse at all - waits the default instead.
     def wait_seconds(retry_after)
-      value = retry_after.to_s.strip
-      return DEFAULT_WAIT_SECONDS if value.empty?
-      return value.to_i.clamp(0, MAX_WAIT_SECONDS) if value.match?(/\A\d+\z/)
-
-      seconds = (Time.httpdate(value) - Time.now).ceil
-      # A date already in the past says nothing useful - gateway clock skew
-      # is ordinary - and retrying instantly would burn every wait in
-      # milliseconds, so it is treated as absent rather than as permission.
-      return DEFAULT_WAIT_SECONDS if seconds <= 0
+      seconds = requested_seconds(retry_after)
+      return DEFAULT_WAIT_SECONDS if seconds.nil? || seconds <= 0
 
       seconds.clamp(1, MAX_WAIT_SECONDS)
+    end
+
+    def requested_seconds(retry_after)
+      value = retry_after.to_s.strip
+      return nil if value.empty?
+      return value.to_i if value.match?(/\A\d+\z/)
+
+      (Time.httpdate(value) - Time.now).ceil
     rescue ArgumentError
-      DEFAULT_WAIT_SECONDS
+      nil
     end
 
     def access_token

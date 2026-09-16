@@ -112,7 +112,7 @@ class SettingsController < ApplicationController
     @perfectbook_last_success = PerfectBook::SyncState.last_success_at
     @perfectbook_last_error = PerfectBook::SyncState.last_error_row
     @mailbox_address = Mail.mailbox_address
-    @mail_syncs = MailSyncState.all.index_by(&:folder)
+    @mailbox_error = MailSyncState.recently_errored.first
     @mailbox_notices = MailSyncState.recently_noticed.to_a
     @graph_configured = Mail::GraphAuth.configured?
     @imports = MailImport.ordered.limit(5)

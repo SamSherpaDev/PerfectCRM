@@ -19,13 +19,16 @@
 # is downloaded twice.
 #
 # Privacy: the info@ hard filter (Mail.keeps?, enforced again in the
-# ingester) decides before any body or attachment bytes are fetched. The
-# history walk judges straight off the folder listing, which carries the
-# recipient fields, so personal mail in a folder costs nothing beyond its
-# row in that listing. Live sync judges off the message metadata GET, which
-# also carries the delivery headers. Attachment bytes come from the
-# attachments endpoint one file at a time, lazily, only when a kept message
-# is actually being stored.
+# ingester) decides what is stored, and no attachment bytes move until it
+# has. The two paths reach that decision differently, and the difference is
+# worth stating exactly. The history walk judges straight off the folder
+# listing, which carries the recipient fields, so personal mail in a folder
+# is never opened at all. Live sync GETs the message first - body included,
+# because that same GET is what carries the delivery headers it judges on -
+# so a personal message's body is read into memory and dropped, never
+# stored and never logged. Attachment bytes come from the attachments
+# endpoint one file at a time, lazily, only when a kept message is actually
+# being stored.
 #
 # That split narrows the backfill on purpose: Microsoft documents
 # internetMessageHeaders as retrievable with $select on a GET of a single
@@ -118,18 +121,22 @@ module Mail
       failure = nil
       mail_folders(graph).each do |folder|
         state = ::MailSyncState.for(folder.id)
+        # A folder Outlook has only just gained has no row until this run
+        # made one; a folder that failed to set up earlier already has one,
+        # and must not be announced to the captain as newly created.
+        discovered = established && state.previously_new_record?
         if state.delta_link.blank?
-          prime_folder(graph, folder.id)
-          announce_new_folder(folder) if established
+          prime_folder(graph, folder)
+          announce_new_folder(folder) if discovered
           next
         end
-        drain_delta(graph, folder.id, state) do |parsed, provider|
+        drain_delta(graph, folder, state) do |parsed, provider|
           yield Fetched.new(parsed: parsed, provider: provider, folder: folder.id)
         end
       rescue NotConfiguredError, GrantRevokedError
         raise
       rescue GraphError => e
-        ::MailSyncState.record_error!(folder.id, e.message)
+        ::MailSyncState.record_error!(folder.id, "#{folder.name}: #{e.message}")
         failure ||= e
       end
       raise failure if failure
@@ -246,13 +253,14 @@ module Mail
 
     # Pages one folder's message listing from a floor, judging each entry on
     # the recipient fields the listing carries so only keepers are opened.
-    def walk_folder(client, folder, floor)
+    def walk_folder(client, folder, floor, skip_stored: false)
       url = history_url(folder, floor)
       loop do
         page = client.get_json(url)
         Array(page["value"]).each do |entry|
           next if entry["@removed"] || entry["id"].blank?
           next unless Mail.keeps?(listed_recipients(entry))
+          next if skip_stored && ::Message.exists?(provider_message_id: entry["id"])
 
           loaded = load_message(client, entry["id"])
           next if loaded.nil?
@@ -264,8 +272,10 @@ module Mail
       end
     end
 
-    # Initial delta call: drained for its deltaLink, never ingested.
-    def prime_folder(client, folder)
+    # Initial delta call, drained for its deltaLink and never ingested. The
+    # drain is separate from the commit because gap recovery must not
+    # persist the new link until it has actually read the gap.
+    def drain_prime(client, folder)
       url = delta_url(folder)
       delta_link = nil
       loop do
@@ -274,7 +284,11 @@ module Mail
         url = page["@odata.nextLink"]
         break if url.blank?
       end
-      ::MailSyncState.for(folder).update!(delta_link: delta_link,
+      delta_link
+    end
+
+    def prime_folder(client, folder)
+      ::MailSyncState.for(folder.id).update!(delta_link: drain_prime(client, folder.id),
         last_sync_at: Time.current, last_error: nil, last_error_at: nil)
     end
 
@@ -283,6 +297,7 @@ module Mail
     # Graph reports every change (a read-state toggle counts), and an
     # uncommitted link replays the whole page on the next run.
     def drain_delta(client, folder, state)
+      folder_id = folder.id
       url = state.delta_link
       last_page = nil
       loop do
@@ -301,7 +316,7 @@ module Mail
         break if url.blank?
       end
       delta_link = last_page["@odata.deltaLink"]
-      ::MailSyncState.record_success!(folder, delta_link: delta_link.presence || state.delta_link)
+      ::MailSyncState.record_success!(folder_id, delta_link: delta_link.presence || state.delta_link)
     rescue GraphClient::GoneError
       # Sync token expired server-side. Re-priming alone would drop every
       # message that arrived since the last committed link, so the window
@@ -311,16 +326,19 @@ module Mail
       recover_gap(client, folder, state.last_sync_at) { |*loaded| yield(*loaded) }
     end
 
+    # The gap the dead token covered is read BEFORE the replacement link is
+    # committed. An interrupted recovery - a failure, or a caller that stops
+    # on its run limit - therefore leaves the dead token in place, so the
+    # next run meets the same 410 and replays the whole window instead of
+    # losing whatever it had not reached yet.
     def recover_gap(client, folder, since)
-      prime_folder(client, folder)
-      if since.blank?
-        ::MailSyncState.record_notice!(folder, "Microsoft expired this folder's sync token; watching from now.")
-        return
+      delta_link = drain_prime(client, folder.id)
+      walk_folder(client, folder.id, since, skip_stored: true) do |parsed, provider, _entry|
+        yield(parsed, provider)
       end
-
-      walk_folder(client, folder, since) { |parsed, provider, _entry| yield(parsed, provider) }
-      ::MailSyncState.record_notice!(folder,
-        "Microsoft expired this folder's sync token; mail since #{since.utc.iso8601} was re-read to fill the gap.")
+      ::MailSyncState.record_success!(folder.id, delta_link: delta_link)
+      ::MailSyncState.record_notice!(folder.id,
+        "#{folder.name}: Microsoft expired this folder's sync token; mail since #{since.utc.iso8601} was re-read to fill the gap.")
     end
 
     # Full message GET (metadata + attachment listing), keeps?-filtered
