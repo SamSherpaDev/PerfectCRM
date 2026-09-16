@@ -179,7 +179,10 @@ module Mail
         data = file[:data].to_s
         next if data.blank?
 
-        if ::Message.sensitive_attachment?(filename, content_type, data: data)
+        # A reader can mark an entry sensitive when it could not screen
+        # everything inside it (see GraphFetcher#forwarded_entry); such
+        # bytes are held rather than offered as a download.
+        if file[:sensitive] || ::Message.sensitive_attachment?(filename, content_type, data: data)
           held << { "filename" => filename, "byte_size" => data.bytesize, "content_type" => content_type,
             "data" => data, "status" => "held: send to PerfectBook" }
         elsif content_type == "message/rfc822" || filename.downcase.end_with?(".eml")

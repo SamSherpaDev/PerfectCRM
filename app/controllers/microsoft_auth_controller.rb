@@ -1,6 +1,7 @@
 # Completes the Microsoft 365 "Connect mailbox" flow started in Settings.
 # Verifies the state round-trip, exchanges the code for tokens via
-# Mail::GraphAuth, and lands back in Settings with the result.
+# Mail::GraphAuth, and lands back in Settings with the result. Approving
+# as the wrong Microsoft account is reported by name rather than stored.
 class MicrosoftAuthController < ApplicationController
   def callback
     if params[:error].present?
@@ -17,6 +18,8 @@ class MicrosoftAuthController < ApplicationController
     redirect_to edit_settings_path,
       notice: "Mailbox connected. Ongoing sync starts now; past mail stays for Import history.",
       status: :see_other
+  rescue Mail::WrongMailboxError => e
+    redirect_to edit_settings_path, alert: e.message, status: :see_other
   rescue Mail::GrantRevokedError
     redirect_to edit_settings_path,
       alert: "Microsoft refused the connection. Try Connect mailbox again.", status: :see_other

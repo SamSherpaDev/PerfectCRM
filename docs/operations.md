@@ -99,16 +99,19 @@ SMTP settings and is unchanged by this setup.
    Keep the default authorization-code settings; no ID tokens needed.
 3. **Add the delegated scopes.** API permissions → Add a permission →
    Microsoft Graph → Delegated permissions → `offline_access`, `Mail.Read`,
-   `Mail.ReadBasic`, `User.Read`. Grant admin consent for the tenant.
+   `User.Read`. Grant admin consent for the tenant.
 4. **Create a secret.** Certificates & secrets → New client secret, save
    the value (it shows once).
 5. **Copy into `.env.app`.** `MS_GRAPH_CLIENT_ID`, `MS_GRAPH_TENANT_ID`,
    `MS_GRAPH_CLIENT_SECRET`. From `/opt/apps/perfectcrm`, run
    `docker compose -f compose.yml up -d --force-recreate app` to apply.
 6. **Connect in Settings.** Settings → Mailbox → Connect mailbox → approve
-   as info@sherpaholidays.com → Test connection. The first connect primes
-   the sync from now without ingesting anything; past mail stays for
-   Settings → Import history, where the captain previews a depth and commits.
+   as info@sherpaholidays.com → Test connection. Approving while signed in
+   to any other Microsoft account is refused by name and stores nothing, so
+   sign out of Microsoft first if the browser holds a personal account. The
+   first connect primes the sync from now without ingesting anything; past
+   mail stays for Settings → Import history, where the captain previews a
+   depth and commits.
 
 If access is revoked or the grant expires, sync records the error and
 Settings offers Reconnect mailbox; reconnecting replaces the grant.

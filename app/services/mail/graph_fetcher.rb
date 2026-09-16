@@ -9,15 +9,15 @@
 # the @odata.deltaLink per folder in MailSyncState. Microsoft 365 has no
 # single All Mail equivalent, so BOTH Inbox and Sent Items are synced: the
 # CRM must keep the captain's own replies on the timeline. Delta quirks
-# handled: @removed entries are skipped, and read-state-only changes simply
-# re-resolve to :duplicate in the ingester (dedupe on provider id +
-# Message-ID), so nothing is ever stored twice.
+# handled: @removed entries are skipped, and entries already stored (a
+# read-state toggle, or a replay after an uncommitted link) are skipped
+# before their message is fetched, so nothing is downloaded twice.
 #
 # Privacy: the info@ hard filter (Mail.keeps?, enforced again in the
 # ingester) runs on message metadata BEFORE any attachment bytes are
 # fetched, so personal mail costs one metadata GET and zero attachment
 # downloads. Attachment bytes come from the attachments endpoint one file
-# at a time, only for kept messages.
+# at a time, lazily, only when a kept message is actually being stored.
 #
 # First-run safety: a fresh connect primes each folder's delta link with an
 # initial delta call that is drained but NOT ingested, so ongoing sync
@@ -27,18 +27,35 @@ module Mail
   class GraphFetcher
     FOLDERS = %w[inbox sentitems].freeze
     PAGE_SIZE = 50
-    # Nested forwards deeper than this lose their innermost enclosures.
+    # How many levels of forwarded (item) attachments are opened and
+    # screened. A forward enclosing anything deeper than this cannot be
+    # screened whole, so it is held as sensitive instead of stored.
     RECURSION_LIMIT = 3
 
     MESSAGE_SELECT = %w[
       id internetMessageId conversationId categories from toRecipients
-      ccRecipients bccRecipients subject body bodyPreview receivedDateTime
+      ccRecipients bccRecipients subject body receivedDateTime
       sentDateTime hasAttachments isRead internetMessageHeaders
     ].join(",").freeze
     ATTACHMENT_SELECT = "id,name,contentType,size,isInline".freeze
     NESTED_ATTACHMENT_SELECT = "id,name,contentType,size,contentBytes".freeze
+    NESTED_ITEM_SELECT = "subject,from,toRecipients,body,internetMessageId".freeze
 
     Fetched = Struct.new(:parsed, :provider, :folder, :cursor, keyword_init: true)
+
+    # Attachment bytes are downloaded on first read. The import preview
+    # walks the whole mailbox but only reads counterparties, so it pays for
+    # metadata alone; the commit path reads the entries and materializes.
+    class LazyAttachments
+      def initialize(&materialize)
+        @materialize = materialize
+      end
+
+      def to_a
+        @entries ||= Array(@materialize.call)
+      end
+      alias_method :to_ary, :to_a
+    end
 
     def initialize(transport: GraphTransport.new)
       @transport = transport
@@ -52,31 +69,29 @@ module Mail
     def test_connection
       raise NotConfiguredError, "Connect the mailbox in Settings first." unless configured?
 
-      with_client { |client| client.get_json("/me", params: { "$select" => "id,mail,userPrincipalName" }) }
+      client.get_json("/me", params: { "$select" => "id,mail,userPrincipalName" })
       true
     end
 
     # Incremental delta sync across both folders. Yields Fetched structs for
     # kept messages only and commits each folder's new deltaLink after a
     # full drain; a mid-folder failure leaves the old link so the next run
-    # replays and dedupes. Folders without a link are primed, not ingested.
-    # Callers cap stored volume themselves (see SyncJob): stopping early
-    # leaves the link uncommitted for replay, and the cap counts stored
-    # messages so replays always make progress instead of starving.
+    # replays and skips what it already stored. Folders without a link are
+    # primed, not ingested. Callers cap stored volume themselves (see
+    # SyncJob): stopping early leaves the link uncommitted for replay.
     def fetch_new
       raise NotConfiguredError, "Mailbox is not connected." unless configured?
       return enum_for(:fetch_new) unless block_given?
 
-      with_client do |client|
-        FOLDERS.each do |folder|
-          state = ::MailSyncState.for(folder)
-          if state.delta_link.blank?
-            prime_folder(client, folder)
-            next
-          end
-          drain_delta(client, folder, state) do |parsed, provider|
-            yield Fetched.new(parsed: parsed, provider: provider, folder: folder)
-          end
+      graph = client
+      FOLDERS.each do |folder|
+        state = ::MailSyncState.for(folder)
+        if state.delta_link.blank?
+          prime_folder(graph, folder)
+          next
+        end
+        drain_delta(graph, folder, state) do |parsed, provider|
+          yield Fetched.new(parsed: parsed, provider: provider, folder: folder)
         end
       end
     end
@@ -91,47 +106,34 @@ module Mail
       return enum_for(:fetch_history, since: since, cursor: cursor) unless block_given?
 
       resume = parse_cursor(cursor)
-      with_client do |client|
-        FOLDERS.each do |folder|
-          next if resume && folder_before?(folder, resume[:folder])
+      graph = client
+      FOLDERS.each do |folder|
+        next if resume && folder_before?(folder, resume[:folder])
 
-          floor = [ since&.to_time, resume&.dig(:at) ].compact.max
-          url = history_url(folder, floor)
-          loop do
-            page = client.get_json(url)
-            Array(page["value"]).each do |entry|
-              next if entry["@removed"] || entry["id"].blank?
-              next if resume && !after_cursor?(folder, entry, resume)
+        url = history_url(folder, floor_for(folder, since, resume))
+        loop do
+          page = graph.get_json(url)
+          Array(page["value"]).each do |entry|
+            next if entry["@removed"] || entry["id"].blank?
+            next if resume && !after_cursor?(folder, entry, resume)
 
-              loaded = load_message(client, folder, entry["id"])
-              next if loaded.nil?
+            loaded = load_message(graph, entry["id"])
+            next if loaded.nil?
 
-              parsed, provider = loaded
-              yield Fetched.new(parsed: parsed, provider: provider, folder: folder,
-                cursor: "#{folder}|#{entry_time(entry).iso8601(6)}|#{entry["id"]}")
-            end
-            url = page["@odata.nextLink"]
-            break if url.blank?
+            parsed, provider = loaded
+            yield Fetched.new(parsed: parsed, provider: provider, folder: folder,
+              cursor: "#{folder}|#{entry_time(entry).iso8601(6)}|#{entry["id"]}")
           end
+          url = page["@odata.nextLink"]
+          break if url.blank?
         end
       end
     end
 
     private
 
-    def with_client
-      attempts = 0
-      token = GraphAuth.access_token!(transport: @transport)
-      begin
-        attempts += 1
-        yield GraphClient.new(access_token: token, transport: @transport)
-      rescue GraphClient::UnauthorizedError => e
-        raise GrantRevokedError, "Mailbox access was revoked or expired. Reconnect the mailbox in Settings." if e.invalid_grant?
-        raise if attempts > 1
-
-        token = GraphAuth.access_token!(transport: @transport)
-        retry
-      end
+    def client
+      GraphClient.new(transport: @transport) { GraphAuth.access_token!(transport: @transport) }
     end
 
     def delta_headers
@@ -140,6 +142,14 @@ module Mail
 
     def delta_url(folder)
       "#{GraphClient::BASE}/me/mailFolders/#{folder}/messages/delta?$select=#{URI.encode_www_form_component("id")}"
+    end
+
+    # The resume timestamp belongs to the folder its cursor names. Applying
+    # it to a later folder would silently skip that folder's older mail.
+    def floor_for(folder, since, resume)
+      floors = [ since&.to_time ]
+      floors << resume[:at] if resume && resume[:folder] == folder
+      floors.compact.max
     end
 
     def history_url(folder, floor)
@@ -167,6 +177,9 @@ module Mail
     end
 
     # Drains one folder's delta, committing the new link at the end.
+    # Entries already stored are skipped before their message is fetched:
+    # Graph reports every change (a read-state toggle counts), and an
+    # uncommitted link replays the whole page on the next run.
     def drain_delta(client, folder, state)
       url = state.delta_link
       last_page = nil
@@ -175,8 +188,9 @@ module Mail
         Array(last_page["value"]).each do |entry|
           next if entry["@removed"]
           next if entry["id"].blank?
+          next if ::Message.exists?(provider_message_id: entry["id"])
 
-          loaded = load_message(client, folder, entry["id"])
+          loaded = load_message(client, entry["id"])
           next if loaded.nil?
 
           yield(*loaded)
@@ -193,26 +207,18 @@ module Mail
     end
 
     # Full message GET (metadata + attachment listing), keeps?-filtered
-    # BEFORE attachment bytes move. Returns [parsed, provider] or nil for
-    # gone/filtered messages.
-    def load_message(client, folder, id)
+    # before any attachment bytes can move. Returns [parsed, provider] or
+    # nil for gone/filtered messages.
+    def load_message(client, id)
       json = client.get_json("/me/messages/#{id}",
         params: {
           "$select" => MESSAGE_SELECT,
           "$expand" => "attachments($select=#{ATTACHMENT_SELECT})"
         })
-      skeleton_headers = skeleton_headers_from(json)
-      unless Mail.keeps?(skeleton_headers)
-        # Hidden-Bcc delivery (see bcc_delivery?): resolved to the mailbox,
-        # so record the delivery evidence where the ingester's hard gate
-        # looks for it. The gate and the pre-filter then always agree.
-        return nil unless bcc_delivery?(folder, json)
+      headers = recipient_headers(json)
+      return nil unless Mail.keeps?(headers)
 
-        skeleton_headers = skeleton_headers.merge(
-          "delivered-to" => Array(skeleton_headers["delivered-to"]) + [ Mail.mailbox_address ])
-      end
-
-      parsed = parsed_from(client, json, skeleton_headers)
+      parsed = parsed_from(client, json, headers)
       provider = {
         message_id: json["id"].to_s,
         thread_id: json["conversationId"].to_s.presence,
@@ -223,29 +229,20 @@ module Mail
       nil
     end
 
-    def skeleton_headers_from(json)
+    # Real recipient headers only: Graph's own recipient lists plus the
+    # delivery headers a hidden Bcc leaves behind (a Bcc copy still shows
+    # the original To). Nothing here is synthesized, so a message that
+    # names the mailbox only in Reply-To or a list header is not kept.
+    def recipient_headers(json)
       {
         "from" => addresses_of(json["from"]),
         "to" => addresses_of(json["toRecipients"]),
         "cc" => addresses_of(json["ccRecipients"]),
         "bcc" => addresses_of(json["bccRecipients"]),
         "delivered-to" => header_values(json, "Delivered-To"),
-        "x-original-to" => header_values(json, "X-Original-To")
+        "x-original-to" => header_values(json, "X-Original-To"),
+        "x-envelope-to" => header_values(json, "X-Envelope-To")
       }
-    end
-
-    # Hidden-Bcc safety net: mail delivered to this mailbox without the
-    # address in any recipient (Bcc copies show the original To). Only
-    # applies to Inbox arrivals and requires a header trace naming the
-    # mailbox (Received: for <info@…> and Exchange envelope remnants);
-    # anything else still falls through to the hard filter.
-    def bcc_delivery?(folder, json)
-      return false unless folder == "inbox"
-
-      blob = Array(json["internetMessageHeaders"])
-        .map { |header| "#{header["name"]}: #{header["value"]}" }.join("\n")
-      pattern = /(?<![a-z0-9._%+-])#{Regexp.escape(Mail.mailbox_address)}(?![a-z0-9.@-])/i
-      blob.match?(pattern)
     end
 
     def parsed_from(client, json, headers)
@@ -253,9 +250,9 @@ module Mail
       to = addresses_of(json["toRecipients"])
       cc = addresses_of(json["ccRecipients"])
       body = json["body"] || {}
-      html_body = body["contentType"].to_s.casecmp?("html") ? body["content"].to_s.presence : nil
-      text_body = !body["contentType"].to_s.casecmp?("html") ? body["content"].to_s.presence : nil
-      text_body ||= json["bodyPreview"].to_s.presence
+      html = body["contentType"].to_s.casecmp?("html")
+      message_id = json["id"].to_s
+      attachments = Array(json["attachments"])
       ::Mail::Ingester::Parsed.new(
         headers: headers,
         from_addresses: from, to_addresses: to, cc_addresses: cc,
@@ -266,19 +263,20 @@ module Mail
         in_reply_to: normalize_message_id(header_values(json, "In-Reply-To").first),
         references: normalize_references(header_values(json, "References")),
         sent_at: parse_time(json["sentDateTime"] || json["receivedDateTime"]),
-        text_body: text_body, html_body: html_body,
-        attachments: attachment_entries(client, json["id"].to_s, Array(json["attachments"])),
+        text_body: html ? nil : body["content"].to_s.presence,
+        html_body: html ? body["content"].to_s.presence : nil,
+        attachments: LazyAttachments.new { attachment_entries(client, message_id, attachments) },
         raw_size: body["content"].to_s.bytesize
       )
     end
 
-    def attachment_entries(client, message_id, attachments, depth: 0)
+    def attachment_entries(client, message_id, attachments)
       entries = []
       Array(attachments).each do |attachment|
         name = attachment["name"].to_s.presence || "attachment"
         content_type = attachment["contentType"].to_s.presence || "application/octet-stream"
         if attachment["@odata.type"].to_s.include?("itemAttachment")
-          entry = forwarded_entry(client, message_id, attachment, name, depth)
+          entry = forwarded_entry(client, message_id, attachment, name)
           entries << entry if entry
         else
           begin
@@ -297,28 +295,37 @@ module Mail
     # ingester's existing recursive screening handles it exactly like an
     # IMAP forward: safe enclosures stay downloadable inside the .eml,
     # sensitive enclosures become held placeholders, and a mixed forward
-    # keeps its safe files while holding the rest.
-    def forwarded_entry(client, message_id, attachment, name, depth)
-      return nil if depth >= RECURSION_LIMIT
-
+    # keeps its safe files while holding the rest. Forwards enclosed in
+    # forwards are opened the same way, up to RECURSION_LIMIT levels.
+    def forwarded_entry(client, message_id, attachment, name)
       nested = client.get_json("/me/messages/#{message_id}/attachments/#{attachment["id"]}",
-        params: {
-          "$expand" => "microsoft.graph.itemAttachment/item(" \
-            "$select=subject,from,toRecipients,body,internetMessageId;" \
-            "$expand=microsoft.graph.message/attachments($select=#{NESTED_ATTACHMENT_SELECT}))"
-        })
-      item = nested["item"] || {}
-      eml = build_forward_mime(item)
-      filename = name.downcase.end_with?(".eml") ? name : "#{name}.eml"
-      { filename: filename, content_type: "message/rfc822", data: eml }
+        params: { "$expand" => item_expand(RECURSION_LIMIT) })
+      item = nested["item"]
+      return nil if item.blank?
+
+      eml, screened = build_forward_mime(item, 1)
+      { filename: eml_name(name), content_type: "message/rfc822", data: eml, sensitive: !screened }
     rescue GraphClient::NotFoundError
       nil
     end
 
-    def build_forward_mime(item)
+    # One nested $expand asking for the forwarded item, its attachments,
+    # and any forward enclosed in those, RECURSION_LIMIT levels deep.
+    def item_expand(levels)
+      deeper = levels > 1 ? ";$expand=#{item_expand(levels - 1)}" : ""
+      "microsoft.graph.itemAttachment/item(" \
+        "$select=#{NESTED_ITEM_SELECT};" \
+        "$expand=microsoft.graph.message/attachments($select=#{NESTED_ATTACHMENT_SELECT}#{deeper}))"
+    end
+
+    # Rebuilds one forwarded message as MIME. Returns the bytes and whether
+    # everything inside could be read: an enclosure Graph would not hand
+    # over (no bytes, or nested deeper than RECURSION_LIMIT) cannot be
+    # screened, so its forward is reported unscreened and held whole.
+    def build_forward_mime(item, depth)
+      body = item["body"] || {}
       from = addresses_of(item["from"]).first
       to = addresses_of(item["toRecipients"])
-      body = item["body"] || {}
       mail = ::Mail.new
       mail.from = from if from.present?
       mail.to = to if to.any?
@@ -329,17 +336,34 @@ module Mail
       else
         mail.body = body["content"].to_s
       end
+      screened = true
       Array(item["attachments"]).each do |nested|
-        # Deeper forwards are not addressable for bytes; skip them.
-        next if nested["@odata.type"].to_s.include?("itemAttachment")
+        name = nested["name"].to_s.presence || "attachment"
+        if nested["@odata.type"].to_s.include?("itemAttachment")
+          enclosed = nested["item"]
+          if depth >= RECURSION_LIMIT || enclosed.blank?
+            screened = false
+            next
+          end
 
-        content = nested["contentBytes"].to_s
-        next if content.blank?
+          inner, inner_screened = build_forward_mime(enclosed, depth + 1)
+          screened &&= inner_screened
+          mail.add_file(filename: eml_name(name), content: inner)
+        else
+          content = nested["contentBytes"].to_s
+          if content.blank?
+            screened = false
+            next
+          end
 
-        mail.add_file(filename: nested["name"].to_s.presence || "attachment",
-          content: Base64.decode64(content))
+          mail.add_file(filename: name, content: Base64.decode64(content))
+        end
       end
-      mail.to_s
+      [ mail.to_s, screened ]
+    end
+
+    def eml_name(name)
+      name.downcase.end_with?(".eml") ? name : "#{name}.eml"
     end
 
     # Strip the surrounding brackets Graph preserves, matching parse_raw.

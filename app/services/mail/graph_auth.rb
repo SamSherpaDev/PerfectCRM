@@ -5,18 +5,21 @@
 # Exchange application access policy, and suits a single-operator tenant.
 # Application permissions are deliberately not used.
 #
-# Scopes: offline_access (refresh token) + Mail.Read/Mail.ReadBasic (read
-# mail) + User.Read (the /me check behind Test connection).
+# Scopes: offline_access (refresh token) + Mail.Read (read mail) +
+# User.Read (the /me check behind Test connection and the account pin).
 #
 # The authorization-code flow runs on demand from Settings: "Connect
 # mailbox" sends the captain to Microsoft, and /auth/microsoft/callback
-# exchanges the code. Only the refresh token is persisted (encrypted on
-# Setting); access tokens are fetched on demand and kept in memory. Every
-# refresh persists a rotated refresh token when Microsoft returns one.
+# exchanges the code. The grant is only stored once /me confirms it belongs
+# to MAILBOX_ADDRESS, so approving while signed in to another Microsoft
+# account fails loudly instead of syncing nothing forever. Only the refresh
+# token is persisted (encrypted on Setting); access tokens are fetched on
+# demand and kept in memory. Every refresh persists a rotated refresh token
+# when Microsoft returns one.
 module Mail
   module GraphAuth
     AUTHORIZE_HOST = "https://login.microsoftonline.com"
-    SCOPES = %w[offline_access Mail.Read Mail.ReadBasic User.Read].freeze
+    SCOPES = %w[offline_access Mail.Read User.Read].freeze
 
     class << self
       def configured?
@@ -46,13 +49,15 @@ module Mail
       end
 
       # Exchanges the callback code and connects the mailbox, replacing any
-      # previous grant. Clears the last mailbox error on success.
+      # previous grant. Refuses an account other than MAILBOX_ADDRESS and
+      # stores nothing in that case. Clears the last mailbox error on success.
       def connect!(code:, redirect_uri:, transport: GraphTransport.new)
         tokens = post_token(transport,
           grant_type: "authorization_code", code: code,
           redirect_uri: redirect_uri, scope: SCOPES.join(" "))
         raise ConnectionError, "Microsoft returned no refresh token" if tokens[:refresh_token].blank?
 
+        verify_mailbox!(transport, tokens[:access_token])
         ::Setting.current.update!(
           ms_graph_refresh_token: tokens[:refresh_token],
           ms_graph_connected_at: Time.current,
@@ -78,6 +83,22 @@ module Mail
       end
 
       private
+
+      # The one mailbox this CRM reads. Microsoft happily hands a refresh
+      # token for whichever account approved the consent screen, so the
+      # grant is discarded unless /me is that mailbox.
+      def verify_mailbox!(transport, access_token)
+        me = GraphClient.new(transport: transport) { access_token }
+          .get_json("/me", params: { "$select" => "id,mail,userPrincipalName" })
+        addresses = [ me["mail"], me["userPrincipalName"] ]
+          .map { |value| value.to_s.strip.downcase }.reject(&:blank?)
+        return if addresses.include?(Mail.mailbox_address)
+
+        signed_in = addresses.first.presence || "an unknown account"
+        raise WrongMailboxError,
+          "Microsoft signed in as #{signed_in}, not #{Mail.mailbox_address}. " \
+          "The connection was refused. Sign out of Microsoft, then connect again as #{Mail.mailbox_address}."
+      end
 
       def token_url
         "#{AUTHORIZE_HOST}/#{tenant_id}/oauth2/v2.0/token"

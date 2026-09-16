@@ -12,7 +12,13 @@ class Mail::PreviewJob < ApplicationJob
     progress["counts"] ||= {}
     progress["scanned"] ||= 0
     progress["kept"] ||= 0
+    # Counting is per provider message id: if the same message is ever
+    # yielded twice in one walk, the preview the captain commits against
+    # still shows it once.
+    counted = Set.new
     fetcher.fetch_history(since: import.cutoff_date&.to_time, cursor: progress["preview_cursor"]) do |item|
+      next unless counted.add?(item.provider[:message_id].to_s)
+
       progress["counts"] ||= {}
       progress["kept"] += 1
       Mail.counterparties(item.parsed).each do |email|

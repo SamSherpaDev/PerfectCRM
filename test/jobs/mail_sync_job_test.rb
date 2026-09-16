@@ -21,6 +21,10 @@ class MailSyncJobTest < ActiveSupport::TestCase
     Mail::GraphFetcher.new(transport: @mailbox.transport)
   end
 
+  def inbox_delta_calls
+    @mailbox.requests.count { |request| request.url.include?("mailFolders/inbox/messages/delta") }
+  end
+
   test "first connect stores nothing and later mail syncs incrementally" do
     @mailbox.add("inbox", sync_message(id: "old", from: "old@example.com"))
     assert_no_difference([ "Conversation.count", "Message.count" ]) do
@@ -49,11 +53,7 @@ class MailSyncJobTest < ActiveSupport::TestCase
     end
     methods = @mailbox.requests.map(&:method).uniq
     assert_includes methods, :get
-    assert_not_includes @mailbox.requests.map(&:url).join(" "), "PATCH"
-    @mailbox.requests.each do |request|
-      assert_includes [ :get, :get_bytes, :post ], request.method
-      refute_match(%r{graph\.microsoft\.com.*(PATCH|DELETE)}i, request.url)
-    end
+    @mailbox.requests.each { |request| assert_includes [ :get, :get_bytes, :post ], request.method }
   end
 
   test "mid-folder failure replays and dedupes on resume" do
@@ -104,6 +104,42 @@ class MailSyncJobTest < ActiveSupport::TestCase
   test "unconfigured mailbox no-ops" do
     Setting.current.update!(ms_graph_refresh_token: nil)
     assert_equal false, Mail::SyncJob.new.perform(fetcher: fetcher)
+  end
+
+  test "an expired access token retries the request without replaying the walk" do
+    Mail::SyncJob.new.perform(fetcher: fetcher) # prime
+    @mailbox.add("inbox", sync_message(id: "t1", from: "t1@example.com"))
+    @mailbox.add("inbox", sync_message(id: "t2", from: "t2@example.com"))
+    refusals = 0
+    @mailbox.transport.on_get("/me/messages/t2") do |_url, token:, params:, headers:|
+      refusals += 1
+      if refusals == 1
+        { status: 401, json: { "error" => { "code" => "InvalidAuthenticationToken" } } }
+      else
+        { status: 200, json: @mailbox.find("t2") }
+      end
+    end
+
+    walks_before = inbox_delta_calls
+    assert_difference("Message.count", 2) do
+      assert_equal 2, Mail::SyncJob.new.perform(fetcher: fetcher)
+    end
+    # The refreshed token retried that one request; the folder walk that had
+    # already yielded t1 was not started over.
+    assert_equal walks_before + 1, inbox_delta_calls
+  end
+
+  test "a grant that keeps refusing the token records the error and stops" do
+    Mail::SyncJob.new.perform(fetcher: fetcher) # prime
+    @mailbox.add("inbox", sync_message(id: "denied", from: "denied@example.com"))
+    @mailbox.transport.on_get("/me/messages/denied") do |_url, token:, params:, headers:|
+      { status: 401, json: { "error" => { "code" => "InvalidAuthenticationToken" } } }
+    end
+
+    assert_no_difference("Message.count") do
+      assert_equal false, Mail::SyncJob.new.perform(fetcher: fetcher)
+    end
+    assert_match(/revoked|Reconnect/i, Setting.current.reload.mailbox_last_error.to_s)
   end
 
   test "connection errors are recorded and raised for retry" do

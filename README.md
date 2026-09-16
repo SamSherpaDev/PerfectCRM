@@ -425,15 +425,18 @@ default `info@sherpaholidays.com`, with no additional accepted mailboxes). The C
 reads the Microsoft 365 mailbox through Microsoft Graph with delegated
 OAuth (the captain's own mailbox only; no tenant-wide grant). It keeps
 only messages with an exact parsed mailbox address
-in From, To, Cc, Bcc, Delivered-To, or X-Original-To; personal mail is skipped
-without storing it, before any attachment bytes are fetched. This release reads
+in From, To, Cc, Bcc, Delivered-To, X-Original-To, or X-Envelope-To; a message
+naming the mailbox anywhere else (Reply-To, a list header) is not kept. Personal
+mail is skipped without storing it, before any attachment bytes are fetched. This release reads
 received and sent history; see [Replying](#replying) for composing and
 sending from CRM. [AI assistance](#ai-assistance) can prepare a draft for review.
 
 Setup (captain, about 10 minutes): register the CRM as a Microsoft
 application with the delegated mail scopes, add the redirect URI, paste the
 client id, tenant id, and secret into `.env.app`, then click Connect mailbox
-in Settings → Mailbox → Test connection. Full steps live in
+in Settings → Mailbox → Test connection. The grant is only stored when
+Microsoft confirms it belongs to `MAILBOX_ADDRESS`; approving as another
+account is refused by name. Full steps live in
 [Microsoft 365 mailbox](docs/operations.md#microsoft-365-mailbox).
 Reconnecting replaces the grant; if access is revoked, sync records the
 error and Settings offers Reconnect mailbox instead of failing silently.

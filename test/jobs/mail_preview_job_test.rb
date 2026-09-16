@@ -44,6 +44,18 @@ class MailPreviewJobTest < ActiveSupport::TestCase
       import.preview_rows.map { |row| row["email"] }.sort
   end
 
+  test "preview never downloads attachment bytes" do
+    @mailbox.add("inbox", graph_message(id: "with-file", from: "client@example.com",
+      message_id: "<withfile@test>",
+      attachments: [ graph_file_attachment(id: "p1", name: "itinerary.txt") ]),
+      file_bytes: { "p1" => "itinerary bytes" })
+
+    import = MailImport.create!(scope: "all", status: "draft")
+    Mail::PreviewJob.new.perform(import.id, fetcher: fetcher)
+    assert_equal 1, import.reload.total_messages
+    assert_equal 0, @mailbox.byte_fetches
+  end
+
   test "preview counts delivery headers and outbound mail but excludes personal mail" do
     client = Client.create!(name: "Remembered", email: "original@example.com")
     EmailIdentity.remember!("alternate@example.com", linkable: client)
@@ -58,8 +70,7 @@ class MailPreviewJobTest < ActiveSupport::TestCase
     end
     @mailbox.add("inbox", graph_message(id: "m-bcc", from: "alias-sender@example.com",
       to: "manifest@example.com", message_id: "<bcc-preview@test>",
-      headers: [ { "name" => "Received",
-        "value" => "from mx.example by outlook.com for <info@sherpaholidays.com>" } ]))
+      headers: [ { "name" => "X-Envelope-To", "value" => "info@sherpaholidays.com" } ]))
 
     import = MailImport.create!(scope: "all", status: "draft")
     Mail::PreviewJob.new.perform(import.id, fetcher: fetcher)

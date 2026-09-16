@@ -36,6 +36,17 @@ class MicrosoftAuthTest < ActionDispatch::IntegrationTest
     assert_not Setting.current.reload.mailbox_connected?
   end
 
+  test "callback names the wrong account and connects nothing" do
+    Mail::GraphAuth.stub(:connect!, ->(**) {
+      raise Mail::WrongMailboxError, "Microsoft signed in as sam@personal.example, not info@sherpaholidays.com."
+    }) do
+      get microsoft_callback_path, params: { code: "auth-code", state: @state }
+    end
+    assert_redirected_to edit_settings_path
+    assert_match(/sam@personal\.example/, flash[:alert].to_s)
+    assert_not Setting.current.reload.mailbox_connected?
+  end
+
   test "callback surfaces a Microsoft refusal" do
     get microsoft_callback_path, params: { error: "access_denied", state: @state }
     assert_redirected_to edit_settings_path

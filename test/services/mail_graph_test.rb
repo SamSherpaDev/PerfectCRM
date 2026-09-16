@@ -22,10 +22,7 @@ class MailGraphTest < ActiveSupport::TestCase
     assert_equal "test-client-id", query["client_id"]
     assert_equal "code", query["response_type"]
     assert_equal "s3cr3t", query["state"]
-    assert_includes query["scope"].split, "offline_access"
-    assert_includes query["scope"].split, "Mail.Read"
-    assert_includes query["scope"].split, "Mail.ReadBasic"
-    assert_includes query["scope"].split, "User.Read"
+    assert_equal %w[Mail.Read User.Read offline_access], query["scope"].split.sort
   end
 
   test "connect exchanges the code and stores the refresh token encrypted" do
@@ -36,6 +33,21 @@ class MailGraphTest < ActiveSupport::TestCase
     raw = Setting.connection.select_value("SELECT ms_graph_refresh_token FROM settings WHERE id = #{settings.id}")
     assert_not_includes raw.to_s, "refresh-2"
     assert settings.mailbox_connected?
+  end
+
+  test "connect refuses another Microsoft account and stores nothing" do
+    Setting.current.update!(ms_graph_refresh_token: nil, ms_graph_connected_at: nil)
+    @mailbox.signed_in_as("sam@personal.example")
+
+    error = assert_raises(Mail::WrongMailboxError) do
+      Mail::GraphAuth.connect!(code: "auth-code",
+        redirect_uri: "https://crm.example/auth/microsoft/callback", transport: @transport)
+    end
+    assert_match(/sam@personal\.example/, error.message)
+    assert_match(/info@sherpaholidays\.com/, error.message)
+    settings = Setting.current.reload
+    assert_nil settings.ms_graph_refresh_token
+    assert_not settings.mailbox_connected?
   end
 
   test "access token refresh persists a rotated refresh token" do
@@ -106,20 +118,54 @@ class MailGraphTest < ActiveSupport::TestCase
     assert_equal %w[p-1 p-2], items.map { |item| item.provider[:message_id] }
   end
 
-  test "read-state-only changes resolve to duplicates, never stored twice" do
+  test "already stored mail is skipped before the message is refetched" do
     fetcher.fetch_new.to_a # prime
     link_before = MailSyncState.for("inbox").delta_link
-    @mailbox.add("inbox", graph_message(id: "reread", from: "client@example.com", message_id: "<reread@test>"))
+    @mailbox.add("inbox", graph_message(id: "reread", from: "client@example.com", message_id: "<reread@test>",
+      attachments: [ graph_file_attachment(id: "r1", name: "itinerary.txt") ]),
+      file_bytes: { "r1" => "itinerary bytes" })
     first = fetcher.fetch_new.map { |item| Mail::Ingester.ingest(parsed: item.parsed, provider: item.provider)[:status] }
     assert_equal [ :stored ], first
     assert_equal 1, Message.where(message_id: "reread@test").count
 
     # The server replays the same change (e.g. a read-state toggle): syncing
-    # from the previous link returns it again, and it dedupes.
+    # from the previous link returns it again and nothing is downloaded.
     MailSyncState.for("inbox").update!(delta_link: link_before)
-    second = fetcher.fetch_new.map { |item| Mail::Ingester.ingest(parsed: item.parsed, provider: item.provider)[:status] }
-    assert_equal [ :duplicate ], second
+    fetches_before = @mailbox.message_fetches
+    bytes_before = @mailbox.byte_fetches
+    assert_empty fetcher.fetch_new.to_a
+    assert_equal fetches_before, @mailbox.message_fetches
+    assert_equal bytes_before, @mailbox.byte_fetches
     assert_equal 1, Message.where(message_id: "reread@test").count
+  end
+
+  test "an HTML message keeps its whole body instead of the Graph preview" do
+    fetcher.fetch_new.to_a # prime
+    full = "<p>#{"The full itinerary. " * 40}</p>"
+    @mailbox.add("inbox", graph_message(id: "rich", from: "client@example.com", message_id: "<rich@test>",
+      body: full, body_type: "html", preview: "The full itinerary. The full"))
+
+    items = fetcher.fetch_new.to_a
+    assert_nil items.first.parsed.text_body
+    assert_equal full, items.first.parsed.html_body
+    stored = Mail::Ingester.ingest(parsed: items.first.parsed, provider: items.first.provider)[:message]
+    assert_nil stored.text_body
+    assert_includes stored.html_body, "The full itinerary."
+    assert_operator stored.html_body.length, :>, 600
+  end
+
+  test "attachment bytes are only fetched when a message is stored" do
+    fetcher.fetch_new.to_a # prime
+    @mailbox.add("inbox", graph_message(id: "lazy-1", from: "client@example.com",
+      message_id: "<lazy@test>", attachments: [ graph_file_attachment(id: "l1", name: "itinerary.txt") ]),
+      file_bytes: { "l1" => "itinerary bytes" })
+
+    items = fetcher.fetch_new.to_a
+    assert_equal 1, items.length
+    assert_equal 0, @mailbox.byte_fetches
+    result = Mail::Ingester.ingest(parsed: items.first.parsed, provider: items.first.provider)
+    assert_equal 1, @mailbox.byte_fetches
+    assert_equal "itinerary bytes", result[:message].files.first.download
   end
 
   test "personal mail is skipped before any attachment bytes are fetched" do
@@ -135,17 +181,27 @@ class MailGraphTest < ActiveSupport::TestCase
     assert_equal 0, @mailbox.byte_fetches
   end
 
-  test "hidden-Bcc delivery to the mailbox is kept via the header trace" do
+  test "hidden-Bcc delivery is kept only through a real recipient header" do
     fetcher.fetch_new.to_a # prime
-    bcc = graph_message(id: "bcc-1", from: "operator@example.com", to: "manifest@example.com",
+    @mailbox.add("inbox", graph_message(id: "bcc-1", from: "operator@example.com", to: "manifest@example.com",
       message_id: "<bcc@test>",
-      headers: [ { "name" => "Received",
-        "value" => "from mail.example.com by outlook.com for <info@sherpaholidays.com>" } ])
-    @mailbox.add("inbox", bcc)
+      headers: [ { "name" => "X-Envelope-To", "value" => "info@sherpaholidays.com" } ]))
 
     items = fetcher.fetch_new.to_a
-    assert_equal 1, items.length
+    assert_equal [ "bcc-1" ], items.map { |item| item.provider[:message_id] }
     assert_equal :stored, Mail::Ingester.ingest(parsed: items.first.parsed, provider: items.first.provider)[:status]
+  end
+
+  test "personal mail naming the mailbox outside a recipient header is not kept" do
+    fetcher.fetch_new.to_a # prime
+    @mailbox.add("inbox", graph_message(id: "reply-to-1", from: "friend@example.com",
+      to: "captain@gmail.com", message_id: "<replyto@test>",
+      headers: [ { "name" => "Reply-To", "value" => "info@sherpaholidays.com" },
+        { "name" => "List-Post", "value" => "<mailto:info@sherpaholidays.com>" } ]))
+
+    assert_no_difference([ "Conversation.count", "Message.count" ]) do
+      assert_empty fetcher.fetch_new.to_a
+    end
   end
 
   test "sensitive attachments are held with bytes in the holding area" do
@@ -231,6 +287,81 @@ class MailGraphTest < ActiveSupport::TestCase
     @mailbox.instance_variable_get(:@messages)["inbox"].reject! { |message| message["id"] == "h-1" }
     rest = fetcher.fetch_history(since: Time.utc(2026, 9, 1), cursor: items[0].cursor).to_a
     assert_equal %w[h-2 h-3], rest.map { |item| item.provider[:message_id] }
+  end
+
+  test "resuming inside one folder keeps older mail in the folders after it" do
+    @mailbox.add("inbox", graph_message(id: "r-in", from: "client@example.com",
+      message_id: "<rin@test>", received: "2026-09-14T10:00:00Z"))
+    @mailbox.add("sentitems", graph_message(id: "r-out", from: "info@sherpaholidays.com",
+      to: "client@example.com", message_id: "<rout@test>", received: "2026-09-02T10:00:00Z"))
+
+    items = fetcher.fetch_history(since: Time.utc(2026, 9, 1)).to_a
+    assert_equal %w[r-in r-out], items.map { |item| item.provider[:message_id] }
+
+    # Resuming after the inbox message must not carry that folder's floor
+    # into Sent Items, where older replies still need importing.
+    rest = fetcher.fetch_history(since: Time.utc(2026, 9, 1), cursor: items.first.cursor).to_a
+    assert_equal %w[r-out], rest.map { |item| item.provider[:message_id] }
+  end
+
+  test "a passport inside a forward inside a forward is still held" do
+    fetcher.fetch_new.to_a # prime
+    innermost = {
+      "subject" => "Documents", "internetMessageId" => "<innermost@test>",
+      "from" => graph_address("traveler@example.com"),
+      "toRecipients" => [ graph_address("agent@example.com") ],
+      "body" => { "contentType" => "text", "content" => "Papers attached" },
+      "attachments" => [
+        { "@odata.type" => "#microsoft.graph.fileAttachment", "id" => "deep-1",
+          "name" => "passport.pdf", "contentType" => "application/pdf", "size" => 21,
+          "contentBytes" => Base64.strict_encode64("deep passport bytes") }
+      ]
+    }
+    middle = {
+      "subject" => "Fwd: Documents", "internetMessageId" => "<middle@test>",
+      "from" => graph_address("agent@example.com"),
+      "toRecipients" => [ graph_address("forwarder@example.com") ],
+      "body" => { "contentType" => "text", "content" => "Passing this along" },
+      "attachments" => [
+        { "@odata.type" => "#microsoft.graph.itemAttachment", "id" => "inner-w",
+          "name" => "documents", "contentType" => "message/rfc822", "size" => 900,
+          "item" => innermost }
+      ]
+    }
+    message = graph_message(id: "fwd-deep", from: "forwarder@example.com", message_id: "<fwddeep@test>",
+      attachments: [ graph_item_attachment(id: "outer-w", name: "forwarded") ])
+    @mailbox.add("inbox", message, nested: { "outer-w" => middle })
+
+    items = fetcher.fetch_new.to_a
+    result = Mail::Ingester.ingest(parsed: items.first.parsed, provider: items.first.provider)
+    stored = result[:message]
+    assert_empty stored.files
+    assert_equal [ "passport.pdf" ], stored.held_attachments.map { |entry| entry["filename"] }
+    assert_equal "deep passport bytes", DocumentHolding.find_by!(message: stored).file.download
+  end
+
+  test "a forward whose enclosure cannot be read is held instead of stored" do
+    fetcher.fetch_new.to_a # prime
+    unreadable = {
+      "subject" => "Fwd: trip", "internetMessageId" => "<unreadable@test>",
+      "from" => graph_address("agent@example.com"),
+      "toRecipients" => [ graph_address("info@sherpaholidays.com") ],
+      "body" => { "contentType" => "text", "content" => "See below" },
+      "attachments" => [
+        # Graph handed back no item for this enclosed forward, so nothing
+        # inside it could be screened.
+        { "@odata.type" => "#microsoft.graph.itemAttachment", "id" => "opaque",
+          "name" => "enclosed", "contentType" => "message/rfc822", "size" => 500 }
+      ]
+    }
+    message = graph_message(id: "fwd-opaque", from: "agent@example.com", message_id: "<fwdopaque@test>",
+      attachments: [ graph_item_attachment(id: "outer-o", name: "forwarded") ])
+    @mailbox.add("inbox", message, nested: { "outer-o" => unreadable })
+
+    items = fetcher.fetch_new.to_a
+    stored = Mail::Ingester.ingest(parsed: items.first.parsed, provider: items.first.provider)[:message]
+    assert_empty stored.files
+    assert_equal [ "forwarded.eml" ], stored.held_attachments.map { |entry| entry["filename"] }
   end
 
   test "unconfigured fetcher refuses to run" do

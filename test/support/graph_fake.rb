@@ -124,6 +124,8 @@ class FakeMailbox
     @attachment_bytes = {}
     @nested_items = {}
     @token_calls = 0
+    @account = { "id" => "captain", "mail" => "info@sherpaholidays.com",
+      "userPrincipalName" => "info@sherpaholidays.com" }
     @grant_mode = :ok
     @expired_deltas = Hash.new(false)
     install_handlers
@@ -148,6 +150,11 @@ class FakeMailbox
     @messages.values.flatten.find { |message| message["id"] == id }
   end
 
+  # Which Microsoft account the delegated grant belongs to (/me).
+  def signed_in_as(address, upn: nil)
+    @account = { "id" => "other", "mail" => address, "userPrincipalName" => upn || address }
+  end
+
   # Next token POST answers invalid_grant (revoked/expired grant).
   def refuse_grant!
     @grant_mode = :revoked
@@ -166,6 +173,13 @@ class FakeMailbox
     requests.count { |request| request.method == :get_bytes }
   end
 
+  # Full message GETs, i.e. how often a message was actually downloaded.
+  def message_fetches
+    requests.count do |request|
+      request.method == :get && request.url.include?("/me/messages/") && !request.url.include?("/attachments/")
+    end
+  end
+
   private
 
   def install_handlers
@@ -182,8 +196,7 @@ class FakeMailbox
     # Registered general-first: matching prefers the last registration, so
     # the bare /me check must not shadow message/folder URLs.
     @transport.on_get("/me") do |_url, token:, params:, headers:|
-      { status: 200, json: { "id" => "captain", "mail" => "info@sherpaholidays.com",
-        "userPrincipalName" => "info@sherpaholidays.com" } }
+      { status: 200, json: @account }
     end
 
     @transport.on_get("mailFolders/") do |url, token:, params:, headers:|
