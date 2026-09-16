@@ -82,7 +82,11 @@ class SettingsController < ApplicationController
     redirect_to edit_settings_path, notice: "Mailbox connection works.", status: :see_other
   rescue Mail::NotConfiguredError
     redirect_to edit_settings_path, alert: "Connect the mailbox first.", status: :see_other
-  rescue Mail::GrantRevokedError
+  rescue Mail::GrantRevokedError => e
+    # Record it as sync does, so the card flips to Reconnect needed now
+    # instead of at the next sync tick.
+    Setting.current.update_columns(mailbox_last_error: e.message.to_s.truncate(500),
+      mailbox_last_error_at: Time.current, updated_at: Time.current)
     redirect_to edit_settings_path, alert: "Mailbox access was revoked or expired. Reconnect the mailbox.", status: :see_other
   rescue Mail::ConnectionError
     redirect_to edit_settings_path, alert: "Mailbox is unreachable right now. Try again in a minute.", status: :see_other

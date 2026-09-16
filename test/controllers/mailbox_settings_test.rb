@@ -100,4 +100,25 @@ class MailboxSettingsTest < ActionDispatch::IntegrationTest
     assert_redirected_to edit_settings_path
     assert_match(/Reconnect the mailbox/i, flash[:alert].to_s)
   end
+
+  # Test connection learns of the revoked grant before the next sync tick,
+  # so the card it lands back on must already agree with its alert.
+  test "a revoked grant met by Test connection shows Reconnect needed right away" do
+    mailbox = FakeMailbox.new
+    Setting.current.update!(ms_graph_refresh_token: "refresh-0", mailbox_watched_since: Time.current.change(usec: 0),
+      mailbox_last_error: nil, mailbox_last_error_at: nil)
+    mailbox.refuse_grant!
+    fetcher = Mail::GraphFetcher.new(transport: mailbox.transport)
+    Mail::GraphFetcher.stub(:new, fetcher) do
+      post mailbox_test_settings_path
+    end
+    assert_redirected_to edit_settings_path
+    assert_match(/Reconnect the mailbox/i, flash[:alert].to_s)
+
+    follow_redirect!
+    assert_select "#mailbox-heading + p + dl .badge" do |badges|
+      assert_equal [ "Reconnect needed" ], badges.map { |badge| badge.text.strip }
+    end
+    assert_match(/Reconnect mailbox/, response.body)
+  end
 end
