@@ -3,7 +3,7 @@ class Setting < ApplicationRecord
 
   encrypts :relay_secret, deterministic: false
 
-  encrypts :mailbox_app_password
+  encrypts :ms_graph_refresh_token
   encrypts :ai_api_key
 
 
@@ -12,15 +12,23 @@ class Setting < ApplicationRecord
 
   validates :singleton_key, inclusion: { in: [ 1 ] }, uniqueness: true
   validates :appearance, inclusion: { in: APPEARANCES }
-  validates :mailbox_login, format: { with: URI::MailTo::EMAIL_REGEXP, allow_blank: true }
   validates :lead_webhook_url, format: { with: %r{\Ahttps?://[^\s/]+(?:/[^\s]*)?\z}, allow_blank: true }
 
   def self.current
     find_by(singleton_key: 1) || create_or_find_by!(singleton_key: 1)
   end
 
-  def mailbox_configured?
-    mailbox_login.present? && mailbox_app_password.present?
+  # Delegated Microsoft 365 grant: connected once a refresh token is stored
+  # along with when the mailbox started being watched.
+  def mailbox_connected?
+    ms_graph_refresh_token.present? && mailbox_watched_since.present?
+  end
+
+  # The stored refresh token outlives a grant Microsoft revoked; sync or Test
+  # connection records that as the last error until a reconnect, a clean
+  # sync, or a working Test connection clears it.
+  def mailbox_grant_revoked?
+    mailbox_connected? && mailbox_last_error == Mail::GraphClient::REVOKED
   end
 
   def webhooks_enabled?

@@ -139,7 +139,7 @@ class PerfectBookDocumentsTest < ActionDispatch::IntegrationTest
     raw = "From: #{@client.email}\r\nTo: info@sherpaholidays.com\r\nMessage-ID: <#{SecureRandom.uuid}@test>\r\nSubject: Docs\r\n\r\nsee attached"
     parsed = Mail::Ingester.parse_raw(raw)
     parsed.attachments = [ { filename: filename, content_type: content_type, data: data } ]
-    message = Mail::Ingester.ingest(parsed: parsed, gmail: {})[:message]
+    message = Mail::Ingester.ingest(parsed: parsed, provider: {})[:message]
     holding = DocumentHolding.find_by!(message: message)
     [ message, holding ]
   end

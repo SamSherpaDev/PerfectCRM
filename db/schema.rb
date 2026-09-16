@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_15_030003) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_16_010001) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -109,19 +109,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_030003) do
     t.string "ai_triage_reason"
     t.string "ai_triage_suggested_source"
     t.datetime "created_at", null: false
-    t.string "gm_thread_id"
     t.boolean "ignored", default: false, null: false
     t.datetime "last_message_at"
     t.integer "linkable_id"
     t.string "linkable_type"
     t.text "participant_emails", default: "[]", null: false
+    t.string "provider_thread_id"
     t.string "subject"
     t.integer "unread_count", default: 0, null: false
     t.datetime "updated_at", null: false
-    t.index ["gm_thread_id"], name: "index_conversations_on_gm_thread_id", unique: true, where: "gm_thread_id IS NOT NULL AND gm_thread_id != ''"
     t.index ["ignored"], name: "index_conversations_on_ignored"
     t.index ["last_message_at"], name: "index_conversations_on_last_message_at"
     t.index ["linkable_type", "linkable_id"], name: "index_conversations_on_linkable_type_and_linkable_id"
+    t.index ["provider_thread_id"], name: "index_conversations_on_provider_thread_id", unique: true, where: "provider_thread_id IS NOT NULL AND provider_thread_id != ''"
   end
 
   create_table "demo_records", force: :cascade do |t|
@@ -301,12 +301,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_030003) do
 
   create_table "mail_sync_states", force: :cascade do |t|
     t.datetime "created_at", null: false
+    t.text "delta_link"
     t.string "folder", null: false
     t.text "last_error"
     t.datetime "last_error_at"
+    t.text "last_notice"
+    t.datetime "last_notice_at"
     t.datetime "last_sync_at"
-    t.integer "last_uid", default: 0, null: false
-    t.integer "uid_validity"
     t.datetime "updated_at", null: false
     t.index ["folder"], name: "index_mail_sync_states_on_folder", unique: true
   end
@@ -319,13 +320,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_030003) do
     t.datetime "created_at", null: false
     t.string "direction", default: "in", null: false
     t.string "from_address"
-    t.string "gm_message_id"
-    t.text "gmail_labels", default: "[]", null: false
     t.integer "group_send_id"
     t.text "held_attachments", default: "[]", null: false
     t.text "html_body"
     t.string "in_reply_to"
     t.string "message_id"
+    t.text "provider_labels", default: "[]", null: false
+    t.string "provider_message_id"
     t.integer "raw_size", default: 0, null: false
     t.datetime "read_at"
     t.text "references_text"
@@ -341,9 +342,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_030003) do
     t.datetime "updated_at", null: false
     t.index ["conversation_id", "sent_at"], name: "index_messages_on_conversation_id_and_sent_at"
     t.index ["conversation_id"], name: "index_messages_on_conversation_id"
-    t.index ["gm_message_id"], name: "index_messages_on_gm_message_id", unique: true, where: "gm_message_id IS NOT NULL AND gm_message_id != ''"
     t.index ["group_send_id"], name: "index_messages_on_group_send_id"
     t.index ["message_id"], name: "index_messages_on_message_id"
+    t.index ["provider_message_id"], name: "index_messages_on_provider_message_id", unique: true, where: "provider_message_id IS NOT NULL AND provider_message_id != ''"
     t.index ["status"], name: "index_messages_on_status"
     t.index ["template_id"], name: "index_messages_on_template_id"
   end
@@ -589,11 +590,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_15_030003) do
     t.boolean "digest_enabled", default: true, null: false
     t.text "email_signature", default: "", null: false
     t.string "lead_webhook_url"
-    t.string "mailbox_app_password"
     t.text "mailbox_last_error"
     t.datetime "mailbox_last_error_at"
     t.datetime "mailbox_last_sync_at"
-    t.string "mailbox_login"
+    t.datetime "mailbox_watched_since"
+    t.text "ms_graph_refresh_token"
     t.boolean "pipeline_digest", default: true, null: false
     t.datetime "relay_last_used_at"
     t.text "relay_secret"

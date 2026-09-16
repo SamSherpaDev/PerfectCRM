@@ -6,5 +6,8 @@
 Rails.application.config.filter_parameters += [
   :passw, :email, :phone, :recipients, :secret, :token, :_key, :crypt, :salt, :certificate, :otp, :ssn, :cvv, :cvc,
   # PerfectBook sibling-API token: never log it (client logs status only).
-  /\A(?:to|cc|bcc)\z/, :perfectbook_api_token
+  /\A(?:to|cc|bcc)\z/, :perfectbook_api_token,
+  # OAuth authorization codes arrive as query parameters on the Google and
+  # Microsoft callbacks, and an unredeemed one must not sit in the logs.
+  /\Acode\z/
 ]

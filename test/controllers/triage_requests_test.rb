@@ -66,7 +66,7 @@ class TriageRequestsTest < ActionDispatch::IntegrationTest
 
   test "Bcc only outbound mail can create a client from triage" do
     parsed = Mail::Ingester.parse_raw("From: info@sherpaholidays.com\r\nBcc: hidden@example.com\r\nSubject: Private invitation\r\n\r\nHello")
-    conversation = Mail::Ingester.ingest(parsed: parsed, gmail: {})[:conversation]
+    conversation = Mail::Ingester.ingest(parsed: parsed, provider: {})[:conversation]
     get inbox_thread_path(conversation)
     assert_response :success
     assert_select "button", text: "Create client"

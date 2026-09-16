@@ -71,16 +71,48 @@ are not repeated here. This file covers only what differs for the CRM.
 | `ALLOWED_GOOGLE_EMAILS` | [Google sign-in allowlist](../README.md#google-sign-in) | `.env.app`, password manager |
 | `SPACES_*` (attachments bucket + keys) | Step 2 | `.env.app`, password manager |
 | `LITESTREAM_*`, backup-bucket `SPACES_ENDPOINT`/`SPACES_REGION` | Step 2 | `.env.litestream`, password manager |
-| `SMTP_USERNAME`, `SMTP_PASSWORD` | Gmail app password | `.env.app`, password manager |
+| `SMTP_USERNAME`, `SMTP_PASSWORD` | Microsoft 365 SMTP credentials | `.env.app`, password manager |
+| `MS_GRAPH_CLIENT_ID`, `MS_GRAPH_CLIENT_SECRET`, `MS_GRAPH_TENANT_ID` | [Microsoft 365 mailbox](#microsoft-365-mailbox) | `.env.app`, password manager |
 | AI provider key | [AI setup](../README.md#ai-assistance) | Settings; encrypted in the primary database, password manager |
-| Mailbox login and app password | [Mail setup](../README.md#mail) | Settings; app password encrypted in the primary database, password manager |
+| Mailbox grant (delegated) | [Mail setup](../README.md#mail) | Refresh token encrypted in the primary database (Settings → Mailbox → Connect mailbox), password manager |
 | `PERFECTBOOK_BASE_URL`, `PERFECTBOOK_API_TOKEN` | [PerfectBook connection setup](../README.md#perfectbook-connection) | CRM `.env.app`; token also in PerfectBook's `.env.app` and password manager |
 
 Preserve the Active Record encryption keys with database backups and supply the
 same keys when restoring. Losing or replacing them makes encrypted values
-unreadable, including the mailbox app password, AI provider key, lead phone fields, and relay
+unreadable, including the mailbox grant, AI provider key, lead phone fields, and relay
 secret. For relay credential setup and rotation, see the
 [website intake contract](leads-intake.md#relay-mode-n8n-panda-ai-any-server).
+
+## Microsoft 365 mailbox
+
+Reading uses delegated OAuth, limited to the captain's own mailbox: no
+tenant-wide Mail.Read grant and no Exchange application access policy.
+Sending still goes through `smtp.office365.com:587` with the existing
+SMTP settings and is unchanged by this setup.
+
+1. **Register the application.** Microsoft Entra admin center → Identity →
+   Applications → App registrations → New registration. Name it
+   PerfectCRM, single tenant (Accounts in this organizational directory
+   only). Note the Application (client) ID and Directory (tenant) ID.
+2. **Add the redirect URI.** Authentication → Add a platform → Web →
+   `https://perfectcrm.sherpaholidays.com/auth/microsoft/callback`.
+   Keep the default authorization-code settings; no ID tokens needed.
+3. **Add the delegated scopes.** API permissions → Add a permission →
+   Microsoft Graph → Delegated permissions → `offline_access`, `Mail.Read`,
+   `User.Read`. Grant admin consent for the tenant.
+4. **Create a secret.** Certificates & secrets → New client secret, save
+   the value (it shows once).
+5. **Copy into `.env.app`.** `MS_GRAPH_CLIENT_ID`, `MS_GRAPH_TENANT_ID`,
+   `MS_GRAPH_CLIENT_SECRET`. From `/opt/apps/perfectcrm`, run
+   `docker compose -f compose.yml up -d --force-recreate app` to apply.
+6. **Connect in Settings.** Settings → Mailbox → Connect mailbox → approve
+   as info@sherpaholidays.com → Test connection. Approving while signed in
+   to any other Microsoft account is refused by name and stores nothing, so
+   sign out of Microsoft first if the browser holds a personal account.
+
+For which folders are read, what the first connect takes, token-expiry
+recovery, the history backfill, and reconnecting after a revoked grant, see
+[Mail](../README.md#mail).
 
 ## PerfectBook connection
 

@@ -1,4 +1,4 @@
-# Quote emails, sent through the same Gmail SMTP settings as every other
+# Quote emails, sent through the same SMTP settings as every other
 # CRM mail (config/environments/production.rb), always from info@.
 class QuoteMailer < ApplicationMailer
   default from: "Sherpa Holidays <info@sherpaholidays.com>"

@@ -1,17 +1,18 @@
 require "mail"
 
 # Turns one fetched email into Conversation + Message rows.
-# Enforces the info@ hard rule, dedupes on X-GM-MSGID, threads on
-# X-GM-THRID with a Message-ID/In-Reply-To/References fallback, stores
-# attachments, and files the thread via Mail::Matcher (or triage).
+# Enforces the info@ hard rule, dedupes on the provider message id
+# (Graph id) and Message-ID, threads on the provider thread id (Graph
+# conversationId) with a Message-ID/In-Reply-To/References fallback,
+# stores attachments, and files the thread via Mail::Matcher (or triage).
 module Mail
   class Ingester
     Parsed = Struct.new(:headers, :from_addresses, :to_addresses, :cc_addresses,
       :subject, :message_id, :in_reply_to, :references, :sent_at,
       :text_body, :html_body, :attachments, :raw_size, keyword_init: true)
 
-    def self.ingest(parsed:, gmail:, **kwargs)
-      new.ingest(parsed: parsed, gmail: gmail, **kwargs)
+    def self.ingest(parsed:, provider:, **kwargs)
+      new.ingest(parsed: parsed, provider: provider, **kwargs)
     end
 
     # Commit cleanup keys before uploads and before any caller transaction
@@ -38,16 +39,15 @@ module Mail
       [ ordinary, held, orphans ]
     end
 
-    def ingest(parsed:, gmail:, prepared: nil)
-      gmail = gmail.transform_keys(&:to_sym)
-      gm_message_id = gmail[:gm_msgid]&.to_s.presence
-      gm_thread_id = gmail[:gm_thrid]&.to_s.presence
-      labels = Array(gmail[:labels])
+    def ingest(parsed:, provider:, prepared: nil)
+      provider = provider.transform_keys(&:to_sym)
+      provider_message_id = provider[:message_id]&.to_s.presence
+      thread_id = provider[:thread_id]&.to_s.presence
+      labels = Array(provider[:labels])
 
       return skipped(:filtered) unless Mail.keeps?(parsed.headers)
 
-      existing = ::Message.find_by(gm_message_id: gm_message_id) if gm_message_id.present?
-      existing ||= ::Message.find_by(message_id: parsed.message_id) if parsed.message_id.present?
+      existing = self.class.existing_message(parsed: parsed, provider: provider)
       return { status: :duplicate, conversation: existing.conversation, message: existing } if existing
 
       ordinary, held, orphans = prepared || self.class.prepare(parsed: parsed)
@@ -56,12 +56,12 @@ module Mail
         orphans.each(&:claim!)
         transaction.after_commit { DocumentUploadOrphan.where(id: orphans.map(&:id)).delete_all }
         transaction.after_rollback { uploaded.each(&:delete) }
-        conversation = find_conversation(gm_thread_id: gm_thread_id, parsed: parsed)
+        conversation = find_conversation(thread_id: thread_id, parsed: parsed)
         direction = Mail.direction_for(parsed.from_addresses)
 
         message = conversation.messages.create!(
           direction: direction,
-          gm_message_id: gm_message_id,
+          provider_message_id: provider_message_id,
           message_id: parsed.message_id,
           in_reply_to: parsed.in_reply_to,
           references_text: parsed.references,
@@ -73,7 +73,7 @@ module Mail
           html_body: parsed.html_body.present? ? Sanitizer.clean(parsed.html_body) : nil,
           sent_at: parsed.sent_at || Time.current,
           raw_size: parsed.raw_size.to_i,
-          gmail_labels: labels
+          provider_labels: labels
         )
         attach_files(message, ordinary, held, uploaded)
         link_conversation(conversation, parsed)
@@ -87,8 +87,18 @@ module Mail
       end
     end
 
-    # Parses a raw RFC822 string into a Parsed struct. Used by the IMAP
-    # fetcher and the import job; keeps parsing in one tested place.
+    # The one dedupe rule: the provider's own message id, then Message-ID.
+    # Callers deciding whether a message is worth downloading ask exactly
+    # the question ingest asks, so the two can never drift apart.
+    def self.existing_message(parsed:, provider:)
+      provider_message_id = provider.transform_keys(&:to_sym)[:message_id]&.to_s.presence
+      found = ::Message.find_by(provider_message_id: provider_message_id) if provider_message_id.present?
+      found ||= ::Message.find_by(message_id: parsed.message_id) if parsed.message_id.present?
+      found
+    end
+
+    # Parses a raw RFC822 string into a Parsed struct. Used by forward
+    # screening and the remaining MIME paths; keeps parsing in one place.
     def self.parse_raw(raw)
       mail = ::Mail.read_from_string(raw.to_s)
       from = Array(mail.from).map { |value| value.to_s.downcase }
@@ -138,12 +148,12 @@ module Mail
       { status: reason, conversation: nil, message: nil }
     end
 
-    def find_conversation(gm_thread_id:, parsed:)
-      if gm_thread_id.present?
-        found = ::Conversation.find_by(gm_thread_id: gm_thread_id)
+    def find_conversation(thread_id:, parsed:)
+      if thread_id.present?
+        found = ::Conversation.find_by(provider_thread_id: thread_id)
         return found if found
       end
-      # Fallback threading on reply headers when Gmail IDs are absent.
+      # Fallback threading on reply headers when provider IDs are absent.
       if parsed.in_reply_to.present?
         found = ::Message.find_by(message_id: parsed.in_reply_to)&.conversation
         return found if found
@@ -158,7 +168,7 @@ module Mail
       end
       ::Conversation.create!(
         subject: parsed.subject.presence || "(no subject)",
-        gm_thread_id: gm_thread_id.presence,
+        provider_thread_id: thread_id.presence,
         participant_emails: participant_list(parsed),
         last_message_at: parsed.sent_at || Time.current
       )
@@ -178,7 +188,10 @@ module Mail
         data = file[:data].to_s
         next if data.blank?
 
-        if ::Message.sensitive_attachment?(filename, content_type, data: data)
+        # A reader can mark an entry sensitive when it could not screen
+        # everything inside it (see GraphFetcher#forwarded_entry); such
+        # bytes are held rather than offered as a download.
+        if file[:sensitive] || ::Message.sensitive_attachment?(filename, content_type, data: data)
           held << { "filename" => filename, "byte_size" => data.bytesize, "content_type" => content_type,
             "data" => data, "status" => "held: send to PerfectBook" }
         elsif content_type == "message/rfc822" || filename.downcase.end_with?(".eml")

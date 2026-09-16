@@ -62,10 +62,12 @@ When updating this file, preserve this bar for all agents and keep entries conci
   Document hand-off and retention policy: README.md, "Mail"; ingestion
   transaction invariant: `Mail::Ingester.prepare`.
 - Mail inbound: `Conversation`/`Message`/`EmailIdentity` + `Mail::SyncJob`
-  (5 min, read-only IMAP over `[Gmail]/All Mail`) + `Mail::ImportJob`;
-  contract in README.md, "Mail". Keep-only-info@ rule lives in
-  `Mail.keeps?`; inside `module Mail` always write `::Message` and
-  `::Conversation` because `Mail::Message` is the mail gem.
+  (5 min, read-only Microsoft Graph delta over every mail folder) +
+  `Mail::ImportJob`; contract in README.md, "Mail". Delegated OAuth only
+  (refresh token encrypted on `Setting`, `Mail::GraphAuth`); sync takes only
+  mail received since the first connect (`Setting#mailbox_watched_since`).
+  Keep-only-info@ rule lives in `Mail.keeps?`; inside `module Mail` always
+  write `::Message` and `::Conversation` because `Mail::Message` is the mail gem.
 - Outbound email: see README.md, "Replying"; recipient context is shared
   through `TemplateContext.resolve_recipient` for reply and group rendering.
 - Views cannot name the `Template` model bare: the

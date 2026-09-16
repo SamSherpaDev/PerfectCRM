@@ -389,7 +389,7 @@ class PipelineSystemTest < ApplicationSystemTestCase
     visit pipeline_path
     assert_selector "article.kcard-stale", text: lead.name
     parsed = Mail::Ingester.parse_raw("From: active@example.com\r\nTo: info@sherpaholidays.com\r\nSubject: Trip dates\r\nDate: #{Time.current.rfc2822}\r\n\r\nHere are my dates.")
-    result = Mail::Ingester.ingest(parsed: parsed, gmail: { gm_thrid: "active-thread", gm_msgid: "active-message" })
+    result = Mail::Ingester.ingest(parsed: parsed, provider: { thread_id: "active-thread", message_id: "active-message" })
     assert_equal :stored, result[:status]
     visit pipeline_path
     assert_selector "article.kcard", text: lead.name

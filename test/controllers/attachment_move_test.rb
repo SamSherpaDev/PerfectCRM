@@ -67,7 +67,7 @@ class AttachmentMoveTest < ActionDispatch::IntegrationTest
   test "failed storage deletion keeps a visible retry path" do
     parsed = Mail::Ingester.parse_raw("From: docs@example.com\r\nTo: info@sherpaholidays.com\r\nSubject: Review passport\r\n\r\nAttached")
     parsed.attachments << { filename: "travel.txt", content_type: "text/plain", data: "document" }
-    result = Mail::Ingester.ingest(parsed: parsed, gmail: {})
+    result = Mail::Ingester.ingest(parsed: parsed, provider: {})
     attachment = result[:message].files.attachments.first
     blob = attachment.blob
     blob.service.stub(:delete, ->(*) { raise IOError, "storage unavailable" }) do
