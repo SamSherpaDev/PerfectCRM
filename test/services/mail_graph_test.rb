@@ -348,8 +348,13 @@ class MailGraphTest < ActiveSupport::TestCase
 
     items = fetcher.fetch_new.to_a
     assert_equal [ "in-the-gap" ], items.map { |item| item.provider[:message_id] }
-    assert_match(/sync token/i, MailSyncState.for("inbox").last_notice.to_s)
-    assert_match(/Inbox/, MailSyncState.for("inbox").last_notice.to_s)
+    notice = MailSyncState.for("inbox").last_notice.to_s
+    assert_match(/sync token/i, notice)
+    assert_match(/Inbox/, notice)
+    # The card beside it reads in Pacific time, so the notice does too.
+    assert_includes notice, synced_at.in_time_zone("America/Los_Angeles").strftime("%H:%M")
+    assert_not_includes notice, synced_at.utc.strftime("%H:%M")
+    assert_no_match(/\d{4}-\d{2}-\d{2}T/, notice)
 
     # The refreshed link still drives ordinary sync afterwards.
     @mailbox.add("inbox", graph_message(id: "fresh", from: "new@example.com", message_id: "<fresh@test>"))
@@ -418,7 +423,8 @@ class MailGraphTest < ActiveSupport::TestCase
     fetcher.fetch_new.to_a # prime
     # The grant was revoked, sync stopped, and the captain reconnected days
     # later: the folder's position is stale by far more than one run's worth.
-    MailSyncState.for("inbox").update!(last_sync_at: 5.days.ago)
+    stale = 5.days.ago.change(usec: 0)
+    MailSyncState.for("inbox").update!(last_sync_at: stale)
     @mailbox.add("inbox", graph_message(id: "long-gap", from: "operator@example.com",
       message_id: "<longgap@test>", received: 3.days.ago.utc.iso8601))
     @mailbox.expire_delta!("inbox")
@@ -430,6 +436,9 @@ class MailGraphTest < ActiveSupport::TestCase
     notice = MailSyncState.for("inbox").last_notice.to_s
     assert_match(/Import history/i, notice)
     assert_match(/#{5.days.ago.to_date}/, notice)
+    assert_includes notice, stale.in_time_zone("America/Los_Angeles").strftime("%H:%M")
+    assert_not_includes notice, stale.utc.strftime("%H:%M")
+    assert_no_match(/\d{4}-\d{2}-\d{2}T/, notice)
     # The backfill judges from a listing with no delivery header, so the
     # notice must not promise it recovers hidden-copy mail.
     assert_match(/hidden copy is not recovered/i, notice)

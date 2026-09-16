@@ -382,7 +382,7 @@ module Mail
       end
       ::MailSyncState.record_success!(folder.id, delta_link: delta_link)
       ::MailSyncState.record_notice!(folder.id,
-        "#{folder.name}: Microsoft expired this folder's sync token; mail since #{since.utc.iso8601} was re-read to fill the gap.")
+        "#{folder.name}: Microsoft expired this folder's sync token; mail since #{notice_time(since)} was re-read to fill the gap.")
     end
 
     # The notice says exactly what an import can and cannot bring back. The
@@ -394,10 +394,16 @@ module Mail
       ::MailSyncState.record_success!(folder.id, delta_link: delta_link)
       ::MailSyncState.record_notice!(folder.id,
         "#{folder.name}: Microsoft expired this folder's sync token, and the gap back to " \
-        "#{since.utc.iso8601} is longer than #{RECOVERY_WINDOW.inspect}. Watching from now. " \
+        "#{notice_time(since)} is longer than #{RECOVERY_WINDOW.inspect}. Watching from now. " \
         "Import history since #{since.to_date} brings back mail naming #{Mail.mailbox_address} in " \
         "From, To, Cc or Bcc; mail that reached the mailbox only as a hidden copy is not recovered that way.")
       nil
+    end
+
+    # Notices sit beside the mailbox card's local times, so they read in the
+    # app's time zone rather than UTC.
+    def notice_time(time)
+      time.in_time_zone.strftime("%b %-d, %Y %H:%M")
     end
 
     # Full message GET (metadata + attachment listing), keeps?-filtered

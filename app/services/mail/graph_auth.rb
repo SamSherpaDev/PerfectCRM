@@ -118,7 +118,7 @@ module Mail
             expires_in: body["expires_in"].to_i }
         when 400, 401
           if body["error"].to_s == "invalid_grant"
-            raise GrantRevokedError, "Mailbox access was revoked or expired. Reconnect the mailbox in Settings."
+            raise GrantRevokedError, GraphClient::REVOKED
           end
           raise ConnectionError, "Microsoft refused the token request (#{body["error"].presence || response.status})"
         else

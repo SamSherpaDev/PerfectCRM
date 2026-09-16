@@ -24,6 +24,12 @@ class Setting < ApplicationRecord
     ms_graph_refresh_token.present? && mailbox_watched_since.present?
   end
 
+  # The stored refresh token outlives a grant Microsoft revoked; sync records
+  # that as the last error until a reconnect or a clean sync clears it.
+  def mailbox_grant_revoked?
+    mailbox_connected? && mailbox_last_error == Mail::GraphClient::REVOKED
+  end
+
   def webhooks_enabled?
     lead_webhook_url.present?
   end

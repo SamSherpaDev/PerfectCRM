@@ -69,7 +69,9 @@
       <div class="flex gap-2">
         <dt class="muted">Status:</dt>
         <dd>
-          <% if @settings.mailbox_connected? %>
+          <% if @settings.mailbox_grant_revoked? %>
+            <%= status_badge "error", label: "Reconnect needed" %>
+          <% elsif @settings.mailbox_connected? %>
             <%= status_badge "connected", label: "Connected" %>
           <% else %>
             <%= status_badge "disconnected", label: "Not connected" %>

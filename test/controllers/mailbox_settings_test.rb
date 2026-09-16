@@ -1,5 +1,6 @@
 require "test_helper"
 require_relative "../support/google_sign_in_test_helper"
+require_relative "../support/graph_fake"
 
 class MailboxSettingsTest < ActionDispatch::IntegrationTest
   include GoogleSignInTestHelper
@@ -52,6 +53,32 @@ class MailboxSettingsTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_match(/Connected/, response.body)
     assert_match(/Reconnect mailbox/, response.body)
+  end
+
+  # The stored refresh token outlives the grant Microsoft revoked, so the
+  # badge has to follow the error the sync recorded, not the token alone.
+  test "a revoked grant met by sync shows Reconnect needed instead of Connected" do
+    mailbox = FakeMailbox.new
+    Setting.current.update!(ms_graph_refresh_token: "refresh-0", mailbox_watched_since: Time.current.change(usec: 0),
+      mailbox_last_error: nil, mailbox_last_error_at: nil)
+    mailbox.refuse_grant!
+    assert_equal false, Mail::SyncJob.new.perform(fetcher: Mail::GraphFetcher.new(transport: mailbox.transport))
+
+    get edit_settings_path
+    assert_response :success
+    assert_select "#mailbox-heading + p + dl .badge" do |badges|
+      assert_equal [ "Reconnect needed" ], badges.map { |badge| badge.text.strip }
+    end
+    assert_match(/Reconnect mailbox/, response.body)
+
+    mailbox.transport.on_post("oauth2/v2.0/token") do |_url, _params|
+      { status: 200, json: { "access_token" => "access-new", "refresh_token" => "refresh-new", "expires_in" => 3600 } }
+    end
+    Mail::SyncJob.new.perform(fetcher: Mail::GraphFetcher.new(transport: mailbox.transport))
+    get edit_settings_path
+    assert_select "#mailbox-heading + p + dl .badge" do |badges|
+      assert_equal [ "Connected" ], badges.map { |badge| badge.text.strip }
+    end
   end
 
   test "mailbox test without a grant asks to connect" do
