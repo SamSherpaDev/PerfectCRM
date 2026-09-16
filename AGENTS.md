@@ -26,6 +26,10 @@ When updating this file, preserve this bar for all agents and keep entries conci
   shared partials; preview every component at `/design` (signed-in only).
   Rail order: Today, Inbox, Leads, Clients, Pipeline, Quotes, Templates,
   Settings; phone tab bar: Today, Inbox, Leads, Clients, More.
+- Today's counts strip carries six `.stat` tiles, two rows of three on
+  desktop; a tile that links to a filtered list wraps `.stat h-full` in the
+  kit's `.stat-link`. `docs/DESIGN.md` section 5 still reads "four equal
+  tiles" from the four-tile era.
 - Timezone `America/Los_Angeles` (`config/application.rb`).
 - Leads convert to clients one way only, by the captain; no reverse action,
   by hand or automation (DESIGN.md 4.11).
@@ -48,7 +52,11 @@ When updating this file, preserve this bar for all agents and keep entries conci
 - System-test Chrome here needs nix NSS *and* NSPR libs on `LD_LIBRARY_PATH`
   (e.g. `nixpkgs#nss` + `nixpkgs#nspr` `.../lib`), plus an explicit
   `resize_to(1400, 900)` in desktop tests; check driver startup output if
-  `chromedriver` cannot start.
+  `chromedriver` cannot start. Headless Chrome answers `(hover: hover)` with
+  false and Tailwind v4 gates every `hover:` utility behind that query, so the
+  kit's 1px hover lift never shows in a headless check; verify `:focus-visible`
+  instead. `bin/rails test:system` also flakes when run in parallel; use
+  `PARALLEL_WORKERS=1` before believing a system-suite failure.
 - PerfectBook link: `PerfectBook::Client` (`lib/perfectbook/`) + mirror tables
   (`app/models/perfectbook/`) + `config/recurring.yml` jobs; contract in
   README.md, "PerfectBook connection". Mirrors only, never money truth.

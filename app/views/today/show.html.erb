@@ -4,7 +4,7 @@
   <%= render "shared/flash" %>
 
   <section aria-label="Counts">
-    <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <div class="grid grid-cols-2 gap-4 lg:grid-cols-3">
       <div class="stat">
         <p class="stat-value"><%= @summary.waiting_on_you %></p>
         <p class="text-sm text-ink-2">Waiting on you</p>
@@ -25,6 +25,20 @@
         <p class="text-sm text-ink-2">Overdue</p>
         <p class="hint">Past due, oldest first.</p>
       </div>
+      <%= link_to leads_path(tab: "new"), class: "stat-link" do %>
+        <div class="stat h-full">
+          <p class="stat-value"><%= @summary.new_leads %></p>
+          <p class="text-sm text-ink-2">New leads</p>
+          <p class="hint">Fresh in, not yet worked.</p>
+        </div>
+      <% end %>
+      <%= link_to clients_path(tab: "clients"), class: "stat-link" do %>
+        <div class="stat h-full">
+          <p class="stat-value"><%= @summary.active_clients %></p>
+          <p class="text-sm text-ink-2">Active clients</p>
+          <p class="hint">On the books, not archived.</p>
+        </div>
+      <% end %>
     </div>
   </section>
 

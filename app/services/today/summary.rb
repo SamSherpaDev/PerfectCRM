@@ -3,6 +3,8 @@
 # Waiting-on-you threads mirror the Inbox "Waiting on you" tab (linked
 # owners only; unknown senders wait in triage). Quotes-out counts live
 # sent and viewed quotes whose valid-until has not passed.
+# New leads and active clients reuse the models' own vocabulary: the New
+# stage of Lead::STATUSES, and every client that is not archived.
 # Departure windows read the mirrored PerfectBook bookings.
 module Today
   class Summary
@@ -24,6 +26,16 @@ module Today
     # Sent or viewed quotes whose valid-until has not passed.
     def quotes_out
       Quote.live.where.not(id: Quote.expired.select(:id)).count
+    end
+
+    # Leads still sitting in the New stage, nobody has worked them yet.
+    def new_leads
+      Lead.by_status("new").count
+    end
+
+    # Clients on the books: everything that is not archived.
+    def active_clients
+      Client.active.count
     end
 
     def overdue

@@ -41,7 +41,7 @@ class TodaySystemTest < ApplicationSystemTestCase
     end
 
     within("section[aria-label=Counts]") do
-      assert_selector ".stat", count: 4
+      assert_selector ".stat", count: 6
     end
     width = page.evaluate_script("document.documentElement.scrollWidth")
     assert_operator width, :<=, 390, "Today overflows a 390px viewport (#{width}px)"

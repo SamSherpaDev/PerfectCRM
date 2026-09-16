@@ -9,15 +9,35 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     @client = Client.create!(name: "Maya", email: "maya@example.com", perfectbook_contact_id: 11)
   end
 
-  test "today renders the four tiles with sentence-case labels" do
+  test "today renders the six tiles with sentence-case labels" do
     get root_path
     assert_response :success
     assert_select "h1", "Today"
-    assert_select ".stat", count: 4
+    assert_select ".stat", count: 6
     assert_select ".stat", text: /Waiting on you/
     assert_select ".stat", text: /Follow-ups due/
     assert_select ".stat", text: /Quotes out/
     assert_select ".stat", text: /Overdue/
+    assert_select ".stat", text: /New leads/
+    assert_select ".stat", text: /Active clients/
+  end
+
+  test "today counts new leads and active clients and links to their lists" do
+    Lead.create!(name: "Priya", email: "priya@example.com")
+    Lead.create!(name: "Ken", email: "ken@example.com", status: "chatting")
+    Lead.create!(name: "Ana", email: "ana@example.com", status: "lost", lost_reason: "price")
+    Client.create!(name: "Retired Ray", email: "ray@example.com").archive!
+
+    get root_path
+    assert_response :success
+    assert_select "a.stat-link[href=?]", leads_path(tab: "new") do
+      assert_select ".stat-value", text: "1"
+      assert_select "p", text: "New leads"
+    end
+    assert_select "a.stat-link[href=?]", clients_path(tab: "clients") do
+      assert_select ".stat-value", text: "1"
+      assert_select "p", text: "Active clients"
+    end
   end
 
   test "today lists follow-ups with one-tap complete and nudge" do
@@ -66,7 +86,7 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     get root_path
     assert_response :success
     assert_select "a[href=?]", inbox_thread_path(convo), text: "Maya"
-    assert_select ".stat-value", text: "1", count: 2
+    assert_select ".stat-value", text: "1", count: 3
     assert_select "p", text: /No replies waiting/, count: 0
   end
 
