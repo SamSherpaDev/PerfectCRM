@@ -2,8 +2,7 @@
 
 # The Settings signature in both shapes: plain text for text mail parts and
 # the {{signature}} placeholder, and the app-owned HTML block (signature
-# lines plus the uploaded logo by Content-ID) for HTML mail parts.
-#
+# text plus the uploaded logo by Content-ID) for HTML mail parts.
 module EmailSignature
   CID = "signature-logo@perfectcrm"
   MAX_LOGO_BYTES = 500.kilobytes
@@ -16,7 +15,7 @@ module EmailSignature
 
   # Fixed brand tokens for the mail block (docs/DESIGN.md through
   # email-safe stand-ins): Georgia is Gelasio's metric twin for the name,
-  # Arial/Helvetica for the rest; ink on the white every mail client shows.
+  # Arial/Helvetica for the rest; colors chosen for a white mail surface.
   NAME_COLOR = "#14110e"
   DETAIL_COLOR = "#3d3226"
   RULE_COLOR = "#c96f1a"
@@ -37,7 +36,7 @@ module EmailSignature
     end
 
     # The app-owned HTML signature block: a two-cell table with the logo
-    # beside the name lines, all styles inline for mail clients. The logo
+    # beside escaped lines or sanitized legacy markup. The logo
     # image, when attached, is referenced through logo_src (a cid: URL in
     # mail, a blob path in the Settings preview). Empty when nothing is
     # configured.
@@ -62,7 +61,7 @@ module EmailSignature
     end
 
     # Natural logo dimensions [width, height]: blob metadata first, else a
-    # small read of the PNG/GIF/JPEG header bytes, so rendering never
+    # download parsed for PNG/GIF/JPEG header dimensions, so rendering never
     # depends on the Active Storage analyzer. Nil when unknown.
     def logo_dimensions(blob)
       width = blob.metadata[:width] || blob.metadata["width"]
@@ -110,8 +109,8 @@ module EmailSignature
       fragment.to_html.strip
     end
 
-    # Best-effort text from sanitized HTML, for the text fallback when only
-    # HTML was supplied.
+    # Best-effort text from sanitized legacy HTML, which takes precedence
+    # over saved plain lines while the legacy signature is retained.
     def text_from_html(html)
       clean = sanitize(html.to_s)
       return "" if clean.blank?
