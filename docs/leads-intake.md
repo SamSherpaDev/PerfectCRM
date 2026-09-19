@@ -74,6 +74,14 @@ Source derivation: `google_ads` on `gclid`/`gbraid`/`wbraid`, or
 on `facebook`/`instagram`/`meta` with a paid medium; else `website_form`.
 `campaign_name` copies `utm_campaign`. The reference is `SH-XXXX`.
 
+Referral: `attribution.referral_code` is optional. The storefront sends the
+advisor code from its `?ref=CODE` landing links here (six chars from
+`ABCDEFGHJKMNPQRSTUVWXYZ23456789`, no I, L, O, 0, or 1). A code outside
+that format after trimming whitespace and uppercasing is ignored as if no
+code was given; intake never rejects over it. A valid code is stored on the
+lead in normalized form; the original attribution remains in metadata.
+For display, conversion, and booking use, see [Leads](../README.md#leads).
+
 ## Details follow-up (optional step two)
 
 Posted after a successful send, with the same `submission_id`:

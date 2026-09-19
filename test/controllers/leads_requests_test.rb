@@ -8,6 +8,26 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     sign_in
   end
 
+  test "manual forms and requests cannot assign referral codes" do
+    get new_lead_path
+    assert_response :success
+    assert_select "input[name='lead[referral_code]']", count: 0
+    post leads_path, params: { lead: { name: "Manual", referral_code: "KQ7X2D" } }
+    record = Lead.order(:id).last
+    assert_redirected_to lead_path(record)
+    assert_nil record.referral_code
+    record.update!(referral_code: "AAAA22")
+    get edit_lead_path(record)
+    assert_response :success
+    assert_select "input[name='lead[referral_code]']", count: 0
+    [ "BBBB33", "" ].each do |code|
+      patch lead_path(record), params: { lead: { name: "Updated", referral_code: code } }
+      assert_redirected_to lead_path(record)
+      assert_equal "AAAA22", record.reload.referral_code
+      assert_equal "Updated", record.name
+    end
+  end
+
   test "index renders tabs with counts and search" do
     Lead.create!(name: "Ad One", source: "google_ads", status: "new")
     Lead.create!(name: "Chatty", source: "manual", status: "chatting")
@@ -57,6 +77,14 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     end
     assert_select "textarea#message_body"
     assert_select "textarea#note_body"
+  end
+
+  test "show renders the referral code" do
+    lead = Lead.create!(name: "Referred", source: "website_form", referral_code: "KQ7X2D")
+    get lead_path(lead)
+    assert_response :success
+    assert_select "dt", text: "Referral code"
+    assert_select "dd", text: "KQ7X2D"
   end
 
   test "show of a converted lead is read-only with a forward link" do

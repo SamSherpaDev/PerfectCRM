@@ -111,6 +111,31 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     assert_equal "https://sherpaholidays.com", response.headers["Access-Control-Allow-Origin"]
   end
 
+  test "a valid referral code is stored with the lead" do
+    post_intake intake_body("attribution" => { "referral_code" => "KQ7X2D" })
+    assert_response :accepted
+    assert_equal "KQ7X2D", Lead.last.referral_code
+    assert_equal "KQ7X2D", Lead.last.metadata["attribution"]["referral_code"]
+  end
+
+  test "a missing referral code stores nothing" do
+    post_intake intake_body
+    assert_response :accepted
+    assert_nil Lead.last.referral_code
+  end
+
+  test "an invalid referral code is ignored, never rejected" do
+    post_intake intake_body("attribution" => { "referral_code" => "REF-1" })
+    assert_response :accepted
+    assert_nil Lead.last.referral_code
+  end
+
+  test "a lowercase referral code is normalized" do
+    post_intake intake_body("attribution" => { "referral_code" => "kq7x2d" })
+    assert_response :accepted
+    assert_equal "KQ7X2D", Lead.last.referral_code
+  end
+
   # -- source derivation table ----------------------------------------------
 
   {

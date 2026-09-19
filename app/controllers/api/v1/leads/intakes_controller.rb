@@ -177,6 +177,7 @@ module Api
             email: fields[:email],
             phone_raw: phone_raw,
             phone: e164,
+            referral_code: referral_code_from(attribution),
             trip_handle: trip["handle"].to_s.strip.presence&.truncate(120),
             trip_title: trip["title"].to_s.strip.presence&.truncate(160),
             message: payload["message"].to_s.strip.presence&.truncate(4000),
@@ -204,6 +205,14 @@ module Api
         end
 
         MODEL_FIELD_MAP = { "name" => "contact.name", "email" => "contact.email" }.freeze
+
+        # Optional advisor referral (?ref=CODE link, sh_ref cookie). Anything
+        # outside PerfectBook's code format is ignored as if no code was
+        # given: intake never rejects an inquiry over it.
+        def referral_code_from(attribution)
+          code = attribution["referral_code"].to_s.strip.upcase
+          code.match?(ReferralCode::REFERRAL_CODE_FORMAT) ? code : nil
+        end
 
         def mappable_field_errors(lead)
           mapped = {}

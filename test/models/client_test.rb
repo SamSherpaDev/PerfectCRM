@@ -30,6 +30,13 @@ class ClientTest < ActiveSupport::TestCase
     assert client.valid?
   end
 
+  test "referral code normalizes case and validates the advisor format" do
+    client = Client.create!(name: "Tashi", referral_code: " kq7x2d ")
+    assert_equal "KQ7X2D", client.reload.referral_code
+    assert_not Client.new(name: "Bad", referral_code: "ABC123").valid?
+    assert Client.new(name: "Blank", referral_code: "").valid?
+  end
+
   test "perfectbook contact id is unique when present" do
     Client.create!(name: "One", perfectbook_contact_id: 42)
     other = Client.new(name: "Two", perfectbook_contact_id: 42)

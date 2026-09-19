@@ -43,6 +43,8 @@ When updating this file, preserve this bar for all agents and keep entries conci
   nested email reassignment in `NestedPeople`. Record layout is the
   `app/views/records/` partials fed by `RecordPage` (composer form shared
   with the reply box through `reply_box/_form`).
+- Referral usage and conversion: README.md, "Leads"; API contract:
+  `docs/leads-intake.md`; shared model validation: `ReferralCode`.
 - Search uses the models' `*.search` APIs; `ensure_fts!` recreates missing
   FTS tables. It does not repopulate existing records; `sync_fts!` indexes
   each record.

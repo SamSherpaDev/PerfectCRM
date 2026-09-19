@@ -12,8 +12,8 @@ class ExportsRequestsTest < ActionDispatch::IntegrationTest
     org = Organization.create!(name: "Ops Co", kind: "operator", email: "ops@example.com")
     archived = Lead.create!(name: "Archived Lead", source: "manual")
     archived.archive!
-    Lead.create!(name: "Ad Lead", source: "google_ads", campaign_name: "Everest", external_ref: "n8n-1")
-    client = Client.create!(name: "Tashi", email: "tashi@example.com", referred_by_organization: org)
+    Lead.create!(name: "Ad Lead", source: "google_ads", campaign_name: "Everest", external_ref: "n8n-1", referral_code: "KQ7X2D")
+    client = Client.create!(name: "Tashi", email: "tashi@example.com", referred_by_organization: org, referral_code: "AAAA22")
     client.people.create!(name: "Maya", email: "maya@example.com")
     note = Note.create!(notable: client, body: "Loves Everest")
 
@@ -34,10 +34,11 @@ class ExportsRequestsTest < ActionDispatch::IntegrationTest
     end
 
     clients = CSV.parse(files["clients.csv"].delete_prefix("\uFEFF"), headers: true)
-    assert_equal %w[id name email phone country state kind source campaign_name referred_by_organization perfectbook_contact_id pipeline_stage archived_at notes_count last_activity_at created_at updated_at],
+    assert_equal %w[id name email phone country state kind source campaign_name referral_code referred_by_organization perfectbook_contact_id pipeline_stage archived_at notes_count last_activity_at created_at updated_at],
       clients.headers
     assert_equal "Tashi", clients.first["name"]
     assert_equal "tashi@example.com", clients.first["email"]
+    assert_equal "AAAA22", clients.first["referral_code"]
 
     people = CSV.parse(files["people.csv"].delete_prefix("\uFEFF"), headers: true)
     assert_equal "Maya", people.first["name"]
@@ -46,6 +47,7 @@ class ExportsRequestsTest < ActionDispatch::IntegrationTest
     leads = CSV.parse(files["leads.csv"].delete_prefix("\uFEFF"), headers: true)
     ad_row = leads.find { |row| row["name"] == "Ad Lead" }
     assert_equal "n8n-1", ad_row["external_ref"]
+    assert_equal "KQ7X2D", ad_row["referral_code"]
     assert_nil ad_row["archived_at"]
     archived_row = leads.find { |row| row["name"] == "Archived Lead" }
     assert_equal archived.archived_at.iso8601, archived_row["archived_at"]

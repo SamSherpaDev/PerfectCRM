@@ -415,12 +415,14 @@ CSV with a UTF-8 BOM. Cells beginning with `=`, `+`, `-`, or `@` receive a
 leading single quote to prevent spreadsheet formula execution, including
 phone numbers beginning with `+`. The leads CSV includes website inquiry
 answers, consent, reference, and attribution (inside JSON metadata).
+Both lead and client CSVs include a `referral_code` column.
 
 ## Leads
 
 Leads are asks that have not booked yet; clients are everyone else.
 A lead carries source (`google_ads`, `meta_ads`, `website_form`, `email`,
-`referral`, `manual`), campaign, `external_ref` for n8n idempotency, Panda
+`referral`, `manual`), campaign, `external_ref` for n8n idempotency, an optional
+advisor `referral_code` from the storefront `?ref=` links, Panda
 AI fit (`fit_score`, `fit_band`, `fit_reason`), and status (`new`,
 `chatting`, `quoted`, `nudged`, `lost`). Tabs are New, Chatting, Quoted,
 Nudged, Lost, Converted, and Archived. An email or PerfectBook contact ID can recur
@@ -448,7 +450,15 @@ and preserves [AI opt-outs](#ai-assistance). Their timeline records Returned as 
 the source, with the campaign in the event metadata. Multiple historical
 leads can link to the same client; conversion never merges two clients.
 Without a match, conversion creates a client with the lead's facts,
-including its exact source and campaign, and copies people and history.
+including its exact source, campaign, and referral code when present,
+and copies people and history.
+Client Details show each converted enquiry's referral code with its enquiry link,
+date, and trip when available, preserving the client's original attribution for
+returning enquiries. Referral codes appear read-only in lead and client Details;
+the creation and edit forms do not offer referral editing. Intake capture follows
+the [referral API contract](docs/leads-intake.md#browser-mode-the-storefront-form).
+Use the enquiry's code when creating the booking in PerfectBook to credit the
+referrer. CRM records who sent the enquiry; PerfectBook owns commissions.
 Only clients created by conversion show Started as a lead.
 Both paths transfer the lead's tasks, drafts, linked conversations, and remembered
 email identities to the client, then link forward and freeze the lead read-only,

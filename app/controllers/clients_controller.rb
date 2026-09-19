@@ -25,6 +25,7 @@ class ClientsController < ApplicationController
 
   def show
     @note = Note.new
+    @referral_enquiries = @client.converted_leads.where.not(referral_code: nil).order(converted_at: :desc, id: :desc)
     load_reply_box(@client)
     load_record_page(@client)
     origin_event = @client.activity_events.find_by(kind: "conversion", summary: "Started as a lead")

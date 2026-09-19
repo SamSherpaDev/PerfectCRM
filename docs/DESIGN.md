@@ -166,7 +166,7 @@ The captain's round-1 condition, in his words: "There should be a leads section 
 - **Two sections, one vocabulary.** Leads has its own rail item, bottom-bar item, page, tiles, tabs and table; it uses the same cards, captions, badges, stream and reply box as Clients. A lead's timeline is identical in shape to a client's.
 - **Page.** Header (eyebrow, "Leads", a one-sentence subtitle, New lead primary, Sources secondary). Four tiles: New this week, With Panda AI (info tone), Strong fit unanswered (warn), Converted this season (good). Tabs: Open, Scoring, Converted, Lost, with counts. One table, best fit first: Lead (name, then party size and dates in `--ink-3`), Source (`.src`), Asked about (trip), Fit (`.fit`), Stage (stage badge), Last touch (right-aligned). The unread mark appears inline before the name where the lead wrote last.
 - **Lead page.** Uses the record treatment in section 4.5, with source, fit and Panda AI's reason, asked-about trip, party, and dates in Details. [Leads in the README](../README.md#leads) owns conversion, archival, and read-only behavior.
-- **Conversion.** One button, one confirmation ("Convert {name} to a client? Their whole timeline moves with them. This cannot be undone."), then the client page opens. The stream gains a `q`-style outlined event "Converted to client". PerfectBook gets the booking task; n8n is told through the outbound webhook.
+- **Conversion.** The stream gains a `q`-style outlined event "Converted to client". Confirmation, matching, and booking hand-off behavior follow [Leads in the README](../README.md#leads).
 - **Stages.** New, Chatting, Quoted, Nudged and Lost are lead stages; Won and Post-trip are client stages. The pipeline board shows both halves under group labels (4.6). Lost is a lead stage that can step back to New; it is not a client.
 
 ### 4.12 Ecosystem readiness (ads, n8n, Panda AI)
@@ -180,7 +180,7 @@ What the design prepares, so that the ecosystem plugs in without a redesign:
 - **Automation events are a timeline kind.** Anything n8n or Panda AI does lands on the stream as an `automation` event with the machine's name in the meta line, a bolt or robot icon, and the dashed edge. The captain can always tell what a machine did.
 - **Automations have limits the UI states.** Settings lists what automations may do (create leads, score them, move between New, Chatting and Lost) and what stays manual (Quoted, Nudged, Won, Convert). These are the permissions the inbound API enforces.
 - **The inbound API is visible.** Settings shows the public site key, masked relay secret, last use, and separate rotation controls. Credential behavior is defined in the [website intake contract](leads-intake.md). Automations live only in Settings: the credentials with their last use, the n8n webhook, and the recent automation activity (machine events with the Automated badge, webhook deliveries with their status). No lead page carries an Automations card.
-- **Outbound is symmetric.** When the captain changes a stage, sends a quote or converts a lead, n8n is told, so Panda AI and the ad platforms can learn from outcomes. Nothing in the UI changes for this; it is a design commitment the ship crew builds against.
+- **Outbound is symmetric (design goal).** Notifications for captain stage changes, quote sends, and conversions remain a design goal so Panda AI and the ad platforms can learn from outcomes. Currently supported events and delivery behavior are defined in the [website intake contract](leads-intake.md#what-happens-after-intake).
 
 ### 4.13 Thinking orbs
 

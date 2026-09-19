@@ -8,6 +8,26 @@ class ClientsRequestsTest < ActionDispatch::IntegrationTest
     sign_in
   end
 
+  test "manual forms and requests cannot assign referral codes" do
+    get new_client_path
+    assert_response :success
+    assert_select "input[name='client[referral_code]']", count: 0
+    post clients_path, params: { client: { name: "Manual", referral_code: "KQ7X2D" } }
+    record = Client.order(:id).last
+    assert_redirected_to client_path(record)
+    assert_nil record.referral_code
+    record.update!(referral_code: "AAAA22")
+    get edit_client_path(record)
+    assert_response :success
+    assert_select "input[name='client[referral_code]']", count: 0
+    [ "BBBB33", "" ].each do |code|
+      patch client_path(record), params: { client: { name: "Updated", referral_code: code } }
+      assert_redirected_to client_path(record)
+      assert_equal "AAAA22", record.reload.referral_code
+      assert_equal "Updated", record.name
+    end
+  end
+
   test "index renders tabs with counts and search" do
     Client.create!(name: "Tashi", source: "website")
     Organization.create!(name: "Ops Co", kind: "operator")
@@ -73,6 +93,19 @@ class ClientsRequestsTest < ActionDispatch::IntegrationTest
     assert_select "li", text: /Maya/
     assert_select ".chip", text: "everest"
     assert_select "p", text: /Replies you send from here will appear on this timeline/, count: 0
+  end
+
+  test "show renders the referral code carried from the lead" do
+    lead = Lead.create!(name: "Referred", source: "website_form", referral_code: "KQ7X2D")
+    client = lead.convert_to_client!
+    get client_path(client)
+    assert_response :success
+    assert_select "dt", text: "Referral code"
+    assert_select "dd", text: "KQ7X2D"
+    assert_select "dt", text: "Enquiry referral"
+    assert_select "dd", text: /KQ7X2D/ do
+      assert_select "a[href=?]", lead_path(lead), text: lead.reference
+    end
   end
 
   test "show renders notes and timeline events newest first" do
