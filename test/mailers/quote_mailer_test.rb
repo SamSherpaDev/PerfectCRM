@@ -1,11 +1,22 @@
 require "test_helper"
 
 class QuoteMailerTest < ActionMailer::TestCase
+  LOGO_BYTES = Base64.decode64(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+  ).freeze
+
   setup do
     @client = Client.create!(name: "Maya Gurung", email: "maya@example.com")
     @quote = Quote.create!(client: @client, trip_name: "Everest trek",
       party_size: 2, valid_until: Date.current + 14)
     @quote.lines.create!(kind: "trip", description: "Everest trek", quantity: 2, unit_dollars: "1500.00")
+    Setting.current.update!(email_signature: "Sam Sherpa", email_signature_html: "")
+  end
+
+  teardown do
+    setting = Setting.current
+    setting.signature_logo.purge if setting.signature_logo.attached?
+    setting.update!(email_signature: "", email_signature_html: "")
   end
 
   test "quote email comes from info@ with PDF and accept link" do
@@ -35,6 +46,24 @@ class QuoteMailerTest < ActionMailer::TestCase
     mail = QuoteMailer.accepted_notice(@quote)
     assert_equal [ "info@sherpaholidays.com" ], mail.to
     assert_includes mail.subject, @quote.reference
+  end
+
+  test "quote email carries the text signature in the text part" do
+    mail = QuoteMailer.quote_email(@quote)
+    assert_includes mail.text_part.decoded, "Sam Sherpa"
+  end
+
+  test "quote email carries the HTML signature with the embedded logo" do
+    Setting.current.signature_logo.attach(
+      io: StringIO.new(LOGO_BYTES), filename: "logo.png", content_type: "image/png"
+    )
+    mail = QuoteMailer.quote_email(@quote)
+    html = mail.html_part.body.to_s
+    assert_includes html, "Sam Sherpa"
+    assert_includes html, "cid:#{EmailSignature::CID}"
+    inline = mail.attachments.find { |attachment| attachment.filename == "signature-logo.png" }
+    assert inline.inline?
+    assert_equal "<#{EmailSignature::CID}>", inline.content_id
   end
 end
 

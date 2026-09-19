@@ -89,7 +89,7 @@ module Outbound
     def with_signature(body)
       return body if template_has_signature?
 
-      signature = Setting.current.email_signature.presence
+      signature = EmailSignature.text_for(Setting.current).presence
       return body if signature.blank?
 
       stripped = body.rstrip

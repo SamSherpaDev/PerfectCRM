@@ -1,11 +1,21 @@
 require "test_helper"
 
 class ClientMailerTest < ActionMailer::TestCase
+  LOGO_BYTES = Base64.decode64(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+  ).freeze
+
   setup do
     @client = Client.create!(name: "Maya Gurung", email: "maya@example.com")
-    Setting.current.update!(sender_name: "Sam", email_signature: "Sam Sherpa")
+    Setting.current.update!(sender_name: "Sam", email_signature: "Sam Sherpa", email_signature_html: "")
     @message = Outbound::Composer.call(owner: @client,
       params: { to: "maya@example.com", subject: "Your trek", body: "Hello *Maya*, see _notes_." })
+  end
+
+  teardown do
+    setting = Setting.current
+    setting.signature_logo.purge if setting.signature_logo.attached?
+    setting.update!(email_signature: "Sam Sherpa", email_signature_html: "")
   end
 
   test "sends as the mailbox with threading headers without internal identifiers" do
@@ -49,5 +59,56 @@ class ClientMailerTest < ActionMailer::TestCase
     @message.files.attach(io: StringIO.new("hello"), filename: "hi.txt", content_type: "text/plain")
     mail = ClientMailer.outbound(@message.reload)
     assert_equal [ "hi.txt" ], mail.attachments.map(&:filename)
+  end
+
+  test "each part carries the text signature exactly once" do
+    mail = ClientMailer.outbound(@message)
+    assert_equal 1, mail.text_part.body.to_s.scan("Sam Sherpa").size
+    assert_equal 1, mail.html_part.body.to_s.scan("Sam Sherpa").size
+  end
+
+  test "HTML signature embeds the logo by Content-ID with no external image" do
+    attach_logo
+    Setting.current.update!(email_signature_html:
+      '<p style="font-size: 12pt; color: #123456">Sam Sherpa</p><img src="https://tracker.example/p.gif">')
+    mail = ClientMailer.outbound(@message)
+    html = mail.html_part.body.to_s
+    assert_includes html, "cid:#{EmailSignature::CID}"
+    assert_includes html, "font-size: 12pt"
+    assert_not_includes html, "tracker.example"
+    assert_not_includes html, "https://"
+    inline = mail.attachments.find { |attachment| attachment.filename == "signature-logo.png" }
+    assert inline.inline?
+    assert_equal "<#{EmailSignature::CID}>", inline.content_id
+    assert_includes html, inline.content_id.delete("<>")
+    assert_equal 1, html.scan("Sam Sherpa").size
+  end
+
+  test "template signature renders the HTML signature at its spot" do
+    attach_logo
+    template = Template.create!(name: "Signed", purpose: "custom",
+      subject: "Hi", body: "Regards {{signature}}\nPS: see you soon")
+    rendered = template.rendered("signature" => EmailSignature.text_for(Setting.current))
+    message = Outbound::Composer.call(owner: @client,
+      params: { to: "maya@example.com", subject: rendered[:subject], body: rendered[:body], template_id: template.id })
+    html = ClientMailer.outbound(message).html_part.body.to_s
+    assert_equal 1, html.scan("Sam Sherpa").size
+    assert_includes html, "cid:#{EmailSignature::CID}"
+    assert_match(/Regards.*Sam Sherpa.*PS: see you soon/m, html.gsub(/<[^>]+>/, " "))
+  end
+
+  test "pasted scripts never reach the HTML part" do
+    Setting.current.update!(email_signature_html: "<p>Sam Sherpa</p><script>alert(1)</script>")
+    html = ClientMailer.outbound(@message).html_part.body.to_s
+    assert_not_includes html, "<script"
+    assert_not_includes html, "alert(1)"
+  end
+
+  private
+
+  def attach_logo
+    Setting.current.signature_logo.attach(
+      io: StringIO.new(LOGO_BYTES), filename: "logo.png", content_type: "image/png"
+    )
   end
 end

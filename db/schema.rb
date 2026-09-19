@@ -300,8 +300,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_16_010001) do
   end
 
   create_table "mail_sync_states", force: :cascade do |t|
+    t.datetime "announced_at"
     t.datetime "created_at", null: false
     t.text "delta_link"
+    t.datetime "discovered_at"
     t.string "folder", null: false
     t.text "last_error"
     t.datetime "last_error_at"
@@ -589,6 +591,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_16_010001) do
     t.datetime "created_at", null: false
     t.boolean "digest_enabled", default: true, null: false
     t.text "email_signature", default: "", null: false
+    t.text "email_signature_html", default: "", null: false
     t.string "lead_webhook_url"
     t.text "mailbox_last_error"
     t.datetime "mailbox_last_error_at"

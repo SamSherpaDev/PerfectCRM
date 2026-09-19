@@ -20,5 +20,6 @@ The full quote is attached as a PDF. To accept, tap this link — no account nee
 <%= @accept_url %>
 
 Questions? Just reply to this email.
-Sam
-Sherpa Holidays
+<% if @signature_text.present? %>
+<%= @signature_text %>
+<% end %>

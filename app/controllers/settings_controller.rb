@@ -43,6 +43,32 @@ class SettingsController < ApplicationController
       status: :see_other
   end
 
+  # Removes the uploaded signature logo; the signature keeps its words.
+  def remove_signature_logo
+    Setting.current.signature_logo.purge
+    redirect_to edit_settings_path, notice: "Logo removed.", status: :see_other
+  end
+
+  # Serves the uploaded signature logo for the Settings preview.
+  # (Active Storage routes stay off; attachments serve through controllers.)
+  def logo
+    setting = Setting.current
+    return head :not_found unless EmailSignature.logo_attached?(setting)
+
+    blob = setting.signature_logo.blob
+    send_data blob.download, filename: blob.filename.to_s,
+      type: blob.content_type, disposition: "inline"
+  end
+
+  # Live signature preview for the Settings form. Renders the unsaved
+  # words exactly as the email will look, without saving anything.
+  def signature_preview
+    html = params.dig(:setting, :email_signature_html).to_s
+    text = params.dig(:setting, :email_signature).to_s
+    preview = EmailSignature.preview_html(html: html, text: text, setting: Setting.current)
+    render html: preview.html_safe # rubocop:disable Rails/OutputSafety
+  end
+
   # Tests the PerfectBook read API with a cheap one-row read. Never renders
   # or logs the token.
   def perfectbook_test
@@ -133,7 +159,7 @@ class SettingsController < ApplicationController
   end
 
   def sender_params
-    params.require(:setting).permit(:sender_name, :email_signature)
+    params.require(:setting).permit(:sender_name, :email_signature, :email_signature_html, :signature_logo)
   end
 
   def update_appearance(value)
