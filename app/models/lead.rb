@@ -207,6 +207,8 @@ class Lead < ApplicationRecord
       end
       client.reload
       ambiguity = client.ambiguous_recipient_emails | ambiguous_recipient_emails
+      source_addresses = current_recipient_emails | redirect_map.values.map { |address| resolve_redirected_email(address) }.compact_blank
+      ambiguity |= source_addresses & client.redirect_map.keys
       redirects = client.redirect_map.merge(redirect_map) do |address, existing, incoming|
         ambiguity |= [ address ] if existing != incoming
         existing

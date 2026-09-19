@@ -588,6 +588,52 @@ class RecipientCorrectionTest < ActionDispatch::IntegrationTest
     assert_equal "alice@example.test", original.reload.to_addrs
   end
 
+  test "conversion by PerfectBook ID cannot join the lead address to another person's history" do
+    client = Client.create!(name: "Existing client", email: "d@example.test", perfectbook_contact_id: 9101)
+    person = client.people.create!(name: "Other traveler", email: "b@example.test")
+    person.update!(email: "c@example.test")
+    lead = Lead.create!(name: "Returning traveler", email: "a@example.test", source: "manual", perfectbook_contact_id: 9101)
+    original = Outbound::Composer.call(owner: lead, params: { to: lead.email, body: "Previously queued" })
+    draft = original.conversation.create_draft!(owner: lead, to_addrs: lead.email, body: "For returning traveler")
+    sign_in
+    patch lead_path(lead), params: { lead: { email: "b@example.test" } }
+    assert_response :redirect
+    post convert_lead_path(lead), params: { expected_client_id: client.id }
+    assert_redirected_to client_path(client)
+    assert_equal client, lead.reload.converted_client
+    assert_equal client, draft.reload.owner
+
+    [ client_path(client), inbox_thread_path(original.conversation) ].each do |path|
+      get path
+      assert_response :success
+      assert_select "input[name='message[to]'][value='b@example.test']"
+      assert_select "textarea[name='message[body]']", text: "For returning traveler"
+    end
+    confirmation = recipient_confirmation_from_form
+    [ [ "a@example.test", nil ], [ "b@example.test", confirmation ] ].each do |address, token|
+      assert_no_difference [ "Message.count", "ActionMailer::Base.deliveries.size" ] do
+        post client_messages_path(client), params: { conversation_id: original.conversation_id,
+          message: { to: address, body: draft.body, recipient_confirmation: token } }
+      end
+      assert_match "Choose a current recipient", flash[:alert]
+    end
+    assert_equal "For returning traveler", draft.reload.body
+    get client_path(client)
+    confirmation = recipient_confirmation_from_form
+    assert_difference "Message.count", 1 do
+      post client_messages_path(client), params: { conversation_id: original.conversation_id,
+        message: { to: "d@example.test", body: draft.body, recipient_confirmation: confirmation } }
+    end
+    outgoing = Message.order(:id).last
+    assert_difference "ActionMailer::Base.deliveries.size", 1 do
+      ClientMailer.outbound(outgoing).deliver_now
+    end
+    assert_equal [ "d@example.test" ], ActionMailer::Base.deliveries.last.to
+    assert_equal "a@example.test", original.reload.to_addrs
+    assert_equal "queued", original.status
+    assert_equal "c@example.test", person.reload.email
+  end
+
   private
 
   def recipient_confirmation_from_form
