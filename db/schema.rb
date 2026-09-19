@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_16_010001) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_19_031100) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -300,10 +300,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_16_010001) do
   end
 
   create_table "mail_sync_states", force: :cascade do |t|
-    t.datetime "announced_at"
     t.datetime "created_at", null: false
     t.text "delta_link"
-    t.datetime "discovered_at"
     t.string "folder", null: false
     t.text "last_error"
     t.datetime "last_error_at"

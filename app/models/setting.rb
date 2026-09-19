@@ -18,7 +18,6 @@ class Setting < ApplicationRecord
   validate :signature_logo_requirements
 
   before_save :sanitize_html_signature
-  before_save :derive_text_signature
 
   def self.current
     find_by(singleton_key: 1) || create_or_find_by!(singleton_key: 1)
@@ -85,13 +84,5 @@ class Setting < ApplicationRecord
 
   def sanitize_html_signature
     self.email_signature_html = EmailSignature.sanitize(email_signature_html)
-  end
-
-  # When only the formatted signature is supplied, the text lines are
-  # derived from it so text mail parts and {{signature}} still sign.
-  def derive_text_signature
-    return if email_signature.present? || email_signature_html.blank?
-
-    self.email_signature = EmailSignature.text_from_html(email_signature_html)
   end
 end

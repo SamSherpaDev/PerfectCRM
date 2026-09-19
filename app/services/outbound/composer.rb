@@ -87,7 +87,7 @@ module Outbound
     end
 
     def with_signature(body)
-      return body if template_has_signature?
+      return body if EmailSignature.template_carries_signature?(@params[:template_id])
 
       signature = EmailSignature.text_for(Setting.current).presence
       return body if signature.blank?
@@ -96,13 +96,6 @@ module Outbound
       return body if stripped.end_with?(signature.strip)
 
       "#{stripped}\n\n#{signature.strip}\n"
-    end
-
-    def template_has_signature?
-      id = @params[:template_id].presence
-      return false if id.blank?
-
-      TemplateRenderer.placeholders_in(Template.where(id: id).pick(:body)).include?("signature")
     end
 
     def thread_under_parent(message)

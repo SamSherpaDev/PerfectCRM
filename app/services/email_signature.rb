@@ -74,8 +74,7 @@ module EmailSignature
       clean = sanitize(html.to_s)
       return "" if clean.blank?
 
-      with_breaks = clean.gsub(%r{<(br|p|div|tr|li)[^>]*>}i, "\n")
-      CGI.unescapeHTML(ActionView::Base.full_sanitizer.sanitize(with_breaks))
+      Loofah.fragment(clean).to_text(encode_special_chars: false).tr("\u00A0", " ")
         .lines.map(&:strip).reject(&:blank?).join("\n")
     end
 
@@ -110,13 +109,15 @@ module EmailSignature
       setting.signature_logo.attached? && setting.signature_logo.attachment.persisted?
     end
 
-    private
-
+    # A template that renders {{signature}} signs its own body, so nothing
+    # appends a second signature after it.
     def template_carries_signature?(template_id)
       return false if template_id.blank?
 
       TemplateRenderer.placeholders_in(Template.where(id: template_id).pick(:body)).include?("signature")
     end
+
+    private
 
     # Every <img> becomes the uploaded logo (keeping a plain-number width
     # or height from the pasted markup), or is dropped when no logo is

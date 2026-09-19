@@ -10,7 +10,9 @@
 class ClientMailer < ApplicationMailer
   def outbound(message)
     @message = message
-    @body_html = signature_aware_html(@message)
+    setting = Setting.current
+    signature_html = EmailSignature.html_for(setting)
+    @body_html = signature_aware_html(@message, signature_html)
 
     headers["In-Reply-To"] = @message.in_reply_to if @message.in_reply_to.present?
     headers["References"] = @message.references if @message.references.present?
@@ -22,7 +24,7 @@ class ClientMailer < ApplicationMailer
         content: file.download
       }
     end
-    attach_signature_logo
+    attach_signature_logo(setting, signature_html)
 
     mail(
       from: Outbound::Composer.from_display,
@@ -51,9 +53,7 @@ class ClientMailer < ApplicationMailer
     paragraphs.join("\n")
   end
 
-  def signature_aware_html(message)
-    setting = Setting.current
-    signature_html = EmailSignature.html_for(setting)
+  def signature_aware_html(message, signature_html)
     return simple_html(message.text_body.to_s) if signature_html.blank?
 
     parts = EmailSignature.split_body(message.text_body, template_id: message.template_id)
@@ -63,29 +63,6 @@ class ClientMailer < ApplicationMailer
       # Settings changed between compose and delivery: the stored text no
       # longer holds the current text signature, so append the HTML one.
       "#{simple_html(message.text_body.to_s)}\n#{signature_html}"
-    end
-  end
-
-  # The logo ships embedded in the mail itself (Content-ID), never hosted
-  # on a public URL, so it renders without a download-images prompt.
-  def attach_signature_logo
-    setting = Setting.current
-    return unless EmailSignature.logo_attached?(setting)
-    return unless EmailSignature.html_for(setting).include?("cid:#{EmailSignature::CID}")
-
-    blob = setting.signature_logo.blob
-    attachments.inline["signature-logo#{logo_extension(blob.content_type)}"] = {
-      mime_type: blob.content_type,
-      content: blob.download,
-      content_id: "<#{EmailSignature::CID}>"
-    }
-  end
-
-  def logo_extension(content_type)
-    case content_type
-    when "image/png" then ".png"
-    when "image/gif" then ".gif"
-    else ".jpg"
     end
   end
 end

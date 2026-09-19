@@ -31,7 +31,7 @@ export default class extends Controller {
         headers: { "X-CSRF-Token": token || "" },
         body: form
       })
-      if (!response.ok) return
+      if (!response.ok || response.redirected) return
       this.outputTarget.innerHTML = await response.text()
       this.applyLogo()
     } catch {

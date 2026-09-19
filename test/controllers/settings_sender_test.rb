@@ -34,14 +34,20 @@ class SettingsSenderTest < ActionDispatch::IntegrationTest
     assert_equal "<p>Sam Sherpa</p>", Setting.current.reload.email_signature_html
   end
 
-  test "text derives from HTML when only HTML is supplied" do
+  test "text follows the formatted signature when only HTML is supplied" do
     sign_in
-    Setting.current.update!(email_signature: "")
     patch settings_path, params: {
-      setting: { email_signature: "", email_signature_html: "<p>Sam Sherpa<br>Sherpa Holidays</p>" }
+      setting: { email_signature: "", email_signature_html: "<p>Sam Sherpa<br>Tel 555-0100</p>" }
     }
     assert_redirected_to edit_settings_path
-    assert_equal "Sam Sherpa\nSherpa Holidays", Setting.current.reload.email_signature
+    assert_equal "", Setting.current.reload.email_signature
+    assert_equal "Sam Sherpa\nTel 555-0100", EmailSignature.text_for(Setting.current)
+
+    patch settings_path, params: {
+      setting: { email_signature: "", email_signature_html: "<p>Sam Sherpa<br>Tel 555-0200</p>" }
+    }
+    assert_redirected_to edit_settings_path
+    assert_equal "Sam Sherpa\nTel 555-0200", EmailSignature.text_for(Setting.current.reload)
   end
 
   test "logo upload attaches a PNG" do

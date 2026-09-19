@@ -242,7 +242,7 @@
       <div>
         <%= form.label :email_signature, "Plain lines", class: "label" %>
         <%= form.text_area :email_signature, rows: 3, class: "textarea", placeholder: "Sam Sherpa\nSherpa Holidays", data: { signature_preview_target: "text", action: "input->signature-preview#schedule" } %>
-        <p class="hint">Added under every reply. Fills {{signature}} too. With a logo, these lines build the formatted signature.</p>
+        <p class="hint">Added under every reply. Fills {{signature}} too. With a logo, these lines build the formatted signature; left empty, the words of the formatted signature are used.</p>
       </div>
       <div>
         <%= form.label :email_signature_html, "Formatted signature", class: "label" %>

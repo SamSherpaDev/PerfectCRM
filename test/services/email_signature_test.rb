@@ -25,6 +25,18 @@ class EmailSignatureTest < ActiveSupport::TestCase
     assert_equal "Sam Sherpa\nSherpa Holidays", EmailSignature.text_for(@setting)
   end
 
+  test "text from Outlook markup drops spacer lines and non-breaking spaces" do
+    @setting.update!(email_signature_html:
+      "<p class=MsoNormal><o:p>&nbsp;</o:p></p><p>Sam&nbsp;Sherpa</p><p>Tel: +1 &amp; <b>555</b></p>")
+    assert_equal "Sam Sherpa\nTel: +1 & 555", EmailSignature.text_for(@setting)
+  end
+
+  test "text breaks lines after closing blocks and table cells" do
+    @setting.update!(email_signature_html:
+      "<div><b>Sam Sherpa</b></div>Sherpa Holidays<table><tr><td>Tel</td><td>555</td></tr></table>")
+    assert_equal "Sam Sherpa\nSherpa Holidays\nTel\n555", EmailSignature.text_for(@setting)
+  end
+
   test "text is blank when nothing is configured" do
     assert_nil EmailSignature.text_for(@setting)
   end
