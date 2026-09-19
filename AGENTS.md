@@ -55,7 +55,11 @@ When updating this file, preserve this bar for all agents and keep entries conci
   false and Tailwind v4 gates every `hover:` utility behind that query, so the
   kit's 1px hover lift never shows in a headless check; verify `:focus-visible`
   instead. `bin/rails test:system` also flakes when run in parallel; use
-  `PARALLEL_WORKERS=1` before believing a system-suite failure.
+  `PARALLEL_WORKERS=1` before believing a system-suite failure. The quote
+  builder submits trip/departure picks as full-page POSTs, so after `select`
+  or `choose` wait on re-rendered state (e.g. the `input[data-description]`
+  value) before touching rows; a `:checked`/count assertion alone passes on
+  the pre-navigation DOM and later steps go stale.
 - PerfectBook link: `PerfectBook::Client` (`lib/perfectbook/`) + mirror tables
   (`app/models/perfectbook/`) + `config/recurring.yml` jobs; contract in
   README.md, "PerfectBook connection". Mirrors only, never money truth.
@@ -68,6 +72,10 @@ When updating this file, preserve this bar for all agents and keep entries conci
   mail received since the first connect (`Setting#mailbox_watched_since`).
   Keep-only-info@ rule lives in `Mail.keeps?`; inside `module Mail` always
   write `::Message` and `::Conversation` because `Mail::Message` is the mail gem.
+  `Conversation` has no `has_many :notes`, so non-transactional mail tests
+  must delete the ingester's holding-area notes themselves (destroying the
+  thread orphans them into later tests sharing the database); precedent in
+  `test/models/document_upload_orphan_test.rb`.
 - Outbound email: see README.md, "Replying"; recipient context is shared
   through `TemplateContext.resolve_recipient` for reply and group rendering.
   Signature rendering lives in `EmailSignature` (sanitize/derive/cid logo);
