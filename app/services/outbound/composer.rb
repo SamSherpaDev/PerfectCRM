@@ -51,9 +51,10 @@ module Outbound
       cc = EmailRedirects.mailboxes(@params[:cc])
       bcc = EmailRedirects.mailboxes(@params[:bcc])
       confirm_recipients!(message, to + cc + bcc)
-      message.to_addrs = redirect_explicit(to).join(", ")
-      message.cc_addrs = redirect_explicit(cc).join(", ")
-      message.bcc_addrs = redirect_explicit(bcc).join(", ")
+      confirmed = confirmation_present_and_valid?
+      message.to_addrs = redirect_explicit(to, confirmed: confirmed).join(", ")
+      message.cc_addrs = redirect_explicit(cc, confirmed: confirmed).join(", ")
+      message.bcc_addrs = redirect_explicit(bcc, confirmed: confirmed).join(", ")
       message.subject = @params[:subject].to_s.strip.presence || default_subject
       if @params[:body].to_s.strip.blank?
         message.errors.add(:text_body, :blank)
@@ -116,10 +117,21 @@ module Outbound
       Array(@owner.try(:display_email) || @owner.try(:email)).compact_blank
     end
 
-    def redirect_explicit(list)
+    def redirect_explicit(list, confirmed: false)
       return list unless @owner.respond_to?(:resolve_redirected_list)
 
-      @owner.resolve_redirected_list(list.join(", "))
+      @owner.resolve_redirected_list(list.join(", "), confirmed: confirmed)
+    end
+
+    # Only a presented, currently valid confirmation token follows an
+    # outstanding correction to its head. Unconfirmed sends keep the
+    # reassignment boundary; confirm_recipients! already rejected missing
+    # or stale tokens before the envelope is assigned.
+    def confirmation_present_and_valid?
+      return false unless @owner.respond_to?(:recipient_confirmation_valid?)
+
+      @params[:recipient_confirmation].present? &&
+        @owner.recipient_confirmation_valid?(@params[:recipient_confirmation])
     end
 
     def default_subject

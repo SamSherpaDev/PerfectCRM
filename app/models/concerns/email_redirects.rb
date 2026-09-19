@@ -20,7 +20,7 @@ module EmailRedirects
     ::Mail::AddressList.new(value.to_s.tr(";\n", ",,")).addresses.map { |address| address.address.to_s.strip.downcase }.compact_blank.uniq
   end
 
-  def resolve_redirected_email(address)
+  def resolve_redirected_email(address, confirmed: false)
     normalized = EmailRedirects.mailboxes(address).first.to_s
     return "" if normalized.blank?
 
@@ -34,18 +34,31 @@ module EmailRedirects
       seen << current
       current = redirects[current].to_s.strip.downcase
     end
+    # A valid recipient confirmation follows an outstanding owner correction
+    # to its head: the captain reviewed the current contacts and confirmed,
+    # so a former owner address still attached to the record (a person
+    # holding the old string) must not silently keep the old envelope.
+    # The head must be the owner's own address: reassignment self-loops,
+    # cycles, and chains ending at another traveler's address have no
+    # single corrected destination, so they stay as-addressed instead of
+    # guessing a traveler.
+    if confirmed
+      head = follow_correction_head(current, redirects, seen)
+      owner_address = email.to_s.strip.downcase
+      current = head if head.present? && head == owner_address
+    end
     current
   end
 
-  def resolve_redirected_list(value)
+  def resolve_redirected_list(value, confirmed: false)
     parts = EmailRedirects.mailboxes(value)
-    resolved = parts.map { |part| resolve_redirected_email(part) }.reject(&:blank?).uniq
+    resolved = parts.map { |part| resolve_redirected_email(part, confirmed: confirmed) }.reject(&:blank?).uniq
     # Preserve display order but drop duplicates case-insensitively.
     resolved.uniq { |addr| addr.downcase }
   end
 
-  def resolve_redirected_field(value)
-    resolve_redirected_list(value).join(", ")
+  def resolve_redirected_field(value, confirmed: false)
+    resolve_redirected_list(value, confirmed: confirmed).join(", ")
   rescue ::Mail::Field::ParseError
     value.to_s
   end
@@ -91,6 +104,23 @@ module EmailRedirects
   end
 
   private
+
+  # Head of the recorded correction chain ignoring still-current stops.
+  # Self-loops (a restored address pointing at itself) end here; a cycle
+  # means reassignment churn with no single head, so the confirmed address
+  # stays as-addressed instead of guessing a traveler. Callers only use
+  # the head when it is the owner's own address.
+  def follow_correction_head(start, redirects, seen)
+    current = start
+    loop do
+      break if current.blank? || !redirects.key?(current) || seen.include?(current)
+      nxt = redirects[current].to_s.strip.downcase
+      break if nxt == current
+      seen << current
+      current = nxt
+    end
+    seen.include?(current) && current != start ? start : current
+  end
 
   def recipient_confirmation_state
     Digest::SHA256.hexdigest([

@@ -634,6 +634,71 @@ class RecipientCorrectionTest < ActionDispatch::IntegrationTest
     assert_equal "c@example.test", person.reload.email
   end
 
+  test "confirmed stale sends follow the owner correction when a person still holds the old address" do
+    # A fresh lead created directly with the new address is the proven
+    # working path; it is removed so the corrected lead can take the address.
+    fresh = Lead.create!(name: "Fresh", email: "owner-new@example.test", source: "manual")
+    fresh_send = Outbound::Composer.call(owner: fresh,
+      params: { to: "", subject: "Hello", body: "Fresh words" })
+    assert_equal "owner-new@example.test", fresh_send.to_addrs
+    assert_equal [ "owner-new@example.test" ], ClientMailer.outbound(fresh_send).to
+    fresh.destroy!
+
+    lead = Lead.create!(name: "Correction", email: "owner-old@example.test", source: "manual")
+    lead.people.create!(name: "Mate", email: "owner-old@example.test")
+    first = Outbound::Composer.call(owner: lead,
+      params: { to: "owner-old@example.test", subject: "Hello", body: "First" })
+    conversation = first.conversation
+    sign_in
+
+    # The captain's edit: record shows the new address afterwards.
+    patch lead_path(lead), params: { lead: { email: "owner-new@example.test" } }
+    assert_response :redirect
+    assert_equal "owner-new@example.test", lead.reload.email
+    assert_equal "owner-new@example.test",
+      lead.resolve_redirected_email("owner-old@example.test", confirmed: true)
+
+    # A stale submit carrying the old address cannot slip through unconfirmed.
+    assert_no_difference "Message.count" do
+      post lead_messages_path(lead), params: { conversation_id: conversation.id,
+        message: { to: "owner-old@example.test", subject: "Stale", body: "Cached words" } }
+    end
+    assert_match "confirm the current recipients", flash[:alert]
+
+    # The reply default on the old thread follows the correction once confirmed.
+    get lead_path(lead)
+    confirmation = recipient_confirmation_from_form
+    assert_difference "Message.count", 1 do
+      post lead_messages_path(lead), params: { conversation_id: conversation.id,
+        message: { to: "", subject: "Follow", body: "Reply words",
+          recipient_confirmation: confirmation } }
+    end
+    assert_response :redirect
+    assert_equal [ "owner-new@example.test" ], ClientMailer.outbound(Message.order(:id).last).to
+
+    # Confirming an explicit stale address follows it to the new envelope.
+    get lead_path(lead)
+    confirmation = recipient_confirmation_from_form
+    assert_difference "Message.count", 1 do
+      post lead_messages_path(lead), params: { conversation_id: conversation.id,
+        message: { to: "owner-old@example.test", subject: "Stale", body: "Cached words",
+          recipient_confirmation: confirmation } }
+    end
+    assert_response :redirect
+    corrected = Message.order(:id).last
+    assert_equal "owner-new@example.test", corrected.to_addrs
+    assert_equal [ "owner-new@example.test" ], ClientMailer.outbound(corrected).to
+
+    # A deliberate alternate still passes through untouched.
+    assert_difference "Message.count", 1 do
+      post lead_messages_path(lead), params: { message: { to: "stranger@example.test", body: "Hello" } }
+    end
+    assert_equal [ "stranger@example.test" ], ClientMailer.outbound(Message.order(:id).last).to
+
+    # History keeps its attribution; nothing rewrites the first send.
+    assert_equal "owner-old@example.test", first.reload.to_addrs
+  end
+
   private
 
   def recipient_confirmation_from_form
