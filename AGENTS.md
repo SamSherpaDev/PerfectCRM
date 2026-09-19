@@ -95,5 +95,8 @@ When updating this file, preserve this bar for all agents and keep entries conci
   `PublicQuotesController` (`/q/:token`, logged in `QuoteView`).
 - Demo data: see `docs/getting-started.md`, "Demo data", for loading,
   cleanup, and ownership rules; implementation is `db/seeds/demo_seed.rb`.
+- Migrations need 14-digit timestamp prefixes (later than the current latest); create them only with
+  `bin/rails generate migration` and check the filename before committing. Enforced by
+  `test/models/migration_version_test.rb`.
 - A partial's first-line `<%# locals: (...) %>` is parsed as strict locals:
   keep it pure Ruby on one line and put prose in a separate comment.
