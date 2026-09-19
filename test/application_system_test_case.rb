@@ -31,14 +31,16 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
     option.args.concat(CONTAINER_CHROME_ARGS) if container_chrome?
   end
 
-  # Runs a click that submits a form as a full-page POST (the quote builder
-  # submits trip/departure picks and saves that way). When the navigation
-  # commits before chromedriver answers the click, it reports UnknownError
+  # Runs an action (select, choose, or click) that submits a full-page POST
+  # in the quote builder. When navigation commits before chromedriver
+  # answers the action, it can report UnknownError
   # ("Node with given id does not belong to the document"), which Capybara
-  # does not retry. The lost response implies the submit executed, so control
-  # falls through: the assertion that follows must verify post-navigation
-  # state, and fails loudly when the submit never landed. Never retry the
-  # click itself here; a second submit would duplicate the record.
+  # does not retry. The submit may already have executed, so control falls
+  # through: the assertion that follows must verify post-navigation state
+  # and fail when the submit never landed. Wait for re-rendered state such
+  # as the updated description; checked controls or unchanged row counts
+  # can match the pre-navigation DOM. Never retry the action itself here;
+  # a second submit could duplicate the record.
   def tolerate_submit_navigation
     yield
   rescue Selenium::WebDriver::Error::UnknownError
@@ -48,9 +50,9 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
   # Re-runs a read-only, navigation-adjacent assertion when the builder's
   # full-page POST commits mid-read (chromedriver reports UnknownError,
   # "Node with given id does not belong to the document", which Capybara
-  # does not retry). A single retry suffices: the crash implies that commit
-  # already happened, and the next navigation is strictly test-driven, so
-  # the retried read runs on a stable document. Only wrap reads here; a
+  # does not retry). Retry once for this race: the next navigation is
+  # test-driven, so the retried read should see the committed document.
+  # A second error propagates. Only wrap reads here; a
   # mutating click retried after a lost response would duplicate the record
   # (see tolerate_submit_navigation).
   def tolerate_navigation_assertion
