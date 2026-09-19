@@ -77,11 +77,10 @@ on `facebook`/`instagram`/`meta` with a paid medium; else `website_form`.
 Referral: `attribution.referral_code` is optional. The storefront sends the
 advisor code from its `?ref=CODE` landing links here (six chars from
 `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, no I, L, O, 0, or 1). A code outside
-that format is ignored as if no code was given; intake never rejects over
-it. A valid code is stored on the lead, shown on the record, and carried
-to the client at conversion so the referrer can be credited when the
-booking is created in PerfectBook, which stays the system of record for
-commissions.
+that format after trimming whitespace and uppercasing is ignored as if no
+code was given; intake never rejects over it. A valid code is stored on the
+lead in normalized form; the original attribution remains in metadata.
+For display, conversion, and booking use, see [Leads](../README.md#leads).
 
 ## Details follow-up (optional step two)
 
