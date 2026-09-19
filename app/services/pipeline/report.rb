@@ -40,7 +40,7 @@ class Pipeline::Report
 
   def inquiries_by_source_this_month
     month = Time.current.beginning_of_month
-    Lead.where("created_at >= ?", month).group(:source).count
+    Lead.active.where("created_at >= ?", month).group(:source).count
   end
 
   def digest_line

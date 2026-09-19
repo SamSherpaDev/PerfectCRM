@@ -1,6 +1,6 @@
 <% content_for :title, "#{@lead.name} · PerfectCRM" %>
 <div class="page">
-  <%= render layout: "shared/page_header", locals: { eyebrow: @lead.converted? ? "Lead · Converted" : "Lead · #{@lead.status.humanize}", title: @lead.name, subtitle: lead_source_label(@lead), back: [ "Leads", leads_path ] } do %>
+  <%= render layout: "shared/page_header", locals: { eyebrow: @lead.archived? ? "Lead · Archived" : (@lead.converted? ? "Lead · Converted" : "Lead · #{@lead.status.humanize}"), title: @lead.name, subtitle: lead_source_label(@lead), back: [ "Leads", leads_path ] } do %>
     <% if @lead.archived? %>
       <%= button_to "Restore", unarchive_lead_path(@lead), method: :patch, class: "btn-secondary btn btn-sm" %>
     <% elsif @lead.converted? && @lead.converted_client %>

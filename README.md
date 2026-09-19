@@ -611,7 +611,8 @@ conversation linking call it through `Conversation#touch_linkable!`.
 The Numbers card is independent of board filters. It shows value by stage
 using the same value sources as the board, median first reply (currently
 unavailable; reporting integration is pending), repeat-and-referral rate among this year's
-conversions, and asks by source this month. “Out in total” sums only open
+conversions, and asks by source this month from leads that are not archived.
+“Out in total” sums only open
 leads' expected values. The repeat-and-referral rate counts each qualifying
 conversion once, including returns to existing clients and referral leads.
 

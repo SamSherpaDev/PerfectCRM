@@ -43,10 +43,11 @@ class PipelineReportTest < ActiveSupport::TestCase
     assert_in_delta 1.0, rate[:rate]
   end
 
-  test "inquiries by source counts this month only" do
+  test "inquiries by source counts active leads from this month only" do
     Lead.create!(name: "This month", source: "google_ads")
     old = Lead.create!(name: "Last month", source: "google_ads")
     old.update_column(:created_at, 2.months.ago)
+    Lead.create!(name: "Deleted spam", source: "google_ads").archive!
 
     counts = Pipeline::Report.new.inquiries_by_source_this_month
     assert_equal 1, counts["google_ads"]

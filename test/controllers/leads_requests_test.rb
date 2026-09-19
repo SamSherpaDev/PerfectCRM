@@ -197,6 +197,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     lead.archive!
     get lead_path(lead)
     assert_response :success
+    assert_select "p.eyebrow", text: "Lead · Archived"
     assert_select "div", text: /Archived on/
     assert_select "button", text: "Restore"
     assert_select "a", { text: "Edit", count: 0 }
