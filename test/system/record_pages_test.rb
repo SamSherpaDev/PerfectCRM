@@ -95,15 +95,23 @@ class RecordPagesTest < ApplicationSystemTestCase
     assert_no_button "Save note"
   end
 
-  test "archived client shows only restore" do
+  test "archived client retains editing composing notes and follow-ups" do
     client = Client.create!(name: "Record Archived", email: "archived@example.com")
     client.archive!
 
     visit client_path(client)
+    assert_link "Edit", href: edit_client_path(client)
+    assert_button "Send"
+    fill_in "New follow-up", with: "Call archived client"
+    click_button "Add", exact: true
+    assert_text "Call archived client"
+    choose "Note", allow_label_click: true
+    fill_in "Add a note", with: "Archived client called"
+    click_button "Save note"
+    within(".timeline") { assert_text "Archived client called" }
+    find("summary[aria-label='More actions']").click
     assert_button "Restore"
-    assert_no_link "Edit"
-    assert_no_button "Send"
-    assert_no_button "Save note"
+    assert_no_button "Archive client"
   end
 
   test "phone shows the thread tab first with the docked reply pill" do
@@ -125,6 +133,109 @@ class RecordPagesTest < ApplicationSystemTestCase
     click_button "Details", exact: true
     assert_selector "#details-heading", visible: true
     assert_selector ".timeline", visible: false
+  end
+
+  test "nudge follows the recipient and resets the phone tab while deep links still work" do
+    owner = Client.create!(name: "Maya Owner", email: "maya@example.com", perfectbook_contact_id: 8101)
+    recipient = Client.create!(name: "Pemba Traveler", email: "pemba@example.com", perfectbook_contact_id: 8102)
+    [ [ owner, "Owner trip" ], [ recipient, "Recipient trip" ] ].each do |client, trip|
+      PerfectBook::Contact.create!(perfectbook_id: client.perfectbook_contact_id,
+        name: client.name, email: client.email, synced_at: Time.current)
+      PerfectBook::Booking.create!(perfectbook_id: client.perfectbook_contact_id,
+        perfectbook_contact_id: client.perfectbook_contact_id, trip_name: trip,
+        synced_at: Time.current)
+    end
+    conversation = owner.conversations.create!(subject_line: "Traveler request")
+    conversation.messages.create!(direction: "in", from_address: recipient.email,
+      subject: "Traveler request", text_body: "Please follow up",
+      message_id: "<traveler-request@example.com>")
+    template = Template.create!(name: "Recipient nudge", subject: "About {{trip}}",
+      body: "Hi {{first_name}}, about {{trip}}.")
+    task = owner.tasks.create!(title: "Nudge traveler", due_on: Date.current, template: template)
+    page.current_window.resize_to(390, 844)
+
+    visit client_path(owner)
+    click_button "Files & dates"
+    assert_selector "#files-heading", visible: true
+    visit client_path(owner, template: template.id, task: task.id)
+    assert_selector ".record-tabs .tab-on", text: "Thread"
+    assert_field "Message", with: "Hi Pemba, about Recipient trip."
+    assert_equal recipient.email, find("#message_to", visible: :all).value
+    assert_equal "About Recipient trip", find("#message_subject", visible: :all).value
+    assert_equal "8102", find("#message_perfectbook_booking_id", visible: :all).value
+
+    visit client_path(owner, anchor: "files-heading")
+    assert_selector ".record-tabs .tab-on", text: "Files & dates"
+    assert_selector "#files-heading", visible: true
+  end
+
+  test "inquiry rows and counts require evidence and describe their source" do
+    lead = Lead.create!(name: "Manual inquiry", source: "manual")
+    page.current_window.resize_to(390, 844)
+    visit lead_path(lead)
+    assert_no_selector "#inquiry"
+    assert_selector "[data-tab='thread'] .tab-count", text: "0", exact_text: true
+
+    lead.update!(message: "Called about a trek")
+    visit lead_path(lead)
+    within("#inquiry") { assert_text "Called about a trek" }
+    assert_selector "[data-tab='thread'] .tab-count", text: "1", exact_text: true
+
+    lead.update!(message: nil, received_at: Time.current)
+    visit lead_path(lead)
+    within("#inquiry") do
+      assert_text "Inquiry received."
+      assert_no_text "Sent the website form"
+    end
+
+    lead.update!(source: "website_form")
+    visit lead_path(lead)
+    within("#inquiry") { assert_text "Sent the website form without a message." }
+    assert_selector "[data-tab='thread'] .tab-count", text: "1", exact_text: true
+  end
+
+  test "archived leads remain read only" do
+    lead = Lead.create!(name: "Archived lead", source: "manual")
+    lead.archive!
+    visit lead_path(lead)
+    assert_button "Restore"
+    assert_no_link "Edit"
+    assert_no_button "Send"
+    assert_no_button "Save note"
+    assert_no_field "New follow-up"
+  end
+
+  test "files include only owned attachments and holdings with message metadata" do
+    client = Client.create!(name: "Files client", email: "files@example.com")
+    conversation = client.conversations.create!(subject_line: "Files")
+    plain = conversation.messages.create!(direction: "in", text_body: "No files")
+    attached = conversation.messages.create!(direction: "in", from_address: client.email,
+      text_body: "Large body", held_attachments: [])
+    attached.files.attach(io: StringIO.new("file"), filename: "passport.txt",
+      content_type: "text/plain", metadata: { sensitive: true })
+    held = conversation.messages.create!(direction: "in",
+      held_attachments: [ { "filename" => "held.pdf", "status" => "expired", "byte_size" => 42 } ])
+    other = Client.create!(name: "Other client")
+    other.conversations.create!(subject_line: "Private").messages.create!(direction: "in",
+      held_attachments: [ { "filename" => "private.pdf", "status" => "expired" } ])
+
+    loader = Object.new.extend(RecordPage)
+    rows = loader.send(:files_for, client)
+    assert_equal [ attached.id, held.id ].sort, rows.map { |row| row.message.id }.sort
+    assert rows.none? { |row| row.message.id == plain.id }
+    rows.each do |row|
+      assert_not row.message.has_attribute?(:text_body)
+      assert_not row.message.has_attribute?(:html_body)
+    end
+
+    visit client_path(client)
+    within("section[aria-labelledby='files-heading']") do
+      assert_text "passport.txt"
+      assert_text "Potentially sensitive"
+      assert_text "held.pdf"
+      assert_no_text "private.pdf"
+      assert_link "Download", href: attachment_path(attached.files.first.id)
+    end
   end
 
   private

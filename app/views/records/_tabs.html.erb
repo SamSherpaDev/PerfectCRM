@@ -1,6 +1,6 @@
 <%# locals: (thread_count:, files_count:, thread_unread: false) %>
 <%# Phone only (records CSS): three tabs over the same three cards, Thread
-    first. record_tabs_controller remembers the last tab per record. %>
+    first. %>
 <nav class="tabs record-tabs" aria-label="Record sections">
   <button type="button" class="tab tab-on" data-tab="thread" data-record-tabs-target="tab" data-action="record-tabs#show" aria-current="true">
     <%= render "shared/icon", name: :inbox, class: "h-4 w-4" %><span>Thread</span><span class="tab-count"><% if thread_unread %><span class="tab-dot" aria-hidden="true"></span><span class="sr-only">Unread.</span><% end %><%= thread_count %></span>

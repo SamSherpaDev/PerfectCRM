@@ -17,12 +17,12 @@ module ReplyBox
       @reply_draft = Draft.for_owner(owner, conversation: @reply_conversation)
     end
     prefill_document_nudge(owner)
-    prefill_task_nudge(owner)
     # A failed send redirects back with its words kept in the draft: open
     # the envelope so the flagged fields are visible instead of folded.
     send_alerts = [ "Could not send", Outbound::Uploads::REFUSAL ]
     @envelope_open = send_alerts.any? { |prefix| flash[:alert].to_s.start_with?(prefix) }
     load_reply_context
+    prefill_task_nudge(owner)
     @outbound_messages = Message.for_owner(owner).for_timeline.newest_first.limit(@events_page.to_i * 100 + 1).to_a
   end
 
@@ -41,8 +41,7 @@ module ReplyBox
       return
     end
 
-    context = TemplateContext.for(owner)
-    context["trip"] ||= owner.trip_interest if owner.is_a?(Lead) && owner.trip_interest.present?
+    context = @reply_context
     @reply_draft.assign_attributes(
       subject: TemplateRenderer.render(template.subject, context),
       body: TemplateRenderer.render(template.body, context),

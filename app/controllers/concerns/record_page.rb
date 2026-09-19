@@ -44,7 +44,7 @@ module RecordPage
     end
     entries.sort_by! { |entry| [ entry.at || Time.zone.at(0), entry.record.id ] }
     entries.reverse!
-    if record.is_a?(Lead)
+    if inquiry?(record)
       entries << Entry.new(record.received_at || record.created_at, :inquiry, record)
     end
     older = entries.size > @page * TIMELINE_PAGE
@@ -55,7 +55,12 @@ module RecordPage
   # For the phone Thread tab count: every stone on every page.
   def timeline_total(record)
     record_messages(record).count + record.notes.count +
-      record.activity_events.where.not(kind: "note").count + (record.is_a?(Lead) ? 1 : 0)
+      record.activity_events.where.not(kind: "note").count + (inquiry?(record) ? 1 : 0)
+  end
+
+  def inquiry?(record)
+    record.is_a?(Lead) && (record.message.present? || record.received_at.present? ||
+      record.source == "website_form" || record.external_ref.to_s.start_with?("website_form:"))
   end
 
   # The unread mark on the phone Thread tab: the newest message is inbound
@@ -86,7 +91,11 @@ module RecordPage
   # version, newest first. Traveler documents render from @bookings.
   def files_for(record)
     rows = []
-    record_messages(record).includes(files_attachments: :blob).find_each do |message|
+    attached_ids = ActiveStorage::Attachment.where(record_type: "Message", name: "files").select(:record_id)
+    messages = record_messages(record)
+    messages.where(id: attached_ids).or(messages.where("json_array_length(messages.held_attachments) > 0"))
+      .select(:id, :sent_at, :created_at, :direction, :from_address, :held_attachments)
+      .includes(files_attachments: :blob).find_each do |message|
       at = message.sent_at || message.created_at
       message.files.each { |file| rows << FileRow.new(at, :attachment, file, message) }
       Array(message.held_attachments).each { |held| rows << FileRow.new(at, :held, held, message) }

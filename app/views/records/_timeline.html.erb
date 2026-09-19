@@ -77,8 +77,10 @@
               <div class="msg">
                 <% if lead.message.present? %>
                   <p class="italic whitespace-pre-line"><%= lead.message %></p>
-                <% else %>
+                <% elsif lead.source == "website_form" || lead.external_ref.to_s.start_with?("website_form:") %>
                   <p class="italic muted">Sent the website form without a message.</p>
+                <% else %>
+                  <p class="italic muted">Inquiry received.</p>
                 <% end %>
                 <% details = [ lead.trip_title.presence || lead.trip_handle.presence, lead_party_and_when(lead), (lead_budget_label(lead.budget_band) if lead.budget_band.present?), ("#{lead.placement.humanize} page" if lead.placement.present?) ].compact_blank %>
                 <% if details.any? %><p class="mt-2 text-xs muted"><%= details.join(" · ") %></p><% end %>

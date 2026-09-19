@@ -4,8 +4,8 @@ module RecordsHelper
   # One sentence under the name: where the ask came from and what it is.
   def record_subtitle(record)
     if record.archived?
-      noun = record.is_a?(Lead) ? "this lead" : "this client"
-      return "Archived on #{date_short(record.archived_at)}. Restore to work #{noun} again."
+      suffix = record.is_a?(Lead) ? " Restore to work this lead again." : ""
+      return "Archived on #{date_short(record.archived_at)}.#{suffix}"
     end
     if record.is_a?(Lead)
       return "Became a client on #{date_short(record.converted_at)}. Converted leads stay read-only." if record.converted?

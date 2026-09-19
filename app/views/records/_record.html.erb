@@ -4,7 +4,7 @@
     right. Under 750px the same cards sit behind three tabs. Read-only
     records (converted or archived) drop the composer and the add line. %>
 <% files_count = @upcoming.size + @files.size %>
-<div data-controller="record-tabs" data-record-tabs-key-value="record-tab:<%= record.class.name.downcase %>:<%= record.id %>">
+<div data-controller="record-tabs">
   <%= render "records/tabs", thread_count: @timeline_total, thread_unread: @thread_unread, files_count: files_count %>
   <div class="record">
     <div class="record-details tab-off" data-record-tabs-target="panel" data-tab="details">
