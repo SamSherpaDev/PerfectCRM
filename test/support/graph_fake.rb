@@ -123,16 +123,12 @@ class FakeMailbox
 
   HISTORY_PAGE_SIZE = 2
 
-  # What v1.0 answers when a folder listing selects wellKnownName: that
-  # property exists only on the beta mailFolder, so the whole listing
-  # fails. Copied from the production 400 this double guards against.
-  WELL_KNOWN_SELECT_ERROR = {
-    "error" => {
-      "code" => "BadRequest",
-      "message" => "Parsing OData Select and Expand failed: Could not find a property named " \
-        "'wellKnownName' on type 'microsoft.graph.mailFolder'."
-    }
-  }.freeze
+  # The v1.0 mailFolder properties a listing can select. wellKnownName is
+  # not one of them (beta only): the records below keep it solely so the
+  # /me/mailFolders/{wellKnownName} path lookup can resolve a name, and a
+  # listing never returns it. Selecting anything else fails the whole
+  # listing with the production 400 this double guards against.
+  LISTING_FIELDS = %w[id displayName childFolderCount].freeze
 
   DEFAULT_FOLDERS = [
     { "id" => "inbox", "displayName" => "Inbox", "wellKnownName" => "inbox", "childFolderCount" => 0 },
@@ -260,11 +256,7 @@ class FakeMailbox
     end
 
     @transport.on_get("mailFolders") do |url, token:, params:, headers:|
-      if selects_well_known?(url)
-        { status: 400, json: WELL_KNOWN_SELECT_ERROR }
-      else
-        { status: 200, json: { "value" => @folders } }
-      end
+      folder_listing(@folders, url)
     end
 
     @transport.on_get("mailFolders/") do |url, token:, params:, headers:|
@@ -295,11 +287,7 @@ class FakeMailbox
   def route_folder_get(url, headers)
     folder = url[%r{mailFolders/([^/?]+)}, 1].to_s
     if url.include?("/childFolders")
-      if selects_well_known?(url)
-        { status: 400, json: WELL_KNOWN_SELECT_ERROR }
-      else
-        { status: 200, json: { "value" => @child_folders.fetch(folder, []) } }
-      end
+      folder_listing(@child_folders.fetch(folder, []), url)
     elsif url.include?("/messages/delta")
       delta_get(folder, url)
     elsif url.include?("/messages")
@@ -317,8 +305,21 @@ class FakeMailbox
     folder.nil? ? { status: 404, json: {} } : { status: 200, json: { "id" => folder["id"] } }
   end
 
-  def selects_well_known?(url)
-    URI.decode_www_form(URI.parse(url).query.to_s).to_h["$select"].to_s.split(",").include?("wellKnownName")
+  # A listing answers only the v1.0 properties it was asked for (all of
+  # them without $select), and 400 for a property v1.0 does not have.
+  def folder_listing(folders, url)
+    fields = URI.decode_www_form(URI.parse(url).query.to_s).to_h["$select"].to_s.split(",").map(&:strip)
+    unknown = fields.find { |field| !LISTING_FIELDS.include?(field) }
+    return { status: 400, json: select_error(unknown) } if unknown
+
+    fields = LISTING_FIELDS if fields.empty?
+    { status: 200, json: { "value" => folders.map { |entry| entry.slice("id", *fields) } } }
+  end
+
+  def select_error(property)
+    { "error" => { "code" => "BadRequest",
+      "message" => "Parsing OData Select and Expand failed: Could not find a property named " \
+        "'#{property}' on type 'microsoft.graph.mailFolder'." } }
   end
 
   def delta_get(folder, url)
