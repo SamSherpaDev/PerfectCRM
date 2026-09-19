@@ -30,6 +30,10 @@ class LeadsSystemTest < ApplicationSystemTestCase
     assert_selector "h1", text: "Ad Tashi"
     assert_no_overflow("lead page")
 
+    # The composer hides behind the Reply pill on the phone and notes live
+    # in its Note mode: open the pill, switch modes, then write.
+    click_button "Reply"
+    choose "Note", allow_label_click: true
     fill_in "Add a note", with: "Clicked the Everest ad"
     # The fixed phone tab bar can cover the button's click point after the
     # auto-scroll; center it first (same pattern as inbox_system_test.rb).
@@ -46,7 +50,8 @@ class LeadsSystemTest < ApplicationSystemTestCase
     assert_text "Started as a lead"
     assert_no_overflow("converted client page")
 
-    click_link "Open the lead"
+    click_button "Details", exact: true
+    click_link "open it"
     assert_text "Converted leads stay read-only."
     assert_no_button "Convert to client"
     assert_no_link "Edit"
@@ -71,8 +76,9 @@ class LeadsSystemTest < ApplicationSystemTestCase
     visit lead_path(lead)
     assert_selector "h1", text: "Archive Tashi"
 
+    find("summary[aria-label='More actions']").click
     accept_confirm "Delete Archive Tashi? They move to the archive and can be restored from the Archived tab." do
-      click_button "Delete"
+      click_button "Delete lead"
     end
     assert_selector "h2", text: "Archived"
     assert_text "Archive Tashi"

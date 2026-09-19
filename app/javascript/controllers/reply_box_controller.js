@@ -1,20 +1,27 @@
 import { Controller } from "@hotwired/stimulus"
 
-// Docked reply box (reply_box/_box): one-tap template inserts with live
-// placeholder values and a booking select that swaps the context.
+// Shared by the docked reply box and record composer. Recipient and
+// booking resolution policy: README.md, "Replying".
 export default class extends Controller {
-  static values = { defaultContext: Object, bookingContexts: Object, contextUrl: String }
+  static values = { defaultContext: Object, bookingContexts: Object, contextUrl: String, open: Boolean }
   static targets = [
     "form", "conversation", "templateId", "to", "subject", "body",
-    "booking", "bookingPanel", "bookingReference", "status", "details", "pill", "composer"
+    "recipientSummary", "subjectSummary", "booking", "bookingPanel", "bookingReference", "status", "details", "pill", "composer"
   ]
 
   connect() {
+    this.updateEnvelopeSummary()
     // The phone keeps the thread clear: the composer hides behind the
     // Reply pill until the captain opens it. Desktop always shows it.
     if (this.hasComposerTarget && this.hasPillTarget) {
+      // A nudge link (?nudge_booking_id=, or a prefilled ?template= that the
+      // server marked open) arrives with the composer already filled, so
+      // the sheet opens on its own. The organization page keeps its
+      // Suggested message card on top, so its box stays shut here.
       const phone = window.innerWidth < 750
-      const collapsed = phone && !new URL(window.location.href).searchParams.has("nudge_booking_id")
+      const params = new URL(window.location.href).searchParams
+      const prefilled = this.openValue || params.has("nudge_booking_id")
+      const collapsed = phone && !prefilled
       this.composerTarget.hidden = collapsed
       this.pillTarget.hidden = !collapsed
     }
@@ -60,8 +67,19 @@ export default class extends Controller {
     if (data.subject && this.hasSubjectTarget) this.subjectTarget.value = data.subject
     if (data.body && this.hasBodyTarget) this.insertAtCursor(this.bodyTarget, data.body)
     if (this.hasTemplateIdTarget) this.templateIdTarget.value = data.id ?? ""
+    this.updateEnvelopeSummary()
     const name = data.name ?? "template"
     this.setStatus(`Inserted ${name} - review and press Send.`)
+  }
+
+  updateEnvelopeSummary() {
+    if (this.hasRecipientSummaryTarget) {
+      this.recipientSummaryTarget.textContent = this.toTarget.value.trim() || "no address yet"
+    }
+    if (this.hasSubjectSummaryTarget) {
+      const subject = this.subjectTarget.value.trim()
+      this.subjectSummaryTarget.textContent = subject ? ` · ${subject}` : ""
+    }
   }
 
   // The floating Reply pill opens the composer as a bottom sheet; Close

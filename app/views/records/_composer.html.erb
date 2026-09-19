@@ -1,0 +1,52 @@
+<%# locals: (record:) %>
+<%# The composer at the top of the thread column: Reply sends email through
+    the reply box form, Note writes a private note. Both land on the one
+    timeline below. On the phone it docks behind the Reply pill like the
+    inbox box (reply_box_controller). The ReplyBox concern prepares the
+    reply side; ?template= and ?nudge=1 arrive already rendered. %>
+<% conversation = @reply_conversation %>
+<% draft = @reply_draft || Draft.new(owner: record) %>
+<% notes_url = record.is_a?(Lead) ? lead_notes_path(record) : client_notes_path(record) %>
+<div class="reply-dock composer" data-controller="reply-box"
+     data-reply-box-default-context-value="<%= h @reply_context.to_json %>"
+     data-reply-box-context-url-value="<%= reply_context_templates_path(owner_type: record.class.name, owner_id: record.id) %>"
+     data-reply-box-booking-contexts-value="<%= h @reply_data[:booking_contexts].to_json %>"
+     <%= "data-reply-box-open-value=true" if @composer_open %>>
+  <button type="button" class="reply-pill btn btn-primary"
+          data-action="reply-box#toggleComposer" data-reply-box-target="pill">
+    <%= render "shared/icon", name: :mail, class: "h-4 w-4" %>
+    <span><%= draft.persisted? ? "Resume reply" : "Reply" %></span>
+  </button>
+  <div class="reply-composer" data-reply-box-target="composer">
+    <section class="card card-pad reply-box" aria-labelledby="reply-heading">
+      <h2 class="sr-only" id="reply-heading">Reply or note</h2>
+      <div class="card-header">
+        <div class="segment composer-mode" role="radiogroup" aria-label="Write a reply or a note">
+          <label><input type="radio" name="composer_mode" value="reply" checked>Reply</label>
+          <label><input type="radio" name="composer_mode" value="note">Note</label>
+        </div>
+        <div class="flex items-center gap-3">
+          <% if conversation %>
+            <%= link_to "New message", polymorphic_path(record, new_thread: 1, anchor: "reply-heading"), class: "link-quiet text-xs" %>
+          <% end %>
+          <button type="button" class="reply-close link-quiet text-xs" data-action="reply-box#toggleComposer">Close</button>
+        </div>
+      </div>
+      <div class="composer-reply">
+        <%= render "reply_box/form", owner: record, compact: true %>
+      </div>
+      <div class="composer-note">
+        <p class="reply-to-line">Only you see this. It lands on the timeline below.</p>
+        <%= form_with model: [ record, @note ], url: notes_url do |form| %>
+          <div class="mt-3">
+            <%= form.label :body, "Add a note", class: "sr-only" %>
+            <%= form.text_area :body, rows: 3, required: true, class: "textarea reply-body", placeholder: record.is_a?(Lead) ? "Asked about Everest in May…" : "Spoke about Everest in May, two travelers…" %>
+          </div>
+          <div class="reply-actions">
+            <%= form.submit "Save note", class: "btn btn-secondary" %>
+          </div>
+        <% end %>
+      </div>
+    </section>
+  </div>
+</div>

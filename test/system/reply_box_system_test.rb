@@ -57,7 +57,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     fill_in "Subject", with: "Hi Maya"
     click_button "Send"
     assert_text "Sending your reply", wait: 5
-    assert_selector ".reply-ev", text: /Sending/
+    assert_selector ".timeline .ev", text: /Sending/
     assert_equal 1, @template.reload.usage_count
     assert_no_overflow("after send")
     capture_outbound_evidence("mobile-reply-queued")
@@ -91,6 +91,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     sign_in_browser
     page.current_window.resize_to(1400, 1000)
     visit client_path(@client)
+    open_envelope_details
     fill_in "To", with: ""
     fill_in "Subject", with: ""
     fill_in "Message", with: "Half written"
@@ -107,6 +108,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     sign_in_browser
     page.current_window.resize_to(1400, 1000)
     visit client_path(@client)
+    open_envelope_details
     fill_in "Subject", with: "Attachment"
     fill_in "Message", with: "See attached"
     attach_file "Attachments", Rails.root.join("test/fixtures/files/sample.txt")
@@ -139,6 +141,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     page.current_window.resize_to(1400, 1000)
     [ inbox_thread_path(message.conversation), client_path(@client) ].each do |path|
       visit path
+      open_envelope_details
       assert_field "To", with: "pemba@example.com"
       assert_select "Placeholders fill from", options: [ "Pemba later trek · INV-503", "Pemba trek · INV-502" ]
       click_button "Quick hello", match: :first
@@ -201,6 +204,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     page.current_window.resize_to(1400, 1000)
     [ inbox_thread_path(older), client_path(@client, new_thread: 1) ].each_with_index do |path, index|
       visit path
+      open_envelope_details
       fill_in "To", with: "secondary@example.com"
       fill_in "Subject", with: "Correct this reply"
       fill_in "Message", with: "  "
@@ -259,6 +263,17 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     page.save_screenshot(File.join(ENV.fetch("OUTBOUND_EVIDENCE_DIR"), "#{name}.png"))
   end
 
+  # The record composer (lead and client pages) folds To, booking, Subject
+  # and attachments behind Details on every width; the inbox and
+  # organization boxes only fold on the phone. Open it when closed so
+  # envelope fields can be filled.
+  def open_envelope_details
+    details = all(".reply-details").first
+    return if details.nil? || details["open"] == "true"
+
+    details.find("summary").click
+  end
+
   test "validation recovery preserves selected booking for template inserts" do
     @client.update!(perfectbook_contact_id: 4242)
     [ [ 9001, "October", "2026-10-01", 12300 ], [ 9002, "May", "2027-05-01", 45600 ] ].each do |id, trip, date, balance|
@@ -269,6 +284,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     sign_in_browser
     page.current_window.resize_to(1400, 1000)
     visit client_path(@client, new_thread: 1)
+    open_envelope_details
     [ [ 9001, "October $123.00" ], [ 9002, "May $456.00" ] ].each do |id, expected|
       find("#message_perfectbook_booking_id option[value='#{id}']").select_option
       fill_in "Subject", with: "Booking question"
@@ -337,6 +353,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     sign_in_browser
     page.current_window.resize_to(1400, 1000)
     visit client_path(@client)
+    open_envelope_details
     fill_in "Subject", with: "Attachment removal"
     fill_in "Message", with: "See attached"
     attach_file "Attachments", Rails.root.join("test/fixtures/files/sample.txt")

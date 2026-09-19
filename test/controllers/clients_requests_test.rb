@@ -61,13 +61,18 @@ class ClientsRequestsTest < ActionDispatch::IntegrationTest
     assert_select "h1", "Tashi"
     assert_select "a", text: "Open in PerfectBook"
     assert_select "a[href=?]", "https://perfectbook.sherpaholidays.com/contacts/123"
-    assert_select "h2", text: "People"
-    assert_select "h2", text: "Notes"
+    assert_select "h2", text: "Details"
     assert_select "h2", text: "Timeline"
-    assert_select "h2", text: "Bookings in PerfectBook"
-    assert_select "h2", text: "Follow-ups"
-    assert_select "h2", text: "Quotes"
-    assert_select "p", text: /Replies you send from here will appear on this timeline/
+    assert_select "h2", text: "Upcoming"
+    assert_select "h2", text: "Files"
+    assert_select "h2", text: "Trip in PerfectBook"
+    assert_select "h2", { text: "People", count: 0 }
+    assert_select "h2", { text: "Notes", count: 0 }
+    assert_select "h2", { text: "Follow-ups", count: 0 }
+    assert_select "h2", { text: "Bookings in PerfectBook", count: 0 }
+    assert_select "li", text: /Maya/
+    assert_select ".chip", text: "everest"
+    assert_select "p", text: /Replies you send from here will appear on this timeline/, count: 0
   end
 
   test "show renders notes and timeline events newest first" do
@@ -75,8 +80,8 @@ class ClientsRequestsTest < ActionDispatch::IntegrationTest
     Note.create!(notable: client, body: "Loves spring")
     get client_path(client)
     assert_response :success
-    assert_select "p", text: /Loves spring/
-    assert_select "ol li", text: /Note added/
+    assert_select ".timeline .ev.note", text: /Loves spring/
+    assert_select "ol li", text: /Note added/, count: 0
   end
 
   test "new and create with inline person and tags" do

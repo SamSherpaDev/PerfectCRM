@@ -111,17 +111,13 @@ class PipelineSystemTest < ApplicationSystemTestCase
   test "suggested message copy button copies the rendered follow-up" do
     template = Template.create!(name: "Follow-up", purpose: "itinerary_follow_up",
       subject: "Your {{trip}}", body: "Hi {{first_name}}")
-    lead = Lead.create!(name: "Tashi Sherpa", trip_interest: "Annapurna")
+    lead = Lead.create!(name: "Tashi Sherpa", email: "tashi@example.com", trip_interest: "Annapurna")
     visit lead_path(lead, template: template.id, nudge: 1)
-    assert_selector "h2", text: "Suggested message"
-    page.execute_script <<~JS
-      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
-        writeText: async (text) => { window.copiedMessage = text }
-      } })
-    JS
-    click_button "Copy message"
-    assert_text "Message copied."
-    assert_equal "Your Annapurna\n\nHi Tashi", page.evaluate_script("window.copiedMessage")
+    assert_selector "h2", text: "Timeline"
+    assert_no_selector "h2", text: "Suggested message"
+    find(".composer .reply-details > summary").click
+    assert_field "Subject", with: "Your Annapurna"
+    assert_field "Message", with: "Hi Tashi"
   end
 
   test "phone move menu reaches Lost and Won for a single card" do
@@ -276,19 +272,12 @@ class PipelineSystemTest < ApplicationSystemTestCase
     within "article.kcard-stale", text: lead.name do
       click_link "Nudge"
     end
-    assert_selector "h2", text: "Suggested message"
-    href = find_link("Open email")[:href]
-    assert_equal "mailto:tashi@example.com", href.split("?").first
-    assert_equal "Your Annapurna", URI.decode_www_form(href.split("?", 2).last).to_h.fetch("subject")
-    origin = page.evaluate_script("location.origin")
-    page.driver.browser.execute_cdp("Browser.grantPermissions", origin: origin,
-      permissions: [ "clipboardReadWrite", "clipboardSanitizedWrite" ])
-    click_button "Copy message"
-    assert_text "Message copied."
-    assert_equal "Your Annapurna\n\nHi Tashi, checking in about Annapurna.",
-      page.evaluate_async_script("navigator.clipboard.readText().then(arguments[0])")
+    find(".composer .reply-details > summary").click
+    assert_field "Subject", with: "Your Annapurna"
+    assert_field "Message", with: "Hi Tashi, checking in about Annapurna."
     assert lead.reload.stale?
     capture_pipeline("suggested-message")
+    choose "Note", allow_label_click: true
     fill_in "Add a note", with: "Traveler replied about dates"
     click_button "Save note"
     visit pipeline_path

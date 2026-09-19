@@ -63,12 +63,12 @@ class TasksRequestsTest < ActionDispatch::IntegrationTest
     assert_equal "review_ask", @client.tasks.last.kind
   end
 
-  test "client page renders the suggested nudge template" do
+  test "client page prefills the composer with the suggested nudge template" do
     template = Template.create!(name: "Deposit nudge", body: "Hi", purpose: "deposit_nudge")
     task = @client.tasks.create!(title: "Nudge", due_on: Date.current, template: template)
     get client_path(@client, template: template.id, task: task.id)
     assert_response :success
-    assert_select "h2", "Suggested message"
-    assert_select "textarea", text: "Hi"
+    assert_select "#suggested-message-heading", count: 0
+    assert_select "textarea#message_body", text: "Hi"
   end
 end

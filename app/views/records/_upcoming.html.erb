@@ -1,0 +1,39 @@
+<%# locals: (record:, rows:, read_only: false) %>
+<%# Right column, first card: follow-ups, quote deadlines and departures,
+    soonest first. Pressed Gelasio date tiles settle in on load. %>
+<% shown = rows.first(RecordPage::UPCOMING_LIMIT) %>
+<% rest = rows.drop(RecordPage::UPCOMING_LIMIT) %>
+<section class="card card-pad" aria-labelledby="upcoming-heading">
+  <div class="card-header">
+    <h2 class="card-title" id="upcoming-heading">Upcoming</h2>
+  </div>
+  <%= card_caption "Follow-ups, quote deadlines, and departures, soonest first." %>
+  <% if rows.any? %>
+    <ul class="upcoming">
+      <%= render partial: "records/upcoming_row", collection: shown, as: :row, locals: { read_only: read_only } %>
+    </ul>
+    <% if rest.any? %>
+      <details class="upcoming-more">
+        <summary>All dates <span class="tab-count"><%= rows.size %></span></summary>
+        <ul class="upcoming">
+          <%= render partial: "records/upcoming_row", collection: rest, as: :row, locals: { read_only: read_only } %>
+        </ul>
+      </details>
+    <% end %>
+  <% else %>
+    <div class="empty-inline">
+      <%= sketch :enso, class: "enso" %>
+      <p class="text-sm text-ink">Nothing scheduled.</p>
+      <p class="text-xs muted"><%= read_only ? "Dates will show here once there are any." : "Add a follow-up to hold a date." %></p>
+    </div>
+  <% end %>
+  <% unless read_only %>
+    <%= form_with model: Task.new(subject: record), url: tasks_path(subject_type: record.class.name, subject_id: record.id), class: "upcoming-add" do |form| %>
+      <%= form.label :title, "New follow-up", class: "sr-only" %>
+      <%= form.text_field :title, required: true, placeholder: "Add a follow-up…", class: "input upcoming-title" %>
+      <%= form.label :due_on, "Due", class: "sr-only" %>
+      <%= form.date_field :due_on, value: Date.current + 1, required: true, class: "input upcoming-date", aria: { label: "Due date" } %>
+      <%= form.submit "Add", class: "btn-secondary btn btn-sm" %>
+    <% end %>
+  <% end %>
+</section>

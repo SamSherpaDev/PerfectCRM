@@ -16,12 +16,17 @@ class TemplateContext
     person = Person.find_by("lower(email) = ?", email) if email.present?
     identity = contact || person || (owner if email.blank? || owner.try(:email).to_s.downcase == email) || recipient
     contact_id = contact ? contact.perfectbook_id : owner.try(:perfectbook_contact_id)
-    { identity: identity, owner: owner, bookings: bookings_for_contact(contact_id), fallback: contact.nil? }
+    { identity: identity, owner: owner, recipient_email: email, bookings: bookings_for_contact(contact_id), fallback: contact.nil? }
   end
 
   def self.resolved_context(resolved, booking)
-    context = self.for(resolved[:identity], booking: booking)
+    identity = resolved[:identity]
+    context = self.for(identity, booking: booking)
     owner = resolved[:owner]
+    if owner.is_a?(Lead) && resolved[:recipient_email].present? &&
+        owner.email.to_s.strip.downcase == resolved[:recipient_email] && owner.trip_interest.present?
+      context["trip"] ||= owner.trip_interest
+    end
     context["advisor_name"] = advisor_name_for(owner) if advisor_name_for(owner).present?
     context["booking_owner_name"] = owner.name if booking && resolved[:fallback] && owner
     context

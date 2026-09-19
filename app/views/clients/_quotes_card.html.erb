@@ -1,9 +1,0 @@
-<%# Slot: quotes (crm-quotes). %>
-<section class="card card-pad" aria-labelledby="quotes-heading">
-  <div class="card-header">
-    <h2 class="card-title" id="quotes-heading">Quotes</h2>
-    <%= link_to "New quote", new_quote_path(client_id: client.id), class: "link-quiet text-xs" %>
-  </div>
-  <%= card_caption "Trip quotes built from the PerfectBook catalog. The client taps a link to accept." %>
-  <%= render "shared/quotes_table", quotes: Quote.where(client: client).or(Quote.where(lead_id: Lead.where(converted_client: client).select(:id))).ordered.includes(:lines) %>
-</section>

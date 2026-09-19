@@ -1,0 +1,62 @@
+<%# locals: (message:, attachments: :rows) %>
+<%# The text of one message plus its attachments: `rows` (inbox stones, full
+    hand-off controls) or `chips` (record timeline, one chip per file; the
+    Files list on the record page carries the hand-off controls). %>
+<% body = message.text_body.presence || ActionView::Base.full_sanitizer.sanitize(message.html_body.to_s).squish %>
+<% body_content = capture do %>
+  <% if message.html_body.present? && message.text_body.blank? %>
+    <div class="mt-2 text-ink-2 prose-sm"><%= sanitize(message.html_body, tags: Mail::Sanitizer::ALLOWED_TAGS, attributes: Mail::Sanitizer::ALLOWED_ATTRIBUTES) %></div>
+  <% else %>
+    <div class="mt-2 whitespace-pre-line text-ink-2"><%= body.presence || "No text in this message." %></div>
+  <% end %>
+<% end %>
+<% if body.length > 600 %>
+  <details>
+    <summary class="link-quiet cursor-pointer text-[12.5px]">Read message</summary>
+    <%= body_content %>
+  </details>
+  <p class="mt-1 text-ink-2 whitespace-pre-line"><%= truncate(body, length: 280) %></p>
+<% else %>
+  <%= body_content %>
+<% end %>
+<% if message.files.attached? %>
+  <% if attachments == :chips %>
+    <div class="chips mt-3" aria-label="Attachments">
+      <% message.files.each do |file| %>
+        <%= link_to attachment_path(file.id), class: "chip chip-tag" do %>
+          <%= render "shared/icon", name: :copy %><%= file.filename %>
+          <% if file.blob.metadata["sensitive"] %><%= badge "Sensitive", :warning %><% end %>
+        <% end %>
+      <% end %>
+    </div>
+  <% else %>
+    <ul class="thread-attachments" aria-label="Attachments">
+      <% message.files.each do |file| %>
+        <li class="attachment-row">
+          <%= render "shared/icon", name: :copy, class: "h-3.5 w-3.5" %>
+          <span class="min-w-0 flex-1 truncate"><%= file.filename %> · <%= number_to_human_size(file.byte_size) %></span>
+          <%= link_to "Download", attachment_path(file.id), class: "link text-xs" %>
+          <% if file.blob.metadata["sensitive"] %><%= badge "Potentially sensitive", :warning %><% end %>
+          <%= link_to "Send to PerfectBook", new_document_handoff_path(attachment_id: file.id), class: "link text-xs" %>
+          <%= button_to "Remove from CRM, collect in PerfectBook", move_to_perfectbook_attachment_path(file.id), method: :post, class: "btn-ghost btn btn-sm" %>
+        </li>
+      <% end %>
+    </ul>
+  <% end %>
+<% end %>
+<% Array(message.held_attachments).each do |file| %>
+  <% holding = file["holding_id"].present? ? DocumentHolding.find_by(id: file["holding_id"]) : nil %>
+  <div class="attachment-row mt-2" role="note">
+    <span><%= file["filename"] %> · <%= number_to_human_size(file["byte_size"]) %> · <%= file["content_type"] %></span>
+    <span><%= file["status"] %></span>
+    <% if holding&.live? %>
+      <p>Held for hand-off only. No download here; it purges automatically in <%= distance_of_time_in_words(Time.current, holding.expires_at) %>.</p>
+      <%= link_to "Send to PerfectBook", new_document_handoff_path(holding_id: holding.id), class: "link text-xs" %>
+    <% else %>
+      <p>Collect this document in PerfectBook. Its file was not stored in CRM.</p>
+    <% end %>
+  </div>
+<% end %>
+<% Array(message.attachment_notices).each do |notice| %>
+  <p class="mt-2 text-sm muted"><%= notice %></p>
+<% end %>

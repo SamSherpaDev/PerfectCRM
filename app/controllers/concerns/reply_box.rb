@@ -17,8 +17,37 @@ module ReplyBox
       @reply_draft = Draft.for_owner(owner, conversation: @reply_conversation)
     end
     prefill_document_nudge(owner)
+    # A failed send redirects back with its words kept in the draft: open
+    # the envelope so the flagged fields are visible instead of folded.
+    send_alerts = [ "Could not send", Outbound::Uploads::REFUSAL ]
+    @envelope_open = send_alerts.any? { |prefix| flash[:alert].to_s.start_with?(prefix) }
     load_reply_context
-    @outbound_messages = Message.for_owner(owner).for_timeline.newest_first.limit(@events_page * 100 + 1).to_a
+    prefill_task_nudge(owner)
+    @outbound_messages = Message.for_owner(owner).for_timeline.newest_first.limit(@events_page.to_i * 100 + 1).to_a
+  end
+
+  # Today's Nudge link (?template=&task=) and the pipeline's ?nudge=1 land in
+  # the lead and client composer with the template already rendered. An
+  # untouched draft only; the captain's own text is never overwritten. The
+  # organization page still shows the Suggested message card instead.
+  def prefill_task_nudge(owner)
+    return unless owner.is_a?(Lead) || owner.is_a?(Client)
+    return if params[:template].blank? || !@reply_draft.empty?
+
+    template = Template.active.find_by(id: params[:template])
+    return if template.nil?
+
+    unless params[:nudge] == "1" || owner.tasks.exists?(id: params[:task], template_id: template.id)
+      return
+    end
+
+    context = @reply_context
+    @reply_draft.assign_attributes(
+      subject: TemplateRenderer.render(template.subject, context),
+      body: TemplateRenderer.render(template.body, context),
+      template: template
+    )
+    @composer_open = true
   end
 
   # Booking-card nudge (?nudge_booking_id=): prefill an untouched draft

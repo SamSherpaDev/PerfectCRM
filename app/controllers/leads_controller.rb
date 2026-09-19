@@ -1,6 +1,6 @@
 class LeadsController < ApplicationController
-  include RecordHistory
   include ReplyBox
+  include RecordPage
 
   before_action :set_lead, only: %i[show edit update convert refresh_bookings archive unarchive]
   before_action :block_converted_edit, only: %i[edit update]
@@ -38,25 +38,9 @@ class LeadsController < ApplicationController
 
   def show
     @matching_client = @lead.matching_client unless @lead.converted?
-    if params[:nudge] == "1"
-      template = Template.active.find_by(id: params[:template])
-      if template
-        context = {
-          first_name: @lead.name.split.first, full_name: @lead.name,
-          trip: @lead.trip_interest, advisor_name: @lead.referred_by_organization&.name,
-          my_name: current_user.name, signature: current_user.name
-        }
-        @suggested_message = {
-          subject: TemplateRenderer.render(template.subject, context),
-          body: TemplateRenderer.render(template.body, context)
-        }
-      end
-    end
     @note = Note.new
-    load_record_history(@lead)
-    @conversations = Conversation.where(linkable: @lead).ordered
     load_reply_box(@lead)
-    @timeline_items = timeline_items(@events, @outbound_messages)
+    load_record_page(@lead)
   end
 
   def new

@@ -26,6 +26,7 @@ class DocumentNudgeSystemTest < ApplicationSystemTestCase
     page.current_window.resize_to(390, 844)
     visit client_path(client)
     assert_selector ".reply-composer", visible: :hidden
+    click_button "Files & dates"
     click_link "Nudge for missing documents"
     assert_selector ".reply-composer", visible: true
     assert_includes find_field("Message").value, "Ama: visa"

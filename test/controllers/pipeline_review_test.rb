@@ -59,14 +59,9 @@ class PipelineReviewTest < ActionDispatch::IntegrationTest
     assert_select "a[href=?]", path, text: "Nudge"
     get path
     assert_response :success
-    assert_select "h2", "Suggested message"
-    assert_select "textarea", text: "Your Annapurna\n\nHi Tashi, checking in about Annapurna."
-    assert_select "button", "Copy message"
-    link = css_select("a").find { |node| node["href"].to_s.start_with?("mailto:") }
-    assert_equal "mailto:tashi@example.com", link["href"].split("?").first
-    query = URI.decode_www_form(link["href"].split("?", 2).last).to_h
-    assert_equal "Your Annapurna", query["subject"]
-    assert_equal "Hi Tashi, checking in about Annapurna.", query["body"]
+    assert_select "#suggested-message-heading", count: 0
+    assert_select "input#message_subject[value='Your Annapurna']"
+    assert_select "textarea#message_body", text: "Hi Tashi, checking in about Annapurna."
     assert lead.reload.stale?
   end
 
