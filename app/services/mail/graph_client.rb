@@ -77,7 +77,7 @@ module Mail
         when 429
           raise ThrottledError.new(retry_after: response.retry_after)
         else
-          raise ConnectionError, "Microsoft Graph returned #{response.status}"
+          raise ConnectionError, describe_failure(response)
         end
       end
     end
@@ -95,12 +95,30 @@ module Mail
         when 429
           raise ThrottledError.new(retry_after: response.retry_after)
         else
-          raise ConnectionError, "Microsoft Graph returned #{response.status}"
+          raise ConnectionError, describe_failure(response)
         end
       end
     end
 
     private
+
+    # Names the Graph error code and message (truncated) after the
+    # status number, so the mailbox card and the log say why a request
+    # failed instead of only how. Built from the response body alone:
+    # the request URL carries the query string and the token rides the
+    # header that fetched it, so neither ever lands in this text.
+    def describe_failure(response)
+      body = response.json
+      error = body.is_a?(Hash) ? body["error"] : nil
+      error = {} unless error.is_a?(Hash)
+      code = error["code"].to_s.strip
+      detail = error["message"].to_s.strip
+      detail = "#{detail[0, 200]}..." if detail.length > 200
+      parts = [ code, detail ].reject(&:blank?)
+      return "Microsoft Graph returned #{response.status}" if parts.empty?
+
+      "Microsoft Graph returned #{response.status} (#{parts.join(": ")})"
+    end
 
     def with_token
       refreshed = false

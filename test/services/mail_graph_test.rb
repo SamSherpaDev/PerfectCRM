@@ -96,6 +96,64 @@ class MailGraphTest < ActiveSupport::TestCase
     assert_raises(Mail::GrantRevokedError) { fetcher.test_connection }
   end
 
+  test "sync and history skip the folders without correspondence by id, children included" do
+    # v1.0 answers 400 to a folder listing that selects wellKnownName, so
+    # the reader resolves each skipped well-known name to an id through the
+    # path lookup instead; the fake behaves that way on both. Every skipped
+    # message below names the mailbox, so only folder skipping can exclude it.
+    @mailbox.add_child_folder("deleteditems", "trashed-client", display_name: "Trashed client")
+    @mailbox.add_child_folder("archive", "rescued", display_name: "Rescued")
+    %w[deleteditems junkemail drafts outbox conversationhistory].each do |folder|
+      @mailbox.add(folder, graph_message(id: "#{folder}-skip", from: "#{folder}@example.com",
+        message_id: "<#{folder}skip@test>"))
+    end
+    @mailbox.add("trashed-client", graph_message(id: "trashed-skip", from: "trashed@example.com",
+      message_id: "<trashedskip@test>"))
+    @mailbox.add("rescued", graph_message(id: "rescued-keep", from: "traveler@example.com",
+      message_id: "<rescuedkeep@test>"))
+    @mailbox.add("inbox", graph_message(id: "kept", from: "client@example.com",
+      message_id: "<kept@test>"))
+
+    assert_equal %w[kept rescued-keep],
+      fetcher.fetch_new.to_a.map { |item| item.provider[:message_id] }.sort
+    assert_equal %w[kept rescued-keep],
+      fetcher.fetch_history.to_a.map { |item| item.provider[:message_id] }.sort
+
+    # No folder listing selected the beta-only property, and each skipped
+    # name was resolved through its own path lookup.
+    listings = @mailbox.requests.select do |request|
+      request.url.include?("mailFolders") && !request.url.include?("/messages") && !request.url.match?(%r{mailFolders/[^/?]+$})
+    end
+    assert listings.any?
+    assert listings.none? { |request| request.url.include?("wellKnownName") }
+    Mail::GraphFetcher::SKIPPED_FOLDERS.each do |name|
+      assert @mailbox.requests.any? { |request| request.url.end_with?("/mailFolders/#{name}") },
+        "expected a path lookup for #{name}"
+    end
+  end
+
+  test "a skipped folder the mailbox does not have is simply carried on without" do
+    @mailbox.remove_folder("outbox")
+    @mailbox.add("inbox", graph_message(id: "kept-2", from: "client@example.com",
+      message_id: "<kept2@test>"))
+
+    assert_equal [ "kept-2" ], fetcher.fetch_new.to_a.map { |item| item.provider[:message_id] }
+  end
+
+  test "an unmapped Graph failure names the Graph error code and message" do
+    fetcher.fetch_new.to_a # prime
+    @mailbox.add("inbox", graph_message(id: "doomed", from: "client@example.com",
+      message_id: "<doomed@test>"))
+    @mailbox.transport.on_get("/me/messages/doomed") do |*|
+      { status: 400,
+        json: { "error" => { "code" => "BadRequest", "message" => "Parsing OData Select and Expand failed: nope" } } }
+    end
+
+    error = assert_raises(Mail::ConnectionError) { fetcher.fetch_new.to_a }
+    assert_equal "Inbox: Microsoft Graph returned 400 (BadRequest: Parsing OData Select and Expand failed: nope)",
+      error.message
+  end
+
   test "live sync reads mail filed outside the Inbox" do
     fetcher.fetch_new.to_a # prime
     @mailbox.add("archive", graph_message(id: "filed-live", from: "operator@example.com",

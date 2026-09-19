@@ -123,6 +123,17 @@ class FakeMailbox
 
   HISTORY_PAGE_SIZE = 2
 
+  # What v1.0 answers when a folder listing selects wellKnownName: that
+  # property exists only on the beta mailFolder, so the whole listing
+  # fails. Copied from the production 400 this double guards against.
+  WELL_KNOWN_SELECT_ERROR = {
+    "error" => {
+      "code" => "BadRequest",
+      "message" => "Parsing OData Select and Expand failed: Could not find a property named " \
+        "'wellKnownName' on type 'microsoft.graph.mailFolder'."
+    }
+  }.freeze
+
   DEFAULT_FOLDERS = [
     { "id" => "inbox", "displayName" => "Inbox", "wellKnownName" => "inbox", "childFolderCount" => 0 },
     { "id" => "sentitems", "displayName" => "Sent Items", "wellKnownName" => "sentitems", "childFolderCount" => 0 },
@@ -190,6 +201,15 @@ class FakeMailbox
     @child_folders.delete(id)
   end
 
+  # Adds a child folder under a top-level folder, as filing one in Outlook would.
+  def add_child_folder(parent_id, id, display_name: nil)
+    @child_folders[parent_id] ||= []
+    @child_folders[parent_id] << { "id" => id, "displayName" => display_name || id.titleize,
+      "wellKnownName" => nil, "childFolderCount" => 0 }
+    parent = @folders.find { |folder| folder["id"] == parent_id }
+    parent["childFolderCount"] = @child_folders[parent_id].length if parent
+  end
+
   # Which Microsoft account the delegated grant belongs to (/me).
   def signed_in_as(address, upn: nil)
     @account = { "id" => "other", "mail" => address, "userPrincipalName" => upn || address }
@@ -240,7 +260,11 @@ class FakeMailbox
     end
 
     @transport.on_get("mailFolders") do |url, token:, params:, headers:|
-      { status: 200, json: { "value" => @folders } }
+      if selects_well_known?(url)
+        { status: 400, json: WELL_KNOWN_SELECT_ERROR }
+      else
+        { status: 200, json: { "value" => @folders } }
+      end
     end
 
     @transport.on_get("mailFolders/") do |url, token:, params:, headers:|
@@ -269,14 +293,32 @@ class FakeMailbox
   end
 
   def route_folder_get(url, headers)
-    folder = url[%r{mailFolders/([^/]+)}, 1]
+    folder = url[%r{mailFolders/([^/?]+)}, 1].to_s
     if url.include?("/childFolders")
-      { status: 200, json: { "value" => @child_folders.fetch(folder, []) } }
+      if selects_well_known?(url)
+        { status: 400, json: WELL_KNOWN_SELECT_ERROR }
+      else
+        { status: 200, json: { "value" => @child_folders.fetch(folder, []) } }
+      end
     elsif url.include?("/messages/delta")
       delta_get(folder, url)
-    else
+    elsif url.include?("/messages")
       history_get(folder, url)
+    else
+      folder_get(folder)
     end
+  end
+
+  # v1.0 accepts a well-known folder name in place of the folder id in the
+  # path; an unknown name (or id) answers 404 like the missing folder it is.
+  def folder_get(name)
+    folder = @folders.find { |entry| entry["id"] == name || entry["wellKnownName"] == name } ||
+      @child_folders.values.flatten.find { |entry| entry["id"] == name }
+    folder.nil? ? { status: 404, json: {} } : { status: 200, json: { "id" => folder["id"] } }
+  end
+
+  def selects_well_known?(url)
+    URI.decode_www_form(URI.parse(url).query.to_s).to_h["$select"].to_s.split(",").include?("wellKnownName")
   end
 
   def delta_get(folder, url)
