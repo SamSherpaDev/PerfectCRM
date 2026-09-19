@@ -493,6 +493,59 @@ class RecipientCorrectionTest < ActionDispatch::IntegrationTest
     end
   end
 
+  [ false, true ].each do |returning|
+    test "conversion into #{returning ? 'existing' : 'new'} client preserves simultaneous reassignment boundaries" do
+      lead = Lead.create!(name: "Conversion boundary", email: "owner@example.test", source: "manual")
+      one = lead.people.create!(name: "One", email: "a@example.test")
+      two = lead.people.create!(name: "Two", email: "b@example.test")
+      unrelated = lead.people.create!(name: "Unrelated", email: "unrelated-old@example.test")
+      unrelated.update!(email: "unrelated-current@example.test")
+      original = Outbound::Composer.call(owner: lead, params: { to: "a@example.test", body: "Queued for One" })
+      draft = original.conversation.create_draft!(owner: lead, to_addrs: "a@example.test", body: "Unsent for One")
+      if returning
+        existing = Client.create!(name: "Existing", email: "existing-old@example.test")
+        existing.update!(email: lead.email)
+      end
+      sign_in
+      patch lead_path(lead), params: { lead: { people_attributes: {
+        "0" => { id: one.id, name: "One", email: "b@example.test" },
+        "1" => { id: two.id, name: "Two", email: "c@example.test" }
+      } } }
+      assert_response :redirect
+      post convert_lead_path(lead), params: { expected_client_id: existing&.id || "new" }
+      client = lead.reload.converted_client
+      assert_not_nil client
+      assert_redirected_to client_path(client)
+      assert_equal existing.id, client.id if returning
+      assert_equal client, draft.reload.owner
+      assert_no_difference "Message.count" do
+        post client_messages_path(client), params: { conversation_id: original.conversation_id,
+          message: { to: "a@example.test", body: draft.body } }
+      end
+      assert_match "confirm the current recipients", flash[:alert]
+      get client_path(client)
+      assert_select "input[name='message[to]'][value='b@example.test']"
+      confirmation = recipient_confirmation_from_form
+      assert_difference "Message.count", 1 do
+        post client_messages_path(client), params: { conversation_id: original.conversation_id,
+          message: { to: "b@example.test", body: draft.body, recipient_confirmation: confirmation } }
+      end
+      assert_equal [ "b@example.test" ], ClientMailer.outbound(Message.order(:id).last).to
+      assert_equal "a@example.test", original.reload.to_addrs
+      assert_equal "queued", original.status
+      assert_difference "Message.count", 1 do
+        post client_messages_path(client), params: { message: { to: "unrelated-old@example.test", body: "Unaffected" } }
+      end
+      assert_equal [ "unrelated-current@example.test" ], ClientMailer.outbound(Message.order(:id).last).to
+      if returning
+        assert_difference "Message.count", 1 do
+          post client_messages_path(client), params: { message: { to: "existing-old@example.test", body: "Existing history" } }
+        end
+        assert_equal [ "owner@example.test" ], ClientMailer.outbound(Message.order(:id).last).to
+      end
+    end
+  end
+
   private
 
   def recipient_confirmation_from_form

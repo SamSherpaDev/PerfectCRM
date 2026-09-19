@@ -197,11 +197,6 @@ class Lead < ApplicationRecord
         referral_code: referral_code,
         perfectbook_contact_id: perfectbook_contact_id
       )
-      redirect_map.each do |former, corrected|
-        client.record_email_redirect(former, client.resolve_redirected_email(corrected))
-      end
-      client.update!(ambiguous_emails: client.ambiguous_recipient_emails | ambiguous_recipient_emails,
-        pipeline_stage: "won")
       client.update!(ai_opt_out: true) if ai_opt_out?
       people.find_each do |person|
         next if person.email.present? && client.people.exists?(email: person.email)
@@ -210,6 +205,14 @@ class Lead < ApplicationRecord
           name: person.name, email: person.email, phone: person.phone, role: person.role
         )
       end
+      client.reload
+      ambiguity = client.ambiguous_recipient_emails | ambiguous_recipient_emails
+      redirects = client.redirect_map.merge(redirect_map) do |address, existing, incoming|
+        ambiguity |= [ address ] if existing != incoming
+        existing
+      end
+      ambiguity |= redirects.keys & client.current_recipient_emails
+      client.update!(email_redirects: redirects, ambiguous_emails: ambiguity, pipeline_stage: "won")
       client.tags |= tags.to_a
       note_ids = {}
       ActivityEvent.suppress do

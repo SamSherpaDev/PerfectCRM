@@ -9,18 +9,14 @@
 class TemplateContext
   INACTIVE_BOOKING_STATUSES = %w[cancelled voided refunded].freeze
 
-  def self.resolve_recipient(recipient, owner: nil)
+  def self.resolve_recipient(recipient, owner:)
     email = recipient.email.to_s.strip.downcase
-    begin
-      owner = Outbound::OwnerLookup.for_email(email) || owner
-    rescue Outbound::OwnerLookup::Conflict
-      raise unless owner
-    end
     email = owner.resolve_redirected_email(email) if owner.respond_to?(:resolve_redirected_email)
     contact = PerfectBook::Contact.find_by("lower(email) = ?", email) if email.present?
-    person = Person.find_by("lower(email) = ?", email) if email.present?
-    identity = contact || person || (owner if email.blank? || owner.try(:email).to_s.downcase == email) || recipient
-    contact_id = contact ? contact.perfectbook_id : owner.try(:perfectbook_contact_id)
+    person = owner.people.find_by("lower(email) = ?", email) if email.present? && owner.respond_to?(:people)
+    owner_address = email.blank? || owner.try(:email).to_s.downcase == email
+    identity = contact || person || (owner if owner_address) || recipient
+    contact_id = contact ? contact.perfectbook_id : (owner.try(:perfectbook_contact_id) if owner_address || person)
     { identity: identity, owner: owner, recipient_email: email, bookings: bookings_for_contact(contact_id), fallback: contact.nil? }
   end
 
@@ -52,14 +48,14 @@ class TemplateContext
   end
 
   def self.for_recipient(recipient, departure_id: nil)
-    resolved = resolve_recipient(recipient)
+    resolved = resolve_recipient(recipient, owner: Outbound::OwnerLookup.for_email(recipient.email))
     bookings = resolved[:bookings]
     booking = departure_id.present? ? bookings.find { |row| row.departure_id.to_s == departure_id.to_s } : bookings.first
     resolved_context(resolved, booking)
   end
 
   def self.for_reply(to:, owner:, booking_id: nil)
-    address = to.to_s.split(/[,;\n]/).first.to_s.strip
+    address = EmailRedirects.mailboxes(to).first.to_s
     parsed = MergeBatch.parse_recipients(address).first
     recipient = parsed || MergeBatch::Recipient.new(name: nil, email: address)
     resolved = resolve_recipient(recipient, owner: owner)

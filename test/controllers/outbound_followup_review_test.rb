@@ -100,4 +100,49 @@ class OutboundFollowupReviewTest < ActionDispatch::IntegrationTest
     assert_equal 1, counts.sum
     assert_equal latest.id, conversation.messages.newest_first.first.id
   end
+
+  test "reply template insertion cannot follow another owner's correction history" do
+    @client.update!(email: "maya-corrected@example.com")
+    PerfectBook::Contact.create!(perfectbook_id: 101, name: "Maya", email: @client.email, synced_at: Time.current)
+    lead = Lead.create!(name: "Unrelated lead", email: "lead@example.test", source: "manual", perfectbook_contact_id: 103)
+    PerfectBook::Booking.create!(perfectbook_id: 503, perfectbook_contact_id: 103,
+      trip_name: "Unrelated owner's booking", invoice_number: "UNRELATED", synced_at: Time.current)
+
+    get reply_context_templates_path, params: { owner_type: "Lead", owner_id: lead.id, to: "maya@example.com" }
+    assert_response :success
+    context = response.parsed_body["context"]
+    assert_empty response.parsed_body["bookings"]
+    assert_nil context["invoice_number"]
+    assert_nil context["trip"]
+    assert_nil context["full_name"]
+    post use_template_path(@template, format: :json), params: { context: context }
+    assert_response :success
+    rendered = response.parsed_body
+    assert_not_includes rendered["body"], "MAYA"
+    assert_not_includes rendered["body"], "UNRELATED"
+    assert_not_includes rendered["body"], "Maya trek"
+    assert_difference "Message.count", 1 do
+      post lead_messages_path(lead), params: { message: {
+        to: "maya@example.com", subject: rendered["subject"], body: rendered["body"], template_id: @template.id
+      } }
+    end
+    message = Message.order(:id).last
+    assert_equal [ "maya@example.com" ], ClientMailer.outbound(message).to
+    assert_not_includes message.text_body, "MAYA"
+    assert_not_includes message.text_body, "UNRELATED"
+
+    get reply_context_templates_path, params: { owner_type: "Client", owner_id: @client.id, to: "maya@example.com" }
+    assert_equal "MAYA", response.parsed_body["context"]["invoice_number"]
+    post use_template_path(@template, format: :json), params: { context: response.parsed_body["context"] }
+    rendered = response.parsed_body
+    assert_difference "Message.count", 1 do
+      post client_messages_path(@client), params: { message: {
+        to: "maya@example.com", subject: rendered["subject"], body: rendered["body"], template_id: @template.id
+      } }
+    end
+    message = Message.order(:id).last
+    assert_equal [ "maya-corrected@example.com" ], ClientMailer.outbound(message).to
+    assert_includes message.text_body, "Maya trek"
+    assert_includes message.text_body, "MAYA"
+  end
 end
