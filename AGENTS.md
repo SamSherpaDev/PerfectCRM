@@ -60,8 +60,8 @@ When updating this file, preserve this bar for all agents and keep entries conci
   or `choose` wait on re-rendered state (e.g. the `input[data-description]`
   value) before touching rows; a `:checked`/count assertion alone passes on
   the pre-navigation DOM and later steps go stale. Wrap the first
-  post-navigation read in `tolerate_navigation_assertion` and submit clicks
-  in `tolerate_submit_navigation` (both live in
+  post-navigation read in `tolerate_navigation_assertion` and submitting
+  `select`, `choose`, or click actions in `tolerate_submit_navigation` (both live in
   `test/application_system_test_case.rb`): when the POST commits mid-call,
   chromedriver reports UnknownError, which Capybara does not retry.
 - PerfectBook link: `PerfectBook::Client` (`lib/perfectbook/`) + mirror tables
@@ -76,10 +76,6 @@ When updating this file, preserve this bar for all agents and keep entries conci
   mail received since the first connect (`Setting#mailbox_watched_since`).
   Keep-only-info@ rule lives in `Mail.keeps?`; inside `module Mail` always
   write `::Message` and `::Conversation` because `Mail::Message` is the mail gem.
-  `Conversation` has no `has_many :notes`, so non-transactional mail tests
-  must delete the ingester's holding-area notes themselves (destroying the
-  thread orphans them into later tests sharing the database); precedent in
-  `test/models/document_upload_orphan_test.rb`.
 - Outbound email: see README.md, "Replying"; recipient context is shared
   through `TemplateContext.resolve_recipient` for reply and group rendering.
   Signature rendering lives in `EmailSignature` (sanitize/derive/cid logo);

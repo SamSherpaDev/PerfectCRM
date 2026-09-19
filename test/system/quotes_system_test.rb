@@ -30,9 +30,9 @@ class QuotesSystemTest < ApplicationSystemTestCase
     assert_selector "h1", text: "New quote"
     assert_no_overflow("builder before trip")
 
-    select "Everest trek", from: "Trip"
+    tolerate_submit_navigation { select "Everest trek", from: "Trip" }
     tolerate_navigation_assertion { assert_text "6 seats left" }
-    choose "4 May – 18 May 2027"
+    tolerate_submit_navigation { choose "4 May – 18 May 2027" }
     tolerate_navigation_assertion do
       assert_selector "input[data-description][value='Everest trek - 4 May – 18 May 2027']"
     end
@@ -150,7 +150,7 @@ class QuotesSystemTest < ApplicationSystemTestCase
     PerfectBook::Departure.create!(perfectbook_id: 43, perfectbook_trip_id: 42,
       start_date: Date.new(2027, 5, 4), end_date: Date.new(2027, 5, 18), synced_at: Time.current)
     visit new_quote_path(client_id: client.id, trip_id: 42, departure_id: 43)
-    select "Annapurna", from: "Trip"
+    tolerate_submit_navigation { select "Annapurna", from: "Trip" }
     tolerate_navigation_assertion { assert_text "No upcoming departures" }
     within(all("[data-line-row]").first) do
       assert_field "Description", with: "Annapurna"
@@ -319,7 +319,7 @@ class QuotesSystemTest < ApplicationSystemTestCase
     fill_in "What is included", with: "Guide only"
     fill_in "quote_party_size", with: "3"
     fill_in "quote_deposit_dollars", with: "200"
-    select "Annapurna", from: "Trip"
+    tolerate_submit_navigation { select "Annapurna", from: "Trip" }
     tolerate_navigation_assertion do
       assert_selector "input[data-description][value='Annapurna']"
     end
@@ -328,7 +328,7 @@ class QuotesSystemTest < ApplicationSystemTestCase
       assert_field "Description", with: "Annapurna"
       fill_in "Description", with: "Annapurna with private guide"
     end
-    choose "4 May – 18 May 2027"
+    tolerate_submit_navigation { choose "4 May – 18 May 2027" }
     tolerate_navigation_assertion do
       assert_selector "input[name='quote[perfectbook_departure_id]'][value='45']", visible: :all
     end
@@ -397,17 +397,17 @@ class QuotesSystemTest < ApplicationSystemTestCase
     recent.lines.create!(kind: "trip", description: "Everest", quantity: 1, unit_minor: 300_000, perfectbook_trip_id: 42)
 
     visit new_quote_path(client_id: client.id)
-    select "Everest", from: "Trip"
+    tolerate_submit_navigation { select "Everest", from: "Trip" }
     tolerate_navigation_assertion do
       assert_text "Prefilled from your last quote"
       assert_selector "[data-line-row]:first-child input[data-each][value='3000.00']"
     end
-    choose "4 May – 18 May 2027"
+    tolerate_submit_navigation { choose "4 May – 18 May 2027" }
     tolerate_navigation_assertion do
       assert_selector "[data-line-row]:first-child input[data-each][value='2000.00']"
     end
 
-    choose "4 Jun – 18 Jun 2027"
+    tolerate_submit_navigation { choose "4 Jun – 18 Jun 2027" }
     tolerate_navigation_assertion do
       assert_selector "input[name='departure_id'][value='44']:checked"
       assert_selector "input[data-description][value='Everest - 4 Jun – 18 Jun 2027']"
@@ -416,12 +416,12 @@ class QuotesSystemTest < ApplicationSystemTestCase
       assert_field "Each ($)", with: "3000.00"
       fill_in "Each ($)", with: "2500"
     end
-    choose "4 May – 18 May 2027"
+    tolerate_submit_navigation { choose "4 May – 18 May 2027" }
     tolerate_navigation_assertion do
       assert_selector "input[data-description][value='Everest - 4 May – 18 May 2027']"
       assert_selector "[data-line-row]:first-child input[data-each][value='2500.00']"
     end
-    choose "4 Jun – 18 Jun 2027"
+    tolerate_submit_navigation { choose "4 Jun – 18 Jun 2027" }
     tolerate_navigation_assertion do
       assert_selector "input[name='departure_id'][value='44']:checked"
       assert_selector "input[data-description][value='Everest - 4 Jun – 18 Jun 2027']"
@@ -430,7 +430,7 @@ class QuotesSystemTest < ApplicationSystemTestCase
       assert_field "Each ($)", with: "2500.00"
       fill_in "Each ($)", with: ""
     end
-    choose "4 May – 18 May 2027"
+    tolerate_submit_navigation { choose "4 May – 18 May 2027" }
     tolerate_navigation_assertion do
       assert_selector "input[data-description][value='Everest - 4 May – 18 May 2027']"
       assert_selector "[data-line-row]:first-child input[data-each][value='0.00']"
@@ -498,8 +498,11 @@ class QuotesSystemTest < ApplicationSystemTestCase
     PerfectBook::Departure.create!(perfectbook_id: 43, perfectbook_trip_id: 42,
       start_date: Date.new(2027, 5, 4), end_date: Date.new(2027, 5, 18), synced_at: Time.current)
     visit new_quote_path(client_id: client.id)
-    select "Everest", from: "Trip"
-    choose "4 May – 18 May 2027"
+    tolerate_submit_navigation { select "Everest", from: "Trip" }
+    tolerate_navigation_assertion do
+      assert_selector "input[data-description][value='Everest']"
+    end
+    tolerate_submit_navigation { choose "4 May – 18 May 2027" }
     tolerate_navigation_assertion do
       assert_selector "input[data-description][value='Everest - 4 May – 18 May 2027']"
     end
