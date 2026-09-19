@@ -50,7 +50,9 @@ module EmailSignature
         %(<div style="font-size:13px;line-height:19px;color:#{DETAIL_COLOR};">#{ERB::Util.html_escape(line)}</div>)
       end.join
       content = if setting.email_signature_html.present?
-        sanitize(setting.email_signature_html)
+        fragment = Loofah.fragment(sanitize(setting.email_signature_html))
+        fragment.css("img").remove
+        fragment.to_html
       else
         %(<div style="font-family:Georgia,'Times New Roman',serif;font-size:16px;line-height:22px;color:#{NAME_COLOR};font-weight:bold;">#{ERB::Util.html_escape(name)}</div>#{detail_rows})
       end

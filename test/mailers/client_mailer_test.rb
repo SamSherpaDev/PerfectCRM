@@ -93,7 +93,7 @@ class ClientMailerTest < ActionMailer::TestCase
       io: StringIO.new(png_bytes(600, 200)), filename: "logo.png", content_type: "image/png"
     )
     setting.update_columns(email_signature: "Sam Sherpa", email_signature_html:
-      '<p>Sam Sherpa<br>Sherpa Holidays<br><a href="https://sherpaholidays.com/contact">Contact us</a><br><a href="tel:+15550100">Call Sam</a><br><a href="javascript:alert(1)">Unsafe</a></p><script>alert(2)</script>')
+      '<p>Sam Sherpa<br>Sherpa Holidays<br><a href="https://sherpaholidays.com/contact">Contact us</a><br><a href="tel:+15550100">Call Sam</a><br><a href="javascript:alert(1)">Unsafe</a></p><script>alert(2)</script><img src="https://tracker.example/p.gif"><img src="cid:old-logo">')
     message = Outbound::Composer.call(owner: @client,
       params: { to: "maya@example.com", subject: "Your trek", body: "Hello Maya." })
     mail = ClientMailer.outbound(message)
@@ -102,6 +102,7 @@ class ClientMailerTest < ActionMailer::TestCase
     assert_equal "Contact us", fragment.at_css('a[href="https://sherpaholidays.com/contact"]').text
     assert_equal "Call Sam", fragment.at_css('a[href="tel:+15550100"]').text
     assert_empty fragment.css('a[href^="javascript:"], script')
+    assert_equal 1, fragment.css("img").size
     img = fragment.at_css("img")
     assert_equal "cid:#{EmailSignature::CID}", img["src"]
     assert_equal "120", img["width"]

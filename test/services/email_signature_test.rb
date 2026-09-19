@@ -173,6 +173,16 @@ class EmailSignatureTest < ActiveSupport::TestCase
     assert_equal "<p>Sam Sherpa<br>Sherpa Holidays</p>", @setting.email_signature_html
   end
 
+  test "legacy images are omitted without changing stored markup or safe links" do
+    legacy = '<p>Sam Sherpa</p><a href="https://sherpaholidays.com">Visit</a><img src="https://tracker.example/p.gif"><img src="cid:old-logo">'
+    @setting.update_columns(email_signature_html: legacy)
+    fragment = Loofah.fragment(EmailSignature.html_for(@setting.reload))
+    assert_empty fragment.css("img")
+    assert_includes fragment.text, "Sam Sherpa"
+    assert_equal "Visit", fragment.at_css('a[href="https://sherpaholidays.com"]').text
+    assert_equal legacy, @setting.reload.email_signature_html
+  end
+
   test "html is empty when nothing is configured" do
     assert_equal "", EmailSignature.html_for(@setting)
   end

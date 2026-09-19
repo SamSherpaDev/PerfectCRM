@@ -152,6 +152,22 @@ class SettingsSenderTest < ActionDispatch::IntegrationTest
     assert_select "textarea[name=?]", "setting[email_signature_html]", count: 0
   end
 
+  test "preview displays only the uploaded logo despite legacy images" do
+    sign_in
+    setting = Setting.current.ensure_intake_credentials!
+    setting.signature_logo.attach(
+      io: StringIO.new(LOGO_BYTES), filename: "logo.png", content_type: "image/png")
+    legacy = '<p>Sam Sherpa</p><a href="https://sherpaholidays.com">Visit</a><img src="https://tracker.example/p.gif"><img src="cid:old-logo">'
+    setting.update_columns(email_signature_html: legacy)
+    get edit_settings_path
+    assert_response :success
+    assert_select "#signature-preview img", count: 1
+    assert_select "#signature-preview img[src=?]", logo_settings_path
+    assert_select '#signature-preview a[href="https://sherpaholidays.com"]', text: "Visit"
+    assert_select "#signature-preview", text: /Sam Sherpa/
+    assert_equal legacy, setting.reload.email_signature_html
+  end
+
   teardown do
     setting = Setting.current
     setting.signature_logo.purge if setting.signature_logo.attached?

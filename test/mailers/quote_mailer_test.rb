@@ -53,6 +53,29 @@ class QuoteMailerTest < ActionMailer::TestCase
     assert_includes mail.text_part.decoded, "Sam Sherpa"
   end
 
+  test "quote renders only the uploaded fitted logo and preserves legacy text and links" do
+    setting = Setting.current
+    setting.signature_logo.attach(
+      io: StringIO.new(LOGO_BYTES), filename: "logo.png", content_type: "image/png")
+    setting.signature_logo.blob.update!(metadata: { "width" => 600, "height" => 200 })
+    legacy = '<p>Sam Sherpa</p><a href="https://sherpaholidays.com">Visit</a><img src="https://tracker.example/p.gif"><img src="cid:old-logo">'
+    setting.update_columns(email_signature_html: legacy)
+    mail = QuoteMailer.quote_email(@quote)
+    fragment = Loofah.fragment(mail.html_part.decoded)
+    assert_equal 1, fragment.css("img").size
+    image = fragment.at_css("img")
+    assert_equal "cid:#{EmailSignature::CID}", image["src"]
+    assert_equal "120", image["width"]
+    assert_equal "40", image["height"]
+    assert_equal "Visit", fragment.at_css('a[href="https://sherpaholidays.com"]').text
+    assert_includes fragment.text, "Sam Sherpa"
+    assert_includes mail.text_part.decoded, "Sam Sherpa"
+    inline = mail.attachments.find { |attachment| attachment.filename == "signature-logo.png" }
+    assert inline.inline?
+    assert_equal "<#{EmailSignature::CID}>", inline.content_id
+    assert_equal legacy, setting.reload.email_signature_html
+  end
+
   test "quote email carries the HTML signature with the embedded logo" do
     Setting.current.signature_logo.attach(
       io: StringIO.new(LOGO_BYTES), filename: "logo.png", content_type: "image/png"
