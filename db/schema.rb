@@ -371,7 +371,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_180956) do
     t.string "country"
     t.datetime "created_at", null: false
     t.string "email"
-    t.text "email_redirects", default: "{}", null: false
     t.string "kind", default: "other", null: false
     t.datetime "last_activity_at"
     t.string "name", null: false

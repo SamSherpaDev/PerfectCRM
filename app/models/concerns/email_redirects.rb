@@ -54,12 +54,17 @@ module EmailRedirects
     new_value = new_address.to_s.strip.downcase
     return if old_key == new_value
 
-    redirects = redirect_map
-    redirects[old_key] = new_value
-    # Bound growth; keep the most recent corrections.
-    redirects = redirects.to_a.last(REDIRECT_LIMIT).to_h if redirects.size > REDIRECT_LIMIT
-    self.class.unscoped.where(id: id).update_all(email_redirects: redirects.to_json)
-    self.email_redirects = redirects
+    self.class.transaction do
+      current = self.class.unscoped.lock.find(id)
+      redirects = current.redirect_map.transform_values { |value| current.resolve_redirected_email(value) }
+      redirects.transform_values! { |value| value == old_key ? new_value : value }
+      redirects.delete(new_value)
+      redirects.delete(old_key)
+      redirects[old_key] = new_value
+      redirects = redirects.to_a.last(REDIRECT_LIMIT).to_h if redirects.size > REDIRECT_LIMIT
+      current.update_columns(email_redirects: redirects)
+      self.email_redirects = redirects
+    end
   end
 
   private

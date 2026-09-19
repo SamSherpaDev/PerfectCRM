@@ -86,4 +86,120 @@ class RecipientCorrectionTest < ActionDispatch::IntegrationTest
     }
     assert_equal "new-correct@example.test", conversation.reload.draft.to_addrs
   end
+
+  test "returning to a former address redirects every superseded recipient" do
+    lead = Lead.create!(name: "Round trip", email: "first@example.test", source: "manual")
+    first = Outbound::Composer.call(owner: lead,
+      params: { to: lead.email, subject: "Hello", body: "Original" })
+    sign_in
+    %w[second third first].each do |address|
+      patch lead_path(lead), params: { lead: { email: "#{address}@example.test" } }
+      assert_response :redirect
+    end
+
+    %w[second third].each do |address|
+      post lead_messages_path(lead), params: {
+        conversation_id: first.conversation_id,
+        message: { to: "#{address}@example.test", body: "Follow up" }
+      }
+      assert_response :redirect
+      assert_equal [ "first@example.test" ], ClientMailer.outbound(Message.order(:id).last).to
+    end
+    assert_equal "first@example.test", first.reload.to_addrs
+    assert_equal "first@example.test", lead.reload.resolve_redirected_email(lead.email)
+  end
+
+  test "draft and thread copy recipients follow corrections on display and send" do
+    lead = Lead.create!(name: "Copies", email: "wrong@example.test", source: "manual")
+    first = Outbound::Composer.call(owner: lead,
+      params: { to: "alternate@example.test", cc: lead.email, bcc: lead.email, body: "Original" })
+    conversation = first.conversation
+    sign_in
+    patch lead_path(lead), params: { lead: { email: "right@example.test" } }
+    assert_response :redirect
+
+    get lead_path(lead)
+    assert_response :success
+    assert_select "input[name='message[cc]'][value='right@example.test']"
+    assert_select "input[name='message[bcc]']" do |fields|
+      assert fields.all? { |field| field["value"].blank? }
+    end
+
+    draft = conversation.create_draft!(owner: lead, to_addrs: "alternate@example.test",
+      cc_addrs: "wrong@example.test, another@example.test", bcc_addrs: "wrong@example.test", body: "Draft")
+
+    get lead_path(lead)
+    assert_response :success
+    assert_select "input[name='message[to]'][value='alternate@example.test']"
+    assert_select "input[name='message[cc]'][value='right@example.test, another@example.test']"
+    assert_select "input[name='message[bcc]'][value='right@example.test']"
+
+    post lead_messages_path(lead), params: {
+      conversation_id: conversation.id,
+      message: { to: draft.to_addrs, cc: draft.cc_addrs, bcc: draft.bcc_addrs, body: draft.body }
+    }
+    assert_response :redirect
+    mail = ClientMailer.outbound(Message.order(:id).last)
+    assert_equal [ "alternate@example.test" ], mail.to
+    assert_equal [ "right@example.test", "another@example.test" ], mail.cc
+    assert_equal [ "right@example.test" ], mail.bcc
+    assert_equal "wrong@example.test", first.reload.cc_addrs
+    assert_equal "wrong@example.test", first.bcc_addrs
+
+  end
+
+  test "one edit preserves both owner and nested contact corrections" do
+    lead = Lead.create!(name: "Nested", email: "owner-old@example.test", source: "manual")
+    person = lead.people.create!(name: "Contact", email: "contact-old@example.test")
+    sign_in
+    patch lead_path(lead), params: { lead: {
+      email: "owner-new@example.test",
+      people_attributes: { "0" => { id: person.id, name: person.name, email: "contact-new@example.test" } }
+    } }
+    assert_response :redirect
+    post lead_messages_path(lead), params: { message: {
+      to: "owner-old@example.test, contact-old@example.test", body: "Both corrected"
+    } }
+    assert_response :redirect
+    assert_equal [ "owner-new@example.test", "contact-new@example.test" ],
+      ClientMailer.outbound(Message.order(:id).last).to
+  end
+
+  [ false, true ].each do |returning|
+    test "conversion transfers recipient corrections to #{returning ? 'an existing' : 'a new'} client" do
+      lead = Lead.create!(name: "Conversion", email: "lead-old@example.test", source: "manual")
+      person = lead.people.create!(name: "Contact", email: "person-old@example.test")
+      first = Outbound::Composer.call(owner: lead, params: { to: lead.email, body: "Original" })
+      draft = first.conversation.create_draft!(owner: lead, to_addrs: lead.email,
+        cc_addrs: person.email, body: "Draft")
+      lead.update!(email: "lead-new@example.test")
+      person.update!(email: "person-new@example.test")
+      if returning
+        existing = Client.create!(name: "Existing", email: "client-old@example.test")
+        existing.update!(email: lead.email)
+      end
+
+      client = lead.reload.convert_to_client!
+      assert_equal existing.id, client.id if returning
+      assert_equal client, draft.reload.owner
+      assert_equal client, first.conversation.reload.linkable
+      sign_in
+      get client_path(client)
+      assert_response :success
+      assert_select "input[name='message[to]'][value='lead-new@example.test']"
+      assert_select "input[name='message[cc]'][value='person-new@example.test']"
+      post client_messages_path(client), params: {
+        conversation_id: first.conversation_id,
+        message: { to: draft.to_addrs, cc: draft.cc_addrs, body: draft.body }
+      }
+      assert_response :redirect
+      mail = ClientMailer.outbound(Message.order(:id).last)
+      assert_equal [ "lead-new@example.test" ], mail.to
+      assert_equal [ "person-new@example.test" ], mail.cc
+      assert_equal "lead-old@example.test", first.reload.to_addrs
+      if returning
+        assert_equal "lead-new@example.test", client.reload.resolve_redirected_email("client-old@example.test")
+      end
+    end
+  end
 end

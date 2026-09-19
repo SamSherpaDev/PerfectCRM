@@ -40,8 +40,8 @@ module Outbound
       message.status = "queued"
       message.from_address = self.class.from_address
       message.to_addrs = recipients.join(", ")
-      message.cc_addrs = @params[:cc].to_s
-      message.bcc_addrs = @params[:bcc].to_s
+      message.cc_addrs = redirect_explicit([ @params[:cc].to_s ]).join(", ")
+      message.bcc_addrs = redirect_explicit([ @params[:bcc].to_s ]).join(", ")
       message.subject = @params[:subject].to_s.strip.presence || default_subject
       if @params[:body].to_s.strip.blank?
         message.errors.add(:text_body, :blank)

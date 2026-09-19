@@ -39,11 +39,11 @@
       <div class="grid gap-3 sm:grid-cols-2">
         <div>
           <%= form.label :cc, "Cc", class: "label" %>
-          <%= form.text_field :cc, value: draft.persisted? ? draft.cc_addrs : conversation&.thread_parent&.cc_addrs, class: "input", autocomplete: "off" %>
+          <%= form.text_field :cc, value: @reply_cc, class: "input", autocomplete: "off" %>
         </div>
         <div>
           <%= form.label :bcc, "Bcc", class: "label" %>
-          <%= form.text_field :bcc, value: draft.bcc_addrs, class: "input", autocomplete: "off" %>
+          <%= form.text_field :bcc, value: @reply_bcc, class: "input", autocomplete: "off" %>
         </div>
       </div>
     </details>
