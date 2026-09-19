@@ -6,10 +6,10 @@
 #
 # Pasted Outlook HTML is scrubbed on an explicit allowlist (what Outlook
 # emits: p, br, div, span, a with href, b, strong, i, em, u, table, tbody,
-# tr, td, img, plus font-size and color inline styles). Scripts, style/link
-# tags, forms, and comments (Outlook conditional markup) go; every <img>
-# becomes the uploaded logo referenced by cid, or is dropped when no logo
-# is attached, so no external image URL ever ships.
+# tr, td, img, plus font-size, font-family, and color inline styles).
+# Scripts, style/link tags, forms, and comments (Outlook conditional
+# markup) go; every <img> becomes the uploaded logo referenced by cid, or
+# is dropped when no logo is attached, so no external image URL ever ships.
 module EmailSignature
   CID = "signature-logo@perfectcrm"
   MAX_LOGO_BYTES = 500.kilobytes
@@ -17,7 +17,7 @@ module EmailSignature
 
   ALLOWED_TAGS = %w[p br div span a b strong i em u table tbody tr td img].freeze
   ALLOWED_ATTRIBUTES = %w[href src alt width height style].freeze
-  STYLE_PROPERTIES = %w[font-size color].freeze
+  STYLE_PROPERTIES = %w[font-size font-family color].freeze
 
   class << self
     # Plain-text signature: the saved lines, or derived from the HTML when
@@ -40,8 +40,9 @@ module EmailSignature
     end
 
     # The Rails sanitizer on the explicit allowlist, then a Loofah pass for
-    # the rules the sanitizer cannot express: style limited to font-size and
-    # color, href limited to http/https/mailto/tel, numeric dimensions only, no
+    # the rules the sanitizer cannot express: style limited to font-size,
+    # font-family, and color, href limited to http/https/mailto/tel, numeric
+    # dimensions only, no
     # comments (Outlook conditional markup hides tables in them).
     def sanitize(html)
       fragment = Loofah.fragment(html.to_s)

@@ -43,7 +43,7 @@ class EmailSignatureTest < ActiveSupport::TestCase
 
   test "sanitize keeps Outlook structure and drops scripts, styles, forms, and comments" do
     html = <<~HTML
-      <p style="font-size:12pt;color:#123456;font-family:Evil">Hi</p>
+      <p style="font-size:12pt;color:#123456;font-family:&quot;Calibri&quot;,sans-serif;position:absolute">Hi</p>
       <script>alert(1)</script>
       <style>p { color: blue; }</style>
       <form action="https://evil.example"><input type="text"></form>
@@ -57,7 +57,8 @@ class EmailSignatureTest < ActiveSupport::TestCase
     assert_includes clean, "<p"
     assert_includes clean, "font-size: 12pt"
     assert_includes clean, "color: #123456"
-    assert_not_includes clean, "font-family"
+    assert_includes clean, "font-family: \"Calibri\",sans-serif"
+    assert_not_includes clean, "position"
     assert_not_includes clean, "alert(1)"
     assert_not_includes clean, "color: blue"
     assert_not_includes clean, "<form"
@@ -68,7 +69,7 @@ class EmailSignatureTest < ActiveSupport::TestCase
     assert_includes clean, 'href="tel:+15550100"'
   end
 
-  test "sanitize drops inline styles down to font-size and color" do
+  test "sanitize drops inline styles down to font-size, font-family, and color" do
     clean = EmailSignature.sanitize(
       '<span style="background: url(https://evil.example/p.gif); color: red; font-size: 11pt">x</span>'
     )
