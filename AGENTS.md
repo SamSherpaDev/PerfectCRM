@@ -59,7 +59,11 @@ When updating this file, preserve this bar for all agents and keep entries conci
   builder submits trip/departure picks as full-page POSTs, so after `select`
   or `choose` wait on re-rendered state (e.g. the `input[data-description]`
   value) before touching rows; a `:checked`/count assertion alone passes on
-  the pre-navigation DOM and later steps go stale.
+  the pre-navigation DOM and later steps go stale. Wrap the first
+  post-navigation read in `tolerate_navigation_assertion` and submit clicks
+  in `tolerate_submit_navigation` (both live in
+  `test/application_system_test_case.rb`): when the POST commits mid-call,
+  chromedriver reports UnknownError, which Capybara does not retry.
 - PerfectBook link: `PerfectBook::Client` (`lib/perfectbook/`) + mirror tables
   (`app/models/perfectbook/`) + `config/recurring.yml` jobs; contract in
   README.md, "PerfectBook connection". Mirrors only, never money truth.

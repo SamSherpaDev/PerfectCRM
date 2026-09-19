@@ -31,9 +31,11 @@ class QuotesSystemTest < ApplicationSystemTestCase
     assert_no_overflow("builder before trip")
 
     select "Everest trek", from: "Trip"
-    assert_text "6 seats left"
+    tolerate_navigation_assertion { assert_text "6 seats left" }
     choose "4 May – 18 May 2027"
-    assert_selector "input[data-description][value='Everest trek - 4 May – 18 May 2027']"
+    tolerate_navigation_assertion do
+      assert_selector "input[data-description][value='Everest trek - 4 May – 18 May 2027']"
+    end
     assert_selector "#catalog-picker input[name='departure_id']:checked"
     assert_no_overflow("builder with departures")
 
@@ -75,8 +77,8 @@ class QuotesSystemTest < ApplicationSystemTestCase
     assert_operator dimensions["removeWidth"], :>=, 44
     assert_operator dimensions["removeHeight"], :>=, 44
 
-    sticky_send.click
-    assert_text "Quote sent"
+    tolerate_submit_navigation { sticky_send.click }
+    tolerate_navigation_assertion { assert_text "Quote sent" }
     assert_no_overflow("quote page")
     quote = Quote.order(:created_at).last
     assert_equal "sent", quote.status
@@ -149,13 +151,13 @@ class QuotesSystemTest < ApplicationSystemTestCase
       start_date: Date.new(2027, 5, 4), end_date: Date.new(2027, 5, 18), synced_at: Time.current)
     visit new_quote_path(client_id: client.id, trip_id: 42, departure_id: 43)
     select "Annapurna", from: "Trip"
-    assert_text "No upcoming departures"
+    tolerate_navigation_assertion { assert_text "No upcoming departures" }
     within(all("[data-line-row]").first) do
       assert_field "Description", with: "Annapurna"
       fill_in "Each ($)", with: "1500"
     end
-    click_button "Save draft"
-    assert_text "Quote saved as a draft"
+    tolerate_submit_navigation { click_button "Save draft" }
+    tolerate_navigation_assertion { assert_text "Quote saved as a draft" }
     quote = Quote.order(:id).last
     assert_equal 44, quote.perfectbook_trip_id
     assert_nil quote.perfectbook_departure_id
@@ -318,13 +320,18 @@ class QuotesSystemTest < ApplicationSystemTestCase
     fill_in "quote_party_size", with: "3"
     fill_in "quote_deposit_dollars", with: "200"
     select "Annapurna", from: "Trip"
+    tolerate_navigation_assertion do
+      assert_selector "input[data-description][value='Annapurna']"
+    end
     assert_field "Note", with: "Keep these details"
     within(all("[data-line-row]").first) do
       assert_field "Description", with: "Annapurna"
       fill_in "Description", with: "Annapurna with private guide"
     end
     choose "4 May – 18 May 2027"
-    assert_selector "input[name='quote[perfectbook_departure_id]'][value='45']", visible: :all
+    tolerate_navigation_assertion do
+      assert_selector "input[name='quote[perfectbook_departure_id]'][value='45']", visible: :all
+    end
     within(all("[data-line-row]").first) do
       assert_field "Description", with: "Annapurna with private guide"
     end
@@ -337,8 +344,8 @@ class QuotesSystemTest < ApplicationSystemTestCase
     end
     assert_field "Description", with: "Extra nights"
     assert_no_overflow("catalog changes preserve inputs")
-    click_button "Save draft"
-    assert_text "Quote saved as a draft"
+    tolerate_submit_navigation { click_button "Save draft" }
+    tolerate_navigation_assertion { assert_text "Quote saved as a draft" }
     quote = Quote.order(:id).last
     assert_equal "Annapurna with private guide", quote.lines.find_by!(kind: "departure").description
     assert_equal 45, quote.perfectbook_departure_id
@@ -391,32 +398,45 @@ class QuotesSystemTest < ApplicationSystemTestCase
 
     visit new_quote_path(client_id: client.id)
     select "Everest", from: "Trip"
-    assert_text "Prefilled from your last quote"
-    assert_selector "[data-line-row]:first-child input[data-each][value='3000.00']"
+    tolerate_navigation_assertion do
+      assert_text "Prefilled from your last quote"
+      assert_selector "[data-line-row]:first-child input[data-each][value='3000.00']"
+    end
     choose "4 May – 18 May 2027"
-    assert_selector "[data-line-row]:first-child input[data-each][value='2000.00']"
+    tolerate_navigation_assertion do
+      assert_selector "[data-line-row]:first-child input[data-each][value='2000.00']"
+    end
 
     choose "4 Jun – 18 Jun 2027"
-    assert_selector "input[name='departure_id'][value='44']:checked"
-    assert_selector "input[data-description][value='Everest - 4 Jun – 18 Jun 2027']"
+    tolerate_navigation_assertion do
+      assert_selector "input[name='departure_id'][value='44']:checked"
+      assert_selector "input[data-description][value='Everest - 4 Jun – 18 Jun 2027']"
+    end
     within(all("[data-line-row]").first) do
       assert_field "Each ($)", with: "3000.00"
       fill_in "Each ($)", with: "2500"
     end
     choose "4 May – 18 May 2027"
-    assert_selector "[data-line-row]:first-child input[data-each][value='2500.00']"
+    tolerate_navigation_assertion do
+      assert_selector "input[data-description][value='Everest - 4 May – 18 May 2027']"
+      assert_selector "[data-line-row]:first-child input[data-each][value='2500.00']"
+    end
     choose "4 Jun – 18 Jun 2027"
-    assert_selector "input[name='departure_id'][value='44']:checked"
-    assert_selector "input[data-description][value='Everest - 4 Jun – 18 Jun 2027']"
+    tolerate_navigation_assertion do
+      assert_selector "input[name='departure_id'][value='44']:checked"
+      assert_selector "input[data-description][value='Everest - 4 Jun – 18 Jun 2027']"
+    end
     within(all("[data-line-row]").first) do
       assert_field "Each ($)", with: "2500.00"
       fill_in "Each ($)", with: ""
     end
     choose "4 May – 18 May 2027"
-    assert_selector "input[data-description][value='Everest - 4 May – 18 May 2027']"
-    assert_selector "[data-line-row]:first-child input[data-each][value='0.00']"
-    click_button "Save draft"
-    assert_selector "[role='status']", text: "Quote saved as a draft"
+    tolerate_navigation_assertion do
+      assert_selector "input[data-description][value='Everest - 4 May – 18 May 2027']"
+      assert_selector "[data-line-row]:first-child input[data-each][value='0.00']"
+    end
+    tolerate_submit_navigation { click_button "Save draft" }
+    tolerate_navigation_assertion { assert_selector "[role='status']", text: "Quote saved as a draft" }
     assert_equal 0, Quote.order(:id).last.lines.find_by!(kind: "departure").unit_minor
   end
 
@@ -480,18 +500,20 @@ class QuotesSystemTest < ApplicationSystemTestCase
     visit new_quote_path(client_id: client.id)
     select "Everest", from: "Trip"
     choose "4 May – 18 May 2027"
-    assert_selector "input[data-description][value='Everest - 4 May – 18 May 2027']"
+    tolerate_navigation_assertion do
+      assert_selector "input[data-description][value='Everest - 4 May – 18 May 2027']"
+    end
     within(all("[data-line-row]").first) { fill_in "Each ($)", with: "1,500" }
-    click_button "Save draft"
-    assert_text "is not a number"
+    tolerate_submit_navigation { click_button "Save draft" }
+    tolerate_navigation_assertion { assert_text "is not a number" }
     assert_select "Trip", selected: "Everest"
     assert_checked_field "4 May – 18 May 2027"
     within(all("[data-line-row]").first) do
       assert_field "Each ($)", with: "1,500"
       fill_in "Each ($)", with: "1500"
     end
-    click_button "Save draft"
-    assert_text "Quote saved as a draft"
+    tolerate_submit_navigation { click_button "Save draft" }
+    tolerate_navigation_assertion { assert_text "Quote saved as a draft" }
     quote = Quote.order(:id).last
     assert_equal 42, quote.perfectbook_trip_id
     assert_equal 43, quote.perfectbook_departure_id
