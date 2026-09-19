@@ -67,21 +67,38 @@ class ClientMailerTest < ActionMailer::TestCase
     assert_equal 1, mail.html_part.body.to_s.scan("Sam Sherpa").size
   end
 
-  test "HTML signature embeds the logo by Content-ID with no external image" do
-    attach_logo
-    Setting.current.update!(email_signature_html:
-      '<p style="font-size: 12pt; color: #123456">Sam Sherpa</p><img src="https://tracker.example/p.gif">')
-    mail = ClientMailer.outbound(@message)
+  test "legacy formatted words without an image still deliver the logo" do
+    Setting.current.signature_logo.attach(
+      io: StringIO.new(png_bytes(600, 200)), filename: "logo.png", content_type: "image/png"
+    )
+    Setting.current.update_columns(email_signature: "", email_signature_html: "Sam Sherpa\nFounder, Sherpa Holidays")
+    message = Outbound::Composer.call(owner: @client,
+      params: { to: "maya@example.com", subject: "Your trek", body: "Hello Maya." })
+    mail = ClientMailer.outbound(message)
     html = mail.html_part.body.to_s
-    assert_includes html, "cid:#{EmailSignature::CID}"
-    assert_includes html, "font-size: 12pt"
-    assert_not_includes html, "tracker.example"
-    assert_not_includes html, "https://"
+    assert_equal 1, html.scan("cid:#{EmailSignature::CID}").size
+    assert_includes html, 'width="120"'
+    assert_includes html, 'height="40"'
     inline = mail.attachments.find { |attachment| attachment.filename == "signature-logo.png" }
     assert inline.inline?
     assert_equal "<#{EmailSignature::CID}>", inline.content_id
-    assert_includes html, inline.content_id.delete("<>")
-    assert_equal 1, html.scan("Sam Sherpa").size
+    assert_equal "multipart/related", mail.mime_type
+    assert_equal 1, mail.text_part.body.to_s.scan("Sam Sherpa").size
+    assert_not_includes mail.text_part.body.to_s, "<table"
+  end
+
+  test "a file attachment wraps the related signature part in mixed" do
+    Setting.current.signature_logo.attach(
+      io: StringIO.new(png_bytes(600, 200)), filename: "logo.png", content_type: "image/png"
+    )
+    Setting.current.update!(email_signature: "Sam Sherpa")
+    message = Outbound::Composer.call(owner: @client,
+      params: { to: "maya@example.com", subject: "Your trek", body: "Hello Maya." })
+    message.files.attach(io: StringIO.new("hello"), filename: "hi.txt", content_type: "text/plain")
+    mail = ClientMailer.outbound(message.reload)
+    assert_equal "multipart/mixed", mail.mime_type
+    assert_equal "multipart/related", mail.parts.first.mime_type
+    assert_includes mail.html_part.body.to_s, "cid:#{EmailSignature::CID}"
   end
 
   test "template signature renders the HTML signature at its spot" do
@@ -139,5 +156,11 @@ class ClientMailerTest < ActionMailer::TestCase
     Setting.current.signature_logo.attach(
       io: StringIO.new(LOGO_BYTES), filename: "logo.png", content_type: "image/png"
     )
+  end
+
+  # A minimal PNG carrying the given dimensions in its IHDR header.
+  def png_bytes(width, height)
+    [ 0x89504E47, 0x0D0A1A0A ].pack("NN") + [ 13 ].pack("N") +
+      "IHDR" + [ width, height ].pack("NN") + "\x08\x02\x00\x00\x00".b
   end
 end

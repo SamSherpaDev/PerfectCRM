@@ -74,7 +74,8 @@ When updating this file, preserve this bar for all agents and keep entries conci
   write `::Message` and `::Conversation` because `Mail::Message` is the mail gem.
 - Outbound email: see README.md, "Replying"; recipient context is shared
   through `TemplateContext.resolve_recipient` for reply and group rendering.
-  Signature rendering lives in `EmailSignature` (sanitize/derive/cid logo);
+  Signature rendering lives in `EmailSignature` (app-owned block: lines +
+  logo by cid; the legacy `email_signature_html` column only seeds the lines);
   the composer owns the text signature in stored `text_body`, mailers own
   the HTML swap so each part signs once. The logo serves through
   `SettingsController#logo` because Active Storage routes stay off.

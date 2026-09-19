@@ -20,7 +20,7 @@
       "cwe_id": [
         79
       ],
-      "note": "The signature preview is sanitized HTML: EmailSignature.sanitize scrubs the stored markup on an explicit allowlist (tags, attributes, style properties, href schemes) on save and again in html_for; covered by test/services/email_signature_test.rb."
+      "note": "The signature preview is app-built HTML only: EmailSignature.html_for renders the saved lines through ERB::Util.html_escape plus the app's own table markup and linkifier (hrefs limited to http/https/mailto/tel), never stored markup; the legacy email_signature_html column only seeds the lines and is still scrubbed by EmailSignature.sanitize on save; covered by test/services/email_signature_test.rb."
     }
   ],
   "updated": "2026-09-18 21:52:00 -0700",

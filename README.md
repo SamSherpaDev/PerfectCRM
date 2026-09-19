@@ -103,8 +103,8 @@ submission endpoint (`smtp.office365.com:587`, `SMTP_USERNAME`/`SMTP_PASSWORD`
 plus `MAIL_FROM` in `.env.app.example`), with
 `From` and `Reply-To` on the mailbox, `In-Reply-To`/`References` from the
 thread, a generated `Message-ID` that is kept, the signature from Settings → Signature
-(a logo plus formatted HTML pasted from Outlook, or plain lines that build
-one; the logo travels embedded in the mail, never as a link),
+(your signature lines plus the uploaded logo, rendered by the app; the logo
+travels embedded in the mail, never as a link),
 and uploaded attachments, subject to the [mail document restrictions](#mail).
 Delivery runs on Solid Queue
 (`OutboundDeliveryJob`, retries with backoff); the timeline shows each

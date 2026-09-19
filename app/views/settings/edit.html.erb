@@ -221,10 +221,11 @@
 
   <section class="card card-pad" aria-labelledby="signature-heading">
     <h2 class="section-title" id="signature-heading">Signature</h2>
-    <%= card_caption "Your logo and sign-off on every reply, quote, and {{signature}}. Paste the formatted version from Outlook, or type plain lines and the uploaded logo is added for you." %>
+    <%= card_caption "Your logo and sign-off on every reply, quote, and {{signature}}. Type your name on the first line; the logo is added for you." %>
     <% if EmailSignature.logo_attached?(@settings) %>
       <div class="mt-4 flex items-center gap-3">
-        <%= image_tag logo_settings_path, alt: "Signature logo", class: "h-12 w-auto" %>
+        <% fitted_logo = EmailSignature.logo_box(@settings) %>
+        <%= image_tag logo_settings_path, alt: "Signature logo", width: fitted_logo&.first, height: fitted_logo&.last, style: fitted_logo ? "width:#{fitted_logo.first}px;height:#{fitted_logo.last}px;" : nil %>
         <%= button_to "Remove logo", signature_logo_settings_path, method: :delete, class: "btn-ghost btn btn-sm" %>
       </div>
     <% end %>
@@ -240,22 +241,17 @@
         <p class="hint">PNG, JPEG, or GIF under 500 KB. It travels inside every email, never as a link, so it shows without a download-images prompt.</p>
       </div>
       <div>
-        <%= form.label :email_signature, "Plain lines", class: "label" %>
+        <%= form.label :email_signature, "Signature lines", class: "label" %>
         <%= form.text_area :email_signature, rows: 3, class: "textarea", placeholder: "Sam Sherpa\nSherpa Holidays" %>
-        <p class="hint">Added under every reply. Fills {{signature}} too. With a logo, these lines build the formatted signature; left empty, the words of the formatted signature are used.</p>
-      </div>
-      <div>
-        <%= form.label :email_signature_html, "Formatted signature", class: "label" %>
-        <%= form.text_area :email_signature_html, rows: 6, class: "textarea mono text-xs", placeholder: "<p>Sam Sherpa<br>Sherpa Holidays</p>" %>
-        <p class="hint">Paste the formatted version from Outlook, pictures and all: pasted pictures are swapped for the uploaded logo. Leave it empty to build from the plain lines.</p>
+        <p class="hint">First line is your name. Added under every reply and fills {{signature}} too.</p>
       </div>
       <% if @settings.errors[:signature_logo].any? %>
         <p class="text-sm text-bad" role="alert"><%= @settings.errors.full_messages_for(:signature_logo).to_sentence %></p>
       <% end %>
       <div>
         <span class="label">Preview</span>
-        <div class="textarea min-h-24" id="signature-preview"><%== EmailSignature.html_for(@settings, logo_src: logo_settings_path) %></div>
-        <p class="hint">The saved signature, exactly as the email will look.</p>
+        <div class="sig-preview" id="signature-preview"><%== EmailSignature.html_for(@settings, logo_src: logo_settings_path) %></div>
+        <p class="hint">How it looks at the bottom of an email.</p>
       </div>
       <div>
         <%= form.submit "Save email settings", class: "btn-secondary btn btn-sm" %>

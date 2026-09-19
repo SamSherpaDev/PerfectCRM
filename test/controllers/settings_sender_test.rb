@@ -25,29 +25,19 @@ class SettingsSenderTest < ActionDispatch::IntegrationTest
     assert_select "label", text: /signature/i
   end
 
-  test "formatted signature saves sanitized" do
+  test "legacy formatted param is ignored" do
+    Setting.current.update_columns(email_signature_html: "<p>Kept</p>")
     sign_in
     patch settings_path, params: {
-      setting: { email_signature_html: "<p>Sam Sherpa</p><script>alert(1)</script>" }
+      setting: { sender_name: "Sam", email_signature_html: "<p>Dropped</p>" }
     }
     assert_redirected_to edit_settings_path
-    assert_equal "<p>Sam Sherpa</p>", Setting.current.reload.email_signature_html
+    assert_equal "<p>Kept</p>", Setting.current.reload.email_signature_html
   end
 
-  test "text follows the formatted signature when only HTML is supplied" do
-    sign_in
-    patch settings_path, params: {
-      setting: { email_signature: "", email_signature_html: "<p>Sam Sherpa<br>Tel 555-0100</p>" }
-    }
-    assert_redirected_to edit_settings_path
-    assert_equal "", Setting.current.reload.email_signature
-    assert_equal "Sam Sherpa\nTel 555-0100", EmailSignature.text_for(Setting.current)
-
-    patch settings_path, params: {
-      setting: { email_signature: "", email_signature_html: "<p>Sam Sherpa<br>Tel 555-0200</p>" }
-    }
-    assert_redirected_to edit_settings_path
-    assert_equal "Sam Sherpa\nTel 555-0200", EmailSignature.text_for(Setting.current.reload)
+  test "text falls back to legacy formatted words without another save" do
+    Setting.current.update_columns(email_signature: "", email_signature_html: "<p>Sam Sherpa<br>Tel 555-0100</p>")
+    assert_equal "Sam Sherpa\nTel 555-0100", EmailSignature.text_for(Setting.current.reload)
   end
 
   test "logo upload attaches a PNG" do
@@ -103,16 +93,18 @@ class SettingsSenderTest < ActionDispatch::IntegrationTest
     assert_not Setting.current.reload.signature_logo.attached?
   end
 
-  test "settings page previews the saved signature with the served logo" do
+  test "settings page previews the app-owned block with the served logo" do
     sign_in
     Setting.current.signature_logo.attach(
       io: StringIO.new(LOGO_BYTES), filename: "logo.png", content_type: "image/png")
-    Setting.current.update!(email_signature_html: "<p>Sam Sherpa</p><img src=\"https://tracker.example/p.gif\">")
+    Setting.current.update!(email_signature: "Sam Sherpa\nFounder, Sherpa Holidays")
     get edit_settings_path
     assert_response :success
-    assert_select "#signature-preview p", text: "Sam Sherpa"
+    assert_select "#signature-preview table"
     assert_select "#signature-preview img[src=?]", logo_settings_path
-    assert_select "#signature-preview img[src*=?]", "tracker.example", count: 0
+    assert_select "label", text: "Signature lines"
+    assert_select "label", text: "Formatted signature", count: 0
+    assert_select "textarea[name=?]", "setting[email_signature_html]", count: 0
   end
 
   teardown do

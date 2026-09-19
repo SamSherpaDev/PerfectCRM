@@ -84,8 +84,16 @@ class Setting < ApplicationRecord
 
   # Browser textareas submit CRLF; the signature is matched against LF
   # bodies, so both signature shapes are stored with LF line endings.
+  # When the editable lines are blank but the legacy formatted column
+  # still holds words, those words move into the lines on save so the
+  # app-owned block keeps rendering them with the logo. The legacy
+  # column itself is never cleared here.
   def normalize_signature
     self.email_signature = email_signature&.gsub("\r\n", "\n")
     self.email_signature_html = EmailSignature.sanitize(email_signature_html)
+    if email_signature.blank?
+      derived = EmailSignature.text_from_html(email_signature_html)
+      self.email_signature = derived if derived.present?
+    end
   end
 end
