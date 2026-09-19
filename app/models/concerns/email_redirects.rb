@@ -7,10 +7,7 @@ module EmailRedirects
     after_update :record_email_redirect_on_change
   end
 
-  # Follow a former address to its correction, transitively, using only
-  # evidence from actual email edits on this owner (and its people).
-  # Unknown addresses (never the owner's) pass through untouched so
-  # explicit alternate recipients stay exactly where the captain put them.
+  # Recipient correction and confirmation policy: README.md, "Replying".
   def redirect_map
     raw = email_redirects
     raw = JSON.parse(raw) if raw.is_a?(String)
@@ -28,6 +25,8 @@ module EmailRedirects
     return "" if normalized.blank?
 
     redirects = redirect_map
+    # Stop at reassignment boundaries so one traveler's correction chain
+    # cannot silently become another traveler's destination.
     active = current_recipient_emails | ambiguous_recipient_emails
     seen = Set.new
     current = normalized

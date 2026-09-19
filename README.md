@@ -146,10 +146,25 @@ automatically linked. Clearing the lines and saving removes the signature,
 including its displayed logo, without deleting the uploaded logo. There is no
 longer a formatted-HTML editor.
 
+Editing a lead's, client's, or one of their people's email corrects matching
+To, Cc, and Bcc addresses in reply defaults, unsent drafts, and future sends,
+including forms opened before the edit. Deliberate alternate recipients
+remain unchanged. Past messages and already-queued messages keep their
+original recipients, including when retried.
+
+If an address was reassigned or restored, review To, Cc, and Bcc against the
+listed current contacts and confirm the intended recipients before sending.
+Replace a former address that is no longer current instead of confirming it.
+Further contact edits can require a fresh confirmation; CRM does not guess
+which traveler an ambiguous old draft meant. Lead conversion preserves this
+correction and confirmation history, including when joining an existing client.
+
 Template inserts, task and pipeline nudges, and group sends resolve identity
-from the recipient's actual email, preferring their own mirrored PerfectBook
-contact and bookings.
-Only when that contact is absent do booking values fall back to the owning
+from the recipient's effective email after correction, preferring their own
+mirrored PerfectBook contact and bookings. Replies use only the composing
+record's correction history, not another record's history.
+Only when that contact is absent and the recipient belongs to the composing
+record or its people (or is blank) do booking values fall back to that
 CRM record; the booking reference names that owner. CRM advisor relationships
 remain available independently of the recipient's identity. Replies default
 to the booking with the latest start date, preferring active bookings, and
@@ -168,7 +183,12 @@ recipient list from mirrored bookings, or paste one `Name <email>` or bare
 email per line. Bookings without email are counted and omitted. Preview merge
 shows personal messages and retains malformed lines with line numbers;
 fix or remove them before sending. Review missing-value markers before
-pressing Send personal emails. Each message is logged on a matching client
+pressing Send personal emails. The same correction and confirmation rules
+apply here; matching includes correction history, so a stale preview follows
+an ordinary email correction. If an address matches multiple CRM records,
+choose an unambiguous current address or send from the intended record.
+All messages must pass validation and required recipient confirmations before
+any delivery is queued. Each message is logged on a matching client
 or open lead timeline (including matches through their people). Recipients
 without a match remain supported and are logged only in the batch summary;
 no CRM record is created. The summary shows delivery counts and Retry for

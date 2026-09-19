@@ -19,9 +19,6 @@ class Person < ApplicationRecord
     client || lead
   end
 
-  # A corrected contact address follows the same redirect evidence as
-  # the owner's own email so unsent drafts and reply defaults follow it
-  # while explicit alternate recipients stay untouched.
   def record_owner_redirect_on_email_change
     return unless saved_change_to_email?
 

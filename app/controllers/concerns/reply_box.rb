@@ -77,8 +77,6 @@ module ReplyBox
     end
     @reply_cc = @reply_draft.persisted? ? @reply_draft.cc_addrs : @reply_conversation&.thread_parent&.cc_addrs
     @reply_bcc = @reply_draft.bcc_addrs
-    # A corrected owner address follows the edit; any other prefilled
-    # recipient (an intentionally different contact) stays as addressed.
     if @reply_owner.respond_to?(:resolve_redirected_field)
       @reply_to = @reply_owner.resolve_redirected_field(@reply_to)
       @reply_cc = @reply_owner.resolve_redirected_field(@reply_cc)

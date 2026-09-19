@@ -10,7 +10,7 @@ module Outbound
 
       candidates = [ Client.all, Lead.open ].flat_map do |scope|
         person_ids = Person.where("lower(email) = ?", normalized)
-          .select("#{scope.klass.model_name.singular}_id")
+          .select(Person.arel_table["#{scope.klass.model_name.singular}_id"])
         history = scope.where(<<~SQL, email: normalized)
           EXISTS (SELECT 1 FROM json_each(email_redirects) WHERE key = :email)
           OR EXISTS (SELECT 1 FROM json_each(ambiguous_emails) WHERE value = :email)

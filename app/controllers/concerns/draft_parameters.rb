@@ -13,8 +13,6 @@ module DraftParameters
     }
   end
 
-  # Unsent drafts follow a corrected address; any other saved recipient
-  # stays exactly as the captain wrote it.
   def redirect_draft_recipients(owner, draft)
     return unless owner.respond_to?(:resolve_redirected_field)
 

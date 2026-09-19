@@ -105,8 +105,6 @@ module Outbound
     def recipients
       explicit = EmailRedirects.mailboxes(@params[:to])
       if explicit.any?
-        # A stale cached form still carrying a corrected address follows
-        # the edit; any other explicit recipient stays exactly as typed.
         return explicit
       end
       return [] if @owner.nil?
