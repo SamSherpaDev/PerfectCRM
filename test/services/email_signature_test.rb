@@ -89,6 +89,37 @@ class EmailSignatureTest < ActiveSupport::TestCase
     assert_not_includes html, "http"
   end
 
+  test "only the first pasted image becomes the logo; social icons are dropped" do
+    attach_logo
+    @setting.update!(email_signature_html: <<~HTML)
+      <p><img src="https://cdn.example/logo.png" width="150" height="60"></p>
+      <p>Sam Sherpa</p>
+      <p><a href="https://linkedin.com/in/sam"><img src="https://cdn.example/in.png" width="24" height="24"></a>
+      <a href="https://facebook.com/sam"><img src="https://cdn.example/fb.png" width="24" height="24"></a></p>
+    HTML
+    images = Loofah.fragment(EmailSignature.html_for(@setting)).css("img")
+    assert_equal 1, images.size
+    assert_equal "cid:#{EmailSignature::CID}", images.first["src"]
+    assert_equal "150", images.first["width"]
+    assert_equal "60", images.first["height"]
+    assert_includes EmailSignature.html_for(@setting), 'href="https://linkedin.com/in/sam"'
+  end
+
+  test "generated logo carries its natural width capped at 200, or none when unmeasured" do
+    attach_logo
+    @setting.update!(email_signature: "Sam Sherpa")
+    blob = @setting.signature_logo.blob
+
+    blob.update!(metadata: blob.metadata.except("width", :width))
+    assert_nil Loofah.fragment(EmailSignature.html_for(@setting)).at_css("img")["width"]
+
+    blob.update!(metadata: blob.metadata.merge(width: 120))
+    assert_equal "120", Loofah.fragment(EmailSignature.html_for(@setting)).at_css("img")["width"]
+
+    blob.update!(metadata: blob.metadata.merge(width: 800))
+    assert_equal "200", Loofah.fragment(EmailSignature.html_for(@setting)).at_css("img")["width"]
+  end
+
   test "past images are dropped when no logo is attached" do
     @setting.update!(email_signature_html: "<p>Sam</p><img src=\"https://tracker.example/p.gif\">")
     html = EmailSignature.html_for(@setting)

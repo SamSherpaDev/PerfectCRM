@@ -8,8 +8,9 @@
 # emits: p, br, div, span, a with href, b, strong, i, em, u, table, tbody,
 # tr, td, img, plus font-size, font-family, and color inline styles).
 # Scripts, style/link tags, forms, and comments (Outlook conditional
-# markup) go; every <img> becomes the uploaded logo referenced by cid, or
-# is dropped when no logo is attached, so no external image URL ever ships.
+# markup) go; the first <img> becomes the uploaded logo referenced by cid
+# (or is dropped when no logo is attached) and any other pasted picture is
+# dropped, so no external image URL ever ships.
 module EmailSignature
   CID = "signature-logo@perfectcrm"
   MAX_LOGO_BYTES = 500.kilobytes
@@ -111,22 +112,24 @@ module EmailSignature
 
     private
 
-    # Every <img> becomes the uploaded logo (keeping a plain-number width
-    # or height from the pasted markup), or is dropped when no logo is
-    # attached, so the only image that ever ships is the uploaded one.
+    # The first <img> becomes the uploaded logo (keeping a plain-number
+    # width or height from the pasted markup); every other pasted picture
+    # (social icons and the like) is dropped, as is the first when no logo
+    # is attached, so the only image that ever ships is the uploaded one,
+    # once.
     def with_logo(html, setting, logo_src:)
       fragment = Loofah.fragment(html)
-      fragment.css("img").each do |node|
-        if logo_attached?(setting) && logo_src.present?
-          replacement = logo_img_tag(setting, logo_src: logo_src)
-          width = node["width"]
-          height = node["height"]
-          replacement["width"] = width if width.to_s.match?(/\A\d+\z/)
-          replacement["height"] = height if height.to_s.match?(/\A\d+\z/)
-          node.replace(replacement)
-        else
-          node.remove
-        end
+      first, *rest = fragment.css("img").to_a
+      rest.each(&:remove)
+      if first && logo_attached?(setting) && logo_src.present?
+        replacement = logo_img_tag(setting, logo_src: logo_src)
+        width = first["width"]
+        height = first["height"]
+        replacement["width"] = width if width.to_s.match?(/\A\d+\z/)
+        replacement["height"] = height if height.to_s.match?(/\A\d+\z/)
+        first.replace(replacement)
+      else
+        first&.remove
       end
       fragment.to_html
     end
@@ -136,13 +139,17 @@ module EmailSignature
       node = Nokogiri::XML::Node.new("img", doc)
       node["src"] = logo_src
       node["alt"] = "Sherpa Holidays"
-      node["width"] = logo_display_width(setting).to_s
+      width = logo_display_width(setting)
+      node["width"] = width.to_s if width
       node
     end
 
+    # Natural width capped at 200px; no width at all when the upload was
+    # never measured, so the client shows the file at its own size rather
+    # than upscaling a small mark.
     def logo_display_width(setting)
       natural = setting.signature_logo.blob.metadata[:width].to_i
-      return 200 if natural <= 0
+      return nil if natural <= 0
 
       [ natural, 200 ].min
     end
