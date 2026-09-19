@@ -60,9 +60,9 @@ module EmailRedirects
       ambiguity = current.ambiguous_recipient_emails
       ambiguity |= [ old_key, new_value ].select { |address| current.redirect_map.key?(address) }
       redirects = current.redirect_map.transform_values { |value| current.resolve_redirected_email(value) }
-      redirects.transform_values! { |value| value == old_key ? new_value : value }
       redirects[new_value] = new_value if redirects.key?(new_value)
       if old_key.present?
+        redirects.transform_values! { |value| value == old_key ? new_value : value }
         redirects.delete(old_key)
         redirects[old_key] = new_value
       end

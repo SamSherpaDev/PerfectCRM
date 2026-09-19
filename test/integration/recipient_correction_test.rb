@@ -401,6 +401,52 @@ class RecipientCorrectionTest < ActionDispatch::IntegrationTest
     end
   end
 
+  [ :person, :owner ].each do |new_contact|
+    test "adding a #{new_contact} address cannot inherit another person's cleared address" do
+      lead = Lead.create!(name: "Cleared address", source: "manual")
+      person = lead.people.create!(name: "One", email: "cleared@example.test")
+      original = Outbound::Composer.call(owner: lead, params: { to: person.email, body: "Already queued" })
+      draft = original.conversation.create_draft!(owner: lead, to_addrs: person.email, body: "Unsent for One")
+      sign_in
+      patch lead_path(lead), params: { lead: { people_attributes: {
+        "0" => { id: person.id, name: "One", email: "" }
+      } } }
+      assert_response :redirect
+      attributes = if new_contact == :person
+        { people_attributes: { "0" => { name: "Two", email: "unrelated@example.test" } } }
+      else
+        { email: "unrelated@example.test" }
+      end
+      patch lead_path(lead), params: { lead: attributes }
+      assert_response :redirect
+      assert_no_difference "Message.count" do
+        post lead_messages_path(lead), params: { conversation_id: original.conversation_id,
+          message: { to: "cleared@example.test", body: draft.body } }
+      end
+      assert_match "Could not send", flash[:alert]
+      assert_equal "Unsent for One", draft.reload.body
+      assert_equal "cleared@example.test", original.reload.to_addrs
+      assert_equal "queued", original.status
+
+      patch lead_path(lead), params: { lead: { people_attributes: {
+        "0" => { id: person.id, name: "One", email: "cleared@example.test" }
+      } } }
+      assert_response :redirect
+      assert_no_difference "Message.count" do
+        post lead_messages_path(lead), params: { conversation_id: original.conversation_id,
+          message: { to: "cleared@example.test", body: draft.body } }
+      end
+      assert_match "confirm the current recipients", flash[:alert]
+      get lead_path(lead)
+      confirmation = recipient_confirmation_from_form
+      assert_difference "Message.count", 1 do
+        post lead_messages_path(lead), params: { conversation_id: original.conversation_id,
+          message: { to: "cleared@example.test", body: draft.body, recipient_confirmation: confirmation } }
+      end
+      assert_equal [ "cleared@example.test" ], ClientMailer.outbound(Message.order(:id).last).to
+    end
+  end
+
   private
 
   def recipient_confirmation_from_form

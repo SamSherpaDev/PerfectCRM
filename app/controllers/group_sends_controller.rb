@@ -37,6 +37,9 @@ class GroupSendsController < ApplicationController
     end
     messages.each { |message| OutboundDeliveryJob.perform_later(message.id) }
     redirect_to group_send_path(group), notice: "Sending #{batch.size} personal emails…"
+  rescue Outbound::OwnerLookup::Conflict => e
+    redirect_to merge_templates_path(template_id: @template&.id, recipients: lines, departure_id: params[:departure_id]),
+      alert: "Could not send: #{e.message}"
   rescue ActiveRecord::RecordInvalid => e
     redirect_to merge_templates_path(template_id: @template&.id, recipients: lines, departure_id: params[:departure_id]),
       alert: "Could not send: #{e.record.errors.full_messages.to_sentence}"

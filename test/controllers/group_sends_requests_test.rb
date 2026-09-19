@@ -162,4 +162,81 @@ class GroupSendsRequestsTest < ActionDispatch::IntegrationTest
     end
     assert_match "Choose a current recipient", flash[:alert]
   end
+
+  test "a stale group preview follows ordinary lead correction history" do
+    lead = Lead.create!(name: "Traveler", email: "previous@example.test", source: "manual")
+    original = Outbound::Composer.call(owner: lead, params: { to: lead.email, body: "Original" })
+    recipients = "Traveler <previous@example.test>\nstranger@example.test"
+    sign_in
+    post merge_templates_path, params: { template_id: @template.id, recipients: recipients }
+    assert_response :success
+    patch lead_path(lead), params: { lead: { email: "corrected@example.test" } }
+    assert_response :redirect
+
+    assert_difference "Message.count", 2 do
+      assert_enqueued_jobs 2, only: OutboundDeliveryJob do
+        post group_sends_path, params: { template_id: @template.id, recipients: recipients }
+      end
+    end
+    messages = GroupSend.last.messages.order(:id).to_a
+    assert_equal [ "corrected@example.test" ], ClientMailer.outbound(messages.first).to
+    assert_equal lead, messages.first.owner
+    assert_equal [ "stranger@example.test" ], ClientMailer.outbound(messages.last).to
+    assert_equal "previous@example.test", original.reload.to_addrs
+  end
+
+  [ :history, :current, :person ].each do |conflict|
+    test "group resolution rejects correction history conflicting with another #{conflict}" do
+      lead = Lead.create!(name: "Original", email: "shared@example.test", source: "manual")
+      lead.update!(email: "lead-current@example.test")
+      case conflict
+      when :history
+        @client.update!(email: "shared@example.test")
+        @client.update!(email: "client-current@example.test")
+      when :current
+        @client.update!(email: "shared@example.test")
+      when :person
+        @client.people.create!(name: "Other", email: "shared@example.test")
+      end
+      recipients = "stranger@example.test\nshared@example.test"
+      sign_in
+      post merge_templates_path, params: { template_id: @template.id, recipients: recipients }
+      assert_response :unprocessable_entity
+      assert_select ".flash-alert", text: /matches multiple records/
+      assert_select "form[action=?]", group_sends_path, count: 0
+      assert_no_difference [ "Message.count", "GroupSend.count", "Conversation.count" ] do
+        assert_no_enqueued_jobs only: OutboundDeliveryJob do
+          post group_sends_path, params: { template_id: @template.id, recipients: recipients }
+        end
+      end
+      assert_match "matches multiple records", flash[:alert]
+
+      Draft.create!(owner: lead, to_addrs: "shared@example.test", body: "For original traveler")
+      get lead_path(lead, new_thread: 1)
+      assert_response :success
+      assert_difference "Message.count", 1 do
+        post lead_messages_path(lead), params: { message: { to: "shared@example.test", body: "For original traveler" } }
+      end
+      assert_equal [ "lead-current@example.test" ], ClientMailer.outbound(Message.order(:id).last).to
+    end
+  end
+
+  test "a historical group recipient exposes confirmation for its restored destination" do
+    lead = Lead.create!(name: "Restored", email: "restored@example.test", source: "manual")
+    lead.update!(email: "intermediate@example.test")
+    lead.update!(email: "restored@example.test")
+    sign_in
+    post merge_templates_path, params: { template_id: @template.id, recipients: "intermediate@example.test" }
+    assert_response :success
+    assert_select "input[type='checkbox'][name^='recipient_confirmations']:not([checked])", count: 1
+    token = css_select("input[type='checkbox'][name^='recipient_confirmations']").first["value"]
+    assert_no_difference "Message.count" do
+      post group_sends_path, params: { template_id: @template.id, recipients: "intermediate@example.test" }
+    end
+    assert_difference "Message.count", 1 do
+      post group_sends_path, params: { template_id: @template.id, recipients: "intermediate@example.test",
+        recipient_confirmations: { lead.to_gid_param => token } }
+    end
+    assert_equal [ "restored@example.test" ], ClientMailer.outbound(Message.order(:id).last).to
+  end
 end
