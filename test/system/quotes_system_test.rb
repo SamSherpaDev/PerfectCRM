@@ -33,6 +33,7 @@ class QuotesSystemTest < ApplicationSystemTestCase
     select "Everest trek", from: "Trip"
     assert_text "6 seats left"
     choose "4 May – 18 May 2027"
+    assert_selector "input[data-description][value='Everest trek - 4 May – 18 May 2027']"
     assert_selector "#catalog-picker input[name='departure_id']:checked"
     assert_no_overflow("builder with departures")
 

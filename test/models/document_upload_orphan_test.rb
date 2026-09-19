@@ -11,6 +11,10 @@ class DocumentUploadOrphanTest < ActiveSupport::TestCase
 
   teardown do
     message = Message.find_by(provider_message_id: @message_id)
+    # The ingester files a holding-area note on the conversation, but
+    # Conversation has no has_many :notes, so destroying the thread below
+    # would orphan it (and leak it into transactional tests sharing the db).
+    Note.where(notable: message.conversation).delete_all if message&.conversation
     DocumentHolding.where(message: message).find_each(&:purge!) if message
     message&.conversation&.destroy!
     @import&.destroy!
