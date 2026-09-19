@@ -154,9 +154,10 @@ All from `/opt/apps/perfectcrm` on the box.
   requires it: stop app and job writes, preserve consistent copies of the
   current primary and queue databases, and identify changes since the
   backup that would be lost or need reconciliation before restoring.
-- **Lead archive migration rename.** The `20260919032300` migration is idempotent, so databases that already applied
-  `202609190323` need no `DELETE FROM schema_migrations` before or after deploy. The stale `202609190323` row is
-  harmless and may be removed.
+- **Lead archive migration rename.** The `20260919032300` migration is
+  idempotent, so databases that already applied `202609190323` need no
+  `DELETE FROM schema_migrations` before or after deploy. The stale
+  `202609190323` row is harmless and may be removed.
 - **Health.** `https://perfectcrm.sherpaholidays.com/up` (uptime check)
   plus the healthchecks.io nightly-backup ping (backup check).
 
