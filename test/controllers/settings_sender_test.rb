@@ -7,7 +7,7 @@ class SettingsSenderTest < ActionDispatch::IntegrationTest
   test "sender name and signature save from Settings" do
     sign_in
     patch settings_path, params: {
-      setting: { sender_name: "Sam", email_signature: "Sam Sherpa\nSherpa Holidays" }
+      setting: { sender_name: "Sam", email_signature: "Sam Sherpa\r\nSherpa Holidays" }
     }
     assert_redirected_to edit_settings_path
     settings = Setting.current.reload

@@ -17,7 +17,7 @@ class Setting < ApplicationRecord
   validates :lead_webhook_url, format: { with: %r{\Ahttps?://[^\s/]+(?:/[^\s]*)?\z}, allow_blank: true }
   validate :signature_logo_requirements
 
-  before_save :sanitize_html_signature
+  before_save :normalize_signature
 
   def self.current
     find_by(singleton_key: 1) || create_or_find_by!(singleton_key: 1)
@@ -82,7 +82,10 @@ class Setting < ApplicationRecord
     end
   end
 
-  def sanitize_html_signature
+  # Browser textareas submit CRLF; the signature is matched against LF
+  # bodies, so both signature shapes are stored with LF line endings.
+  def normalize_signature
+    self.email_signature = email_signature&.gsub("\r\n", "\n")
     self.email_signature_html = EmailSignature.sanitize(email_signature_html)
   end
 end

@@ -47,7 +47,7 @@ module Outbound
         message.errors.add(:text_body, :blank)
         raise ActiveRecord::RecordInvalid, message
       end
-      message.text_body = with_signature(@params[:body].to_s)
+      message.text_body = with_signature(@params[:body].to_s.gsub("\r\n", "\n"))
       message.html_body = nil
       message.template_id = @params[:template_id].presence
       thread_under_parent(message)
