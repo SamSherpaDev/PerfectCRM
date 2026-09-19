@@ -75,6 +75,15 @@ class ClientsRequestsTest < ActionDispatch::IntegrationTest
     assert_select "p", text: /Replies you send from here will appear on this timeline/, count: 0
   end
 
+  test "show renders the referral code carried from the lead" do
+    lead = Lead.create!(name: "Referred", source: "website_form", referral_code: "KQ7X2D")
+    client = lead.convert_to_client!
+    get client_path(client)
+    assert_response :success
+    assert_select "dt", text: "Referral code"
+    assert_select "dd", text: "KQ7X2D"
+  end
+
   test "show renders notes and timeline events newest first" do
     client = Client.create!(name: "Tashi")
     Note.create!(notable: client, body: "Loves spring")

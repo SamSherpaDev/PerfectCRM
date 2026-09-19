@@ -59,6 +59,14 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     assert_select "textarea#note_body"
   end
 
+  test "show renders the referral code" do
+    lead = Lead.create!(name: "Referred", source: "website_form", referral_code: "KQ7X2D")
+    get lead_path(lead)
+    assert_response :success
+    assert_select "dt", text: "Referral code"
+    assert_select "dd", text: "KQ7X2D"
+  end
+
   test "show of a converted lead is read-only with a forward link" do
     lead = Lead.create!(name: "Ad", source: "manual")
     client = lead.convert_to_client!

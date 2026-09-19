@@ -420,7 +420,8 @@ answers, consent, reference, and attribution (inside JSON metadata).
 
 Leads are asks that have not booked yet; clients are everyone else.
 A lead carries source (`google_ads`, `meta_ads`, `website_form`, `email`,
-`referral`, `manual`), campaign, `external_ref` for n8n idempotency, Panda
+`referral`, `manual`), campaign, `external_ref` for n8n idempotency, an optional
+advisor `referral_code` from the storefront `?ref=` links, Panda
 AI fit (`fit_score`, `fit_band`, `fit_reason`), and status (`new`,
 `chatting`, `quoted`, `nudged`, `lost`). Tabs are New, Chatting, Quoted,
 Nudged, Lost, Converted, and Archived. An email or PerfectBook contact ID can recur
@@ -448,7 +449,7 @@ and preserves [AI opt-outs](#ai-assistance). Their timeline records Returned as 
 the source, with the campaign in the event metadata. Multiple historical
 leads can link to the same client; conversion never merges two clients.
 Without a match, conversion creates a client with the lead's facts,
-including its exact source and campaign, and copies people and history.
+including its exact source and campaign, the referral code when present, and copies people and history.
 Only clients created by conversion show Started as a lead.
 Both paths transfer the lead's tasks, drafts, linked conversations, and remembered
 email identities to the client, then link forward and freeze the lead read-only,

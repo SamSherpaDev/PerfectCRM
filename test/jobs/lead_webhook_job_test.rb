@@ -44,6 +44,7 @@ class LeadWebhookJobTest < ActiveJob::TestCase
   end
 
   test "posts a signed lead.created to the subscription and logs delivery" do
+    @lead.update!(referral_code: "KQ7X2D")
     @settings.update!(lead_webhook_url: "https://n8n.example.com/hook")
     with_fake_http do |fake|
       LeadWebhookJob.perform_now(@lead.id, "lead.created")
@@ -52,6 +53,7 @@ class LeadWebhookJobTest < ActiveJob::TestCase
       assert_equal "lead.created", payload["event"]
       assert_equal @lead.reference, payload["lead"]["reference"]
       assert_equal "anna@example.com", payload["lead"]["email"]
+      assert_equal "KQ7X2D", payload["lead"]["referral_code"]
 
       fake.signatures.each do |signature|
         caller_name = ::Leads.verify_relay_signature(fake.bodies.first, signature, secret: @relay_secret)

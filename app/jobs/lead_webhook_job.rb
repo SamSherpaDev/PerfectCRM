@@ -63,6 +63,7 @@ class LeadWebhookJob < ApplicationJob
         message: lead.message,
         source: lead.source,
         campaign_name: lead.campaign_name,
+        referral_code: lead.referral_code,
         placement: lead.placement,
         status: lead.status,
         fit_score: lead.fit_score,

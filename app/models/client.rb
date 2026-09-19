@@ -22,6 +22,7 @@ class Client < ApplicationRecord
 
   include TaggedRecord
   include NestedPeople
+  include ReferralCode
 
   before_validation :normalize_email
 

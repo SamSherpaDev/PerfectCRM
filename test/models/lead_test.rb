@@ -58,6 +58,31 @@ class LeadTest < ActiveSupport::TestCase
     assert_not_nil lead.converted_at
   end
 
+  test "referral code normalizes case and validates the advisor format" do
+    lead = Lead.create!(name: "Ad", source: "manual", referral_code: " kq7x2d ")
+    assert_equal "KQ7X2D", lead.reload.referral_code
+    assert_not Lead.new(name: "Short", source: "manual", referral_code: "ABC23").valid?
+    assert_not Lead.new(name: "Long", source: "manual", referral_code: "ABC2345").valid?
+    assert_not Lead.new(name: "Ambiguous", source: "manual", referral_code: "ABC123").valid?
+    assert_not Lead.new(name: "Dashed", source: "manual", referral_code: "ABC-23").valid?
+    blank = Lead.create!(name: "Blank", source: "manual", referral_code: "")
+    assert_nil blank.reload.referral_code
+  end
+
+  test "conversion carries the referral code to the new client" do
+    lead = Lead.create!(name: "Ad", source: "website_form", referral_code: "KQ7X2D")
+    client = lead.convert_to_client!
+    assert_equal "KQ7X2D", client.referral_code
+  end
+
+  test "conversion to an existing client leaves its referral code alone" do
+    client = Client.create!(name: "Returning", email: "return@example.com", referral_code: "AAAA22")
+    lead = Lead.create!(name: "New", email: "return@example.com", referral_code: "BBBB33")
+    lead.convert_to_client!
+    assert_equal "AAAA22", client.reload.referral_code
+    assert_equal "BBBB33", lead.reload.referral_code
+  end
+
   test "conversion cannot run twice and cannot reverse" do
     lead = Lead.create!(name: "Ad", source: "manual")
     lead.convert_to_client!

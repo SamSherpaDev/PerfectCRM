@@ -49,6 +49,11 @@
         <p class="hint">Advisors who sent this traveler. Commissions stay in PerfectBook.</p>
       </div>
       <div>
+        <%= form.label :referral_code, "Referral code", class: "label" %>
+        <%= form.text_field :referral_code, class: "input", placeholder: "ABC234", maxlength: 6, autocomplete: "off" %>
+        <p class="hint">Advisor ?ref= code from the storefront. Carried over at conversion.</p>
+      </div>
+      <div>
         <%= form.label :perfectbook_contact_id, "PerfectBook contact id", class: "label" %>
         <%= form.number_field :perfectbook_contact_id, min: 1, class: "input", placeholder: "Links to PerfectBook" %>
       </div>

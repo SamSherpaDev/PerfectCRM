@@ -43,6 +43,11 @@ When updating this file, preserve this bar for all agents and keep entries conci
   nested email reassignment in `NestedPeople`. Record layout is the
   `app/views/records/` partials fed by `RecordPage` (composer form shared
   with the reply box through `reply_box/_form`).
+- Advisor referral codes arrive as `attribution.referral_code` on website
+  intake (storefront `?ref=` links, PerfectBook `Contact::REFERRAL_CODE_FORMAT`
+  alphabet); the `ReferralCode` concern validates them on `Lead` and `Client`,
+  intake ignores bad codes, conversion carries the code to new clients, and
+  commissions stay in PerfectBook.
 - Search uses the models' `*.search` APIs; `ensure_fts!` recreates missing
   FTS tables. It does not repopulate existing records; `sync_fts!` indexes
   each record.

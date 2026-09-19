@@ -126,7 +126,7 @@ class ClientsController < ApplicationController
   def client_params
     params.require(:client).permit(
       :name, :email, :phone, :country, :state, :kind, :source,
-      :referred_by_organization_id, :perfectbook_contact_id, :tag_list, :ai_opt_out,
+      :referred_by_organization_id, :referral_code, :perfectbook_contact_id, :tag_list, :ai_opt_out,
       people_attributes: %i[id name email phone role _destroy]
     )
   end

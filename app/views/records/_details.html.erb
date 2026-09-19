@@ -96,6 +96,12 @@
         <dd><%= link_to record.referred_by_organization.name, organization_path(record.referred_by_organization), class: "link" %></dd>
       </div>
     <% end %>
+    <% if record.referral_code.present? %>
+      <div>
+        <dt>Referral code</dt>
+        <dd><span class="mono text-xs"><%= record.referral_code %></span></dd>
+      </div>
+    <% end %>
     <% if lead && record.reference.present? %>
       <div>
         <dt>Reference</dt>

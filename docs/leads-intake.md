@@ -74,6 +74,15 @@ Source derivation: `google_ads` on `gclid`/`gbraid`/`wbraid`, or
 on `facebook`/`instagram`/`meta` with a paid medium; else `website_form`.
 `campaign_name` copies `utm_campaign`. The reference is `SH-XXXX`.
 
+Referral: `attribution.referral_code` is optional. The storefront sends the
+advisor code from its `?ref=CODE` landing links here (six chars from
+`ABCDEFGHJKMNPQRSTUVWXYZ23456789`, no I, L, O, 0, or 1). A code outside
+that format is ignored as if no code was given; intake never rejects over
+it. A valid code is stored on the lead, shown on the record, and carried
+to the client at conversion so the referrer can be credited when the
+booking is created in PerfectBook, which stays the system of record for
+commissions.
+
 ## Details follow-up (optional step two)
 
 Posted after a successful send, with the same `submission_id`:

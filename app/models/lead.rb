@@ -33,6 +33,7 @@ class Lead < ApplicationRecord
 
   include TaggedRecord
   include NestedPeople
+  include ReferralCode
 
   before_save :reject_converted_write, prepend: true
 
@@ -192,6 +193,7 @@ class Lead < ApplicationRecord
         source: source,
         campaign_name: campaign_name,
         referred_by_organization: referred_by_organization,
+        referral_code: referral_code,
         perfectbook_contact_id: perfectbook_contact_id
       )
       client.update!(pipeline_stage: "won")
