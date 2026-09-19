@@ -395,8 +395,9 @@ Archived tab restores it to its previous stage, and nothing is ever
 hard-deleted. Archived leads leave every working list, pipeline column,
 Today count, and digest, and Panda AI or n8n automations only act on
 active leads. New mail from an archived lead's address waits in triage
-instead of linking to it, and a new lead may take its email or PerfectBook
-contact ID; Restore is refused while an open lead holds that identity.
+instead of linking to it, Link in triage refuses an archived lead until it
+is restored, and a new lead may take its email or PerfectBook contact ID;
+Restore is refused while an open lead holds that identity.
 Converted leads cannot be archived.
 
 Conversion is one-way and manual. Convert to client matches an existing
