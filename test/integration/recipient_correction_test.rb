@@ -447,6 +447,52 @@ class RecipientCorrectionTest < ActionDispatch::IntegrationTest
     end
   end
 
+  [ false, true ].each do |reverse_order|
+    [ false, true ].each do |swap|
+      test "simultaneous #{swap ? 'swaps' : 'reassignments'} preserve chains with reverse order #{reverse_order}" do
+        lead = Lead.create!(name: "Nested reassignment", email: "owner@example.test", source: "manual")
+        addresses = { "One" => "a@example.test", "Two" => "b@example.test" }
+        names = reverse_order ? %w[Two One] : %w[One Two]
+        people = names.to_h { |name| [ name, lead.people.create!(name: name, email: addresses[name]) ] }
+        unrelated = lead.people.create!(name: "Unrelated", email: "unrelated-old@example.test")
+        unrelated.update!(email: "unrelated-current@example.test")
+        original = Outbound::Composer.call(owner: lead, params: { to: "a@example.test", body: "Original for One" })
+        draft = original.conversation.create_draft!(owner: lead, to_addrs: "a@example.test", body: "Draft for One")
+        sign_in
+        patch lead_path(lead), params: { lead: { people_attributes: {
+          "0" => { id: people["One"].id, name: "One", email: "b@example.test" },
+          "1" => { id: people["Two"].id, name: "Two", email: swap ? "a@example.test" : "c@example.test" }
+        } } }
+        assert_response :redirect
+        assert_equal "b@example.test", people["One"].reload.email
+        assert_equal swap ? "a@example.test" : "c@example.test", people["Two"].reload.email
+        assert_no_difference "Message.count" do
+          post lead_messages_path(lead), params: { conversation_id: original.conversation_id,
+            message: { to: "a@example.test", body: draft.body } }
+        end
+        assert_match "confirm the current recipients", flash[:alert]
+        get lead_path(lead)
+        confirmation = recipient_confirmation_from_form
+        assert_difference "Message.count", 1 do
+          post lead_messages_path(lead), params: { conversation_id: original.conversation_id,
+            message: { to: "b@example.test", body: draft.body, recipient_confirmation: confirmation } }
+        end
+        assert_equal [ "b@example.test" ], ClientMailer.outbound(Message.order(:id).last).to
+        assert_equal "a@example.test", original.reload.to_addrs
+        assert_equal "queued", original.status
+
+        assert_difference "Message.count", 1 do
+          post lead_messages_path(lead), params: { message: { to: "unrelated-old@example.test", body: "Unaffected chain" } }
+        end
+        assert_equal [ "unrelated-current@example.test" ], ClientMailer.outbound(Message.order(:id).last).to
+        assert_difference "Message.count", 1 do
+          post lead_messages_path(lead), params: { message: { to: "alternate@example.test", body: "Deliberate alternate" } }
+        end
+        assert_equal [ "alternate@example.test" ], ClientMailer.outbound(Message.order(:id).last).to
+      end
+    end
+  end
+
   private
 
   def recipient_confirmation_from_form

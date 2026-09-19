@@ -62,7 +62,9 @@ module EmailRedirects
       redirects = current.redirect_map.transform_values { |value| current.resolve_redirected_email(value) }
       redirects[new_value] = new_value if redirects.key?(new_value)
       if old_key.present?
-        redirects.transform_values! { |value| value == old_key ? new_value : value }
+        unless ambiguity.include?(old_key) || current.current_recipient_emails.include?(old_key)
+          redirects.transform_values! { |value| value == old_key ? new_value : value }
+        end
         redirects.delete(old_key)
         redirects[old_key] = new_value
       end

@@ -8,17 +8,18 @@ class GroupSendsController < ApplicationController
     return redirect_to merge_templates_path, alert: "Pick a template first." unless @template
 
     lines = params[:recipients].to_s
-    batch = MergeBatch.build(template: @template, recipient_lines: lines,
-      context_for: ->(recipient) { TemplateContext.for_recipient(recipient, departure_id: params[:departure_id]) })
-
-    unless batch.complete?
-      return redirect_to merge_templates_path(template_id: @template.id, recipients: lines,
-        departure_id: params[:departure_id]),
-        alert: "Fix #{batch.errors.size} #{'line'.pluralize(batch.errors.size)} before sending."
-    end
-
     group = nil
+    batch = nil
     messages = GroupSend.transaction do
+      batch = MergeBatch.build(template: @template, recipient_lines: lines,
+        context_for: ->(recipient) { TemplateContext.for_recipient(recipient, departure_id: params[:departure_id]) })
+
+      unless batch.complete?
+        return redirect_to merge_templates_path(template_id: @template.id, recipients: lines,
+          departure_id: params[:departure_id]),
+          alert: "Fix #{batch.errors.size} #{'line'.pluralize(batch.errors.size)} before sending."
+      end
+
       group = GroupSend.create!(template: @template,
         perfectbook_departure_id: params[:departure_id].presence,
         total_count: batch.size, recipient_lines: lines)

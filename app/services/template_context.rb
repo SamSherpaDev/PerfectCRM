@@ -16,6 +16,7 @@ class TemplateContext
     rescue Outbound::OwnerLookup::Conflict
       raise unless owner
     end
+    email = owner.resolve_redirected_email(email) if owner.respond_to?(:resolve_redirected_email)
     contact = PerfectBook::Contact.find_by("lower(email) = ?", email) if email.present?
     person = Person.find_by("lower(email) = ?", email) if email.present?
     identity = contact || person || (owner if email.blank? || owner.try(:email).to_s.downcase == email) || recipient
