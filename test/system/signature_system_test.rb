@@ -67,7 +67,9 @@ class SignatureSystemTest < ApplicationSystemTestCase
 
     visit client_path(client)
     click_button "Reply"
-    find(".reply-details > summary").click
+    # Opening the sheet focuses the body and animates its height. Activate
+    # Details by keyboard so its moving position cannot swallow the click.
+    find(".reply-details > summary").send_keys(:space)
     fill_in "Subject", with: "Signature check"
     fill_in "Message", with: "Hello, here are your trip details."
     perform_enqueued_jobs(only: OutboundDeliveryJob) do

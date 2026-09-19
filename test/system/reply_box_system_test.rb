@@ -99,7 +99,8 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     assert_text "Draft saved"
     assert_equal "Half written", Draft.find_by!(owner: @client).body
     fill_in "Message", with: ""
-    click_button "Save draft"
+    # Blurring the body animates its height and moves the button below it.
+    find_button("Save draft").send_keys(:enter)
     assert_text "Draft cleared"
     assert_not Draft.exists?(owner: @client)
   end
@@ -191,6 +192,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     message.mark_failed!("SMTP unavailable")
     visit group_send_path(message.group_send)
     click_button "Retry"
+    assert_text "Retrying delivery"
     assert_no_button "Retry"
     assert_equal "queued", message.reload.status
     assert_equal 3, Message.count
