@@ -11,6 +11,7 @@ class DraftsController < ApplicationController
       owner.conversations.find_by(id: params[:conversation_id]) : nil
     @draft = Draft.for_owner(owner, conversation: conversation)
     @draft.assign_attributes(draft_attributes)
+    redirect_draft_recipients(owner, @draft)
     @upload_refused = @draft.attach_uploads(params.dig(:message, :files))
 
     if @draft.empty?

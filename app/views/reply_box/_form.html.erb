@@ -39,11 +39,11 @@
       <div class="grid gap-3 sm:grid-cols-2">
         <div>
           <%= form.label :cc, "Cc", class: "label" %>
-          <%= form.text_field :cc, value: draft.persisted? ? draft.cc_addrs : conversation&.thread_parent&.cc_addrs, class: "input", autocomplete: "off" %>
+          <%= form.text_field :cc, value: @reply_cc, class: "input", autocomplete: "off" %>
         </div>
         <div>
           <%= form.label :bcc, "Bcc", class: "label" %>
-          <%= form.text_field :bcc, value: draft.bcc_addrs, class: "input", autocomplete: "off" %>
+          <%= form.text_field :bcc, value: @reply_bcc, class: "input", autocomplete: "off" %>
         </div>
       </div>
     </details>
@@ -85,6 +85,23 @@
               title="<%= template.subject %>"><%= template.name %></button>
     <% end %>
   </div>
+
+  <% if owner.respond_to?(:ambiguous_recipient_emails) && owner.ambiguous_recipient_emails.any? %>
+    <div class="mt-3">
+      <p class="hint">An address was reassigned or restored. Review To, Cc and Bcc and replace any former address with the intended current recipient. Current contacts:</p>
+      <ul class="text-sm">
+        <% ([ owner ] + owner.people.to_a).each do |contact| %>
+          <% if contact.email.present? %>
+            <li><%= contact.name %>: <%= contact.email %></li>
+          <% end %>
+        <% end %>
+      </ul>
+      <%= form.label :recipient_confirmation, class: "label" do %>
+        <%= form.check_box :recipient_confirmation, { class: "checkbox", checked: false }, owner.recipient_confirmation_token, "" %>
+        I confirm these are the intended current recipients.
+      <% end %>
+    </div>
+  <% end %>
 
   <div class="reply-actions">
     <p id="draft-status" role="status" class="hint reply-status" data-reply-box-target="status"><% if draft.persisted? %>Draft saved <%= time_ago_in_words(draft.updated_at) %> ago.<% end %></p>

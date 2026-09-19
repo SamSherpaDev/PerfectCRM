@@ -13,9 +13,19 @@ class Person < ApplicationRecord
 
   after_save :refresh_owner_search
   after_destroy :refresh_owner_search
+  after_save :record_owner_redirect_on_email_change
 
   def owner
     client || lead
+  end
+
+  def record_owner_redirect_on_email_change
+    return unless saved_change_to_email?
+
+    old_email, new_email = saved_change_to_email
+    target = client_id.present? ? Client.find_by(id: client_id) : Lead.find_by(id: lead_id)
+    target ||= owner
+    target&.record_email_redirect(old_email, new_email)
   end
 
   private

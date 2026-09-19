@@ -90,6 +90,22 @@
               <%= form.hidden_field :template_id, value: @selected.id %>
               <%= form.hidden_field :departure_id, value: @departure&.perfectbook_id %>
               <%= form.hidden_field :recipients, value: @recipient_lines %>
+              <% @recipient_confirmation_owners.each do |owner| %>
+                <div class="mb-3">
+                  <p class="hint">An address for <%= owner.name %> was reassigned or restored. Replace any former address with the intended current recipient before sending. Current contacts:</p>
+                  <ul class="text-sm">
+                    <% ([ owner ] + owner.people.to_a).each do |contact| %>
+                      <% if contact.email.present? %>
+                        <li><%= contact.name %>: <%= contact.email %></li>
+                      <% end %>
+                    <% end %>
+                  </ul>
+                  <label class="label">
+                    <%= check_box_tag "recipient_confirmations[#{owner.to_gid_param}]", owner.recipient_confirmation_token, false, class: "checkbox" %>
+                    I confirm the listed recipients for <%= owner.name %>.
+                  </label>
+                </div>
+              <% end %>
               <%= form.submit "Send #{@batch.size} personal emails", class: "btn btn-primary",
                     data: { turbo_confirm: "Send #{@batch.size} personal emails now? Each traveler gets their own copy." } %>
             <% end %>

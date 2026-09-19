@@ -254,6 +254,9 @@ class QuotesSystemTest < ApplicationSystemTestCase
     end
     click_button "Send quote", match: :first
     assert_text "Lines description can't be blank"
+    # The same error appears on the first response. Wait for the server's
+    # normalized price to prove the corrected-price submission has rendered.
+    assert_field "Each ($)", with: "1600.00"
     within(all("[data-line-row]").first) { fill_in "Description", with: "Updated trek" }
     click_button "Send quote", match: :first
     assert_text "Quote sent"

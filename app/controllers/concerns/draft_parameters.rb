@@ -12,4 +12,12 @@ module DraftParameters
       perfectbook_booking_id: permitted[:perfectbook_booking_id].presence
     }
   end
+
+  def redirect_draft_recipients(owner, draft)
+    return unless owner.respond_to?(:resolve_redirected_field)
+
+    draft.to_addrs = owner.resolve_redirected_field(draft.to_addrs)
+    draft.cc_addrs = owner.resolve_redirected_field(draft.cc_addrs)
+    draft.bcc_addrs = owner.resolve_redirected_field(draft.bcc_addrs)
+  end
 end

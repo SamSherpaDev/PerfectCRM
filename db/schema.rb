@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_19_175652) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_19_192509) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -73,11 +73,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_175652) do
 
   create_table "clients", force: :cascade do |t|
     t.boolean "ai_opt_out", default: false, null: false
+    t.text "ambiguous_emails", default: "[]", null: false
     t.datetime "archived_at"
     t.string "campaign_name"
     t.string "country"
     t.datetime "created_at", null: false
     t.string "email"
+    t.text "email_redirects", default: "{}", null: false
     t.string "kind", default: "individual", null: false
     t.datetime "last_activity_at"
     t.string "name", null: false
@@ -227,6 +229,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_175652) do
 
   create_table "leads", force: :cascade do |t|
     t.boolean "ai_opt_out", default: false, null: false
+    t.text "ambiguous_emails", default: "[]", null: false
     t.datetime "archived_at"
     t.string "budget_band"
     t.string "campaign_name"
@@ -237,6 +240,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_175652) do
     t.string "country"
     t.datetime "created_at", null: false
     t.string "email"
+    t.text "email_redirects", default: "{}", null: false
     t.integer "expected_value_minor"
     t.string "external_ref"
     t.string "fit_band"

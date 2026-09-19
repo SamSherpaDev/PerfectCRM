@@ -53,7 +53,7 @@ class MessagesController < ApplicationController
   end
 
   def message_params
-    params.fetch(:message, {}).permit(:to, :cc, :bcc, :subject, :body, :template_id, files: [])
+    params.fetch(:message, {}).permit(:to, :cc, :bcc, :subject, :body, :template_id, :recipient_confirmation, files: [])
   end
 
   # The send failed validation (no recipient, blank subject/body): stash
@@ -62,6 +62,7 @@ class MessagesController < ApplicationController
     return unless owner
     draft = Draft.for_owner(owner, conversation: conversation)
     draft.assign_attributes(draft_attributes)
+    redirect_draft_recipients(owner, draft)
     refused = draft.attach_uploads(params.dig(:message, :files))
     if draft.empty?
       draft.destroy if draft.persisted?

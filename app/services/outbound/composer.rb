@@ -30,6 +30,14 @@ module Outbound
     end
 
     def compose
+      message = build
+      message.save!
+      @params[:template_id].present? && Template.where(id: @params[:template_id]).first&.record_use!
+      message
+    end
+
+    def build
+      @owner.reload if @owner&.persisted?
       @draft = Draft.for_owner(@owner, conversation: @conversation) if @owner && !@group_send
       resolve_conversation
       message = @conversation ? @conversation.messages.build : Message.new
@@ -39,9 +47,13 @@ module Outbound
       message.direction = "out"
       message.status = "queued"
       message.from_address = self.class.from_address
-      message.to_addrs = recipients.join(", ")
-      message.cc_addrs = @params[:cc].to_s
-      message.bcc_addrs = @params[:bcc].to_s
+      to = recipients
+      cc = EmailRedirects.mailboxes(@params[:cc])
+      bcc = EmailRedirects.mailboxes(@params[:bcc])
+      confirm_recipients!(message, to + cc + bcc)
+      message.to_addrs = redirect_explicit(to).join(", ")
+      message.cc_addrs = redirect_explicit(cc).join(", ")
+      message.bcc_addrs = redirect_explicit(bcc).join(", ")
       message.subject = @params[:subject].to_s.strip.presence || default_subject
       if @params[:body].to_s.strip.blank?
         message.errors.add(:text_body, :blank)
@@ -53,12 +65,31 @@ module Outbound
       thread_under_parent(message)
       message.message_id ||= "#{SecureRandom.uuid}@#{domain}"
       attach_files(message)
-      message.save!
-      @params[:template_id].present? && Template.where(id: @params[:template_id]).first&.record_use!
+      message.validate!
       message
+    rescue ::Mail::Field::ParseError
+      message.errors.add(:base, "Enter valid recipient email addresses.")
+      raise ActiveRecord::RecordInvalid, message
     end
 
     private
+
+    def confirm_recipients!(message, addresses)
+      return unless @owner.respond_to?(:ambiguous_recipient_emails)
+
+      addresses |= @owner.resolve_redirected_list(addresses.join(", "))
+      ambiguous = addresses & @owner.ambiguous_recipient_emails
+      if (ambiguous - @owner.current_recipient_emails).any?
+        message.errors.add(:base, "Choose a current recipient in place of the reassigned address before sending.")
+        raise ActiveRecord::RecordInvalid, message
+      end
+      confirmation = @params[:recipient_confirmation]
+      return if ambiguous.empty? && confirmation.blank?
+      return if @owner.recipient_confirmation_valid?(confirmation)
+
+      message.errors.add(:base, "Review To, Cc and Bcc and confirm the current recipients. An address was reassigned or restored.")
+      raise ActiveRecord::RecordInvalid, message
+    end
 
     def resolve_conversation
       return if @conversation
@@ -68,14 +99,27 @@ module Outbound
       @conversation = @owner.conversations.build(subject_line: subject.presence || default_subject)
     end
 
+    # Corrections apply to drafts and future sends. An already-queued
+    # send keeps the envelope stored when Send was pressed; past messages
+    # keep their attribution and are never rewritten.
     def recipients
-      explicit = @params[:to].to_s.split(/[,\n;]/).map(&:strip).reject(&:blank?)
-      return explicit if explicit.any?
+      explicit = EmailRedirects.mailboxes(@params[:to])
+      if explicit.any?
+        return explicit
+      end
       return [] if @owner.nil?
 
-      return @conversation.thread_parent.recipients if @conversation&.thread_parent
+      if @conversation&.thread_parent
+        return EmailRedirects.mailboxes(@conversation.thread_parent.recipients.join(", "))
+      end
 
       Array(@owner.try(:display_email) || @owner.try(:email)).compact_blank
+    end
+
+    def redirect_explicit(list)
+      return list unless @owner.respond_to?(:resolve_redirected_list)
+
+      @owner.resolve_redirected_list(list.join(", "))
     end
 
     def default_subject
