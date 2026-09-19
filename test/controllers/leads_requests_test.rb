@@ -145,6 +145,78 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     end
     assert_redirected_to lead_path(lead)
   end
+  test "archive needs confirmation, then lists under the archived tab" do
+    lead = Lead.create!(name: "Deleteme", source: "manual", status: "new")
+
+    patch archive_lead_path(lead)
+    assert_redirected_to lead_path(lead)
+    assert_not lead.reload.archived?
+
+    patch archive_lead_path(lead), params: { confirm: "1" }
+    assert_redirected_to leads_path(tab: "archived")
+    assert lead.reload.archived?
+
+    get leads_path(tab: "new")
+    assert_response :success
+    assert_select "a", { text: "Deleteme", count: 0 }
+    get leads_path(tab: "archived")
+    assert_response :success
+    assert_select "nav.tabs a", text: /Archived/
+    assert_select "a", text: "Deleteme"
+    assert_select "button", text: "Restore"
+  end
+
+  test "unarchive restores the previous stage" do
+    lead = Lead.create!(name: "Back", source: "manual", status: "quoted")
+    lead.archive!
+    patch unarchive_lead_path(lead)
+    assert_redirected_to lead_path(lead)
+    assert_not lead.reload.archived?
+    assert_equal "quoted", lead.status
+    get leads_path(tab: "quoted")
+    assert_select "a", text: "Back"
+  end
+
+  test "converted leads refuse archive" do
+    lead = Lead.create!(name: "Won", source: "manual")
+    lead.convert_to_client!
+    patch archive_lead_path(lead), params: { confirm: "1" }
+    assert_redirected_to lead_path(lead)
+    assert_not lead.reload.archived?
+  end
+
+  test "archived lead page hides working actions and offers restore" do
+    lead = Lead.create!(name: "Archie", source: "manual", status: "new")
+    lead.archive!
+    get lead_path(lead)
+    assert_response :success
+    assert_select "div", text: /Archived on/
+    assert_select "button", text: "Restore"
+    assert_select "a", { text: "Edit", count: 0 }
+    assert_select "button", { text: /Convert to client/, count: 0 }
+    assert_select "button", { text: "Delete", count: 0 }
+  end
+
+  test "show names the lead in the delete confirmation" do
+    lead = Lead.create!(name: "Deleteme", source: "manual")
+    get lead_path(lead)
+    assert_response :success
+    assert_select "form[data-turbo-confirm*=?]", "Delete Deleteme?"
+  end
+
+  test "edit and convert are blocked while archived" do
+    lead = Lead.create!(name: "Archie", source: "manual", status: "new")
+    lead.archive!
+    get edit_lead_path(lead)
+    assert_redirected_to lead_path(lead)
+    patch lead_path(lead), params: { lead: { name: "Changed" } }
+    assert_redirected_to lead_path(lead)
+    assert_equal "Archie", lead.reload.name
+    post convert_lead_path(lead)
+    assert_redirected_to lead_path(lead)
+    assert_not lead.reload.converted?
+  end
+
   test "fit labels and bars use the supplied band" do
     lead = Lead.create!(name: "Panda", fit_score: 80, fit_band: "possible")
     [ leads_path, lead_path(lead) ].each do |path|

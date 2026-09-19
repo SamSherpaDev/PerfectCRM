@@ -90,4 +90,15 @@ class LeadsTransitionTest < ActiveSupport::TestCase
     end
     assert_equal "quoted", @lead.reload.status
   end
+
+  test "archived leads refuse every transition, captain or automation" do
+    @lead.archive!
+    %i[captain automation].each do |actor|
+      error = assert_raises(ActiveRecord::RecordInvalid) do
+        Leads::Transition.call(@lead, to: "chatting", actor: actor)
+      end
+      assert_match(/until restored/, error.record.errors.full_messages.to_sentence)
+    end
+    assert_equal "new", @lead.reload.status
+  end
 end

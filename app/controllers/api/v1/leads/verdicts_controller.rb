@@ -60,6 +60,10 @@ module Api
               return render json: { error: "validation", fields: { "base" => "converted" } },
                 status: :unprocessable_entity
             end
+            if lead.archived?
+              return render json: { error: "validation", fields: { "base" => "archived" } },
+                status: :unprocessable_entity
+            end
 
             from_status = lead.status
             if status.present? && status != from_status

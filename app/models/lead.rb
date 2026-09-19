@@ -52,7 +52,7 @@ class Lead < ApplicationRecord
   validates :email, format: { with: URI::MailTo::EMAIL_REGEXP, allow_blank: true }
   validates :email, :perfectbook_contact_id,
     uniqueness: { allow_nil: true, conditions: -> { open } },
-    if: -> { converted_client_id.nil? && status != "lost" }
+    if: -> { converted_client_id.nil? && status != "lost" && archived_at.nil? }
   validates :external_ref, uniqueness: { allow_nil: true }
   validates :perfectbook_contact_id, numericality: { only_integer: true, greater_than: 0, allow_nil: true }
   validates :fit_score, numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 100, allow_nil: true }
@@ -74,10 +74,12 @@ class Lead < ApplicationRecord
   after_save :sync_fts_later
   after_destroy :remove_fts_row
 
-  scope :open, -> { where(converted_client_id: nil).where.not(status: "lost") }
-  scope :lost, -> { where(status: "lost").where(converted_client_id: nil) }
+  scope :active, -> { where(archived_at: nil) }
+  scope :archived, -> { where.not(archived_at: nil) }
+  scope :open, -> { active.where(converted_client_id: nil).where.not(status: "lost") }
+  scope :lost, -> { active.where(status: "lost").where(converted_client_id: nil) }
   scope :converted, -> { where.not(converted_client_id: nil) }
-  scope :by_status, ->(status) { where(status: status).where(converted_client_id: nil) }
+  scope :by_status, ->(status) { active.where(status: status).where(converted_client_id: nil) }
   scope :stale, -> {
     open.where("COALESCE(last_touch_at, last_activity_at, updated_at, created_at) < ?", STALE_AFTER.ago)
   }
@@ -141,6 +143,24 @@ class Lead < ApplicationRecord
 
   def converted?
     converted_client_id.present?
+  end
+
+  def archived?
+    archived_at.present?
+  end
+
+  # Deleting a lead archives it; the Archived tab restores it. Converted
+  # leads are clients now and stay out of the archive.
+  def archive!
+    if converted?
+      errors.add(:base, "Converted leads stay read-only")
+      raise ActiveRecord::RecordInvalid, self
+    end
+    update!(archived_at: Time.current)
+  end
+
+  def unarchive!
+    update!(archived_at: nil)
   end
 
   def readonly_after_convert?

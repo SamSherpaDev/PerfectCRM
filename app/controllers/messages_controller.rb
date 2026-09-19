@@ -9,6 +9,9 @@ class MessagesController < ApplicationController
     if owner.is_a?(Lead) && owner.converted?
       return redirect_to owner, alert: "Converted leads stay read-only."
     end
+    if owner.is_a?(Lead) && owner.archived?
+      return redirect_to owner, alert: "Archived leads stay read-only until restored."
+    end
 
     conversation = params[:conversation_id].present? ?
       owner.conversations.find_by(id: params[:conversation_id]) : nil

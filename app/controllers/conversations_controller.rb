@@ -38,7 +38,7 @@ class ConversationsController < ApplicationController
     sender = sender_email
     return redirect_to inbox_thread_path(@conversation), alert: "No sender to create from." if sender.blank?
 
-    lead = Lead.find_by(email: sender) || Lead.create!(name: display_name_for(sender), email: sender, source: "email")
+    lead = Lead.active.find_by(email: sender) || Lead.create!(name: display_name_for(sender), email: sender, source: "email")
     target = Mail::Matcher.current_owner(lead)
     @conversation.update!(linkable: target, ignored: false)
     EmailIdentity.remember!(sender, linkable: target)

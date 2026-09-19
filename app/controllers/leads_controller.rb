@@ -2,10 +2,11 @@ class LeadsController < ApplicationController
   include RecordHistory
   include ReplyBox
 
-  before_action :set_lead, only: %i[show edit update convert refresh_bookings]
+  before_action :set_lead, only: %i[show edit update convert refresh_bookings archive unarchive]
   before_action :block_converted_edit, only: %i[edit update]
+  before_action :block_archived_edit, only: %i[edit update]
 
-  TABS = %w[new chatting quoted nudged lost converted].freeze
+  TABS = %w[new chatting quoted nudged lost converted archived].freeze
 
   def index
     @tab = TABS.include?(params[:tab]) ? params[:tab] : "new"
@@ -18,11 +19,14 @@ class LeadsController < ApplicationController
       "quoted" => Lead.by_status("quoted").count,
       "nudged" => Lead.by_status("nudged").count,
       "lost" => Lead.lost.count,
-      "converted" => Lead.converted.count
+      "converted" => Lead.converted.count,
+      "archived" => Lead.archived.count
     }
 
     base = if @tab == "converted"
       Lead.converted
+    elsif @tab == "archived"
+      Lead.archived
     elsif @tab == "lost"
       Lead.lost
     else
@@ -95,6 +99,9 @@ class LeadsController < ApplicationController
   end
 
   def convert
+    if @lead.archived?
+      return redirect_to @lead, alert: "Restore this lead before converting."
+    end
     if @lead.converted?
       return redirect_to @lead, alert: "Already converted."
     end
@@ -103,6 +110,26 @@ class LeadsController < ApplicationController
     redirect_to client, notice: "Lead converted. Their timeline moved with them."
   rescue ActiveRecord::RecordInvalid => e
     redirect_to @lead, alert: e.record.errors.full_messages.to_sentence.presence || "Could not convert."
+  end
+
+  def archive
+    if @lead.converted?
+      return redirect_to @lead, alert: "Converted leads stay read-only."
+    end
+    unless params[:confirm].present?
+      return redirect_to @lead, alert: "Please confirm before archiving this lead."
+    end
+    @lead.archive!
+    redirect_to leads_path(tab: "archived"), notice: "Lead archived."
+  rescue ActiveRecord::RecordInvalid => e
+    redirect_to @lead, alert: e.record.errors.full_messages.to_sentence.presence || "Could not archive."
+  end
+
+  def unarchive
+    @lead.unarchive!
+    redirect_to @lead, notice: "Lead restored."
+  rescue ActiveRecord::RecordInvalid => e
+    redirect_to @lead, alert: e.record.errors.full_messages.to_sentence.presence || "Could not restore."
   end
 
   def refresh_bookings
@@ -123,6 +150,12 @@ class LeadsController < ApplicationController
   def block_converted_edit
     if @lead.converted?
       redirect_to @lead, alert: "Converted leads stay read-only."
+    end
+  end
+
+  def block_archived_edit
+    if @lead.archived?
+      redirect_to @lead, alert: "Archived leads stay read-only until restored."
     end
   end
 

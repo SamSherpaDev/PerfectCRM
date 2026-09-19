@@ -242,4 +242,13 @@ class ApiV1LeadsVerdictsTest < ActionDispatch::IntegrationTest
     assert_equal before, @lead.stage_changed_at
     assert_nil @lead.fit_score
   end
+
+  test "archived leads are untouched by verdicts" do
+    @lead.archive!
+    post_verdict @lead.id, { "fit_score" => 90, "status" => "chatting" }
+    assert_response :unprocessable_entity
+    assert_equal "archived", response.parsed_body["fields"]["base"]
+    assert_equal "new", @lead.reload.status
+    assert_nil @lead.fit_score
+  end
 end

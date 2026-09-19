@@ -226,6 +226,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_16_010001) do
 
   create_table "leads", force: :cascade do |t|
     t.boolean "ai_opt_out", default: false, null: false
+    t.datetime "archived_at"
     t.string "budget_band"
     t.string "campaign_name"
     t.datetime "consent_contact_at"
@@ -269,6 +270,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_16_010001) do
     t.string "trip_interest"
     t.string "trip_title"
     t.datetime "updated_at", null: false
+    t.index ["archived_at"], name: "index_leads_on_archived_at"
     t.index ["converted_client_id"], name: "index_leads_on_converted_client_id"
     t.index ["email"], name: "index_leads_on_email", unique: true, where: "email IS NOT NULL AND email != '' AND converted_client_id IS NULL AND status != 'lost'"
     t.index ["external_ref"], name: "index_leads_on_external_ref", unique: true, where: "external_ref IS NOT NULL AND external_ref != ''"

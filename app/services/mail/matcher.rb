@@ -23,9 +23,10 @@ module Mail
         end
         if (person = ::Person.find_by(email: normalized))
           owner = person.client || person.lead
-          return Result.new(linkable: self.class.current_owner(owner), via: "person") if owner
+          owner = self.class.current_owner(owner) if owner
+          return Result.new(linkable: owner, via: "person") if owner && !(owner.is_a?(::Lead) && owner.archived?)
         end
-        if (lead = ::Lead.find_by(email: normalized))
+        if (lead = ::Lead.active.find_by(email: normalized))
           return Result.new(linkable: self.class.current_owner(lead), via: "lead")
         end
         if (organization = ::Organization.find_by(email: normalized))

@@ -89,4 +89,45 @@ class LeadTest < ActiveSupport::TestCase
       assert_equal "Spring", client.campaign_name
     end
   end
+
+  test "archiving scopes split on archived_at and leave working lists" do
+    lead = Lead.create!(name: "Archie", source: "manual", status: "chatting")
+    assert_includes Lead.active, lead
+    lead.archive!
+    assert lead.reload.archived?
+    assert_includes Lead.archived, lead
+    assert_not_includes Lead.active, lead
+    assert_not_includes Lead.open, lead
+    assert_not_includes Lead.by_status("chatting"), lead
+    lead.unarchive!
+    assert_not lead.reload.archived?
+    assert_includes Lead.by_status("chatting"), lead
+  end
+
+  test "archived leads leave the lost and stale working sets" do
+    lost = Lead.create!(name: "Lostie", source: "manual", status: "lost", lost_reason: "no_reply")
+    assert_includes Lead.lost, lost
+    stale = Lead.create!(name: "Stale", source: "manual", status: "new")
+    stale.update_columns(last_touch_at: 30.days.ago, last_activity_at: 30.days.ago, updated_at: 30.days.ago)
+    assert_includes Lead.stale, stale
+    lost.archive!
+    stale.archive!
+    assert_not_includes Lead.lost, lost.reload
+    assert_not_includes Lead.stale, stale.reload
+  end
+
+  test "converted leads refuse archive" do
+    lead = Lead.create!(name: "Won", source: "manual")
+    lead.convert_to_client!
+    error = assert_raises(ActiveRecord::RecordInvalid) { lead.archive! }
+    assert_match(/read-only/, error.record.errors.full_messages.to_sentence)
+    assert_not lead.reload.archived?
+  end
+
+  test "an archived email does not block a new open lead" do
+    old = Lead.create!(name: "Old", source: "manual", email: "reuse@example.com")
+    old.archive!
+    fresh = Lead.new(name: "New", source: "manual", email: "reuse@example.com")
+    assert fresh.valid?
+  end
 end
