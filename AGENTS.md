@@ -55,7 +55,9 @@ When updating this file, preserve this bar for all agents and keep entries conci
   false and Tailwind v4 gates every `hover:` utility behind that query, so the
   kit's 1px hover lift never shows in a headless check; verify `:focus-visible`
   instead. `bin/rails test:system` also flakes when run in parallel; use
-  `PARALLEL_WORKERS=1` before believing a system-suite failure.
+  `PARALLEL_WORKERS=1` before believing a system-suite failure. Quote-builder
+  navigation guards and their assertion requirements live in
+  `test/application_system_test_case.rb`; usage is in `test/system/quotes_system_test.rb`.
 - PerfectBook link: `PerfectBook::Client` (`lib/perfectbook/`) + mirror tables
   (`app/models/perfectbook/`) + `config/recurring.yml` jobs; contract in
   README.md, "PerfectBook connection". Mirrors only, never money truth.

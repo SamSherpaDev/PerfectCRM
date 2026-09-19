@@ -15,7 +15,7 @@ class ExportsRequestsTest < ActionDispatch::IntegrationTest
     Lead.create!(name: "Ad Lead", source: "google_ads", campaign_name: "Everest", external_ref: "n8n-1")
     client = Client.create!(name: "Tashi", email: "tashi@example.com", referred_by_organization: org)
     client.people.create!(name: "Maya", email: "maya@example.com")
-    Note.create!(notable: client, body: "Loves Everest")
+    note = Note.create!(notable: client, body: "Loves Everest")
 
     get settings_export_path
     assert_response :success
@@ -54,7 +54,7 @@ class ExportsRequestsTest < ActionDispatch::IntegrationTest
     assert_equal "Ops Co", organizations.first["name"]
 
     notes = CSV.parse(files["notes.csv"].delete_prefix("\uFEFF"), headers: true)
-    assert_equal "Loves Everest", notes.first["body"]
+    assert_equal "Loves Everest", notes.find { |row| row["id"] == note.id.to_s }["body"]
   end
 
   test "settings page offers the export" do

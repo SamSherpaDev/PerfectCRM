@@ -30,4 +30,34 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
   driven_by :selenium, using: :headless_chrome, screen_size: [ 1400, 1400 ] do |option|
     option.args.concat(CONTAINER_CHROME_ARGS) if container_chrome?
   end
+
+  # Runs an action (select, choose, or click) that submits a full-page POST
+  # in the quote builder. When navigation commits before chromedriver
+  # answers the action, it can report UnknownError
+  # ("Node with given id does not belong to the document"), which Capybara
+  # does not retry. The submit may already have executed, so control falls
+  # through: the assertion that follows must verify post-navigation state
+  # and fail when the submit never landed. Wait for re-rendered state such
+  # as the updated description; checked controls or unchanged row counts
+  # can match the pre-navigation DOM. Never retry the action itself here;
+  # a second submit could duplicate the record.
+  def tolerate_submit_navigation
+    yield
+  rescue Selenium::WebDriver::Error::UnknownError
+    nil
+  end
+
+  # Re-runs a read-only, navigation-adjacent assertion when the builder's
+  # full-page POST commits mid-read (chromedriver reports UnknownError,
+  # "Node with given id does not belong to the document", which Capybara
+  # does not retry). Retry once for this race: the next navigation is
+  # test-driven, so the retried read should see the committed document.
+  # A second error propagates. Only wrap reads here; a
+  # mutating click retried after a lost response would duplicate the record
+  # (see tolerate_submit_navigation).
+  def tolerate_navigation_assertion
+    yield
+  rescue Selenium::WebDriver::Error::UnknownError
+    yield
+  end
 end
