@@ -50,7 +50,7 @@ module EmailSignature
 
     # The Rails sanitizer on the explicit allowlist, then a Loofah pass for
     # the rules the sanitizer cannot express: style limited to font-size and
-    # color, href limited to http/https/mailto, numeric dimensions only, no
+    # color, href limited to http/https/mailto/tel, numeric dimensions only, no
     # comments (Outlook conditional markup hides tables in them).
     def sanitize(html)
       fragment = Loofah.fragment(html.to_s)
@@ -186,7 +186,7 @@ module EmailSignature
     def scrub_href(node)
       return unless node.name == "a" && node["href"]
 
-      node.remove_attribute("href") unless node["href"].match?(/\A(https?|mailto):/i)
+      node.remove_attribute("href") unless node["href"].match?(/\A(https?|mailto|tel):/i)
     end
 
     def scrub_dimensions(node)

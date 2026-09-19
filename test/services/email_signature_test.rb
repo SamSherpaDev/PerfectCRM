@@ -51,6 +51,7 @@ class EmailSignatureTest < ActiveSupport::TestCase
       <a href="javascript:alert(2)">bad</a>
       <a href="https://sherpaholidays.com">good</a>
       <a href="mailto:info@sherpaholidays.com">mail</a>
+      <a href="tel:+15550100">+1 555 0100</a>
     HTML
     clean = EmailSignature.sanitize(html)
     assert_includes clean, "<p"
@@ -64,6 +65,7 @@ class EmailSignatureTest < ActiveSupport::TestCase
     assert_includes clean, "<a>bad</a>"
     assert_includes clean, 'href="https://sherpaholidays.com"'
     assert_includes clean, 'href="mailto:info@sherpaholidays.com"'
+    assert_includes clean, 'href="tel:+15550100"'
   end
 
   test "sanitize drops inline styles down to font-size and color" do

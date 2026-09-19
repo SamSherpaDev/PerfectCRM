@@ -40,19 +40,28 @@ export default class extends Controller {
   }
 
   // The server previews the saved logo; a file picked but not yet saved
-  // is shown in its place so the captain sees the real combination.
+  // is shown in its place so the captain sees the real combination. The
+  // mail only adds a logo of its own on the plain-lines path, so the
+  // preview prepends one only there; pasted markup shows the logo solely
+  // where it carried a picture.
   applyLogo() {
     if (!this.hasFileTarget || !this.fileTarget.files?.length) return
     if (!this.logoUrl) this.logoUrl = URL.createObjectURL(this.fileTarget.files[0])
     const images = this.outputTarget.querySelectorAll("img")
-    if (images.length === 0) {
+    if (images.length > 0) {
+      images.forEach((image) => { image.src = this.logoUrl })
+    } else if (this.plainLinesPath()) {
       const image = document.createElement("img")
       image.src = this.logoUrl
       image.alt = "Signature logo"
       image.width = 200
       this.outputTarget.prepend(image)
-    } else {
-      images.forEach((image) => { image.src = this.logoUrl })
     }
+  }
+
+  plainLinesPath() {
+    const html = this.hasHtmlTarget ? this.htmlTarget.value.trim() : ""
+    const text = this.hasTextTarget ? this.textTarget.value.trim() : ""
+    return html === "" && text !== ""
   }
 }
