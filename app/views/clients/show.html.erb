@@ -4,5 +4,5 @@
     <%= render "records/header_actions", record: @client %>
   <% end %>
   <%= render "shared/flash" %>
-  <%= render "records/record", record: @client, read_only: false %>
+  <%= render "records/record", record: @client, read_only: @client.archived? %>
 </div>

@@ -1,6 +1,6 @@
 <%# locals: (record:) %>
 <% lead = record.is_a?(Lead) %>
-<% if lead && record.archived? %>
+<% if record.archived? %>
   <%= button_to "Restore", lead ? unarchive_lead_path(record) : unarchive_client_path(record), method: :patch, class: "btn-primary btn btn-sm" %>
 <% elsif lead && record.converted? %>
   <% if record.converted_client %>
@@ -25,8 +25,6 @@
       <hr>
       <% if lead %>
         <%= button_to "Delete lead", archive_lead_path(record), method: :patch, class: "more-item more-danger", form: { data: { turbo_confirm: "Delete #{record.name}? They move to the archive and can be restored from the Archived tab." } } %>
-      <% elsif record.archived? %>
-        <%= button_to "Restore", unarchive_client_path(record), method: :patch, class: "more-item" %>
       <% else %>
         <%= button_to "Archive client", archive_client_path(record), method: :patch, class: "more-item more-danger", form: { data: { turbo_confirm: "Archive this client?" } } %>
       <% end %>

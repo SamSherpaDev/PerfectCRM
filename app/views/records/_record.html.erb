@@ -3,7 +3,7 @@
     timeline in the middle, Upcoming, Files and the PerfectBook trip on the
     right. Under 750px the same cards sit behind three tabs. Read-only
     records (converted or archived) drop the composer and the add line. %>
-<% files_count = @upcoming.size + @files.size %>
+<% files_count = (record.archived? ? 0 : @upcoming.size) + @files.size %>
 <div data-controller="record-tabs">
   <%= render "records/tabs", thread_count: @timeline_total, thread_unread: @thread_unread, files_count: files_count %>
   <div class="record">
@@ -17,7 +17,9 @@
       <%= render "records/timeline", record: record, entries: @timeline, older: @older_timeline, page: @page %>
     </div>
     <div class="record-aside tab-off" data-record-tabs-target="panel" data-tab="files">
-      <%= render "records/upcoming", record: record, rows: @upcoming, read_only: read_only %>
+      <% unless record.archived? %>
+        <%= render "records/upcoming", record: record, rows: @upcoming, read_only: read_only %>
+      <% end %>
       <%= render "records/files", record: record, rows: @files, bookings: @bookings, read_only: read_only %>
       <% if record.is_a?(Client) || record.perfectbook_contact_id.present? %>
         <%= render "records/trip", record: record, bookings: @bookings %>

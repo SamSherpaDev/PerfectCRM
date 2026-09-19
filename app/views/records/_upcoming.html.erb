@@ -10,13 +10,13 @@
   <%= card_caption "Follow-ups, quote deadlines, and departures, soonest first." %>
   <% if rows.any? %>
     <ul class="upcoming">
-      <%= render partial: "records/upcoming_row", collection: shown, as: :row %>
+      <%= render partial: "records/upcoming_row", collection: shown, as: :row, locals: { read_only: read_only } %>
     </ul>
     <% if rest.any? %>
       <details class="upcoming-more">
         <summary>All dates <span class="tab-count"><%= rows.size %></span></summary>
         <ul class="upcoming">
-          <%= render partial: "records/upcoming_row", collection: rest, as: :row %>
+          <%= render partial: "records/upcoming_row", collection: rest, as: :row, locals: { read_only: read_only } %>
         </ul>
       </details>
     <% end %>

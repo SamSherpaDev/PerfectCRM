@@ -1,4 +1,4 @@
-<%# locals: (row:) %>
+<%# locals: (row:, read_only:) %>
 <% date = row.date %>
 <% overdue = date < Date.current %>
 <% today = date == Date.current %>
@@ -11,12 +11,16 @@
       <p class="t"><%= task.title %></p>
       <div class="s">
         <span><%= due_label(task) %> · <%= task.kind_label %></span>
-        <% if task.template %><%= link_to "Nudge", polymorphic_path(task.subject, template: task.template_id, task: task.id, anchor: "reply-heading"), class: "link-quiet" %><% end %>
-        <%= render "tasks/snooze", task: task %>
+        <% unless read_only %>
+          <% if task.template %><%= link_to "Nudge", polymorphic_path(task.subject, template: task.template_id, task: task.id, anchor: "reply-heading"), class: "link-quiet" %><% end %>
+          <%= render "tasks/snooze", task: task %>
+        <% end %>
       </div>
     </div>
-    <%= button_to complete_task_path(task), method: :patch, class: "check-btn", aria: { label: "Mark done: #{task.title}" } do %>
-      <%= render "shared/icon", name: :check, class: "h-5 w-5" %>
+    <% unless read_only %>
+      <%= button_to complete_task_path(task), method: :patch, class: "check-btn", aria: { label: "Mark done: #{task.title}" } do %>
+        <%= render "shared/icon", name: :check, class: "h-5 w-5" %>
+      <% end %>
     <% end %>
   <% when :quote %>
     <% quote = row.record %>

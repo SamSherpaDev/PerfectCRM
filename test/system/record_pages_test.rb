@@ -95,23 +95,37 @@ class RecordPagesTest < ApplicationSystemTestCase
     assert_no_button "Save note"
   end
 
-  test "archived client retains editing composing notes and follow-ups" do
+  test "archived client shows restore alone and hides composer and upcoming" do
     client = Client.create!(name: "Record Archived", email: "archived@example.com")
+    task = client.tasks.create!(title: "Call archived client", due_on: Date.current)
+    client.notes.create!(body: "Existing client history")
     client.archive!
 
     visit client_path(client)
-    assert_link "Edit", href: edit_client_path(client)
+    within(".page-actions") do
+      assert_button "Restore"
+      assert_selector "button", count: 1
+      assert_no_selector "a, summary"
+    end
+    assert_no_button "Send"
+    assert_no_button "Save note"
+    assert_no_selector "#upcoming-heading", visible: :all
+    assert_no_field "New follow-up"
+    within(".timeline") { assert_text "Existing client history" }
+    assert_selector "#files-heading"
+    assert_selector "#perfectbook-heading"
+    page.current_window.resize_to(390, 844)
+    click_button "Files & dates"
+    assert_selector "[data-tab='files'] .tab-count", text: "0", exact_text: true
+
+    click_button "Restore"
+    click_button "Reply", exact: true
     assert_button "Send"
-    fill_in "New follow-up", with: "Call archived client"
-    click_button "Add", exact: true
-    assert_text "Call archived client"
-    choose "Note", allow_label_click: true
-    fill_in "Add a note", with: "Archived client called"
-    click_button "Save note"
-    within(".timeline") { assert_text "Archived client called" }
-    find("summary[aria-label='More actions']").click
-    assert_button "Restore"
-    assert_no_button "Archive client"
+    click_button "Close", exact: true
+    click_button "Files & dates"
+    assert_text task.title
+    assert_field "New follow-up"
+    assert_nil task.reload.done_at
   end
 
   test "phone shows the thread tab first with the docked reply pill" do
@@ -196,9 +210,15 @@ class RecordPagesTest < ApplicationSystemTestCase
 
   test "archived leads remain read only" do
     lead = Lead.create!(name: "Archived lead", source: "manual")
+    template = Template.create!(name: "Archived nudge", subject: "Hello", body: "Checking in")
+    7.times { |i| lead.tasks.create!(title: "Archived task #{i}", due_on: Date.current, template: template) }
     lead.archive!
     visit lead_path(lead)
     assert_button "Restore"
+    assert_no_selector ".more-menu", visible: :all
+    assert_no_selector "#upcoming-heading", visible: :all
+    assert_no_link "Nudge", visible: :all
+    assert_no_selector ".snooze, button[aria-label^='Mark done:']", visible: :all
     assert_no_link "Edit"
     assert_no_button "Send"
     assert_no_button "Save note"
