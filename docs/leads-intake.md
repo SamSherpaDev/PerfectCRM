@@ -16,10 +16,11 @@ Base URL: `https://perfectcrm.sherpaholidays.com`.
 
 Bodies are `application/json`, max 32 KB. Error bodies are
 `{ "error": "bad_request" | "forbidden" | "unauthorized" | "validation" |
-"rate_limited" | "not_found" | "expired" | "converted" | "server" }`;
+"rate_limited" | "not_found" | "expired" | "converted" | "archived" | "server" }`;
 validation errors add a `fields` map from payload key (or model attribute
-for save failures) to `invalid` / `taken` / `required`. A converted verdict instead returns
-`{ "error": "validation", "fields": { "base": "converted" } }`.
+for save failures) to `invalid` / `taken` / `required`. A verdict for a converted or
+archived lead instead returns `{ "error": "validation", "fields": { "base": "converted" } }`
+or `{ "base": "archived" }`.
 
 ## Browser mode (the storefront form)
 
@@ -92,10 +93,11 @@ curl -X POST https://perfectcrm.sherpaholidays.com/api/v1/leads/intake/details \
 ```
 
 Unknown id: `404`. Older than 24 hours: `410`. Converted lead: `422` with
-`error: "converted"`. Details have their own IP rate limit, with no email
-limit. Only provided fields change; each change appends a "Details added by
-the visitor" note. Repeating answers already stored makes no new note or
-notification. No email is sent; the lead page shows the answers.
+`error: "converted"`; archived lead: `422` with `error: "archived"`. Details
+have their own IP rate limit, with no email limit. Only provided fields
+change; each change appends a "Details added by the visitor" note. Repeating
+answers already stored makes no new note or notification. No email is sent;
+the lead page shows the answers.
 
 Month accepts integers 1-12, year 2020-2100, and party size 1-20.
 Budget bands are defined by `Lead::BUDGET_BANDS`. These fields accept `null`
@@ -147,7 +149,7 @@ curl -X POST https://perfectcrm.sherpaholidays.com/api/v1/leads/123/verdict \
 
 `fit_score` 0–100, `fit_band` strong/possible/weak, `status` optional and
 limited to `new`, `chatting`, `lost` - `quoted`, `nudged`, `won`, or a
-converted lead are `422`. Reopening a lost lead also returns `422` if its
+converted or archived lead are `422`. Reopening a lost lead also returns `422` if its
 email or PerfectBook identity belongs to another open lead. Every successful
 call saves its changes and an `automation` timeline event naming the caller
 in one transaction. Failed calls do not add events.

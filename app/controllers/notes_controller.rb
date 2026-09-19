@@ -5,6 +5,9 @@ class NotesController < ApplicationController
     if @notable.is_a?(Lead) && @notable.converted?
       return redirect_to @notable, alert: "Converted leads stay read-only."
     end
+    if @notable.is_a?(Lead) && @notable.archived?
+      return redirect_to @notable, alert: "Archived leads stay read-only until restored."
+    end
 
     @note = @notable.notes.build(note_params)
     @note.author = current_user

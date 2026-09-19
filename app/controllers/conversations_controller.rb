@@ -7,9 +7,11 @@ class ConversationsController < ApplicationController
 
   # Link triage thread to an existing client, lead, or organization.
   def link
-    target = find_target
-    return redirect_to inbox_thread_path(@conversation), alert: "Pick a record to link." if target.nil?
+    record = find_target
+    return redirect_to inbox_thread_path(@conversation), alert: "Pick a record to link." if record.nil?
+    return redirect_to inbox_thread_path(@conversation), alert: "Restore this lead before linking." if record.is_a?(Lead) && record.archived?
 
+    target = Mail::Matcher.current_owner(record)
     @conversation.update!(linkable: target, ignored: false)
     EmailIdentity.remember!(sender_email, linkable: target)
     ActivityEvent.create!(subject: target, kind: "email",
@@ -38,7 +40,7 @@ class ConversationsController < ApplicationController
     sender = sender_email
     return redirect_to inbox_thread_path(@conversation), alert: "No sender to create from." if sender.blank?
 
-    lead = Lead.find_by(email: sender) || Lead.create!(name: display_name_for(sender), email: sender, source: "email")
+    lead = Lead.active.find_by(email: sender) || Lead.create!(name: display_name_for(sender), email: sender, source: "email")
     target = Mail::Matcher.current_owner(lead)
     @conversation.update!(linkable: target, ignored: false)
     EmailIdentity.remember!(sender, linkable: target)
@@ -68,7 +70,7 @@ class ConversationsController < ApplicationController
 
     case type
     when "Client" then Client.find_by(id: id)
-    when "Lead" then Mail::Matcher.current_owner(Lead.find_by(id: id))
+    when "Lead" then Lead.find_by(id: id)
     when "Organization" then Organization.find_by(id: id)
     end
   end

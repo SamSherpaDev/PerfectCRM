@@ -28,6 +28,11 @@ class Leads::Transition
 
     @lead.errors.clear
 
+    if @lead.archived?
+      @lead.errors.add(:base, "Archived leads stay read-only until restored.")
+      raise ActiveRecord::RecordInvalid, @lead
+    end
+
     if @actor == :automation && !Lead::AUTOMATION_STATUSES.include?(@to)
       @lead.errors.add(:status, AUTOMATION_ONLY_ERROR)
       raise ActiveRecord::RecordInvalid, @lead

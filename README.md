@@ -387,10 +387,20 @@ A lead carries source (`google_ads`, `meta_ads`, `website_form`, `email`,
 `referral`, `manual`), campaign, `external_ref` for n8n idempotency, Panda
 AI fit (`fit_score`, `fit_band`, `fit_reason`), and status (`new`,
 `chatting`, `quoted`, `nudged`, `lost`). Tabs are New, Chatting, Quoted,
-Nudged, Lost, and Converted. An email or PerfectBook contact ID can recur
-across lost or converted inquiries, but only one open lead (unconverted
-and not lost) can hold each identity. `external_ref` remains unique across
+Nudged, Lost, Converted, and Archived. An email or PerfectBook contact ID can recur
+across lost or converted inquiries, but only one open lead (unconverted,
+not lost, not archived) can hold each identity. `external_ref` remains unique across
 all leads.
+
+Deleting a lead archives it after one confirmation naming the lead; the
+Archived tab restores it to its previous stage, and nothing is ever
+hard-deleted. Archived leads leave every working list, pipeline column,
+Today count, and digest, and Panda AI or n8n automations only act on
+active leads. New mail from an archived lead's address waits in triage
+instead of linking to it, Link in triage refuses an archived lead until it
+is restored, and a new lead may take its email or PerfectBook contact ID;
+Restore is refused while an open lead holds that identity.
+Converted leads cannot be archived.
 
 Conversion is one-way and manual. Convert to client matches an existing
 client by PerfectBook contact ID first, then normalized primary email.
@@ -604,7 +614,8 @@ conversation linking call it through `Conversation#touch_linkable!`.
 The Numbers card is independent of board filters. It shows value by stage
 using the same value sources as the board, median first reply (currently
 unavailable; reporting integration is pending), repeat-and-referral rate among this year's
-conversions, and asks by source this month. “Out in total” sums only open
+conversions, and asks by source this month from leads that are not archived.
+“Out in total” sums only open
 leads' expected values. The repeat-and-referral rate counts each qualifying
 conversion once, including returns to existing clients and referral leads.
 

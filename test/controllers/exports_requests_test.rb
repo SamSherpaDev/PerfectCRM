@@ -10,6 +10,8 @@ class ExportsRequestsTest < ActionDispatch::IntegrationTest
 
   test "export streams a zip of eight csv files with a bom" do
     org = Organization.create!(name: "Ops Co", kind: "operator", email: "ops@example.com")
+    archived = Lead.create!(name: "Archived Lead", source: "manual")
+    archived.archive!
     Lead.create!(name: "Ad Lead", source: "google_ads", campaign_name: "Everest", external_ref: "n8n-1")
     client = Client.create!(name: "Tashi", email: "tashi@example.com", referred_by_organization: org)
     client.people.create!(name: "Maya", email: "maya@example.com")
@@ -42,8 +44,11 @@ class ExportsRequestsTest < ActionDispatch::IntegrationTest
     assert_includes people.headers, "lead_id"
 
     leads = CSV.parse(files["leads.csv"].delete_prefix("\uFEFF"), headers: true)
-    assert_equal "Ad Lead", leads.first["name"]
-    assert_equal "n8n-1", leads.first["external_ref"]
+    ad_row = leads.find { |row| row["name"] == "Ad Lead" }
+    assert_equal "n8n-1", ad_row["external_ref"]
+    assert_nil ad_row["archived_at"]
+    archived_row = leads.find { |row| row["name"] == "Archived Lead" }
+    assert_equal archived.archived_at.iso8601, archived_row["archived_at"]
 
     organizations = CSV.parse(files["organizations.csv"].delete_prefix("\uFEFF"), headers: true)
     assert_equal "Ops Co", organizations.first["name"]

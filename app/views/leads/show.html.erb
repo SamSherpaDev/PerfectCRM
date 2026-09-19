@@ -1,12 +1,15 @@
 <% content_for :title, "#{@lead.name} · PerfectCRM" %>
 <div class="page">
-  <%= render layout: "shared/page_header", locals: { eyebrow: @lead.converted? ? "Lead · Converted" : "Lead · #{@lead.status.humanize}", title: @lead.name, subtitle: lead_source_label(@lead), back: [ "Leads", leads_path ] } do %>
-    <% if @lead.converted? && @lead.converted_client %>
+  <%= render layout: "shared/page_header", locals: { eyebrow: @lead.archived? ? "Lead · Archived" : (@lead.converted? ? "Lead · Converted" : "Lead · #{@lead.status.humanize}"), title: @lead.name, subtitle: lead_source_label(@lead), back: [ "Leads", leads_path ] } do %>
+    <% if @lead.archived? %>
+      <%= button_to "Restore", unarchive_lead_path(@lead), method: :patch, class: "btn-secondary btn btn-sm" %>
+    <% elsif @lead.converted? && @lead.converted_client %>
       <%= link_to "Open client", client_path(@lead.converted_client), class: "btn-primary btn btn-sm" %>
     <% else %>
       <%= link_to "Edit", edit_lead_path(@lead), class: "btn-secondary btn btn-sm" %>
       <% confirmation = @matching_client ? "This is an existing client: #{@matching_client.name}. Convert will attach this lead's history to them." : "Convert #{@lead.name} to a client? Their whole timeline moves with them. This cannot be undone." %>
       <%= button_to "Convert to client", convert_lead_path(@lead), method: :post, params: { expected_client_id: @matching_client&.id || "new" }, class: "btn-primary btn btn-sm", form: { data: { turbo_confirm: confirmation } } %>
+      <%= button_to "Delete", archive_lead_path(@lead), method: :patch, class: "btn btn-danger btn-sm", form: { data: { turbo_confirm: "Delete #{@lead.name}? They move to the archive and can be restored from the Archived tab." } } %>
     <% end %>
   <% end %>
   <%= render "shared/flash" %>
@@ -30,6 +33,12 @@
         <%= link_to "Open templates", templates_path, class: "link" %>
       <% end %>
     </section>
+  <% end %>
+
+  <% if @lead.archived? %>
+    <div class="callout-neutral callout" role="note">
+      Archived on <%= date_short(@lead.archived_at) %>. Restore to work this lead again.
+    </div>
   <% end %>
 
   <% if @lead.converted? %>
@@ -135,7 +144,7 @@
   <section class="card card-pad" aria-labelledby="people-heading">
     <div class="card-header">
       <h2 class="card-title" id="people-heading">People</h2>
-      <% unless @lead.converted? %>
+      <% unless @lead.converted? || @lead.archived? %>
         <%= link_to "Manage", edit_lead_path(@lead), class: "link-quiet text-xs" %>
       <% end %>
     </div>
@@ -172,11 +181,11 @@
   <% end %>
 
   <% lead_quotes = Quote.where(lead: @lead).ordered.includes(:lines) %>
-  <% if lead_quotes.any? || !@lead.converted? %>
+  <% if lead_quotes.any? || (!@lead.converted? && !@lead.archived?) %>
     <section class="card card-pad" aria-labelledby="quotes-heading">
       <div class="card-header">
         <h2 class="card-title" id="quotes-heading">Quotes</h2>
-        <% unless @lead.converted? %>
+        <% unless @lead.converted? || @lead.archived? %>
           <%= link_to "New quote", new_quote_path(lead_id: @lead.id), class: "link-quiet text-xs" %>
         <% end %>
       </div>
@@ -190,7 +199,7 @@
       <h2 class="card-title" id="notes-heading">Notes</h2>
     </div>
     <%= card_caption "What you know that the ask did not say. Only you see these." %>
-    <% unless @lead.converted? %>
+    <% unless @lead.converted? || @lead.archived? %>
       <%= form_with model: [ @lead, @note ], url: lead_notes_path(@lead), class: "mt-3" do |form| %>
         <%= form.label :body, "Add a note", class: "label" %>
         <%= form.text_area :body, rows: 3, required: true, class: "textarea", placeholder: "Asked about Everest in May…" %>
@@ -244,7 +253,7 @@
       </div>
     <% end %>
     <%= render "shared/history_pagination", record: @lead, page: @events_page, older: @older_events, parameter: :events_page, label: "activity", anchor: "timeline-heading" %>
-    <% unless @lead.converted? %>
+    <% unless @lead.converted? || @lead.archived? %>
       <%= render "reply_box/box", owner: @lead %>
     <% end %>
   </section>

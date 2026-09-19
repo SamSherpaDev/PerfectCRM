@@ -226,6 +226,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_031100) do
 
   create_table "leads", force: :cascade do |t|
     t.boolean "ai_opt_out", default: false, null: false
+    t.datetime "archived_at"
     t.string "budget_band"
     t.string "campaign_name"
     t.datetime "consent_contact_at"
@@ -269,12 +270,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_031100) do
     t.string "trip_interest"
     t.string "trip_title"
     t.datetime "updated_at", null: false
+    t.index ["archived_at"], name: "index_leads_on_archived_at"
     t.index ["converted_client_id"], name: "index_leads_on_converted_client_id"
-    t.index ["email"], name: "index_leads_on_email", unique: true, where: "email IS NOT NULL AND email != '' AND converted_client_id IS NULL AND status != 'lost'"
+    t.index ["email"], name: "index_leads_on_email", unique: true, where: "email IS NOT NULL AND email != '' AND converted_client_id IS NULL AND status != 'lost' AND archived_at IS NULL"
     t.index ["external_ref"], name: "index_leads_on_external_ref", unique: true, where: "external_ref IS NOT NULL AND external_ref != ''"
     t.index ["last_activity_at"], name: "index_leads_on_last_activity_at"
     t.index ["last_touch_at"], name: "index_leads_on_last_touch_at"
-    t.index ["perfectbook_contact_id"], name: "index_leads_on_perfectbook_contact_id", unique: true, where: "perfectbook_contact_id IS NOT NULL AND converted_client_id IS NULL AND status != 'lost'"
+    t.index ["perfectbook_contact_id"], name: "index_leads_on_perfectbook_contact_id", unique: true, where: "perfectbook_contact_id IS NOT NULL AND converted_client_id IS NULL AND status != 'lost' AND archived_at IS NULL"
     t.index ["reference"], name: "index_leads_on_reference", unique: true, where: "reference IS NOT NULL AND reference != ''"
     t.index ["referred_by_organization_id"], name: "index_leads_on_referred_by_organization_id"
     t.index ["status"], name: "index_leads_on_status"

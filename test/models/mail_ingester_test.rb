@@ -216,6 +216,20 @@ class MailIngesterTest < ActiveSupport::TestCase
     end
   end
 
+  test "mail for an archived lead waits in triage even with a remembered identity" do
+    lead = Lead.create!(name: "Gone", source: "email", email: "gone@example.com")
+    EmailIdentity.remember!("gone@example.com", linkable: lead)
+    assert_equal lead, Mail::Matcher.call([ "gone@example.com" ]).linkable
+
+    lead.archive!
+    result = Mail::Matcher.call([ "gone@example.com" ])
+    assert_nil result.linkable
+    assert_equal "unknown", result.via
+
+    lead.unarchive!
+    assert_equal lead, Mail::Matcher.call([ "gone@example.com" ]).linkable
+  end
+
   test "matching always excludes the configured mailbox" do
     client = Client.create!(name: "Business mailbox", email: Mail.mailbox_address)
     EmailIdentity.remember!(Mail.mailbox_address, linkable: client)

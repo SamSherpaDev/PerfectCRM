@@ -154,6 +154,16 @@ class ApiV1LeadsDetailsTest < ActionDispatch::IntegrationTest
     assert_nil @lead.reload.travel_month
   end
 
+  test "archived leads reject details without writing" do
+    @lead.archive!
+    assert_no_difference([ "Note.count", "LeadNotification.count" ]) do
+      post_details details_body
+    end
+    assert_response :unprocessable_entity
+    assert_equal "archived", response.parsed_body["error"]
+    assert_nil @lead.reload.travel_month
+  end
+
   test "model validation failure returns a structured response" do
     @lead.update_column(:name, "")
     assert_no_difference([ "Note.count", "LeadNotification.count" ]) do

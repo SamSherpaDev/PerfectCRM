@@ -24,15 +24,16 @@
     <%= tab_link "Chatting", leads_path(tab: "chatting", q: @query, sort: @sort), icon: :list, active: @tab == "chatting", count: @counts["chatting"] %>
     <%= tab_link "Quoted", leads_path(tab: "quoted", q: @query, sort: @sort), icon: :receipt, active: @tab == "quoted", count: @counts["quoted"] %>
     <%= tab_link "Nudged", leads_path(tab: "nudged", q: @query, sort: @sort), icon: :alert, active: @tab == "nudged", count: @counts["nudged"] %>
-    <%= tab_link "Lost", leads_path(tab: "lost", q: @query, sort: @sort), icon: :archive, active: @tab == "lost", count: @counts["lost"] %>
+    <%= tab_link "Lost", leads_path(tab: "lost", q: @query, sort: @sort), icon: :void, active: @tab == "lost", count: @counts["lost"] %>
     <%= tab_link "Converted", leads_path(tab: "converted", q: @query, sort: @sort), icon: :check, active: @tab == "converted", count: @counts["converted"] %>
+    <%= tab_link "Archived", leads_path(tab: "archived", q: @query, sort: @sort), icon: :archive, active: @tab == "archived", count: @counts["archived"] %>
   </nav>
 
   <section class="card" aria-labelledby="leads-heading">
     <div class="card-header">
-      <h2 class="card-title" id="leads-heading"><%= @tab.humanize %></h2>
+      <h2 class="card-title" id="leads-heading"><%= @tab == "archived" ? "Archived" : @tab.humanize %></h2>
     </div>
-    <%= card_caption(@tab == "converted" ? "Leads that became clients. Read-only, kept for memory." : "Best fit first. Tap a lead to see the full story.") %>
+    <%= card_caption(@tab == "archived" ? "Leads set aside for now. Restore any time." : (@tab == "converted" ? "Leads that became clients. Read-only, kept for memory." : "Best fit first. Tap a lead to see the full story.")) %>
     <% if @leads.any? %>
       <ul class="divide-y divide-rule-2">
         <% @leads.each do |lead| %>
@@ -59,9 +60,14 @@
               </div>
             </div>
             <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs muted sm:justify-end">
-              <span>Active <%= date_short(lead.last_activity) %></span>
-              <% if lead.converted_client %>
-                <%= link_to "Open client", client_path(lead.converted_client), class: "link-quiet" %>
+              <% if @tab == "archived" %>
+                <span>Archived <%= date_short(lead.archived_at) %></span>
+                <%= button_to "Restore", unarchive_lead_path(lead), method: :patch, class: "btn-secondary btn btn-sm" %>
+              <% else %>
+                <span>Active <%= date_short(lead.last_activity) %></span>
+                <% if lead.converted_client %>
+                  <%= link_to "Open client", client_path(lead.converted_client), class: "link-quiet" %>
+                <% end %>
               <% end %>
             </div>
           </li>
@@ -70,6 +76,8 @@
     <% else %>
       <% if @query.present? %>
         <%= render "shared/empty_state", title: "No matches", body: "Nothing matches that search. Try a name fragment or a campaign.", scene: :cairn %>
+      <% elsif @tab == "archived" %>
+        <%= render "shared/empty_state", title: "Nothing archived", body: "Archived leads rest here until they need follow-up again.", scene: :cairn %>
       <% elsif @tab == "converted" %>
         <%= render "shared/empty_state", title: "No conversions yet", body: "Converted leads stay here with a link forward to their client.", scene: :cairn %>
       <% else %>

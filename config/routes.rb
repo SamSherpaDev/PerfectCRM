@@ -52,6 +52,8 @@ Rails.application.routes.draw do
   resources :leads, except: %i[destroy] do
     member do
       post :convert
+      patch :archive
+      patch :unarchive
       post :refresh_bookings
     end
     resources :notes, only: %i[create]

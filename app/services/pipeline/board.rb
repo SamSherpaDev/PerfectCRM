@@ -34,7 +34,7 @@ class Pipeline::Board
   end
 
   def trip_options
-    (Lead.where.not(trip_interest: [ nil, "" ]).distinct.pluck(:trip_interest) +
+    (Lead.active.where.not(trip_interest: [ nil, "" ]).distinct.pluck(:trip_interest) +
       PerfectBook::Booking.where.not(trip_name: [ nil, "" ]).distinct.pluck(:trip_name)).uniq.sort
   end
 

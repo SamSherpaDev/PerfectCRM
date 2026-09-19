@@ -44,6 +44,9 @@ module Api
             if lead.converted?
               return render json: { error: "converted" }, status: :unprocessable_entity
             end
+            if lead.archived?
+              return render json: { error: "archived" }, status: :unprocessable_entity
+            end
 
             lead.assign_attributes(updates)
             if lead.changed?

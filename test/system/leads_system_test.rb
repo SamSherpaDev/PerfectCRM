@@ -56,6 +56,38 @@ class LeadsSystemTest < ApplicationSystemTestCase
     assert_no_link "Edit"
   end
 
+  test "delete archives with one confirmation and the archived tab restores" do
+    OmniAuth.config.mock_auth[:google_oauth2] = OmniAuth::AuthHash.new(
+      provider: "google_oauth2", uid: "google-captain",
+      extra: { id_token: JWT.encode(@claims, @key, "RS256") }
+    )
+    Google::Auth::IDTokens.stub(:oidc_key_source, @source) do
+      visit "/auth/google_oauth2/callback"
+      assert_selector "h1", text: "Today"
+    end
+    page.current_window.resize_to(1400, 900)
+
+    lead = Lead.create!(name: "Archive Tashi", source: "manual", status: "chatting")
+    visit lead_path(lead)
+    assert_selector "h1", text: "Archive Tashi"
+
+    accept_confirm "Delete Archive Tashi? They move to the archive and can be restored from the Archived tab." do
+      click_button "Delete"
+    end
+    assert_selector "h2", text: "Archived"
+    assert_text "Archive Tashi"
+
+    visit leads_path(tab: "chatting")
+    assert_no_text "Archive Tashi"
+
+    visit leads_path(tab: "archived")
+    click_button "Restore"
+    assert_selector "h1", text: "Archive Tashi"
+    assert_link "Edit"
+    visit leads_path(tab: "chatting")
+    assert_text "Archive Tashi"
+  end
+
   private
 
   def assert_no_overflow(context)
