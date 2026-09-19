@@ -8,6 +8,26 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     sign_in
   end
 
+  test "manual forms and requests cannot assign referral codes" do
+    get new_lead_path
+    assert_response :success
+    assert_select "input[name='lead[referral_code]']", count: 0
+    post leads_path, params: { lead: { name: "Manual", referral_code: "KQ7X2D" } }
+    record = Lead.order(:id).last
+    assert_redirected_to lead_path(record)
+    assert_nil record.referral_code
+    record.update!(referral_code: "AAAA22")
+    get edit_lead_path(record)
+    assert_response :success
+    assert_select "input[name='lead[referral_code]']", count: 0
+    [ "BBBB33", "" ].each do |code|
+      patch lead_path(record), params: { lead: { name: "Updated", referral_code: code } }
+      assert_redirected_to lead_path(record)
+      assert_equal "AAAA22", record.reload.referral_code
+      assert_equal "Updated", record.name
+    end
+  end
+
   test "index renders tabs with counts and search" do
     Lead.create!(name: "Ad One", source: "google_ads", status: "new")
     Lead.create!(name: "Chatty", source: "manual", status: "chatting")

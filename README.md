@@ -450,6 +450,9 @@ the source, with the campaign in the event metadata. Multiple historical
 leads can link to the same client; conversion never merges two clients.
 Without a match, conversion creates a client with the lead's facts,
 including its exact source and campaign, the referral code when present, and copies people and history.
+Client details show each converted enquiry’s referral code with its enquiry link, date,
+and trip, preserving the client’s original attribution for returning enquiries.
+Referral codes are captured by intake and are read-only in lead and client forms.
 Only clients created by conversion show Started as a lead.
 Both paths transfer the lead's tasks, drafts, linked conversations, and remembered
 email identities to the client, then link forward and freeze the lead read-only,

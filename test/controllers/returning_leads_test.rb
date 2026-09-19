@@ -35,6 +35,41 @@ class ReturningLeadsTest < ActionDispatch::IntegrationTest
       assert_redirected_to lead_path(lead)
     end
   end
+
+  test "returning enquiry referrals retain their context and original client attribution" do
+    [ :email, :perfectbook_contact_id ].each_with_index do |key, index|
+      [ nil, "AAAA22" ].each_with_index do |original_code, variant|
+        value = key == :email ? "referral#{variant}@example.com" : 800 + variant
+        client = Client.create!(name: "Returning", key => value, referral_code: original_code)
+        enquiries = [ "KQ7X2D", "BBBB33", nil ].map.with_index do |code, number|
+          lead = Lead.create!(name: "Enquiry #{index}-#{variant}-#{number}", key => value,
+            referral_code: code, trip_interest: "Trip #{number}")
+          assert_no_difference -> { Client.count } do
+            post convert_lead_path(lead), params: { expected_client_id: client.id }
+          end
+          assert_redirected_to client_path(client)
+          assert_equal client, lead.reload.converted_client
+          code ? assert_equal(code, lead.referral_code) : assert_nil(lead.referral_code)
+          lead
+        end
+        client.reload
+        original_code ? assert_equal(original_code, client.referral_code) : assert_nil(client.referral_code)
+        assert_equal enquiries.map(&:id).sort, client.converted_leads.pluck(:id).sort
+        get client_path(client)
+        assert_response :success
+        assert_select "dt", text: "Enquiry referral", count: 2
+        enquiries.first(2).each do |lead|
+          assert_select "dd", text: /#{lead.referral_code}/ do
+            assert_select "a[href=?]", lead_path(lead), text: lead.reference
+            assert_select "p", text: lead.trip_interest
+          end
+        end
+        assert_select "dt", text: "Referral code", count: original_code ? 1 : 0
+        assert_select "dd", text: original_code if original_code
+      end
+    end
+  end
+
   test "PerfectBook identity wins when email matches a different client" do
     email_client = Client.create!(name: "Email client", email: "shared@example.com")
     booking_client = Client.create!(name: "Booking client", perfectbook_contact_id: 123)

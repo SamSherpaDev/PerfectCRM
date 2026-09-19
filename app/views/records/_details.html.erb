@@ -102,6 +102,20 @@
         <dd><span class="mono text-xs"><%= record.referral_code %></span></dd>
       </div>
     <% end %>
+    <% unless lead %>
+      <% @referral_enquiries.each do |enquiry| %>
+        <div>
+          <dt>Enquiry referral</dt>
+          <dd>
+            <span class="mono text-xs"><%= enquiry.referral_code %></span>
+            <p class="mt-1 text-xs"><%= link_to enquiry.reference.presence || enquiry.name, lead_path(enquiry), class: "link" %> · <%= date_short(enquiry.received_at || enquiry.created_at) %></p>
+            <% if (trip = enquiry.trip_interest.presence || enquiry.trip_title.presence || enquiry.trip_handle.presence) %>
+              <p class="mt-1 text-xs muted"><%= trip %></p>
+            <% end %>
+          </dd>
+        </div>
+      <% end %>
+    <% end %>
     <% if lead && record.reference.present? %>
       <div>
         <dt>Reference</dt>
