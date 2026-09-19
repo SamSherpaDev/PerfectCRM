@@ -25,29 +25,64 @@ class SettingsSenderTest < ActionDispatch::IntegrationTest
     assert_select "label", text: /signature/i
   end
 
-  test "formatted signature saves sanitized" do
+  test "legacy formatted param is ignored" do
+    Setting.current.update_columns(email_signature_html: "<p>Kept</p>")
     sign_in
     patch settings_path, params: {
-      setting: { email_signature_html: "<p>Sam Sherpa</p><script>alert(1)</script>" }
+      setting: { sender_name: "Sam", email_signature_html: "<p>Dropped</p>" }
     }
     assert_redirected_to edit_settings_path
-    assert_equal "<p>Sam Sherpa</p>", Setting.current.reload.email_signature_html
+    assert_equal "<p>Kept</p>", Setting.current.reload.email_signature_html
   end
 
-  test "text follows the formatted signature when only HTML is supplied" do
-    sign_in
-    patch settings_path, params: {
-      setting: { email_signature: "", email_signature_html: "<p>Sam Sherpa<br>Tel 555-0100</p>" }
-    }
-    assert_redirected_to edit_settings_path
-    assert_equal "", Setting.current.reload.email_signature
-    assert_equal "Sam Sherpa\nTel 555-0100", EmailSignature.text_for(Setting.current)
+  test "text falls back to legacy formatted words without another save" do
+    Setting.current.update_columns(email_signature: "", email_signature_html: "<p>Sam Sherpa<br>Tel 555-0100</p>")
+    assert_equal "Sam Sherpa\nTel 555-0100", EmailSignature.text_for(Setting.current.reload)
+  end
 
-    patch settings_path, params: {
-      setting: { email_signature: "", email_signature_html: "<p>Sam Sherpa<br>Tel 555-0200</p>" }
-    }
+  test "legacy identity and safe links survive viewing and saving unchanged lines" do
+    Setting.current.update_columns(email_signature: "Sam Sherpa", email_signature_html:
+      '<p>Sam Sherpa<br>Sherpa Holidays<br><a href="tel:+15550100">Call Sam</a></p>')
+    sign_in
+    get edit_settings_path
+    assert_response :success
+    lines = "Sam Sherpa\nSherpa Holidays\nCall Sam"
+    assert_select 'textarea[name="setting[email_signature]"]', text: lines
+    assert_select '#signature-preview a[href="tel:+15550100"]', text: "Call Sam"
+    patch settings_path, params: { setting: { email_signature: lines.gsub("\n", "\r\n") } }
     assert_redirected_to edit_settings_path
-    assert_equal "Sam Sherpa\nTel 555-0200", EmailSignature.text_for(Setting.current.reload)
+    follow_redirect!
+    assert_select '#signature-preview a[href="tel:+15550100"]', text: "Call Sam"
+    assert_equal lines, EmailSignature.text_for(Setting.current.reload)
+  end
+
+  test "explicit empty submission clears legacy signatures including uninitialized lines" do
+    sign_in
+    [ "Sam Sherpa", "" ].each do |plain|
+      Setting.current.update_columns(email_signature: plain, email_signature_html: "<p>Sam Sherpa</p>")
+      patch settings_path, params: { setting: { email_signature: "" } }
+      assert_redirected_to edit_settings_path
+      settings = Setting.current.reload
+      assert_empty settings.email_signature_html
+      assert_nil EmailSignature.text_for(settings)
+      assert_empty EmailSignature.html_for(settings)
+      settings.update!(sender_name: "Sam")
+      assert_nil EmailSignature.text_for(settings.reload)
+      follow_redirect!
+      assert_select 'textarea[name="setting[email_signature]"]', text: ""
+      assert_select "#signature-preview table", count: 0
+    end
+  end
+
+  test "editing signature lines replaces legacy content" do
+    Setting.current.update_columns(email_signature: "Sam Sherpa", email_signature_html: "<p>Sam Sherpa<br>Old phone</p>")
+    sign_in
+    patch settings_path, params: { setting: { email_signature: "Sam Sherpa\r\nNew phone" } }
+    assert_redirected_to edit_settings_path
+    follow_redirect!
+    assert_select "#signature-preview", text: /New phone/
+    assert_select "#signature-preview", text: /Old phone/, count: 0
+    assert_equal "Sam Sherpa\nNew phone", EmailSignature.text_for(Setting.current.reload)
   end
 
   test "logo upload attaches a PNG" do
@@ -103,16 +138,34 @@ class SettingsSenderTest < ActionDispatch::IntegrationTest
     assert_not Setting.current.reload.signature_logo.attached?
   end
 
-  test "settings page previews the saved signature with the served logo" do
+  test "settings page previews the app-owned block with the served logo" do
     sign_in
     Setting.current.signature_logo.attach(
       io: StringIO.new(LOGO_BYTES), filename: "logo.png", content_type: "image/png")
-    Setting.current.update!(email_signature_html: "<p>Sam Sherpa</p><img src=\"https://tracker.example/p.gif\">")
+    Setting.current.update!(email_signature: "Sam Sherpa\nFounder, Sherpa Holidays")
     get edit_settings_path
     assert_response :success
-    assert_select "#signature-preview p", text: "Sam Sherpa"
+    assert_select "#signature-preview table"
     assert_select "#signature-preview img[src=?]", logo_settings_path
-    assert_select "#signature-preview img[src*=?]", "tracker.example", count: 0
+    assert_select "label", text: "Signature lines"
+    assert_select "label", text: "Formatted signature", count: 0
+    assert_select "textarea[name=?]", "setting[email_signature_html]", count: 0
+  end
+
+  test "preview displays only the uploaded logo despite legacy images" do
+    sign_in
+    setting = Setting.current.ensure_intake_credentials!
+    setting.signature_logo.attach(
+      io: StringIO.new(LOGO_BYTES), filename: "logo.png", content_type: "image/png")
+    legacy = '<p>Sam Sherpa</p><a href="https://sherpaholidays.com">Visit</a><img src="https://tracker.example/p.gif"><img src="cid:old-logo">'
+    setting.update_columns(email_signature_html: legacy)
+    get edit_settings_path
+    assert_response :success
+    assert_select "#signature-preview img", count: 1
+    assert_select "#signature-preview img[src=?]", logo_settings_path
+    assert_select '#signature-preview a[href="https://sherpaholidays.com"]', text: "Visit"
+    assert_select "#signature-preview", text: /Sam Sherpa/
+    assert_equal legacy, setting.reload.email_signature_html
   end
 
   teardown do

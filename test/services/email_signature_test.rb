@@ -78,62 +78,109 @@ class EmailSignatureTest < ActiveSupport::TestCase
     assert_includes clean, "font-size: 11pt"
   end
 
-  test "past images become the uploaded logo by Content-ID" do
-    attach_logo
-    @setting.update!(email_signature_html:
-      '<p>Sam</p><img src="https://tracker.example/pixel.gif" width="120" height="30">')
-    html = EmailSignature.html_for(@setting)
-    assert_includes html, "cid:#{EmailSignature::CID}"
-    assert_includes html, 'width="120"'
-    assert_not_includes html, "tracker.example"
-    assert_not_includes html, "http"
+  test "block fits a wide logo inside 120x44" do
+    attach_png(600, 200)
+    @setting.update!(email_signature: "Sam Sherpa\nFounder, Sherpa Holidays")
+    img = Loofah.fragment(EmailSignature.html_for(@setting)).at_css("img")
+    assert_equal "cid:#{EmailSignature::CID}", img["src"]
+    assert_equal "120", img["width"]
+    assert_equal "40", img["height"]
+    assert_equal "Sherpa Holidays", img["alt"]
   end
 
-  test "only the first pasted image becomes the logo; social icons are dropped" do
-    attach_logo
-    @setting.update!(email_signature_html: <<~HTML)
-      <p><img src="https://cdn.example/logo.png" width="150" height="60"></p>
-      <p>Sam Sherpa</p>
-      <p><a href="https://linkedin.com/in/sam"><img src="https://cdn.example/in.png" width="24" height="24"></a>
-      <a href="https://facebook.com/sam"><img src="https://cdn.example/fb.png" width="24" height="24"></a></p>
-    HTML
-    images = Loofah.fragment(EmailSignature.html_for(@setting)).css("img")
-    assert_equal 1, images.size
-    assert_equal "cid:#{EmailSignature::CID}", images.first["src"]
-    assert_equal "150", images.first["width"]
-    assert_equal "60", images.first["height"]
-    assert_includes EmailSignature.html_for(@setting), 'href="https://linkedin.com/in/sam"'
-  end
-
-  test "generated logo carries its natural width capped at 200, or none when unmeasured" do
-    attach_logo
+  test "block fits a square mark and never upscales a small one" do
+    attach_png(90, 90)
     @setting.update!(email_signature: "Sam Sherpa")
-    blob = @setting.signature_logo.blob
+    img = Loofah.fragment(EmailSignature.html_for(@setting)).at_css("img")
+    assert_equal "44", img["width"]
+    assert_equal "44", img["height"]
 
-    blob.update!(metadata: blob.metadata.except("width", :width))
-    assert_nil Loofah.fragment(EmailSignature.html_for(@setting)).at_css("img")["width"]
-
-    blob.update!(metadata: blob.metadata.merge(width: 120))
-    assert_equal "120", Loofah.fragment(EmailSignature.html_for(@setting)).at_css("img")["width"]
-
-    blob.update!(metadata: blob.metadata.merge(width: 800))
-    assert_equal "200", Loofah.fragment(EmailSignature.html_for(@setting)).at_css("img")["width"]
+    attach_png(40, 12)
+    img = Loofah.fragment(EmailSignature.html_for(@setting)).at_css("img")
+    assert_equal "40", img["width"]
+    assert_equal "12", img["height"]
   end
 
-  test "past images are dropped when no logo is attached" do
-    @setting.update!(email_signature_html: "<p>Sam</p><img src=\"https://tracker.example/p.gif\">")
+  test "logo dimensions come from header bytes when metadata is absent" do
+    attach_png(600, 200)
+    blob = @setting.signature_logo.blob
+    blob.update!(metadata: { "identified" => true })
+    assert_equal [ 600, 200 ], EmailSignature.logo_dimensions(blob)
+    assert_equal [ 120, 40 ], EmailSignature.logo_box(@setting)
+  end
+
+  test "logo dimensions read GIF and JPEG headers" do
+    @setting.signature_logo.attach(
+      io: StringIO.new("GIF89a".b + [ 90, 90 ].pack("vv") + "\x00".b),
+      filename: "logo.gif", content_type: "image/gif"
+    )
+    assert_equal [ 44, 44 ], EmailSignature.logo_box(@setting)
+    @setting.signature_logo.purge
+
+    sof = "\xFF\xC0".b + [ 8 ].pack("n") + "\x08".b + [ 200, 600 ].pack("nn") + "\x01\x11\x00".b
+    @setting.signature_logo.attach(
+      io: StringIO.new("\xFF\xD8".b + sof),
+      filename: "logo.jpg", content_type: "image/jpeg"
+    )
+    assert_equal [ 600, 200 ], EmailSignature.logo_dimensions(@setting.signature_logo.blob)
+    assert_equal [ 120, 40 ], EmailSignature.logo_box(@setting)
+  end
+
+  test "block without a logo keeps the words and the ochre rule, no image" do
+    @setting.update!(email_signature: "Sam Sherpa\nFounder, Sherpa Holidays")
     html = EmailSignature.html_for(@setting)
     assert_not_includes html, "<img"
-    assert_not_includes html, "tracker.example"
-    assert_includes html, "Sam"
+    assert_includes html, "Sam Sherpa"
+    assert_includes html, "border-left:2px solid #c96f1a"
   end
 
-  test "build-from-text escapes the lines and adds the logo" do
+  test "first line renders as the bold name, details as plain lines" do
+    @setting.update!(email_signature: "Sam Sherpa\nFounder, Sherpa Holidays")
+    html = EmailSignature.html_for(@setting)
+    assert_includes html, "font-family:Georgia"
+    assert_includes html, "font-weight:bold;\">Sam Sherpa<"
+    assert_includes html, ">Founder, Sherpa Holidays<"
+  end
+
+  test "detail lines escape text without inferring link destinations" do
+    @setting.update!(email_signature: [
+      "Sam Sherpa",
+      "sherpaholidays.com | +1 555 0100",
+      "https://sherpaholidays.com/everest, info@sherpaholidays.com",
+      "Sam <boss> & \"friends\""
+    ].join("\n"))
+    html = EmailSignature.html_for(@setting)
+    assert_empty Loofah.fragment(html).css("a")
+    assert_includes html, "Sam &lt;boss&gt; &amp; &quot;friends&quot;"
+    assert_not_includes html, "<script"
+  end
+
+  test "legacy formatted words without an image still build the block with the logo" do
     attach_logo
-    @setting.update!(email_signature: "Sam <boss>\nSherpa Holidays")
+    @setting.update_columns(email_signature: "", email_signature_html: "Sam Sherpa\nFounder, Sherpa Holidays")
+    @setting.reload
     html = EmailSignature.html_for(@setting)
     assert_includes html, "cid:#{EmailSignature::CID}"
-    assert_includes html, "Sam &lt;boss&gt;"
+    assert_includes html, "Sam Sherpa"
+    assert_includes html, "Founder, Sherpa Holidays"
+  end
+
+  test "saving with blank lines copies legacy words without clearing the column" do
+    @setting.update_columns(email_signature: "", email_signature_html: "<p>Sam Sherpa<br>Sherpa Holidays</p>")
+    @setting.reload
+    @setting.save!
+    assert_equal "Sam Sherpa\nSherpa Holidays", @setting.email_signature
+    assert_equal "<p>Sam Sherpa<br>Sherpa Holidays</p>", @setting.email_signature_html
+  end
+
+  test "legacy images are omitted without changing stored markup or safe links" do
+    legacy = '<p>Sam Sherpa</p><a href="https://sherpaholidays.com">Visit</a><img src="https://tracker.example/p.gif"><img src="cid:old-logo">'
+    @setting.update_columns(email_signature_html: legacy)
+    fragment = Loofah.fragment(EmailSignature.html_for(@setting.reload))
+    assert_empty fragment.css("img")
+    assert_includes fragment.text, "Sam Sherpa"
+    assert_equal "Visit", fragment.at_css('a[href="https://sherpaholidays.com"]').text
+    assert_equal legacy, @setting.reload.email_signature_html
   end
 
   test "html is empty when nothing is configured" do
@@ -165,6 +212,16 @@ class EmailSignatureTest < ActiveSupport::TestCase
   def attach_logo
     @setting.signature_logo.attach(
       io: StringIO.new(PNG_BYTES), filename: "logo.png", content_type: "image/png"
+    )
+  end
+
+  # A minimal PNG carrying the given dimensions in its IHDR header.
+  def attach_png(width, height)
+    @setting.signature_logo.purge if @setting.signature_logo.attached?
+    bytes = [ 0x89504E47, 0x0D0A1A0A ].pack("NN") + [ 13 ].pack("N") +
+      "IHDR" + [ width, height ].pack("NN") + "\x08\x02\x00\x00\x00".b
+    @setting.signature_logo.attach(
+      io: StringIO.new(bytes), filename: "logo.png", content_type: "image/png"
     )
   end
 end

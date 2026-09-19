@@ -332,11 +332,11 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     page.current_window.resize_to(390, 844)
     visit edit_settings_path
     fill_in "Your name", with: 'Sam, "Sherpa Holidays"'
-    fill_in "Plain lines", with: "Sam Sherpa Holidays"
+    fill_in "Signature lines", with: "Sam Sherpa Holidays"
     click_button "Save email settings"
     visit edit_settings_path
     assert_field "Your name", with: 'Sam, "Sherpa Holidays"'
-    assert_field "Plain lines", with: "Sam Sherpa Holidays"
+    assert_field "Signature lines", with: "Sam Sherpa Holidays"
     page.execute_script("document.querySelector('#signature-heading').scrollIntoView({behavior: 'instant', block: 'start'})")
     capture_outbound_evidence("sender-settings-mobile")
     @template.update!(body: "{{my_name}} says hello. {{ signature }}")

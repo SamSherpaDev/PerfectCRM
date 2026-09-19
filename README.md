@@ -103,8 +103,7 @@ submission endpoint (`smtp.office365.com:587`, `SMTP_USERNAME`/`SMTP_PASSWORD`
 plus `MAIL_FROM` in `.env.app.example`), with
 `From` and `Reply-To` on the mailbox, `In-Reply-To`/`References` from the
 thread, a generated `Message-ID` that is kept, the signature from Settings → Signature
-(a logo plus formatted HTML pasted from Outlook, or plain lines that build
-one; the logo travels embedded in the mail, never as a link),
+(managed in Settings as described below),
 and uploaded attachments, subject to the [mail document restrictions](#mail).
 Delivery runs on Solid Queue
 (`OutboundDeliveryJob`, retries with backoff); the timeline shows each
@@ -130,6 +129,22 @@ separate conversation regardless of subject. Saved attachments accompany
 newly uploaded files; a successful delivery clears the submitted draft
 only if it has not been edited since submission. Nothing sends without the
 captain pressing Send.
+
+In Settings → Signature, edit Signature lines with your name first and save.
+The preview and outgoing HTML mail use the same layout, with the uploaded logo
+beside the signature. When its dimensions can be read, the logo fits within
+120 × 44 pixels without stretching or enlarging it. It travels embedded by
+Content-ID, rather than as a remote image; display still depends on the
+recipient's mail client.
+
+Existing formatted signatures retain their sanitized text, formatting, and
+safe links until you change the displayed lines. Legacy images are omitted;
+only the uploaded logo is rendered. Saving unchanged lines or replacing the
+logo preserves the legacy formatting. Editing the lines replaces that formatting
+and its links with plain text in the app's layout; typed addresses are not
+automatically linked. Clearing the lines and saving removes the signature,
+including its displayed logo, without deleting the uploaded logo. There is no
+longer a formatted-HTML editor.
 
 Template inserts, task and pipeline nudges, and group sends resolve identity
 from the recipient's actual email, preferring their own mirrored PerfectBook

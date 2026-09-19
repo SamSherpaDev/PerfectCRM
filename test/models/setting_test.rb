@@ -15,6 +15,13 @@ class SettingTest < ActiveSupport::TestCase
     assert_includes settings.errors[:appearance], "is not included in the list"
   end
 
+  test "legacy HTML is sanitized on save" do
+    settings = Setting.current
+    settings.update!(email_signature: "Sam Sherpa",
+      email_signature_html: "<p>Sam Sherpa</p><script>alert(1)</script>")
+    assert_equal "<p>Sam Sherpa</p>", settings.reload.email_signature_html
+  end
+
   test "only one settings row can exist" do
     Setting.current
     assert_not Setting.new(singleton_key: 1).valid?

@@ -376,6 +376,11 @@
   .form-errors {
     @apply rounded-control bg-bad-tint px-4 py-3 text-sm text-bad;
   }
+  /* Signature preview uses a white email surface in both app schemes. */
+  .sig-preview {
+    @apply rounded-control border border-rule overflow-x-auto p-4;
+    background-color: #ffffff;
+  }
   .form-errors ul {
     @apply list-disc pl-5 space-y-1;
   }

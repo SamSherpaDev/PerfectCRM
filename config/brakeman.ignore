@@ -20,7 +20,7 @@
       "cwe_id": [
         79
       ],
-      "note": "The signature preview is sanitized HTML: EmailSignature.sanitize scrubs the stored markup on an explicit allowlist (tags, attributes, style properties, href schemes) on save and again in html_for; covered by test/services/email_signature_test.rb."
+      "note": "EmailSignature.html_for wraps escaped plain lines or legacy HTML sanitized on render with EmailSignature.sanitize (explicit tag, attribute, style and href-scheme allowlists). Legacy image nodes are removed at this shared rendering boundary; only the uploaded logo is rendered with an escaped source. Covered by test/services/email_signature_test.rb."
     }
   ],
   "updated": "2026-09-18 21:52:00 -0700",

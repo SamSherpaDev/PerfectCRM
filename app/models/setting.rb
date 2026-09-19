@@ -23,6 +23,14 @@ class Setting < ApplicationRecord
     find_by(singleton_key: 1) || create_or_find_by!(singleton_key: 1)
   end
 
+  def email_signature=(value)
+    normalized = value&.gsub("\r\n", "\n")
+    if persisted? && email_signature_html.present? && normalized.to_s != EmailSignature.text_for(self).to_s
+      self.email_signature_html = ""
+    end
+    super(normalized)
+  end
+
   # Delegated Microsoft 365 grant: connected once a refresh token is stored
   # along with when the mailbox started being watched.
   def mailbox_connected?
@@ -85,7 +93,7 @@ class Setting < ApplicationRecord
   # Browser textareas submit CRLF; the signature is matched against LF
   # bodies, so both signature shapes are stored with LF line endings.
   def normalize_signature
-    self.email_signature = email_signature&.gsub("\r\n", "\n")
     self.email_signature_html = EmailSignature.sanitize(email_signature_html)
+    self[:email_signature] = EmailSignature.text_for(self).to_s.gsub("\r\n", "\n")
   end
 end

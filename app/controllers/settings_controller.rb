@@ -150,7 +150,7 @@ class SettingsController < ApplicationController
   end
 
   def sender_params
-    params.require(:setting).permit(:sender_name, :email_signature, :email_signature_html, :signature_logo)
+    params.require(:setting).permit(:sender_name, :email_signature, :signature_logo)
   end
 
   def update_appearance(value)
