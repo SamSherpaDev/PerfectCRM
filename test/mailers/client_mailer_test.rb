@@ -97,6 +97,17 @@ class ClientMailerTest < ActionMailer::TestCase
     assert_match(/Regards.*Sam Sherpa.*PS: see you soon/m, html.gsub(/<[^>]+>/, " "))
   end
 
+  test "HTML part mirrors the stored text when the signature changed after compose" do
+    attach_logo
+    Setting.current.update!(email_signature: "Sam Sherpa\nNew line")
+    mail = ClientMailer.outbound(@message)
+    html = mail.html_part.body.to_s
+    assert_equal 1, html.scan("Sam Sherpa").size
+    assert_not_includes html, "New line"
+    assert_not_includes html, "cid:#{EmailSignature::CID}"
+    assert_empty mail.attachments.select(&:inline?)
+  end
+
   test "pasted scripts never reach the HTML part" do
     Setting.current.update!(email_signature_html: "<p>Sam Sherpa</p><script>alert(1)</script>")
     html = ClientMailer.outbound(@message).html_part.body.to_s

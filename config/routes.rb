@@ -124,7 +124,6 @@ Rails.application.routes.draw do
     post :rotate_relay_secret, on: :collection
     delete :signature_logo, to: "settings#remove_signature_logo", on: :collection
     get :logo, to: "settings#logo", on: :collection
-    post :signature_preview, on: :collection
     patch :ai, on: :collection
   end
   namespace :ai do

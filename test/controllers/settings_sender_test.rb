@@ -103,15 +103,16 @@ class SettingsSenderTest < ActionDispatch::IntegrationTest
     assert_not Setting.current.reload.signature_logo.attached?
   end
 
-  test "signature preview renders without saving" do
+  test "settings page previews the saved signature with the served logo" do
     sign_in
-    post signature_preview_settings_path, params: {
-      setting: { email_signature: "", email_signature_html: "<script>alert(1)</script><p>Sam Sherpa</p>" }
-    }
+    Setting.current.signature_logo.attach(
+      io: StringIO.new(LOGO_BYTES), filename: "logo.png", content_type: "image/png")
+    Setting.current.update!(email_signature_html: "<p>Sam Sherpa</p><img src=\"https://tracker.example/p.gif\">")
+    get edit_settings_path
     assert_response :success
-    assert_includes response.body, "Sam Sherpa"
-    assert_not_includes response.body, "alert(1)"
-    assert_equal "", Setting.current.reload.email_signature_html
+    assert_select "#signature-preview p", text: "Sam Sherpa"
+    assert_select "#signature-preview img[src=?]", logo_settings_path
+    assert_select "#signature-preview img[src*=?]", "tracker.example", count: 0
   end
 
   teardown do

@@ -228,7 +228,7 @@
         <%= button_to "Remove logo", signature_logo_settings_path, method: :delete, class: "btn-ghost btn btn-sm" %>
       </div>
     <% end %>
-    <%= form_with model: @settings, url: settings_path, method: :patch, class: "mt-4 space-y-4", data: { controller: "signature-preview", signature_preview_url_value: signature_preview_settings_path } do |form| %>
+    <%= form_with model: @settings, url: settings_path, method: :patch, class: "mt-4 space-y-4" do |form| %>
       <div>
         <%= form.label :sender_name, "Your name", class: "label" %>
         <%= form.text_field :sender_name, class: "input", autocomplete: "off", placeholder: "Sam" %>
@@ -236,17 +236,17 @@
       </div>
       <div>
         <%= form.label :signature_logo, "Logo", class: "label" %>
-        <%= form.file_field :signature_logo, accept: "image/png,image/jpeg,image/gif", class: "input", data: { signature_preview_target: "file", action: "change->signature-preview#logoChanged" } %>
+        <%= form.file_field :signature_logo, accept: "image/png,image/jpeg,image/gif", class: "input" %>
         <p class="hint">PNG, JPEG, or GIF under 500 KB. It travels inside every email, never as a link, so it shows without a download-images prompt.</p>
       </div>
       <div>
         <%= form.label :email_signature, "Plain lines", class: "label" %>
-        <%= form.text_area :email_signature, rows: 3, class: "textarea", placeholder: "Sam Sherpa\nSherpa Holidays", data: { signature_preview_target: "text", action: "input->signature-preview#schedule" } %>
+        <%= form.text_area :email_signature, rows: 3, class: "textarea", placeholder: "Sam Sherpa\nSherpa Holidays" %>
         <p class="hint">Added under every reply. Fills {{signature}} too. With a logo, these lines build the formatted signature; left empty, the words of the formatted signature are used.</p>
       </div>
       <div>
         <%= form.label :email_signature_html, "Formatted signature", class: "label" %>
-        <%= form.text_area :email_signature_html, rows: 6, class: "textarea mono text-xs", placeholder: "<p>Sam Sherpa<br>Sherpa Holidays</p>", data: { signature_preview_target: "html", action: "input->signature-preview#schedule" } %>
+        <%= form.text_area :email_signature_html, rows: 6, class: "textarea mono text-xs", placeholder: "<p>Sam Sherpa<br>Sherpa Holidays</p>" %>
         <p class="hint">Paste the formatted version from Outlook, pictures and all: pasted pictures are swapped for the uploaded logo. Leave it empty to build from the plain lines.</p>
       </div>
       <% if @settings.errors[:signature_logo].any? %>
@@ -254,8 +254,8 @@
       <% end %>
       <div>
         <span class="label">Preview</span>
-        <div class="textarea min-h-24" data-signature-preview-target="output"><%== EmailSignature.preview_html(html: @settings.email_signature_html, text: @settings.email_signature, setting: @settings) %></div>
-        <p class="hint">Exactly as the email will look.</p>
+        <div class="textarea min-h-24" id="signature-preview"><%== EmailSignature.html_for(@settings, logo_src: logo_settings_path) %></div>
+        <p class="hint">The saved signature, exactly as the email will look.</p>
       </div>
       <div>
         <%= form.submit "Save email settings", class: "btn-secondary btn btn-sm" %>

@@ -24,7 +24,7 @@ class ClientMailer < ApplicationMailer
         content: file.download
       }
     end
-    attach_signature_logo(setting, signature_html)
+    attach_signature_logo(setting, @body_html)
 
     mail(
       from: Outbound::Composer.from_display,
@@ -57,12 +57,8 @@ class ClientMailer < ApplicationMailer
     return simple_html(message.text_body.to_s) if signature_html.blank?
 
     parts = EmailSignature.split_body(message.text_body, template_id: message.template_id)
-    if parts
-      [ simple_html(parts.first.rstrip), signature_html, simple_html(parts.last.strip) ].reject(&:blank?).join("\n")
-    else
-      # Settings changed between compose and delivery: the stored text no
-      # longer holds the current text signature, so append the HTML one.
-      "#{simple_html(message.text_body.to_s)}\n#{signature_html}"
-    end
+    return simple_html(message.text_body.to_s) if parts.nil?
+
+    [ simple_html(parts.first.rstrip), signature_html, simple_html(parts.last.strip) ].reject(&:blank?).join("\n")
   end
 end

@@ -60,15 +60,6 @@ class SettingsController < ApplicationController
       type: blob.content_type, disposition: "inline"
   end
 
-  # Live signature preview for the Settings form. Renders the unsaved
-  # words exactly as the email will look, without saving anything.
-  def signature_preview
-    html = params.dig(:setting, :email_signature_html).to_s
-    text = params.dig(:setting, :email_signature).to_s
-    preview = EmailSignature.preview_html(html: html, text: text, setting: Setting.current)
-    render html: preview.html_safe # rubocop:disable Rails/OutputSafety
-  end
-
   # Tests the PerfectBook read API with a cheap one-row read. Never renders
   # or logs the token.
   def perfectbook_test

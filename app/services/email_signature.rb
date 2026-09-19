@@ -39,15 +39,6 @@ module EmailSignature
       end
     end
 
-    # Preview for Settings: same rendering as the email, but the logo shows
-    # through the controller-served bytes (cid: means nothing to a browser).
-    def preview_html(html:, text:, setting:)
-      draft = Struct.new(:email_signature, :email_signature_html, :signature_logo)
-        .new(text.to_s, html.to_s, setting.signature_logo)
-      logo_src = logo_attached?(setting) ? preview_logo_src : ""
-      html_for(draft, logo_src: logo_src)
-    end
-
     # The Rails sanitizer on the explicit allowlist, then a Loofah pass for
     # the rules the sanitizer cannot express: style limited to font-size and
     # color, href limited to http/https/mailto/tel, numeric dimensions only, no
@@ -162,10 +153,6 @@ module EmailSignature
       logo = logo_attached?(setting) && logo_src.present? ?
         "#{logo_img_tag(setting, logo_src: logo_src).to_html}\n" : ""
       "#{logo}#{paragraphs}"
-    end
-
-    def preview_logo_src
-      Rails.application.routes.url_helpers.logo_settings_path
     end
 
     def scrub_style(node)
