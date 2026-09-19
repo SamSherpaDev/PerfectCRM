@@ -53,7 +53,7 @@ class MessagesController < ApplicationController
   end
 
   def message_params
-    params.fetch(:message, {}).permit(:to, :cc, :bcc, :subject, :body, :template_id, files: [])
+    params.fetch(:message, {}).permit(:to, :cc, :bcc, :subject, :body, :template_id, :recipient_confirmation, files: [])
   end
 
   # The send failed validation (no recipient, blank subject/body): stash

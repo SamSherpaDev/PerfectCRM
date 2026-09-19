@@ -1,8 +1,6 @@
 module EmailRedirects
   extend ActiveSupport::Concern
 
-  REDIRECT_LIMIT = 20
-
   included do
     serialize :email_redirects, coder: JSON
     after_update :record_email_redirect_on_change
@@ -25,11 +23,10 @@ module EmailRedirects
     return "" if normalized.blank?
 
     redirects = redirect_map
-    return normalized unless redirects.key?(normalized)
-
-    seen = Set.new([ normalized ])
-    current = redirects[normalized].to_s.strip.downcase
-    while current.present? && redirects.key?(current) && !seen.include?(current) && seen.size <= REDIRECT_LIMIT
+    active = current_recipient_emails
+    seen = Set.new
+    current = normalized
+    while current.present? && redirects.key?(current) && !active.include?(current) && !seen.include?(current)
       seen << current
       current = redirects[current].to_s.strip.downcase
     end
@@ -52,22 +49,43 @@ module EmailRedirects
     return if old_key.blank?
 
     new_value = new_address.to_s.strip.downcase
-    return if old_key == new_value
 
     self.class.transaction do
       current = self.class.unscoped.lock.find(id)
       redirects = current.redirect_map.transform_values { |value| current.resolve_redirected_email(value) }
       redirects.transform_values! { |value| value == old_key ? new_value : value }
-      redirects.delete(new_value)
+      redirects[new_value] = new_value if redirects.key?(new_value)
       redirects.delete(old_key)
       redirects[old_key] = new_value
-      redirects = redirects.to_a.last(REDIRECT_LIMIT).to_h if redirects.size > REDIRECT_LIMIT
       current.update_columns(email_redirects: redirects)
       self.email_redirects = redirects
     end
   end
 
+  def current_recipient_emails
+    ([ email ] + people.pluck(:email)).compact_blank.map { |address| address.strip.downcase }.uniq
+  end
+
+  def ambiguous_recipient_emails
+    redirect_map.keys & current_recipient_emails
+  end
+
+  def recipient_confirmation_token
+    Rails.application.message_verifier(:recipient_confirmation).generate(recipient_confirmation_state)
+  end
+
+  def recipient_confirmation_valid?(token)
+    Rails.application.message_verifier(:recipient_confirmation).verified(token.to_s) == recipient_confirmation_state
+  end
+
   private
+
+  def recipient_confirmation_state
+    Digest::SHA256.hexdigest([
+      self.class.name, id, email, updated_at, redirect_map.sort,
+      people.reorder(:id).pluck(:id, :email, :updated_at)
+    ].to_json)
+  end
 
   def record_email_redirect_on_change
     return unless saved_change_to_email?

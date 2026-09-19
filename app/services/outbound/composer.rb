@@ -30,6 +30,7 @@ module Outbound
     end
 
     def compose
+      @owner.reload if @owner&.persisted?
       @draft = Draft.for_owner(@owner, conversation: @conversation) if @owner && !@group_send
       resolve_conversation
       message = @conversation ? @conversation.messages.build : Message.new
@@ -42,6 +43,7 @@ module Outbound
       message.to_addrs = recipients.join(", ")
       message.cc_addrs = redirect_explicit([ @params[:cc].to_s ]).join(", ")
       message.bcc_addrs = redirect_explicit([ @params[:bcc].to_s ]).join(", ")
+      confirm_recipients!(message)
       message.subject = @params[:subject].to_s.strip.presence || default_subject
       if @params[:body].to_s.strip.blank?
         message.errors.add(:text_body, :blank)
@@ -59,6 +61,18 @@ module Outbound
     end
 
     private
+
+    def confirm_recipients!(message)
+      return unless @owner.respond_to?(:ambiguous_recipient_emails)
+
+      addresses = [ message.to_addrs, message.cc_addrs, message.bcc_addrs ].join(", ").split(/[,\n;]/).map { |address| address.strip.downcase }
+      confirmation = @params[:recipient_confirmation]
+      return if (addresses & @owner.ambiguous_recipient_emails).empty? && confirmation.blank?
+      return if @owner.recipient_confirmation_valid?(confirmation)
+
+      message.errors.add(:base, "Review To, Cc and Bcc and confirm the current recipients. An address was reassigned or restored.")
+      raise ActiveRecord::RecordInvalid, message
+    end
 
     def resolve_conversation
       return if @conversation

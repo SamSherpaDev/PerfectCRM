@@ -98,10 +98,14 @@ class RecipientCorrectionTest < ActionDispatch::IntegrationTest
     end
 
     %w[second third].each do |address|
-      post lead_messages_path(lead), params: {
-        conversation_id: first.conversation_id,
-        message: { to: "#{address}@example.test", body: "Follow up" }
-      }
+      get lead_path(lead)
+      confirmation = recipient_confirmation_from_form
+      assert_difference "Message.count", 1 do
+        post lead_messages_path(lead), params: {
+          conversation_id: first.conversation_id,
+          message: { to: "#{address}@example.test", body: "Follow up", recipient_confirmation: confirmation }
+        }
+      end
       assert_response :redirect
       assert_equal [ "first@example.test" ], ClientMailer.outbound(Message.order(:id).last).to
     end
@@ -145,7 +149,6 @@ class RecipientCorrectionTest < ActionDispatch::IntegrationTest
     assert_equal [ "right@example.test" ], mail.bcc
     assert_equal "wrong@example.test", first.reload.cc_addrs
     assert_equal "wrong@example.test", first.bcc_addrs
-
   end
 
   test "one edit preserves both owner and nested contact corrections" do
@@ -201,5 +204,120 @@ class RecipientCorrectionTest < ActionDispatch::IntegrationTest
         assert_equal "lead-new@example.test", client.reload.resolve_redirected_email("client-old@example.test")
       end
     end
+  end
+
+  test "reassigned draft recipients require confirmation and reach the current contact" do
+    lead = Lead.create!(name: "Reassignment", email: "owner@example.test", source: "manual")
+    person = lead.people.create!(name: "One", email: "reused@example.test")
+    queued = Outbound::Composer.call(owner: lead, params: { to: person.email, body: "Already queued" })
+    conversation = queued.conversation
+    draft = conversation.create_draft!(owner: lead, to_addrs: person.email, body: "Unsent words")
+    sign_in
+    patch lead_path(lead), params: { lead: { people_attributes: {
+      "0" => { id: person.id, name: "One", email: "corrected@example.test" },
+      "1" => { name: "Two", email: "reused@example.test" }
+    } } }
+    assert_response :redirect
+
+    [ nil, "1" ].each do |confirmation|
+      assert_no_difference "Message.count" do
+        post lead_messages_path(lead), params: { conversation_id: conversation.id,
+          message: { to: "reused@example.test", body: draft.body, recipient_confirmation: confirmation } }
+      end
+      assert_match "confirm the current recipients", flash[:alert]
+    end
+    assert_equal "reused@example.test", draft.reload.to_addrs
+    assert_equal "Unsent words", draft.body
+
+    get inbox_thread_path(conversation)
+    assert_response :success
+    assert_select "input[name='message[to]'][value='reused@example.test']"
+    assert_select "li", text: "Two: reused@example.test"
+    confirmation = recipient_confirmation_from_form
+    assert_difference "Message.count", 1 do
+      post lead_messages_path(lead), params: { conversation_id: conversation.id,
+        message: { to: "reused@example.test", body: draft.body, recipient_confirmation: confirmation } }
+    end
+    assert_equal [ "reused@example.test" ], ClientMailer.outbound(Message.order(:id).last).to
+    assert_equal "reused@example.test", queued.reload.to_addrs
+    assert_equal "queued", queued.status
+
+    assert_difference "Message.count", 1 do
+      post lead_messages_path(lead), params: { message: { to: "alternate@example.test", body: "Deliberate alternate" } }
+    end
+    assert_equal [ "alternate@example.test" ], ClientMailer.outbound(Message.order(:id).last).to
+  end
+
+  [ :owner, :person ].each do |target|
+    test "clearing and restoring a #{target} address requires fresh confirmation for copy recipients" do
+      lead = Lead.create!(name: "Restoration", email: "owner@example.test", source: "manual")
+      contact = target == :owner ? lead : lead.people.create!(name: "Contact", email: "contact@example.test")
+      address = contact.email
+      contact.update!(email: nil)
+      contact.update!(email: address)
+      sign_in
+
+      [ :cc, :bcc ].each do |field|
+        message_params = { to: "alternate@example.test", field => address, body: "Confirm copies" }
+        assert_no_difference "Message.count" do
+          post lead_messages_path(lead), params: { message: message_params }
+        end
+        assert_match "confirm the current recipients", flash[:alert]
+        get lead_path(lead, new_thread: 1)
+        assert_select "input[name='message[#{field}]'][value='#{address}']"
+        stale_confirmation = recipient_confirmation_from_form
+
+        contact.update!(email: nil)
+        contact.update!(email: address)
+        assert_no_difference "Message.count" do
+          post lead_messages_path(lead), params: { message: message_params.merge(recipient_confirmation: stale_confirmation) }
+        end
+        get lead_path(lead, new_thread: 1)
+        confirmation = recipient_confirmation_from_form
+        assert_difference "Message.count", 1 do
+          post lead_messages_path(lead), params: { message: message_params.merge(recipient_confirmation: confirmation) }
+        end
+        assert_equal [ address ], ClientMailer.outbound(Message.order(:id).last).public_send(field)
+      end
+    end
+  end
+
+  test "a stale composer owner cannot bypass reassignment confirmation" do
+    lead = Lead.create!(name: "Stale owner", email: "owner@example.test", source: "manual")
+    person = lead.people.create!(name: "One", email: "reused@example.test")
+    stale_owner = Lead.find(lead.id)
+    person.update!(email: "corrected@example.test")
+    lead.people.create!(name: "Two", email: "reused@example.test")
+
+    assert_no_difference "Message.count" do
+      assert_raises ActiveRecord::RecordInvalid do
+        Outbound::Composer.call(owner: stale_owner, params: { to: "reused@example.test", body: "Old form" })
+      end
+    end
+  end
+
+  test "correction history survives more than twenty subsequent edits" do
+    lead = Lead.create!(name: "Long history", email: "first@example.test", source: "manual")
+    original = Outbound::Composer.call(owner: lead, params: { to: lead.email, body: "Original" })
+    draft = original.conversation.create_draft!(owner: lead, to_addrs: lead.email, body: "Old draft")
+    22.times { |index| lead.update!(email: "correction-#{index}@example.test") }
+    person = lead.people.create!(name: "Contact", email: "person-old@example.test")
+    person.update!(email: "person-new@example.test")
+    sign_in
+    get lead_path(lead)
+    assert_select "input[name='message[to]'][value='correction-21@example.test']"
+    assert_difference "Message.count", 1 do
+      post lead_messages_path(lead), params: { conversation_id: original.conversation_id,
+        message: { to: draft.to_addrs, body: draft.body } }
+    end
+    assert_equal [ "correction-21@example.test" ], ClientMailer.outbound(Message.order(:id).last).to
+    assert_equal "first@example.test", original.reload.to_addrs
+  end
+
+  private
+
+  def recipient_confirmation_from_form
+    assert_select "input[type='checkbox'][name='message[recipient_confirmation]']:not([checked])", count: 1
+    css_select("input[type='checkbox'][name='message[recipient_confirmation]']").first["value"]
   end
 end
