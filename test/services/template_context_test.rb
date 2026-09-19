@@ -119,5 +119,4 @@ class TemplateContextTest < ActiveSupport::TestCase
     lead.update!(email: nil)
     assert_nil TemplateContext.for_reply(to: "", owner: lead)[:context]["trip"]
   end
-
 end
