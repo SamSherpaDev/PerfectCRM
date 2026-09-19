@@ -411,7 +411,7 @@ manually and add another person in the blank People fields.
 
 Website inquiries now arrive directly in Leads. Open a lead to read its
 inquiry and optional travel details; unknown timing takes precedence over
-previous dates. The Automations strip shows recent integration activity.
+previous dates.
 In Settings → Automations, manage credentials and the n8n subscription,
 and review machine events and delivery results. The website form and external
 n8n/Panda AI workflows are configured separately; see the
