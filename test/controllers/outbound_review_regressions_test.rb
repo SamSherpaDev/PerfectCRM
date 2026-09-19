@@ -86,9 +86,9 @@ class OutboundReviewRegressionsTest < ActionDispatch::IntegrationTest
     get client_path(@client)
     assert_select "input[name='message[to]'][value='secondary@example.com']"
     assert_select "input[name='message[cc]'][value='cc@example.com']"
-    assert_select "a", text: "Older activity"
-    get client_path(@client), params: { events_page: 2 }
-    assert_select ".reply-ev", text: /Message 0/
+    assert_select "a", text: "Load older"
+    get client_path(@client), params: { page: 3 }
+    assert_select ".timeline", text: /Message 0/
     50.times { |i| @client.conversations.create!(subject_line: "Thread #{i}") }
     get inbox_path, params: { tab: "all" }
     assert_select "a", text: "Load older"

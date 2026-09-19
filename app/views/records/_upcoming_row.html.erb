@@ -1,0 +1,42 @@
+<%# locals: (row:) %>
+<% date = row.date %>
+<% overdue = date < Date.current %>
+<% today = date == Date.current %>
+<li>
+  <%= upcoming_day_tile(date, warn: overdue || today) %>
+  <% case row.kind %>
+  <% when :task %>
+    <% task = row.record %>
+    <div class="min-w-0">
+      <p class="t"><%= task.title %></p>
+      <div class="s">
+        <span><%= due_label(task) %> · <%= task.kind_label %></span>
+        <% if task.template %><%= link_to "Nudge", polymorphic_path(task.subject, template: task.template_id, task: task.id, anchor: "reply-heading"), class: "link-quiet" %><% end %>
+        <%= render "tasks/snooze", task: task %>
+      </div>
+    </div>
+    <%= button_to complete_task_path(task), method: :patch, class: "check-btn", aria: { label: "Mark done: #{task.title}" } do %>
+      <%= render "shared/icon", name: :check, class: "h-5 w-5" %>
+    <% end %>
+  <% when :quote %>
+    <% quote = row.record %>
+    <div class="min-w-0">
+      <p class="t">Quote <%= quote.reference %> expires</p>
+      <p class="s"><span><%= today ? "Today" : pluralize((date - Date.current).to_i, "day") + " left" %></span><%= status_badge(quote.status) %></p>
+    </div>
+    <%= link_to quote_path(quote), class: "chev", aria: { label: "Open quote #{quote.reference}" } do %>
+      <%= render "shared/icon", name: :chevron_right, class: "h-4 w-4" %>
+    <% end %>
+  <% when :departure %>
+    <% booking = row.record %>
+    <div class="min-w-0">
+      <p class="t"><%= booking.trip_name.presence || "Departure" %> departs</p>
+      <p class="s"><span><%= date_range(booking.start_date, booking.end_date) %><% if booking.party_size %> · <%= pluralize(booking.party_size, "traveler") %><% end %></span></p>
+    </div>
+    <% if booking.deep_link.present? %>
+      <%= link_to perfectbook_booking_url(booking), class: "chev", target: "_blank", rel: "noopener", aria: { label: "Open booking #{booking.ref} in PerfectBook" } do %>
+        <%= render "shared/icon", name: :external, class: "h-4 w-4" %>
+      <% end %>
+    <% end %>
+  <% end %>
+</li>

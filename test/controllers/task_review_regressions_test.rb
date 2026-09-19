@@ -19,14 +19,21 @@ class TaskReviewRegressionsTest < ActionDispatch::IntegrationTest
       assert_equal polymorphic_path(subject, template: @template.id, task: task.id), link["href"]
       get link["href"]
       assert_response :success
-      assert_select "h2", "Suggested message"
-      assert_select "textarea", text: "Hi Tashi & friends, how was [missing: trip]?"
-      assert_select "button", "Copy message"
-      mailto = URI.parse(css_select('a[href^="mailto:"]').last["href"])
-      assert_equal subject.email, mailto.opaque.split("?").first
-      query = URI.decode_www_form(mailto.opaque.split("?", 2).last).to_h
-      assert_equal "Hello Tashi", query["subject"]
-      assert_equal "Hi Tashi & friends, how was [missing: trip]?", query["body"]
+      if model == Organization
+        assert_select "h2", "Suggested message"
+        assert_select "textarea", text: "Hi Tashi & friends, how was [missing: trip]?"
+        assert_select "button", "Copy message"
+        mailto = URI.parse(css_select('a[href^="mailto:"]').last["href"])
+        assert_equal subject.email, mailto.opaque.split("?").first
+        query = URI.decode_www_form(mailto.opaque.split("?", 2).last).to_h
+        assert_equal "Hello Tashi", query["subject"]
+        assert_equal "Hi Tashi & friends, how was [missing: trip]?", query["body"]
+      else
+        # Leads and clients prefill the record composer instead.
+        assert_select "#suggested-message-heading", count: 0
+        assert_select "textarea#message_body", text: "Hi Tashi & friends, how was [missing: trip]?"
+        assert_select "input#message_subject[value='Hello Tashi']"
+      end
       assert_not task.reload.done?
     end
   end

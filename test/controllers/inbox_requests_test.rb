@@ -52,10 +52,10 @@ class InboxRequestsTest < ActionDispatch::IntegrationTest
       to_addresses: [ "info@sherpaholidays.com" ], subject: "Stream sub", sent_at: Time.current, text_body: "hello stream")
     get client_path(client)
     assert_response :success
-    assert_select "h2", text: "Email"
-    assert_select "article.stone", minimum: 1
+    assert_select "h2", text: "Timeline"
+    assert_select ".timeline .ev", minimum: 1
   end
-  test "record timeline exposes older messages and the full expanded body" do
+  test "record timeline pages long histories with the full expanded body" do
     client = Client.create!(name: "Long history", email: "history@example.com")
     21.times do |index|
       conversation = Conversation.create!(linkable: client, subject: "History #{index}")
@@ -63,17 +63,28 @@ class InboxRequestsTest < ActionDispatch::IntegrationTest
         text_body: index.zero? ? "x" * 4100 + " final itinerary detail" : "message #{index}")
     end
     get client_path(client)
-    assert_select "article.stone", count: 20
-    assert_select "details", text: /final itinerary detail/
+    assert_response :success
+    assert_select ".timeline .ev", count: 21
+    assert_select ".timeline details", text: /final itinerary detail/
+    assert_select "a", { text: "Load older", count: 0 }
+    30.times do |index|
+      conversation = Conversation.create!(linkable: client, subject: "Older #{index}")
+      conversation.messages.create!(direction: "in", from_address: client.email, sent_at: (21 + index).minutes.ago,
+        text_body: "older message #{index}")
+    end
+    get client_path(client)
+    assert_response :success
+    assert_select ".timeline .ev", count: 50
+    assert_select "a", text: "Load older"
     older = css_select("a").find { |a| a.text == "Load older" }["href"]
     get older
     assert_response :success
-    assert_select "article.stone", count: 1
-    assert_select "article", text: /message 20/
-    newest = css_select("a").find { |a| a.text == "Jump to newest ↑" }["href"]
-    get URI.join(request.url, newest).to_s
-    assert_select "article.stone", count: 20
-    assert_select "details", text: /final itinerary detail/
+    assert_select ".timeline .ev", count: 1
+    assert_select ".timeline", text: /older message 29/
+    newer = css_select("a").find { |a| a.text == "Newer" }["href"]
+    get URI.join(request.url, newer).to_s
+    assert_select ".timeline .ev", count: 50
+    assert_select ".timeline details", text: /final itinerary detail/
   end
 
   test "inbox exposes the fifty first conversation" do

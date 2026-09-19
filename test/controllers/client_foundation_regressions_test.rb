@@ -65,17 +65,32 @@ class ClientFoundationRegressionsTest < ActionDispatch::IntegrationTest
   end
 
   test "older notes and events remain reachable" do
-    [ Client, Lead, Organization ].each do |model|
+    record = Organization.create!(name: "History")
+    51.times { |i| record.notes.create!(body: "Note #{i}", created_at: i.minutes.ago) }
+    51.times { |i| record.activity_events.create!(kind: "email", summary: "Email #{i}", occurred_at: i.days.ago) }
+    get polymorphic_path(record)
+    assert_select "a", text: "Older notes"
+    assert_select "a", text: "Older activity"
+    get polymorphic_path(record), params: { notes_page: 2, events_page: 2 }
+    assert_response :success
+    assert_select "p", text: "Note 50"
+    assert_select "p", text: "Email 50"
+  end
+
+  test "lead and client timelines page as one stream" do
+    [ Client, Lead ].each do |model|
       record = model.create!(name: "History")
       51.times { |i| record.notes.create!(body: "Note #{i}", created_at: i.minutes.ago) }
-      51.times { |i| record.activity_events.create!(kind: "email", summary: "Email #{i}", occurred_at: i.days.ago) }
       get polymorphic_path(record)
-      assert_select "a", text: "Older notes"
-      assert_select "a", text: "Older activity"
-      get polymorphic_path(record), params: { notes_page: 2, events_page: 2 }
       assert_response :success
-      assert_select "p", text: "Note 50"
-      assert_select "p", text: "Email 50"
+      assert_select "a", text: "Load older"
+      assert_select "a", { text: "Older notes", count: 0 }
+      assert_select "a", { text: "Older activity", count: 0 }
+      oldest = record.notes.find_by!(body: "Note 50")
+      assert_select "#note-#{oldest.id}", count: 0
+      get polymorphic_path(record), params: { page: 2 }
+      assert_response :success
+      assert_select "#note-#{oldest.id}"
     end
   end
 

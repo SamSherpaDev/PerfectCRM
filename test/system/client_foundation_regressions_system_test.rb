@@ -27,7 +27,8 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
     }.each do |band, label|
       lead.update!(budget_band: band)
       visit lead_path(lead)
-      within "section[aria-labelledby='inquiry-heading']" do
+      click_button "Details", exact: true
+      within "section[aria-labelledby='details-heading']" do
         assert_selector "dd", exact_text: label
       end
       capture("inquiry-budget-#{band}-phone")
@@ -77,6 +78,7 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
       fill_in "#{key}[people_attributes][2][email]", with: "third@example.com"
       click_button "Save changes"
       assert_selector "h1", text: record.name
+      click_button "Details", exact: true
       assert_text "Third"
       assert_equal "two@example.com", one.reload.email
       assert_nil two.reload.email
@@ -121,11 +123,15 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
     assert_no_text "Unanswered"
     capture("leads-phone")
     visit lead_path(lead)
+    click_button "Details", exact: true
     assert_text "maya@example.com"
     capture("lead-phone")
     accept_confirm { click_button "Convert to client" }
+    assert_text "Lead converted. Their timeline moved with them."
+    click_button "Details", exact: true
     assert_text "Started as a lead"
     assert_text "Spring 2027"
+    click_button "Thread"
     assert_text "Panda qualification received"
     client = lead.reload.converted_client
     assert_equal "meta_ads", client.source
@@ -141,26 +147,35 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
     assert_selector "a[href='https://perfectbook.sherpaholidays.com/contacts/123']"
     capture("clients-phone")
     visit client_path(client)
-    accept_confirm { click_button "Archive" }
+    find("summary[aria-label='More actions']").click
+    accept_confirm { click_button "Archive client" }
     assert_text "Client archived."
     click_link client.name
     assert_button "Restore"
     click_button "Restore"
-    assert_button "Archive"
+    find("summary[aria-label='More actions']").click
+    assert_button "Archive client"
   end
 
   test "older notes and activity are reachable on every record type" do
-    [ Client, Lead, Organization ].each do |model|
+    [ Client, Lead ].each do |model|
       record = model.create!(name: "Long history")
       51.times { |i| record.notes.create!(body: "Historic note #{i}", created_at: i.minutes.ago) }
       51.times { |i| record.activity_events.create!(kind: "email", summary: "Historic email #{i}", occurred_at: i.days.ago) }
       visit polymorphic_path(record)
-      click_link "Older notes"
+      click_link "Load older"
       assert_text "Historic note 50"
-      click_link "Older activity"
-      assert_text "Historic email 50"
       capture("#{model.model_name.param_key}-older-history")
     end
+    record = Organization.create!(name: "Long history")
+    51.times { |i| record.notes.create!(body: "Historic note #{i}", created_at: i.minutes.ago) }
+    51.times { |i| record.activity_events.create!(kind: "email", summary: "Historic email #{i}", occurred_at: i.days.ago) }
+    visit polymorphic_path(record)
+    click_link "Older notes"
+    assert_text "Historic note 50"
+    click_link "Older activity"
+    assert_text "Historic email 50"
+    capture("organization-older-history")
   end
 
   test "search sorting and export operate through the running application" do
@@ -260,6 +275,8 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
       click_button "Save lead"
       assert_selector "h1", text: "Return inquiry #{index}"
       lead = Lead.find_by!(name: "Return inquiry #{index}")
+      click_button "Reply"
+      choose "Note", allow_label_click: true
       fill_in "Add a note", with: "Return plans #{index}"
       click_button "Save note"
       assert_text "Return plans #{index}"

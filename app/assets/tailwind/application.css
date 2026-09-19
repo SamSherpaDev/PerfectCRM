@@ -436,6 +436,15 @@
   .tab-on .tab-count {
     @apply bg-seal-tint text-seal-text;
   }
+  .tab-count .tab-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--pb-seal);
+    margin-right: 4px;
+    vertical-align: 1px;
+  }
 
   /* Tables: the header rule is drawn once, rows are hairlines */
   .table-wrap {
@@ -2276,4 +2285,540 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+
+/* ---------------------------------------------------------------------------
+ * Record page (leads and clients, app/views/records): three columns on the
+ * desktop, Details and Thread on the tablet, three tabs on the phone. The
+ * composer well grows on focus and the Upcoming date tiles settle in on
+ * load; both stop under reduced motion. Unlayered like the rest of the kit.
+ * ------------------------------------------------------------------------- */
+.page-wide {
+  margin-inline: auto;
+  width: 100%;
+  max-width: 1280px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+.page-wide > * {
+  min-width: 0;
+}
+.record {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr) 300px;
+  grid-template-areas: "details thread aside";
+  gap: 24px;
+  align-items: start;
+}
+.record > * {
+  min-width: 0;
+}
+.record-details {
+  grid-area: details;
+}
+.record-thread {
+  grid-area: thread;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.record-aside {
+  grid-area: aside;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.record-tabs {
+  display: none;
+}
+.record-tabs .tab {
+  background-color: transparent;
+  border: 0;
+  padding-inline: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13.5px;
+}
+.record .composer .reply-dock {
+  margin-top: 0;
+}
+.record .reply-dock {
+  margin-top: 0;
+}
+
+/* Details: fit headline on the band, one-column facts, travelers. */
+.fit-head {
+  margin-top: 4px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--pb-band);
+}
+.fit-word {
+  font-family: var(--font-display);
+  font-size: 19px;
+  line-height: 1.2;
+  color: var(--pb-ink);
+}
+.fit-word .num {
+  color: var(--pb-ink-3);
+  font-size: 15px;
+}
+.fit-head .bar {
+  margin-top: 8px;
+}
+.fit-why {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--pb-ink-3);
+}
+.facts-col {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px 0;
+}
+.travelers {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13.5px;
+}
+
+/* Composer: Reply | Note segment, a well that grows on focus, quiet Save. */
+.composer .card-header {
+  padding-bottom: 0;
+}
+.composer-mode {
+  padding: 4px;
+  border-radius: 10px;
+}
+.composer-mode label {
+  padding: 5px 12px;
+  border-radius: 7px;
+  font-size: 12.5px;
+}
+.composer .reply-to-line {
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+.composer .reply-body {
+  min-height: 72px;
+  transition: min-height 160ms ease-out;
+}
+.composer .reply-body:focus {
+  min-height: 128px;
+}
+.composer .reply-details {
+  margin-top: 8px;
+}
+.composer .reply-chips {
+  margin-top: 10px;
+}
+.composer .reply-actions {
+  margin-top: 10px;
+}
+.composer .reply-status {
+  font-size: 11.5px;
+}
+.composer:has(.composer-mode input[value="note"]:checked) .composer-reply {
+  display: none;
+}
+.composer:not(:has(.composer-mode input[value="note"]:checked)) .composer-note {
+  display: none;
+}
+
+/* Timeline stones carry the message body; chips list attachments. */
+.ev .msg .chips {
+  margin-top: 10px;
+}
+.ev .msg .chip {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.ev .msg details > summary {
+  margin-top: 6px;
+}
+.ev .msg .prose-sm p + p {
+  margin-top: 8px;
+}
+
+/* Upcoming: pressed Gelasio date tiles that settle in, one per row. */
+.upcoming {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.upcoming > li {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  gap: 0 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid var(--pb-rule-2);
+  animation: pb-settle 0.5s ease-out both;
+}
+.upcoming > li:first-child {
+  border-top: 0;
+  padding-top: 2px;
+}
+.upcoming > li:nth-child(2) { animation-delay: 0.06s; }
+.upcoming > li:nth-child(3) { animation-delay: 0.12s; }
+.upcoming > li:nth-child(4) { animation-delay: 0.18s; }
+.upcoming > li:nth-child(5) { animation-delay: 0.24s; }
+.upcoming > li:nth-child(6) { animation-delay: 0.3s; }
+.date-tile {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: var(--pb-paper-3);
+  box-shadow: var(--pb-press);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  flex: none;
+}
+.date-tile b {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 19px;
+  color: var(--pb-ink);
+}
+.date-tile small {
+  margin-top: 3px;
+  font-size: 10px;
+  color: var(--pb-ink-3);
+}
+.date-tile.due {
+  background: var(--pb-warn-tint);
+}
+.upcoming .t {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--pb-ink);
+  overflow-wrap: anywhere;
+}
+.upcoming .s {
+  margin-top: 2px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+  font-size: 12px;
+  color: var(--pb-ink-3);
+}
+.upcoming .s .snooze summary,
+.upcoming .s .link-quiet {
+  min-height: 0;
+  font-size: 12px;
+}
+.upcoming .check-btn {
+  width: 40px;
+  height: 40px;
+}
+.upcoming .chev {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  color: var(--pb-ink-4);
+}
+.upcoming .chev:hover,
+.upcoming .chev:focus-visible {
+  color: var(--pb-ink);
+  background: var(--pb-band);
+}
+.upcoming-more {
+  margin-top: 4px;
+}
+.upcoming-more > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--pb-seal-text);
+  list-style: none;
+}
+.upcoming-more > summary::-webkit-details-marker {
+  display: none;
+}
+.upcoming-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--pb-rule-2);
+}
+.upcoming-add .input {
+  min-width: 0;
+  min-height: 40px;
+  padding-block: 8px;
+}
+.upcoming-add .upcoming-title {
+  grid-column: 1 / -1;
+}
+.upcoming-add .upcoming-date {
+  padding-inline: 8px;
+  font-size: 12.5px;
+}
+.upcoming-add .btn {
+  justify-self: end;
+}
+
+/* Files: icon tile, name, one status line, quiet actions. */
+.files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.files > li {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 0 10px;
+  align-items: start;
+  padding: 10px 0;
+  border-top: 1px solid var(--pb-rule-2);
+}
+.files > li:first-child {
+  border-top: 0;
+  padding-top: 2px;
+}
+.file-tile {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: var(--pb-band);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--pb-ink-3);
+}
+.file-tile svg {
+  width: 16px;
+  height: 16px;
+}
+.files .n {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--pb-ink);
+  overflow-wrap: anywhere;
+}
+.files .s {
+  margin-top: 2px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  font-size: 12px;
+  color: var(--pb-ink-3);
+}
+.files .acts {
+  margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 12px;
+  font-size: 12px;
+}
+.files .acts form {
+  display: inline;
+}
+.files .acts button {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+.traveler-docs {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--pb-rule-2);
+}
+
+/* Trip in PerfectBook: the money line as a small three-up. */
+.trip-money {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.trip-money > div {
+  min-width: 0;
+}
+.trip-money dt {
+  font-size: 11px;
+  color: var(--pb-ink-3);
+}
+.trip-money dd {
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  color: var(--pb-ink);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.trip .button_to {
+  display: inline;
+}
+.trip .button_to button {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* More menu: a raised paper-2 sheet under the ghost button, danger last. */
+.more-menu {
+  position: relative;
+}
+.more-menu > summary {
+  list-style: none;
+  min-width: 40px;
+}
+.more-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.more-menu[open] > summary {
+  box-shadow: var(--pb-press);
+}
+.more-pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  min-width: 208px;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--pb-paper-2);
+  border: 1px solid var(--pb-edge);
+  box-shadow: var(--pb-raise);
+  display: flex;
+  flex-direction: column;
+}
+.more-pop hr {
+  border: 0;
+  border-top: 1px solid var(--pb-rule);
+  margin: 6px 4px;
+}
+.more-pop form {
+  display: block;
+}
+.more-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 7px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  color: var(--pb-ink-2);
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.more-item:hover,
+.more-item:focus-visible {
+  background: var(--pb-band);
+  color: var(--pb-ink);
+  outline: none;
+}
+.more-danger {
+  color: var(--pb-bad);
+}
+.more-danger:hover,
+.more-danger:focus-visible {
+  background: var(--pb-bad-tint);
+  color: var(--pb-bad);
+}
+
+/* Tablet: Details left, Thread right, Files and dates under Details. */
+@media (max-width: 989px) {
+  .record {
+    grid-template-columns: 300px minmax(0, 1fr);
+    grid-template-areas:
+      "details thread"
+      "aside thread";
+  }
+}
+
+/* Phone: three tabs over the same cards; Thread first. */
+@media (max-width: 749px) {
+  .page-wide {
+    gap: 20px;
+  }
+  .record {
+    display: block;
+  }
+  .record > .tab-off {
+    display: none;
+  }
+  .record-tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0 18px;
+    margin-bottom: 14px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .record-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .record-tabs .tab {
+    flex: none;
+  }
+  .record-details,
+  .record-aside {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .record-thread {
+    gap: 16px;
+  }
+  .composer .reply-body:focus {
+    min-height: 128px;
+  }
+  .composer .reply-composer:not([hidden]) .composer-mode {
+    margin-bottom: 0;
+  }
+  .more-pop {
+    right: auto;
+    left: 0;
+  }
+  .page-actions .more-menu:last-child .more-pop {
+    left: auto;
+    right: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .upcoming > li {
+    animation: none;
+  }
+  .composer .reply-body {
+    transition: none;
+  }
+  .more-menu > summary,
+  .upcoming .chev,
+  .more-item {
+    transition: none;
+  }
 }

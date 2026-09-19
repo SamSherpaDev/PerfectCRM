@@ -40,7 +40,9 @@ When updating this file, preserve this bar for all agents and keep entries conci
 
 - Client and lead usage: see README.md, "Clients" and "Leads"; conversion
   lives in `Lead#convert_to_client!`, person ownership in `Person`, and
-  nested email reassignment in `NestedPeople`.
+  nested email reassignment in `NestedPeople`. Record layout is the
+  `app/views/records/` partials fed by `RecordPage` (composer form shared
+  with the reply box through `reply_box/_form`).
 - Search uses the models' `*.search` APIs; `ensure_fts!` recreates missing
   FTS tables. It does not repopulate existing records; `sync_fts!` indexes
   each record.

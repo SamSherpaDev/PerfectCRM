@@ -35,15 +35,23 @@ class ClientsSystemTest < ApplicationSystemTestCase
 
     click_button "Save client"
     assert_selector "h1", text: "Tashi Sherpa"
-    assert_text "Maya Gurung"
-    assert_text "everest"
+    assert_text "tashi@example.com"
     assert_no_overflow("client page")
 
+    # Notes live in the composer's Note mode; travelers and tags live on
+    # the Details tab on the phone.
+    click_button "Reply"
+    choose "Note", allow_label_click: true
     fill_in "Add a note", with: "Wants Everest in May with two travelers"
     click_button "Save note"
     assert_text "Wants Everest in May"
-    assert_text "Note added"
+    assert_text "Note saved"
     assert_no_overflow("client page after note")
+
+    click_button "Details", exact: true
+    assert_text "Maya Gurung"
+    assert_text "everest"
+    assert_no_overflow("client details tab")
 
     visit clients_path(q: "tashi@ex")
     assert_text "Tashi Sherpa"

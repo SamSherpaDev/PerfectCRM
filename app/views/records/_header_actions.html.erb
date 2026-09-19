@@ -1,0 +1,36 @@
+<%# locals: (record:) %>
+<%# Header actions by state (README "Leads", "Clients"): Restore alone when
+    archived, Open client alone once converted, otherwise Edit, Convert (lead)
+    and a More menu holding the rare actions with Delete or Archive last. %>
+<% lead = record.is_a?(Lead) %>
+<% if record.archived? %>
+  <%= button_to "Restore", lead ? unarchive_lead_path(record) : unarchive_client_path(record), method: :patch, class: "btn-primary btn btn-sm" %>
+<% elsif lead && record.converted? %>
+  <% if record.converted_client %>
+    <%= link_to "Open client", client_path(record.converted_client), class: "btn-primary btn btn-sm" %>
+  <% end %>
+<% else %>
+  <%= link_to "Edit", lead ? edit_lead_path(record) : edit_client_path(record), class: "btn-secondary btn btn-sm" %>
+  <% if lead %>
+    <% confirmation = @matching_client ? "This is an existing client: #{@matching_client.name}. Convert will attach this lead's history to them." : "Convert #{record.name} to a client? Their whole timeline moves with them. This cannot be undone." %>
+    <%= button_to "Convert to client", convert_lead_path(record), method: :post, params: { expected_client_id: @matching_client&.id || "new" }, class: "btn-secondary btn btn-sm", form: { data: { turbo_confirm: confirmation } } %>
+  <% end %>
+  <details class="more-menu">
+    <summary class="btn-ghost btn btn-sm" aria-label="More actions" title="More">
+      <%= render "shared/icon", name: :more, class: "h-4 w-4" %><span class="sr-only">More</span>
+    </summary>
+    <div class="more-pop">
+      <%= link_to "New message", polymorphic_path(record, new_thread: 1, anchor: "reply-heading"), class: "more-item" %>
+      <%= link_to "New quote", new_quote_path(lead ? { lead_id: record.id } : { client_id: record.id }), class: "more-item" %>
+      <% if !lead && record.perfectbook_contact_id.present? %>
+        <%= link_to "Open in PerfectBook", perfectbook_contact_url(record.perfectbook_contact_id), class: "more-item", target: "_blank", rel: "noopener" %>
+      <% end %>
+      <hr>
+      <% if lead %>
+        <%= button_to "Delete lead", archive_lead_path(record), method: :patch, class: "more-item more-danger", form: { data: { turbo_confirm: "Delete #{record.name}? They move to the archive and can be restored from the Archived tab." } } %>
+      <% else %>
+        <%= button_to "Archive client", archive_client_path(record), method: :patch, class: "more-item more-danger", form: { data: { turbo_confirm: "Archive this client?" } } %>
+      <% end %>
+    </div>
+  </details>
+<% end %>

@@ -83,7 +83,7 @@ class SettingsAutomationsTest < ActionDispatch::IntegrationTest
     assert_select "h2", text: "Automations"
   end
 
-  test "lead page shows the inquiry section for website leads" do
+  test "lead page folds the inquiry into details facts and the oldest timeline stone" do
     lead = Lead.create!(
       name: "Anna Lindqvist", email: "anna@example.com", source: "website_form",
       trip_title: "Private Nepal tour", message: "Two of us.", placement: "landing",
@@ -91,10 +91,10 @@ class SettingsAutomationsTest < ActionDispatch::IntegrationTest
     )
     get lead_path(lead)
     assert_response :success
-    assert_select "h2", text: "Inquiry"
+    assert_select "h2", { text: "Inquiry", count: 0 }
     assert_select "dd", text: /Private Nepal tour/
-    assert_select "dd", text: /Two of us/
     assert_select "dd", text: /#{lead.reference}/
+    assert_select "#inquiry", text: /Two of us/
   end
   test "unknown timing takes precedence over earlier dates" do
     lead = Lead.create!(name: "Visitor", travel_month: 4, travel_year: 2027, timing_unknown: true)

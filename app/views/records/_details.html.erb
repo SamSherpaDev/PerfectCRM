@@ -1,0 +1,127 @@
+<%# locals: (record:) %>
+<%# The left column: who this is and what they asked. Empty rows stay out. %>
+<% lead = record.is_a?(Lead) %>
+<% read_only = record.archived? || (lead && record.converted?) %>
+<section class="card card-pad" aria-labelledby="details-heading" data-tab="details">
+  <div class="card-header">
+    <h2 class="card-title" id="details-heading">Details</h2>
+    <% unless read_only %>
+      <%= link_to "Edit details", lead ? edit_lead_path(record) : edit_client_path(record), class: "link-quiet text-xs" %>
+    <% end %>
+  </div>
+  <%= card_caption lead ? "Where this ask came from and what they want." : "Who this client is and how they found Sherpa Holidays." %>
+
+  <% if lead %>
+    <div class="fit-head">
+      <% if record.fit_score.present? || record.fit_band.present? %>
+        <p class="fit-word"><%= record.fit_band.present? ? "#{record.fit_band.humanize} fit" : "Fit" %><% if record.fit_score.present? %><span class="num"> <%= record.fit_score %></span><% end %></p>
+        <span class="bar <%= lead_fit_bar_class(record.fit_band) %>" aria-hidden="true"><span class="bar-fill" style="width: <%= record.fit_score.to_i %>%"></span></span>
+        <% if record.fit_reason.present? %><p class="fit-why"><%= record.fit_reason %></p><% end %>
+      <% else %>
+        <p class="fit-word flex items-center gap-2"><%= orb(:shaping, label: "Scoring this ask") %>Scoring</p>
+        <p class="fit-why">Panda AI reads the ask and scores the fit within a few minutes.</p>
+      <% end %>
+    </div>
+  <% end %>
+
+  <dl class="facts facts-col mt-4">
+    <div>
+      <dt>Source</dt>
+      <dd>
+        <% if lead %>
+          <span class="src"><%= render "shared/icon", name: lead_source_icon(record.source) %><%= lead_source_label(record) %></span>
+        <% else %>
+          <%= record.source.present? ? record.source.humanize : "Not recorded" %>
+          <% if @origin_lead %>
+            <p class="mt-1 text-xs muted">Started as a lead<% if @origin_lead.campaign_name.present? %> · <%= @origin_lead.campaign_name %><% end %> · <%= link_to "open it", lead_path(@origin_lead), class: "link" %></p>
+          <% end %>
+        <% end %>
+        <% if record.perfectbook_contact_id.present? %>
+          <p class="mt-1 text-xs"><%= link_to "PerfectBook contact ##{record.perfectbook_contact_id}", perfectbook_contact_url(record.perfectbook_contact_id), class: "link", target: "_blank", rel: "noopener" %></p>
+        <% end %>
+      </dd>
+    </div>
+    <% if lead && record.status == "lost" %>
+      <div>
+        <dt>Lost reason</dt>
+        <dd><%= record.lost_reason.to_s.humanize %><% if record.lost_note.present? %><p class="mt-1 text-xs muted"><%= record.lost_note %></p><% end %></dd>
+      </div>
+    <% end %>
+    <% if lead && (record.trip_interest.presence || record.trip_title.presence || record.trip_handle.presence) %>
+      <div>
+        <dt>Trip</dt>
+        <dd><%= record.trip_interest.presence || record.trip_title.presence || record.trip_handle %></dd>
+      </div>
+    <% end %>
+    <% if lead && lead_party_and_when(record) %>
+      <div>
+        <dt>Party and when</dt>
+        <dd><%= lead_party_and_when(record) %></dd>
+      </div>
+    <% end %>
+    <% if lead && record.budget_band.present? %>
+      <div>
+        <dt>Budget</dt>
+        <dd><%= lead_budget_label(record.budget_band) %></dd>
+      </div>
+    <% end %>
+    <% if record.email.present? %>
+      <div>
+        <dt>Email</dt>
+        <dd><%= record.email %></dd>
+      </div>
+    <% end %>
+    <% if record.phone.present? %>
+      <div>
+        <dt>Phone</dt>
+        <dd><%= record.phone %></dd>
+      </div>
+    <% end %>
+    <% place = [ record.state, record.country ].compact_blank.join(", ") %>
+    <% if place.present? %>
+      <div>
+        <dt>Place</dt>
+        <dd><%= place %></dd>
+      </div>
+    <% end %>
+    <% if !lead && record.kind.present? && record.kind != "individual" %>
+      <div>
+        <dt>Kind</dt>
+        <dd><%= record.kind.humanize %></dd>
+      </div>
+    <% end %>
+    <% if record.referred_by_organization %>
+      <div>
+        <dt>Referred by</dt>
+        <dd><%= link_to record.referred_by_organization.name, organization_path(record.referred_by_organization), class: "link" %></dd>
+      </div>
+    <% end %>
+    <% if lead && record.reference.present? %>
+      <div>
+        <dt>Reference</dt>
+        <dd><span class="mono text-xs"><%= record.reference %></span><% if record.received_at.present? %><span class="text-xs muted"> · received <%= date_short(record.received_at) %> <%= time_24_12(record.received_at) %></span><% end %></dd>
+      </div>
+    <% end %>
+  </dl>
+
+  <% if record.people.any? %>
+    <h3 class="mt-5 text-[12.5px] font-medium text-ink-3">Travelers</h3>
+    <ul class="mt-1 travelers">
+      <% record.people.each do |person| %>
+        <li>
+          <span class="text-ink font-medium"><%= person.name %></span>
+          <% if person.role.present? %><span class="muted"> · <%= person.role %></span><% end %>
+          <% if person.email.present? %><p class="text-xs muted"><%= person.email %></p><% end %>
+        </li>
+      <% end %>
+    </ul>
+  <% end %>
+
+  <% if record.tags.any? %>
+    <div class="chips mt-4" aria-label="Tags">
+      <% record.tags.each do |tag| %>
+        <span class="chip chip-tag"><%= tag.name %></span>
+      <% end %>
+    </div>
+  <% end %>
+</section>

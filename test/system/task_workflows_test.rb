@@ -25,23 +25,29 @@ class TaskWorkflowsTest < ApplicationSystemTestCase
       within("li", text: task.title) { click_link "Nudge", exact: true }
       assert_current_path polymorphic_path(subject, template: template.id, task: task.id)
       assert_field "Message", with: "Hi Maya Sherpa, welcome back."
-      page.driver.browser.execute_cdp("Browser.grantPermissions", origin: URI.join(page.current_url, "/").to_s, permissions: [ "clipboardReadWrite", "clipboardSanitizedWrite" ])
-      within("section[aria-labelledby='suggested-message-heading']") do
-        link = find_link("Open email draft")[:href]
-        address, query = link.delete_prefix("mailto:").split("?", 2)
-        assert_equal subject.email, address
-        assert_equal "Hello Maya", URI.decode_www_form(query).to_h["subject"]
-        assert_equal "Hi Maya Sherpa, welcome back.", URI.decode_www_form(query).to_h["body"]
-        click_button "Copy message"
-        assert_text "Message copied."
+      if model == Organization
+        page.driver.browser.execute_cdp("Browser.grantPermissions", origin: URI.join(page.current_url, "/").to_s, permissions: [ "clipboardReadWrite", "clipboardSanitizedWrite" ])
+        within("section[aria-labelledby='suggested-message-heading']") do
+          link = find_link("Open email draft")[:href]
+          address, query = link.delete_prefix("mailto:").split("?", 2)
+          assert_equal subject.email, address
+          assert_equal "Hello Maya", URI.decode_www_form(query).to_h["subject"]
+          assert_equal "Hi Maya Sherpa, welcome back.", URI.decode_www_form(query).to_h["body"]
+          click_button "Copy message"
+          assert_text "Message copied."
+        end
+        assert_equal "Hi Maya Sherpa, welcome back.", page.evaluate_async_script("const done = arguments[0]; navigator.clipboard.readText().then(done)")
+      else
+        # Leads and clients prefill the composer instead of the suggested card.
+        assert_no_selector "#suggested-message-heading"
       end
-      assert_equal "Hi Maya Sherpa, welcome back.", page.evaluate_async_script("const done = arguments[0]; navigator.clipboard.readText().then(done)")
       assert_not task.reload.done?
       assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, 390
       capture("nudge-#{model.name.downcase}")
       other = model.create!(name: "Other")
       visit polymorphic_path(other, template: template.id, task: task.id)
       assert_no_selector "#suggested-message-heading"
+      assert_no_field "Message", with: "Hi Maya Sherpa, welcome back."
       task.complete!
     end
   end
@@ -49,6 +55,7 @@ class TaskWorkflowsTest < ApplicationSystemTestCase
   test "client follow-ups can be added snoozed and completed from Today" do
     client = Client.create!(name: "Maya Sherpa", email: "maya@example.com")
     visit client_path(client)
+    click_button "Files & dates"
     fill_in "New follow-up", with: "Confirm Maya's itinerary"
     click_button "Add", exact: true
     assert_text "Follow-up saved."
@@ -77,6 +84,7 @@ class TaskWorkflowsTest < ApplicationSystemTestCase
       assert_no_text task.title
       assert task.reload.done?
       visit client_path(client)
+      click_button "Thread"
       assert_text "Completed: #{task.title}"
       capture("completed-follow-up")
     end
@@ -90,6 +98,7 @@ class TaskWorkflowsTest < ApplicationSystemTestCase
     visit lead_path(lead)
     accept_confirm { click_button "Convert to client" }
     assert_current_path client_path(client)
+    click_button "Files & dates"
     assert_text old.title
     assert_equal client, old.reload.subject
     PerfectBook::Booking.create!(perfectbook_id: 991, perfectbook_contact_id: 991,
@@ -98,6 +107,7 @@ class TaskWorkflowsTest < ApplicationSystemTestCase
     task = Task.find_by!(idempotency_key: "review-ask:991")
     assert_equal client, task.subject
     visit client_path(client)
+    click_button "Files & dates"
     assert_text task.title
     find("button[aria-label='Mark done: Existing follow-up']").click
     assert_text "Done. Nice."

@@ -28,7 +28,7 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
       deep_link: "https://perfectbook.example.test/bookings/11", synced_at: Time.current)
     get client_path(@client)
     assert_response :success
-    assert_select "h2", text: "Bookings in PerfectBook"
+    assert_select "h2", text: "Trip in PerfectBook"
     assert_includes response.body, "BK-11"
     assert_includes response.body, "Everest trek"
     assert_includes response.body, "$4,000.00"
@@ -51,7 +51,7 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
     quote.lines.create!(kind: "trip", description: "Everest trek", quantity: 1, unit_dollars: "10.00")
     get client_path(@client)
     assert_response :success
-    assert_select "h2", text: "Quotes"
+    assert_select "h2", text: "Files"
     assert_select "a[href=?]", new_quote_path(client_id: @client.id)
     assert_select "a", text: quote.reference
   end
@@ -63,7 +63,7 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
       paid_minor: 0, balance_due_minor: 50_000, currency: "USD", synced_at: Time.current)
     get lead_path(lead)
     assert_response :success
-    assert_select "h2", text: "Bookings in PerfectBook"
+    assert_select "h2", text: "Trip in PerfectBook"
     assert_includes response.body, "BK-12"
   end
 
@@ -71,7 +71,7 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
     lead = Lead.create!(name: "Dawa", email: "dawa@example.com")
     get lead_path(lead)
     assert_response :success
-    assert_select "h2", { text: "Bookings in PerfectBook", count: 0 }
+    assert_select "h2", { text: "Trip in PerfectBook", count: 0 }
   end
 
   test "builder creates a draft from catalog and departure" do

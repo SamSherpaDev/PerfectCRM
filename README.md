@@ -112,16 +112,23 @@ message as queued, sending, sent, or failed. A failure retains the queued
 message and any saved draft. Retry on the timeline resends that message;
 it does not pick up later draft edits.
 
-The reply box docks at the bottom of the client, lead, organization, and
-inbox thread views: recipient chips prefilled from the thread, `Re:`
-subject, a plain-text editor, attachments, one-tap template chips and the full picker
-(filled from live data), a booking select when several mirrored bookings
-exist, Save draft per conversation, and Send. On a phone, tap Reply or
-Resume reply to open the composer; Details holds recipients, subject,
-booking choice, and attachments. New message starts a separate conversation
-regardless of subject. Saved attachments accompany newly uploaded files;
-a successful delivery clears the submitted draft only if it has not been
-edited since submission. Nothing sends without the captain pressing Send.
+The lead and client pages put the composer first in the middle column,
+above the one timeline: a Reply | Note segment, a `To {name} · Re:
+{subject} · sends as` line, a compact well that grows on focus, template
+chips with the full picker behind All templates, Save draft, and Send.
+Details (recipients, subject, booking choice, attachments) stays folded.
+Note mode swaps Send for Save note and writes a private note onto the
+timeline. The organization and inbox thread views keep the same form
+docked at the bottom of the thread: recipient chips prefilled from the
+thread, `Re:` subject, a plain-text editor, attachments, one-tap template
+chips and the full picker (filled from live data), a booking select when
+several mirrored bookings exist, Save draft per conversation, and Send.
+On a phone, tap Reply or Resume reply to open the composer; Details holds
+recipients, subject, booking choice, and attachments. New message starts a
+separate conversation regardless of subject. Saved attachments accompany
+newly uploaded files; a successful delivery clears the submitted draft
+only if it has not been edited since submission. Nothing sends without the
+captain pressing Send.
 
 Template inserts and group sends resolve identity from the recipient's
 actual email, preferring their own mirrored PerfectBook contact and bookings.
@@ -316,20 +323,19 @@ Tasks belong to clients, leads, or organizations. Today lists overdue tasks
 and those due through the next 7 days, using the Pacific date. Tap the
 circle to complete a task and record it on the subject's timeline.
 Snooze until tomorrow, 3 days, next week, or a picked date to hide a task
-until that date without changing its due date. The client's Follow-ups
-card lists unsnoozed open tasks and lets you add a title and due date.
+until that date without changing its due date. The record page's Upcoming
+card lists follow-ups, live quote deadlines, and confirmed departures
+soonest first, with an inline check to complete a follow-up and one field
+to add the next one due tomorrow.
 
 Tasks with a template offer Nudge, opening the client, lead, or organization
-with `?template=<id>&task=<id>`. Its Suggested message panel renders the
-template with the record's name, offers Copy message, and opens a prefilled
-draft in your email app with Open email draft. Review and fill missing
+with `?template=<id>&task=<id>`. On clients and leads the composer arrives
+with the template already rendered, ready to Send; the organization page
+shows a Suggested message panel with the rendered template, Copy message,
+and a prefilled Open email draft instead. Review and fill missing
 details before sending; other placeholders follow the [Templates](#templates)
 rules. Nothing sends automatically. Tasks without a template have no Nudge
 link; deleting a template preserves its tasks and removes their template link.
-
-TODO (perfectcrm-mail-out-65): Replace the Suggested message copy/mailto
-fallback with the approval-only reply box, preserving the template and task
-parameters.
 
 `Tasks::Automatic` runs daily in production at 6am Pacific through
 `Tasks::GenerateAutomaticJob`; see [`config/recurring.yml`](config/recurring.yml).
@@ -356,14 +362,19 @@ Settings → Morning digest toggles it; it is enabled by default.
 
 ## Clients
 
-Clients own people, tags, notes, and a timeline. Linked email appears in the
-Email card; see [Mail](#mail) and [Replying](#replying) for composing messages.
-Use New client to create a record, and Edit to update facts or add another
-person in the blank People fields. Archive moves a client to the Archived
-tab, where Restore makes it active again. The Organizations tab holds
-advisors, operators, and other companies, with their own notes and timeline.
-On client, lead, and organization pages, Older/Newer links beneath notes
-and timeline entries provide access to the full history.
+Clients own people, tags, notes, and a timeline. The record page keeps
+three columns on a desktop: Details (facts, travelers, tags) on the left,
+the composer and the one timeline of every email, note, quote, and
+automated step in the middle, Upcoming dates and Files on the right with
+a compact read-only Trip in PerfectBook. On a phone the same cards sit
+behind Thread, Details, and Files & dates tabs with Thread first. Use
+New client to create a record, and Edit to update facts or add another
+person in the blank People fields. Archive lives in the More menu and
+moves a client to the Archived tab, where Restore makes it active again.
+The Organizations tab holds advisors, operators, and other companies,
+with their own notes and timeline. On lead and client pages one Load
+older pager walks the whole timeline; organization pages keep separate
+Older notes and Older activity links.
 
 Search covers names, emails, phone tails, tags, and note text over SQLite
 FTS5 with an email-substring fallback; no external service. Each row links
@@ -422,7 +433,8 @@ derive a band from the numeric score. Edit lets you enter these fields
 manually and add another person in the blank People fields.
 
 Website inquiries now arrive directly in Leads. Open a lead to read its
-inquiry and optional travel details; unknown timing takes precedence over
+facts in Details and its original message as the oldest stone on the
+timeline; unknown timing takes precedence over
 previous dates.
 In Settings → Automations, manage credentials and the n8n subscription,
 and review machine events and delivery results. The website form and external

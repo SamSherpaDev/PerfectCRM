@@ -1,0 +1,101 @@
+<%# locals: (record:, rows:, bookings:, read_only: false) %>
+<%# Right column, second card: attachments from the thread, one row per quote
+    version, and traveler documents mirrored from PerfectBook. No uploads
+    here; files arrive by email or from the quote builder. %>
+<% lead = record.is_a?(Lead) %>
+<% doc_bookings = bookings.select(&:documents_ready?) %>
+<section class="card card-pad" aria-labelledby="files-heading">
+  <div class="card-header">
+    <h2 class="card-title" id="files-heading">Files</h2>
+    <% unless read_only %>
+      <%= link_to "New quote", new_quote_path(lead ? { lead_id: record.id } : { client_id: record.id }), class: "link-quiet text-xs" %>
+    <% end %>
+  </div>
+  <%= card_caption bookings.any? ? "Attachments from the thread, quote PDFs, and traveler documents." : "Attachments from the thread and quote PDFs." %>
+  <% if rows.any? %>
+    <ul class="files">
+      <% rows.each do |row| %>
+        <li>
+          <% case row.kind %>
+          <% when :attachment %>
+            <% file = row.record %>
+            <span class="file-tile" aria-hidden="true"><%= render "shared/icon", name: :copy %></span>
+            <div class="min-w-0">
+              <p class="n"><%= file.filename %></p>
+              <p class="s">
+                <% if file.blob.metadata["sensitive"] %><%= badge "Potentially sensitive", :warning %><% end %>
+                <span><%= row.message.inbound? ? "From #{timeline_sender(row.message, record)}" : "You sent" %> · <%= date_short(row.at) %> · <%= number_to_human_size(file.byte_size) %></span>
+              </p>
+              <p class="acts">
+                <%= link_to "Download", attachment_path(file.id), class: "link-quiet" %>
+                <%= link_to "Send to PerfectBook", new_document_handoff_path(attachment_id: file.id), class: "link-quiet" %>
+                <%= button_to "Remove from CRM, collect in PerfectBook", move_to_perfectbook_attachment_path(file.id), method: :post, class: "link-quiet" %>
+              </p>
+            </div>
+          <% when :held %>
+            <% held = row.record %>
+            <% holding = held["holding_id"].present? ? DocumentHolding.find_by(id: held["holding_id"]) : nil %>
+            <span class="file-tile" aria-hidden="true"><%= render "shared/icon", name: :alert %></span>
+            <div class="min-w-0">
+              <p class="n"><%= held["filename"] %></p>
+              <p class="s"><%= badge held["status"].to_s.humanize, :warning %><span><%= date_short(row.at) %> · <%= number_to_human_size(held["byte_size"].to_i) %></span></p>
+              <p class="acts">
+                <% if holding&.live? %>
+                  <span class="muted">Held for hand-off, purges in <%= distance_of_time_in_words(Time.current, holding.expires_at) %>.</span>
+                  <%= link_to "Send to PerfectBook", new_document_handoff_path(holding_id: holding.id), class: "link-quiet" %>
+                <% else %>
+                  <span class="muted">Collect this document in PerfectBook.</span>
+                <% end %>
+              </p>
+            </div>
+          <% when :quote %>
+            <% quote = row.record %>
+            <span class="file-tile" aria-hidden="true"><%= render "shared/icon", name: :receipt %></span>
+            <div class="min-w-0">
+              <p class="n"><%= link_to quote.reference, quote_path(quote), class: "link-quiet" %><% if quote.version.to_i > 1 %> <span class="muted">v<%= quote.version %></span><% end %></p>
+              <p class="s">
+                <%= status_badge(quote.expired? ? "expired" : quote.status) %>
+                <span><%= quote.subject_label %> · <%= money_in(quote.subtotal_minor, quote.currency) %><% if quote.valid_until %> · until <%= date_short(quote.valid_until) %><% end %></span>
+              </p>
+              <p class="acts"><%= link_to "Open", quote_path(quote), class: "link-quiet" %></p>
+            </div>
+          <% end %>
+        </li>
+      <% end %>
+    </ul>
+  <% else %>
+    <div class="empty-inline">
+      <%= sketch :enso, class: "enso" %>
+      <p class="text-sm text-ink">No files yet.</p>
+      <p class="text-xs muted">Attachments on emails and quote PDFs collect here.</p>
+    </div>
+  <% end %>
+  <% doc_bookings.each do |booking| %>
+    <div class="traveler-docs" aria-label="Document status for <%= booking.ref %>">
+      <h3 class="text-[12.5px] font-medium text-ink-3">Traveler documents · <%= booking.ref %></h3>
+      <ul class="mt-1 space-y-1">
+        <% booking.travelers.each do |traveler| %>
+          <li class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
+            <span class="font-medium text-ink"><%= traveler["first_name"].presence || "Traveler" %></span>
+            <% Array(traveler["documents"]).each do |doc| %>
+              <span class="inline-flex items-center gap-1">
+                <span class="text-xs muted"><%= doc["type"].to_s.humanize %></span>
+                <%= document_status_badge(doc["status"]) %>
+              </span>
+            <% end %>
+          </li>
+        <% end %>
+      </ul>
+      <p class="mt-1.5 text-xs muted">
+        <% if booking.outstanding_count.positive? %>
+          <%= pluralize(booking.outstanding_count, "document") %> missing.
+          <% if booking.missing_lines.present? && !read_only %>
+            <%= link_to "Nudge for missing documents", polymorphic_path(record, nudge_booking_id: booking.id, anchor: "reply-heading"), class: "link", title: "Open the composer with the document request for this booking" %>
+          <% end %>
+        <% else %>
+          All documents received.
+        <% end %>
+      </p>
+    </div>
+  <% end %>
+</section>

@@ -172,6 +172,7 @@ class QuotesSystemTest < ApplicationSystemTestCase
       currency: "USD", invoice_badge: "sent", invoice_number: "SH-2027-0142",
       deep_link: "https://perfectbook.example.test/bookings/11", synced_at: Time.current)
     visit client_path(client)
+    click_button "Files & dates"
     within("section[aria-labelledby='perfectbook-heading']") do
       assert_text "$4,000.00"
       assert_text "$1,000.00"
@@ -447,6 +448,7 @@ class QuotesSystemTest < ApplicationSystemTestCase
       start_date: Date.new(2027, 5, 4), end_date: Date.new(2027, 5, 18), synced_at: Time.current)
 
     visit lead_path(lead)
+    click_button "Files & dates"
     click_link "Nudge for missing documents"
     assert_field "To", with: "pasang@example.com"
     body = find_field("Message").value
@@ -463,6 +465,7 @@ class QuotesSystemTest < ApplicationSystemTestCase
       start_date: Date.new(2027, 5, 4), end_date: Date.new(2027, 5, 18), synced_at: Time.current)
 
     visit lead_path(lead)
+    click_button "Files & dates"
     click_link "Nudge for missing documents"
     assert_field "To", with: "current@example.com"
     body = find_field("Message").value
@@ -525,6 +528,7 @@ class QuotesSystemTest < ApplicationSystemTestCase
     client.update!(email: "current@example.com")
 
     visit client_path(client)
+    click_button "Files & dates"
     click_link quote.reference
     click_button "Send quote"
     assert_text "Quote sent"

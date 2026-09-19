@@ -49,12 +49,14 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "h1", "Ad Lead"
     assert_select "button", text: /Convert to client/
-    assert_select "h2", text: "Facts"
+    assert_select "h2", text: "Details"
     assert_select "h2", text: "Timeline"
+    assert_select "h2", { text: "Facts", count: 0 }
     assert_select "section[aria-labelledby=timeline-heading]" do
-      assert_select ".card-caption", text: "Every ask, score, note, and automation in one scroll, newest first."
-      assert_select "textarea#message_body"
+      assert_select ".card-caption", text: "Every email, note, quote, and automated step in one scroll."
     end
+    assert_select "textarea#message_body"
+    assert_select "textarea#note_body"
   end
 
   test "show of a converted lead is read-only with a forward link" do
@@ -74,7 +76,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     get client_path(client)
     assert_response :success
     assert_select "div", text: /Started as a lead/
-    assert_select "a", text: "Open the lead"
+    assert_select "a", text: "open it"
   end
 
   test "new and create with person and tags" do
@@ -227,16 +229,20 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
 
   test "fit labels and bars use the supplied band" do
     lead = Lead.create!(name: "Panda", fit_score: 80, fit_band: "possible")
-    [ leads_path, lead_path(lead) ].each do |path|
-      get path
-      assert_response :success
-      assert_select ".bar-warn", count: 1
-      assert_select "span", text: "Possible · 80"
-      assert_select ".stat", count: 0
-    end
+    get leads_path
+    assert_response :success
+    assert_select ".bar-warn", count: 1
+    assert_select "span", text: "Possible · 80"
+    assert_select ".stat", count: 0
+    get lead_path(lead)
+    assert_response :success
+    assert_select ".bar-warn", count: 1
+    assert_select ".fit-word", text: /Possible fit/
+    assert_select ".fit-word .num", text: "80"
+    assert_select ".stat", count: 0
     lead.update!(fit_score: nil, fit_band: "strong")
     get lead_path(lead)
-    assert_select "span", text: "Strong"
+    assert_select ".fit-word", text: /Strong fit/
     assert_select ".bar-good", count: 1
   end
 end

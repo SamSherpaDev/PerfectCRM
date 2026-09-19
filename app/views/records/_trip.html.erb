@@ -1,0 +1,57 @@
+<%# locals: (record:, bookings:) %>
+<%# Right column, third card: the mirrored PerfectBook booking, read only.
+    Money and documents stay in PerfectBook; this is the glance. %>
+<% refresh_path = record.is_a?(Lead) ? refresh_bookings_lead_path(record) : refresh_bookings_client_path(record) %>
+<section class="card card-pad trip" aria-labelledby="perfectbook-heading">
+  <div class="card-header">
+    <h2 class="card-title" id="perfectbook-heading">Trip in PerfectBook</h2>
+    <%= badge "Read only", :neutral %>
+  </div>
+  <%= card_caption "Booking, dates, and balance as PerfectBook has them." %>
+  <% if bookings.any? %>
+    <ul class="divide-y divide-rule-2">
+      <% bookings.each do |booking| %>
+        <li class="py-3 first:pt-0 last:pb-0">
+          <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <p class="font-medium text-ink">
+              <% if booking.deep_link.present? %>
+                <%= link_to booking.ref.presence || "Booking ##{booking.perfectbook_id}", booking.deep_link, class: "link", target: "_blank", rel: "noopener" %>
+              <% else %>
+                <%= booking.ref.presence || "Booking ##{booking.perfectbook_id}" %>
+              <% end %>
+            </p>
+            <%= status_badge booking.status %>
+          </div>
+          <p class="mt-0.5 text-[13px] text-ink-2"><%= booking.trip_name.presence || "Trip to be confirmed" %><% if booking.departure_place.present? %> · <%= booking.departure_place %><% end %></p>
+          <p class="mt-0.5 text-xs muted"><%= date_range(booking.start_date, booking.end_date) %><% if booking.party_size %> · <%= pluralize(booking.party_size, "traveler") %><% end %></p>
+          <dl class="trip-money">
+            <div><dt>Total</dt><dd><%= money_in(booking.total_minor, booking.currency) %></dd></div>
+            <div><dt>Paid</dt><dd><%= money_in(booking.paid_minor, booking.currency) %></dd></div>
+            <div><dt>Balance due</dt><dd><%= money_in(booking.balance_due_minor, booking.currency) %></dd></div>
+          </dl>
+          <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
+            <% if booking.invoice_badge.present? %><%= status_badge booking.invoice_badge %><% end %>
+            <% if booking.invoice_number.present? %><span class="muted"><%= booking.invoice_number %></span><% end %>
+            <% if booking.deep_link.present? %>
+              <%= link_to perfectbook_booking_url(booking), class: "link-quiet inline-flex items-center gap-1", target: "_blank", rel: "noopener" do %>
+                <%= render "shared/icon", name: :external, class: "h-3.5 w-3.5" %>Open in PerfectBook
+              <% end %>
+            <% end %>
+            <% unless booking.documents_ready? %>
+              <span class="muted">Document status arrives with the PerfectBook update</span>
+              <%= link_to "Nudge for missing documents", document_nudge_path(booking_id: booking.id), class: "link-quiet", title: "Open the document-request template for this booking" %>
+            <% end %>
+          </div>
+        </li>
+      <% end %>
+    </ul>
+  <% else %>
+    <div class="empty-inline">
+      <%= sketch :cairn, class: "sk scene" %>
+      <%= sketch :enso, class: "enso" %>
+      <p class="text-sm text-ink">No bookings yet.</p>
+      <p class="text-xs muted">Trips booked in PerfectBook for this contact show here with balances and invoice status.</p>
+    </div>
+  <% end %>
+  <%= button_to "Refresh", refresh_path, method: :post, class: "link-quiet mt-3 text-xs" %>
+</section>

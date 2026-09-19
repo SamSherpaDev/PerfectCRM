@@ -1,0 +1,108 @@
+<%# locals: (record:, entries:, older:, page:) %>
+<%# The one timeline (docs/DESIGN.md stream): inbound raised, outbound
+    pressed, notes on the band, quotes and PerfectBook outlined, automations
+    dashed. Newest first; one Load older at the foot. %>
+<section class="card" aria-labelledby="timeline-heading">
+  <div class="card-header">
+    <h2 class="card-title" id="timeline-heading">Timeline</h2>
+  </div>
+  <%= card_caption "Every email, note, quote, and automated step in one scroll." %>
+  <% if entries.any? %>
+    <ol class="timeline">
+      <%= sketch :stream, class: "sk stream", aria_hidden: true %>
+      <% entries.each do |entry| %>
+        <% case entry.kind %>
+        <% when :message %>
+          <% message = entry.record %>
+          <% inbound = message.inbound? %>
+          <li class="<%= timeline_row_class(inbound ? :in : :out, entry.at) %>" id="message-<%= message.id %>">
+            <span class="stone" aria-hidden="true"><i></i></span>
+            <div class="body">
+              <p class="meta">
+                <% if inbound %>
+                  <b><%= timeline_sender(message, record) %></b>
+                <% else %>
+                  <b>You</b><span>to <%= message.to_list.first(2).join(", ") %></span>
+                <% end %>
+                <span><%= timeline_stamp(entry.at) %></span>
+                <% if message.unread? %><%= badge "Unread", :brand, dot: true %><% end %>
+                <% if message.outbound? && message.status != "received" %><%= delivery_badge(message.status) %><% end %>
+                <% if message.template %><span><%= message.template.name %></span><% end %>
+              </p>
+              <div class="msg">
+                <% if message.subject.present? %><p class="font-semibold text-ink text-[13px]"><%= message.subject %></p><% end %>
+                <%= render "shared/message_body", message: message, attachments: :chips %>
+                <% if message.failed? %>
+                  <p class="mt-2 text-xs text-bad">Could not deliver: <%= message.send_error.presence || "unknown error" %></p>
+                  <%= button_to "Retry", retry_message_path(message), method: :post, class: "btn btn-secondary btn-sm mt-1" %>
+                <% elsif %w[queued sending].include?(message.status) %>
+                  <p class="mt-1 text-xs muted">Sending…</p>
+                <% end %>
+              </div>
+            </div>
+          </li>
+        <% when :note %>
+          <% note = entry.record %>
+          <li class="<%= timeline_row_class(:note, entry.at) %>" id="note-<%= note.id %>">
+            <span class="stone" aria-hidden="true"><i></i></span>
+            <div class="body">
+              <p class="meta"><b>Note</b><span><%= timeline_stamp(entry.at) %></span><% if note.author %><span><%= note.author.email %></span><% end %></p>
+              <div class="msg whitespace-pre-line"><%= note.body %></div>
+            </div>
+          </li>
+        <% when :event %>
+          <% event = entry.record %>
+          <% stone = event_stone_kind(event) %>
+          <li class="<%= timeline_row_class(stone, entry.at) %>">
+            <span class="stone" aria-hidden="true"><i></i></span>
+            <div class="body">
+              <p class="meta">
+                <% if stone == "auto" %><%= render "shared/icon", name: automation_icon(automation_caller(event)) %><% end %>
+                <b><%= event_actor(event) %></b><span><%= timeline_stamp(entry.at) %></span>
+                <% if stone == "auto" %><%= badge "Automated", :info, dot: true %><% end %>
+              </p>
+              <div class="msg">
+                <span><%= event.summary %></span>
+                <% quote_id = event.metadata.is_a?(Hash) ? event.metadata["quote_id"] : nil %>
+                <% if quote_id.present? %><%= link_to "Open quote", quote_path(quote_id), class: "link" %><% end %>
+              </div>
+            </div>
+          </li>
+        <% when :inquiry %>
+          <% lead = entry.record %>
+          <li class="ev in" id="inquiry">
+            <span class="stone" aria-hidden="true"><i></i></span>
+            <div class="body">
+              <p class="meta"><b><%= lead.name %></b><span><%= timeline_stamp(entry.at) %></span><span class="src"><%= render "shared/icon", name: lead_source_icon(lead.source) %><%= lead_source_label(lead) %></span></p>
+              <div class="msg">
+                <% if lead.message.present? %>
+                  <p class="italic whitespace-pre-line"><%= lead.message %></p>
+                <% else %>
+                  <p class="italic muted">Sent the website form without a message.</p>
+                <% end %>
+                <% details = [ lead.trip_title.presence || lead.trip_handle.presence, lead_party_and_when(lead), (lead_budget_label(lead.budget_band) if lead.budget_band.present?), ("#{lead.placement.humanize} page" if lead.placement.present?) ].compact_blank %>
+                <% if details.any? %><p class="mt-2 text-xs muted"><%= details.join(" · ") %></p><% end %>
+              </div>
+            </div>
+          </li>
+        <% end %>
+      <% end %>
+    </ol>
+  <% else %>
+    <div class="empty-inline">
+      <%= sketch :enso, class: "enso" %>
+      <p class="text-sm text-ink">Nothing here yet.</p>
+      <p class="text-xs muted">Replies and notes you write above land here, newest first.</p>
+    </div>
+  <% end %>
+  <% if older || page > 1 %>
+    <nav class="flex flex-wrap gap-3 px-6 pb-6 sm:px-7" aria-label="Timeline pages">
+      <% if older %>
+        <%= link_to "Load older", polymorphic_path(record, request.query_parameters.merge(page: page + 1, anchor: "timeline-heading")), class: "btn-secondary btn btn-sm" %>
+      <% end %>
+      <% if page > 1 %>
+        <%= link_to "Newer", polymorphic_path(record, request.query_parameters.merge(page: page - 1, anchor: "timeline-heading")), class: "btn-ghost btn btn-sm" %>
+      <% end %>
+    </nav>
+  <% end %>
+</section>

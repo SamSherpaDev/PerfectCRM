@@ -50,17 +50,16 @@ class InboxSystemTest < ApplicationSystemTestCase
     jump.scroll_to(jump, align: :center)
     assert page.evaluate_script("((link) => { const rect = link.getBoundingClientRect(); return link.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)); })(document.querySelector('a[href=\"#thread-newest\"]'))")
     jump.click
-    19.times do |index|
+    51.times do |index|
       @conversation.messages.create!(direction: "in", from_address: @client.email,
-        sent_at: (index + 2).hours.ago, text_body: "Older message #{index}")
+        sent_at: (index + 2).minutes.ago, text_body: "Older message #{index}")
     end
     visit client_path(@client)
     click_link "Load older"
-    assert_text "Older message 18"
+    assert_text "Older message 50"
     assert_no_text "Namaste, we want Everest in May."
-    click_link "Jump to newest ↑"
+    click_link "Newer"
     assert_text "Namaste, we want Everest in May."
-    assert_equal "mail_page=1", URI.parse(page.current_url).query
   end
 
   test "triage thread offers link, create, and ignore" do

@@ -1,15 +1,9 @@
-<%# Docked reply box for the client, lead, organization, and inbox thread views.
-    Follows docs/DESIGN.md 4.4: recipient chips, Re: subject, pressed
-    textarea, template chips in one scrolling row, primary Send. On the
-    phone the composer lives in a bottom sheet behind a floating Reply
-    pill, so it never covers the thread until the captain opens it.
-    Locals: owner (Client, Lead, or Organization). The ReplyBox concern
-    supplies @reply_conversation, @reply_draft, @reply_to, @reply_data,
-    @reply_context, and @reply_chips. %>
-<% send_url = owner.is_a?(Client) ? client_messages_path(owner) :
-     owner.is_a?(Lead) ? lead_messages_path(owner) : organization_messages_path(owner) %>
-<% draft_url = owner.is_a?(Client) ? client_draft_path(owner) :
-     owner.is_a?(Lead) ? lead_draft_path(owner) : organization_draft_path(owner) %>
+<%# Docked reply box for the organization and inbox thread views (leads and
+    clients use records/_composer). Follows docs/DESIGN.md 4.4: recipient
+    chips, Re: subject, pressed textarea, template chips in one scrolling
+    row, primary Send. On the phone the composer lives in a bottom sheet
+    behind a floating Reply pill, so it never covers the thread until the
+    captain opens it. Locals: owner (Client, Lead, or Organization). %>
 <% conversation = @reply_conversation %>
 <% draft = @reply_draft || Draft.new(owner: owner) %>
 <% subject_default = conversation ? "Re: #{conversation.display_subject.sub(/\ARe:\s*/i, '')}" : "" %>
@@ -33,94 +27,11 @@
       <button type="button" class="reply-close link-quiet text-xs" data-action="reply-box#toggleComposer">Close</button>
     </div>
   </div>
-  <%= card_caption "Replies send as info@sherpaholidays.com, in the same thread." %>
+  <%= card_caption "Replies send as #{Mail.mailbox_address}, in the same thread." %>
   <p class="reply-to-line hidden sm:block">
     Reply to <%= @reply_context["full_name"].presence || @reply_to %><% if subject_default.present? %> · <%= subject_default %><% end %>
   </p>
-
-  <%= form_with url: send_url, scope: :message, html: { novalidate: false, multipart: true }, data: { "reply-box-target": "form" } do |form| %>
-    <%= hidden_field_tag :conversation_id, conversation&.id, data: { "reply-box-target": "conversation" } %>
-    <%= form.hidden_field :template_id, value: draft.template_id, data: { "reply-box-target": "templateId" } %>
-
-    <%# Envelope fields collapse behind Details on the phone so the docked
-        box stays compact (chips, message, Send); open on desktop. %>
-    <details class="reply-details" open data-reply-box-target="details">
-      <summary>Details</summary>
-      <div class="mt-3">
-        <%= form.label :to, "To", class: "label" %>
-        <%= form.text_field :to, value: @reply_to,
-              class: "input reply-chips", required: true, autocomplete: "off",
-              placeholder: "name@example.com",
-              data: { "reply-box-target": "to", action: "change->reply-box#recipientChanged" } %>
-      </div>
-
-      <details class="reply-cc">
-        <summary>Cc / Bcc</summary>
-        <div class="grid gap-3 sm:grid-cols-2">
-          <div>
-            <%= form.label :cc, "Cc", class: "label" %>
-            <%= form.text_field :cc, value: draft.persisted? ? draft.cc_addrs : conversation&.thread_parent&.cc_addrs, class: "input", autocomplete: "off" %>
-          </div>
-          <div>
-            <%= form.label :bcc, "Bcc", class: "label" %>
-            <%= form.text_field :bcc, value: draft.bcc_addrs, class: "input", autocomplete: "off" %>
-          </div>
-        </div>
-      </details>
-
-      <div class="mt-3" data-reply-box-target="bookingPanel" <%= "hidden" unless @reply_data[:bookings].many? %>>
-        <%= form.label :perfectbook_booking_id, "Placeholders fill from", class: "label" %>
-        <%= form.select :perfectbook_booking_id,
-              options_for_select(@reply_data[:bookings].map { |booking| [ booking[:label], booking[:id] ] }, @reply_data[:selected_booking_id]),
-              {}, class: "select", data: { action: "change->reply-box#bookingChanged", "reply-box-target": "booking" } %>
-        <p class="hint">Template inserts use this booking's trip, dates, and balance.</p>
-      </div>
-      <p class="hint" data-reply-box-target="bookingReference" <%= "hidden" unless @reply_context["booking_owner_name"].present? %>>
-        <% if @reply_context["booking_owner_name"].present? %>Booking reference: <%= @reply_context["booking_owner_name"] %>'s booking.<% end %>
-      </p>
-
-      <div class="mt-3">
-        <%= form.label :subject, class: "label" %>
-        <%= form.text_field :subject, value: draft.subject.presence || subject_default,
-              class: "input", required: true, autocomplete: "off", placeholder: "Re: your trek",
-              data: { "reply-box-target": "subject" } %>
-      </div>
-
-      <%= render "reply_box/attachments", draft: draft %>
-    </details>
-
-    <div class="mt-3">
-      <%= form.label :body, "Message", class: "label" %>
-      <%= form.text_area :body, value: draft.body, rows: 5, required: true,
-            class: "textarea reply-body", placeholder: "Hi #{@reply_context['first_name'] || 'there'},",
-            data: { "reply-box-target": "body" } %>
-    </div>
-
-    <div class="reply-chips" role="group" aria-label="Insert a template">
-      <% @reply_chips.each do |template| %>
-        <button type="button" class="rchip"
-                data-action="reply-box#insertTemplate"
-                data-url="<%= use_template_path(template, format: :json) %>"
-                data-name="<%= template.name %>"
-                title="<%= template.subject %>"><%= template.name %></button>
-      <% end %>
-    </div>
-
-
-    <div class="reply-actions">
-      <p id="draft-status" role="status" class="hint reply-status" data-reply-box-target="status"><% if draft.persisted? %>Draft saved <%= time_ago_in_words(draft.updated_at) %> ago.<% end %></p>
-      <%= form.submit "Save draft", formaction: draft_url, formnovalidate: true,
-            class: "btn btn-secondary", data: { "reply-box-target": "saveButton" } %>
-      <%= form.submit "Send", class: "btn btn-primary reply-send" %>
-    </div>
-  <% end %>
-
-  <%# Outside the send form on purpose: nested forms would close the outer
-      form early and strand Send outside it. %>
-  <details class="reply-templates">
-    <summary>All templates</summary>
-    <%= render "templates/picker", templates: ::Template.active.ordered.limit(10), context: @reply_context %>
-  </details>
+  <%= render "reply_box/form", owner: owner %>
 </section>
   </div>
 </div>
