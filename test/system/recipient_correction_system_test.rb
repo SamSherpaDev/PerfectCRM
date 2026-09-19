@@ -32,8 +32,8 @@ class RecipientCorrectionSystemTest < ApplicationSystemTestCase
     assert_field "Bcc", with: "correct@example.test"
     capture("corrected-draft")
     browser_request(lead_messages_path(lead), "POST", conversation_id: original.conversation_id,
-      message: { to: 'Alice <wrong@example.test>, alternate@example.test',
-        cc: 'Alice <WRONG@example.test>', bcc: 'Alice <wrong@example.test>', subject: "Stale form", body: "Saved words" })
+      message: { to: "Alice <wrong@example.test>, alternate@example.test",
+        cc: "Alice <WRONG@example.test>", bcc: "Alice <wrong@example.test>", subject: "Stale form", body: "Saved words" })
     outgoing = Message.order(:id).last
     assert_equal "correct@example.test, alternate@example.test", outgoing.to_addrs
     assert_equal "correct@example.test", outgoing.cc_addrs
@@ -135,8 +135,8 @@ class RecipientCorrectionSystemTest < ApplicationSystemTestCase
 
   test "stale group preview delivers corrected traveler booking context and reply cannot borrow another owner history" do
     lead = Lead.create!(name: "Intended Traveler", email: "wrong@example.test", source: "manual", perfectbook_contact_id: 8202)
-    [ [8201, "Other Traveler", "wrong@example.test", "OTHER-PRIVATE"],
-      [8202, "Intended Traveler", "correct@example.test", "INTENDED-TREK"] ].each do |id, name, email, trip|
+    [ [ 8201, "Other Traveler", "wrong@example.test", "OTHER-PRIVATE" ],
+      [ 8202, "Intended Traveler", "correct@example.test", "INTENDED-TREK" ] ].each do |id, name, email, trip|
       PerfectBook::Contact.create!(perfectbook_id: id, name: name, email: email, synced_at: Time.current)
       PerfectBook::Booking.create!(perfectbook_id: id, perfectbook_contact_id: id, trip_name: trip, synced_at: Time.current)
     end
