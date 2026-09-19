@@ -130,9 +130,11 @@ Everything in PerfectBook's `docs/design-system.md` component list exists in the
 - **AI draft.** Appears inside the reply box area as the `.draft` block described in 2.2, with the tag "AI draft, yours to edit". Tools become Edit and Try again; Send is unchanged. Nothing sends until Send is pressed; there is no auto-send setting.
 - **Template chips.** `.chip`: pill, `--paper-2`, `--raise-sm`, 12.5px 500 text, a 13px `--seal` icon, 32px tall, 8px gaps. Tag chips (`.chip-tag`) are flat on `--band`.
 
-### 4.5 Client page
+### 4.5 Client and lead record pages
 
-Header with back link, eyebrow "Client · {stage}", the client's name as title, a one-sentence subtitle (where they are, what trip, who referred them). Tabs: Overview, Timeline, People, Quotes, Bookings, Notes, each with a count. Cards: Facts (`.facts` grid plus tag chips), Latest (last message with a Reply button and the next promise), People (table with passport status badges), Quotes (table with status badges and money right-aligned), Bookings in PerfectBook (table labelled "Read only", the booking reference is the deep link, empty state with enso and the cairn), Notes (rowlist). Foot: the scene specified in section 4.10 with a one-line caption.
+[Clients](../README.md#clients), [Leads](../README.md#leads), and [Replying](../README.md#replying) own the record layout, actions, state variants, and composer usage. The visual treatment stays Washi: `.page-wide` caps at 1280px, with 300px side columns around a flexible center and 24px gaps. At tablet widths the right column moves beneath Details; on the phone the panels use the shared brush-underline tabs. Header actions are quiet secondary controls, with Send the solid action in the editable record view. More opens a raised paper sheet with the destructive action last.
+
+The composer uses the shared segment and a pressed well, with compact template chips and quiet draft controls. Details uses one-column facts and flat traveler rows; the lead's fit headline sits on the band. Upcoming uses pressed Gelasio date tiles, Files uses flat icon tiles and quiet links, and Trip uses compact tabular money. These reuse the timeline relief of section 4.4; motion is specified in section 8.
 
 ### 4.6 Pipeline
 
@@ -155,7 +157,7 @@ Tabs: Replies, Nudges, Post-trip, AI voice, with counts. Left, a compact table (
 
 ### 4.10 Empty states
 
-`shared/_empty_state` unchanged: an enso on every empty state and beside cleared good-toned zeros. Scenes by area: Today `:pass` ("Nothing waiting. Enjoy the quiet."), Inbox `:bridge`, Clients `:bridge` (foot of the client page too), Leads `:cairn`, Pipeline `:pass`, Quotes and Templates `:cairn`, Settings `:wheel`. The sign-in card shows `:bridge` with the shared `:ridge` behind it, so the family is visible before signing in.
+`shared/_empty_state` unchanged: an enso on every empty state and beside cleared good-toned zeros. Scenes by area: Today `:pass` ("Nothing waiting. Enjoy the quiet."), Inbox `:bridge`, Clients `:bridge`, Leads `:cairn`, Pipeline `:pass`, Quotes and Templates `:cairn`, Settings `:wheel`. The sign-in card shows `:bridge` with the shared `:ridge` behind it, so the family is visible before signing in.
 
 ### 4.11 Leads
 
@@ -163,7 +165,7 @@ The captain's round-1 condition, in his words: "There should be a leads section 
 
 - **Two sections, one vocabulary.** Leads has its own rail item, bottom-bar item, page, tiles, tabs and table; it uses the same cards, captions, badges, stream and reply box as Clients. A lead's timeline is identical in shape to a client's.
 - **Page.** Header (eyebrow, "Leads", a one-sentence subtitle, New lead primary, Sources secondary). Four tiles: New this week, With Panda AI (info tone), Strong fit unanswered (warn), Converted this season (good). Tabs: Open, Scoring, Converted, Lost, with counts. One table, best fit first: Lead (name, then party size and dates in `--ink-3`), Source (`.src`), Asked about (trip), Fit (`.fit`), Stage (stage badge), Last touch (right-aligned). The unread mark appears inline before the name where the lead wrote last.
-- **Lead page.** Same shape as the client page with the lead's facts (source, campaign, fit and Panda AI's reason, asked-about trip, party, dates), the stream, quotes, notes, and one primary action, **Convert to client**, in the header once the stage is Won. A converted lead's page stays readable but read-only, with a line "Became a client on {date}" linking forward; the client page carries "started as a lead" in its facts. There is no reverse action anywhere in the interface, and no automation may perform one. A quiet **Delete** action beside Edit archives the lead after one confirmation ("Delete {name}? They move to the archive and can be restored from the Archived tab."); nothing is ever hard-deleted. An Archived tab with a count lists archived leads with their archived date and a Restore button that returns the lead to its previous stage. An archived lead's page stays readable with an "Archived on {date}" callout while edit, convert, and reply stay hidden; converted leads cannot be archived.
+- **Lead page.** Uses the record treatment in section 4.5, with source, fit and Panda AI's reason, asked-about trip, party, and dates in Details. [Leads in the README](../README.md#leads) owns conversion, archival, and read-only behavior.
 - **Conversion.** One button, one confirmation ("Convert {name} to a client? Their whole timeline moves with them. This cannot be undone."), then the client page opens. The stream gains a `q`-style outlined event "Converted to client". PerfectBook gets the booking task; n8n is told through the outbound webhook.
 - **Stages.** New, Chatting, Quoted, Nudged and Lost are lead stages; Won and Post-trip are client stages. The pipeline board shows both halves under group labels (4.6). Lost is a lead stage that can step back to New; it is not a client.
 
@@ -235,7 +237,7 @@ Budget per surface: the Everest ridge in the header and one river or scene lower
 
 ## 8. Motion
 
-PerfectBook's three moments, unchanged: the ridge (here Everest) draws itself on page load (1.3s, `pb-draw`), the enso draws itself when rendered (0.9s), stat values settle in (0.5s, staggered 60ms). One CRM addition: **a stone lands**. A second, decided in round 2: the **thinking orbs** of 4.13, the only continuous motion, present only while a draft or a score is in progress. When a reply or note is sent, the new event fades and rises 3px onto the stream over 300ms (`pb-settle`), and the unread mark on that client clears. Hover and press transitions on controls and the 160ms tab underline are unchanged. Everything is removed under `prefers-reduced-motion`. No scroll reveals, no per-card entrances, no sheet or drawer animation longer than 200ms.
+PerfectBook's three moments, unchanged: the ridge (here Everest) draws itself on page load (1.3s, `pb-draw`), the enso draws itself when rendered (0.9s), stat values settle in (0.5s, staggered 60ms). One CRM addition: **a stone lands**. A second, decided in round 2: the **thinking orbs** of 4.13, the only continuous motion, present only while a draft or a score is in progress. When a reply or note is sent, the new event fades and rises 3px onto the stream over 300ms (`pb-settle`), and the unread mark on that client clears. Record composer wells grow on focus over 160ms; Upcoming rows use the 0.5s settle with 60ms staggering. Hover and press transitions on controls and the 160ms tab underline are unchanged. Everything is removed under `prefers-reduced-motion`. No scroll reveals, no per-card entrances, no sheet or drawer animation longer than 200ms.
 
 ## 9. Accessibility
 

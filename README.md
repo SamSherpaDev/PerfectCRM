@@ -113,9 +113,10 @@ message and any saved draft. Retry on the timeline resends that message;
 it does not pick up later draft edits.
 
 The lead and client pages put the composer first in the middle column,
-above the one timeline: a Reply | Note segment, a `To {name} · Re:
-{subject} · sends as` line, a compact well that grows on focus, template
-chips with the full picker behind All templates, Save draft, and Send.
+above the one timeline: a Reply | Note segment, a summary of the current
+recipient, subject, and sending mailbox that updates as you edit, a compact
+well that grows on focus, template chips with the full picker behind All
+templates, Save draft, and Send.
 Details (recipients, subject, booking choice, attachments) stays folded.
 Note mode swaps Send for Save note and writes a private note onto the
 timeline. The organization and inbox thread views keep the same form
@@ -130,13 +131,17 @@ newly uploaded files; a successful delivery clears the submitted draft
 only if it has not been edited since submission. Nothing sends without the
 captain pressing Send.
 
-Template inserts and group sends resolve identity from the recipient's
-actual email, preferring their own mirrored PerfectBook contact and bookings.
+Template inserts, task and pipeline nudges, and group sends resolve identity
+from the recipient's actual email, preferring their own mirrored PerfectBook
+contact and bookings.
 Only when that contact is absent do booking values fall back to the owning
 CRM record; the booking reference names that owner. CRM advisor relationships
 remain available independently of the recipient's identity. Replies default
 to the booking with the latest start date, preferring active bookings, and
 let you choose another; a group departure uses a booking for that departure.
+When the booking supplies no trip, the resolved lead owner's trip interest
+fills `trip` only if its nonblank email matches the actual recipient after
+trimming and ignoring case, including with a same-email mirrored contact.
 Unknown or empty placeholder values render `[missing: name]`, never blanks
 or an email substituted for an unknown name. Sample values appear only in
 the labeled template-editor preview. Set Your name, Logo, and Signature in
@@ -193,7 +198,7 @@ polling is scheduled in
 [`config/recurring.yml`](config/recurring.yml); these recurring jobs are
 not scheduled in development. `PerfectBook::Catalog` feeds the quote
 builder, and the `perfectbook_contact_url` and `perfectbook_booking_url`
-helpers power the client booking cards; see "Quotes" below.
+helpers power the record's PerfectBook links; see [Quotes](#quotes) below.
 
 Configure with `PERFECTBOOK_BASE_URL` (defaults to
 `https://perfectbook.sherpaholidays.com`) and `PERFECTBOOK_API_TOKEN`
@@ -267,8 +272,8 @@ A direct post replaces the manual intake step once
 PerfectBook ships its enquiry-creation endpoint (see
 `TODO(pb-inquiry-intake)` in `Quote#perfectbook_intake_url`).
 
-Client and lead pages (when linked to a PerfectBook contact) show
-"Bookings in PerfectBook": each mirrored booking with ref, trip, dates,
+The client page's "Trip in PerfectBook" block (also shown on leads linked
+to a PerfectBook contact) lists each mirrored booking with ref, trip, dates,
 status, total, paid, balance due, invoice badge and number, and "Open in
 PerfectBook", plus a Refresh button that re-pulls just that contact
 (`PerfectBook::SyncBookingsJob` with `perfectbook_contact_id`). Refresh
@@ -278,9 +283,9 @@ first name plus received/missing/expiring per document type, with the
 booking-level missing count; never contents or values) and checklist done
 flags (`documents_json`, `missing_count`, `checklist_json` on
 `PerfectBook::Booking`, stored by `SyncBookingsJob`; the ETag flow is
-unchanged). Each booking card shows every traveler with a badge per
-document type and the missing count. While anything is outstanding the card
-links "Nudge for missing documents", which opens the reply box, including on
+unchanged). Files shows every traveler with a badge per document type and
+the missing count. On editable records, while anything is outstanding,
+"Nudge for missing documents" opens the reply box, including on
 phones, and prefills an empty draft using the active document-request template.
 The `missing_documents` placeholder names each traveler and their missing or
 expiring document types; the booking reference and dates accompany the text.
@@ -288,7 +293,7 @@ If no active template exists, built-in copy includes that missing list.
 Existing drafts are preserved. The action disappears when no tracked documents
 are missing or expiring. The copy page (`document-nudge/:booking_id`) offers
 the same text to review and an "Open in reply box" shortcut when documents are
-outstanding. If the mirror has no document summary yet, the card links to the
+outstanding. If the mirror has no document summary yet, Trip links to the
 copy page with a reminder to check PerfectBook manually. Today lists the
 mirrored missing count on departing-soon rows.
 
@@ -323,15 +328,17 @@ Tasks belong to clients, leads, or organizations. Today lists overdue tasks
 and those due through the next 7 days, using the Pacific date. Tap the
 circle to complete a task and record it on the subject's timeline.
 Snooze until tomorrow, 3 days, next week, or a picked date to hide a task
-until that date without changing its due date. The record page's Upcoming
-card lists follow-ups, live quote deadlines, and confirmed departures
-soonest first, with an inline check to complete a follow-up and one field
-to add the next one due tomorrow.
+until that date without changing its due date. On lead and client pages,
+the Upcoming card lists follow-ups, live quote deadlines, and confirmed departures
+soonest first, with an inline check to complete a follow-up and title and
+due-date fields to add the next one; the date defaults to tomorrow.
 
 Tasks with a template offer Nudge, opening the client, lead, or organization
 with `?template=<id>&task=<id>`. On clients and leads the composer arrives
-with the template already rendered, ready to Send; the organization page
-shows a Suggested message panel with the rendered template, Copy message,
+with the template rendered into an empty draft, ready for review and Send;
+existing draft content is preserved. Personalization follows [Replying](#replying).
+The organization page shows a Suggested message panel with the rendered
+template, Copy message,
 and a prefilled Open email draft instead. Review and fill missing
 details before sending; other placeholders follow the [Templates](#templates)
 rules. Nothing sends automatically. Tasks without a template have no Nudge
@@ -367,10 +374,13 @@ three columns on a desktop: Details (facts, travelers, tags) on the left,
 the composer and the one timeline of every email, note, quote, and
 automated step in the middle, Upcoming dates and Files on the right with
 a compact read-only Trip in PerfectBook. On a phone the same cards sit
-behind Thread, Details, and Files & dates tabs with Thread first. Use
-New client to create a record, and Edit to update facts or add another
+behind Thread, Details, and Files & dates tabs. Each visit starts on Thread
+unless an explicit link targets another panel. Use New client to create a
+record, and Edit to update facts or add another
 person in the blank People fields. Archive lives in the More menu and
 moves a client to the Archived tab, where Restore makes it active again.
+Archived client and lead pages keep their history readable, with Restore
+as the sole header action and editing controls, composer, and Upcoming hidden.
 The Organizations tab holds advisors, operators, and other companies,
 with their own notes and timeline. On lead and client pages one Load
 older pager walks the whole timeline; organization pages keep separate
@@ -403,7 +413,7 @@ across lost or converted inquiries, but only one open lead (unconverted,
 not lost, not archived) can hold each identity. `external_ref` remains unique across
 all leads.
 
-Deleting a lead archives it after one confirmation naming the lead; the
+More → Delete lead archives it after one confirmation naming the lead; the
 Archived tab restores it to its previous stage, and nothing is ever
 hard-deleted. Archived leads leave every working list, pipeline column,
 Today count, and digest, and Panda AI or n8n automations only act on
@@ -411,7 +421,8 @@ active leads. New mail from an archived lead's address waits in triage
 instead of linking to it, Link in triage refuses an archived lead until it
 is restored, and a new lead may take its email or PerfectBook contact ID;
 Restore is refused while an open lead holds that identity.
-Converted leads cannot be archived.
+Converted leads cannot be archived. The archived record presentation is
+described under [Clients](#clients).
 
 Conversion is one-way and manual. Convert to client matches an existing
 client by PerfectBook contact ID first, then normalized primary email.
@@ -433,9 +444,10 @@ derive a band from the numeric score. Edit lets you enter these fields
 manually and add another person in the blank People fields.
 
 Website inquiries now arrive directly in Leads. Open a lead to read its
-facts in Details and its original message as the oldest stone on the
-timeline; unknown timing takes precedence over
-previous dates.
+facts in Details and its inquiry as the oldest entry on the timeline,
+including a placeholder when a website submission has no message. Manual
+leads without inquiry evidence have no inquiry entry. Unknown timing takes
+precedence over previous dates.
 In Settings → Automations, manage credentials and the n8n subscription,
 and review machine events and delivery results. The website form and external
 n8n/Panda AI workflows are configured separately; see the
@@ -609,13 +621,11 @@ Open leads quiet for more than 7 days glow stale. Adding a note or importing
 inbound or outbound mail linked to the lead counts as a touch. Linking an
 existing conversation uses its latest message time; older imported mail
 never overwrites a newer touch. Changing stage or editing details does not
-count as contact. Nudge opens a
-Suggested message panel rendered from the first active itinerary follow-up
-template, with Copy message and a prefilled Open email link when the lead
-has an email address. If no template is available, the panel links to
-Templates. Copying or opening email does not clear staleness; record the
-contact with a note if it has not synced from mail. TODO perfectcrm-mail-out-65: connect suggested
-messages to the reply box and sending.
+count as contact. Nudge opens the lead composer using the first active
+itinerary follow-up template, with the draft-preservation behavior described
+under [Today and follow-ups](#today-and-follow-ups). Without an active
+template it opens the ordinary composer. Opening a nudge does not clear
+staleness; sending a message or adding a note records contact.
 
 Lead transitions use `Leads::Transition`; its automation policy is documented
 in that service. For the tasks hook, see [Today and follow-ups](#today-and-follow-ups). Stage moves

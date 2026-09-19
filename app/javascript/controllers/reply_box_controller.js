@@ -1,7 +1,7 @@
 import { Controller } from "@hotwired/stimulus"
 
-// Docked reply box (reply_box/_box): one-tap template inserts with live
-// placeholder values and a booking select that swaps the context.
+// Shared by the docked reply box and record composer. Recipient and
+// booking resolution policy: README.md, "Replying".
 export default class extends Controller {
   static values = { defaultContext: Object, bookingContexts: Object, contextUrl: String, open: Boolean }
   static targets = [
