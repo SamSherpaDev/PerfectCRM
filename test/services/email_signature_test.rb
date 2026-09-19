@@ -142,7 +142,7 @@ class EmailSignatureTest < ActiveSupport::TestCase
     assert_includes html, ">Founder, Sherpa Holidays<"
   end
 
-  test "detail lines link URLs, emails, domains, and phones, and escape the rest" do
+  test "detail lines escape text without inferring link destinations" do
     @setting.update!(email_signature: [
       "Sam Sherpa",
       "sherpaholidays.com | +1 555 0100",
@@ -150,10 +150,7 @@ class EmailSignatureTest < ActiveSupport::TestCase
       "Sam <boss> & \"friends\""
     ].join("\n"))
     html = EmailSignature.html_for(@setting)
-    assert_includes html, '<a href="https://sherpaholidays.com"'
-    assert_includes html, '<a href="tel:+15550100"'
-    assert_includes html, '<a href="https://sherpaholidays.com/everest"'
-    assert_includes html, '<a href="mailto:info@sherpaholidays.com"'
+    assert_empty Loofah.fragment(html).css("a")
     assert_includes html, "Sam &lt;boss&gt; &amp; &quot;friends&quot;"
     assert_not_includes html, "<script"
   end

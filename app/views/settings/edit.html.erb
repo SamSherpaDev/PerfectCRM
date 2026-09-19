@@ -242,7 +242,7 @@
       </div>
       <div>
         <%= form.label :email_signature, "Signature lines", class: "label" %>
-        <%= form.text_area :email_signature, rows: 3, class: "textarea", placeholder: "Sam Sherpa\nSherpa Holidays" %>
+        <%= form.text_area :email_signature, value: EmailSignature.text_for(@settings), rows: 3, class: "textarea", placeholder: "Sam Sherpa\nSherpa Holidays" %>
         <p class="hint">First line is your name. Added under every reply and fills {{signature}} too.</p>
       </div>
       <% if @settings.errors[:signature_logo].any? %>

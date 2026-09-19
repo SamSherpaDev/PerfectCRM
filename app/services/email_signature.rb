@@ -4,12 +4,6 @@
 # the {{signature}} placeholder, and the app-owned HTML block (signature
 # lines plus the uploaded logo by Content-ID) for HTML mail parts.
 #
-# The legacy `email_signature_html` column (raw pasted Outlook markup) is
-# read-only: its words seed the signature lines when no plain lines are
-# saved, but it never renders directly, because a browser textarea cannot
-# receive Outlook's formatting or pictures — pasting there silently dropped
-# the logo. The sanitizing helpers stay for that legacy column, which
-# Setting still scrubs on save.
 module EmailSignature
   CID = "signature-logo@perfectcrm"
   MAX_LOGO_BYTES = 500.kilobytes
@@ -25,29 +19,15 @@ module EmailSignature
   # Arial/Helvetica for the rest; ink on the white every mail client shows.
   NAME_COLOR = "#14110e"
   DETAIL_COLOR = "#3d3226"
-  LINK_COLOR = "#9a520f"
   RULE_COLOR = "#c96f1a"
 
   ALLOWED_TAGS = %w[p br div span a b strong i em u table tbody tr td img].freeze
   ALLOWED_ATTRIBUTES = %w[href src alt width height style].freeze
   STYLE_PROPERTIES = %w[font-size font-family color].freeze
 
-  # Matches URLs, email addresses, phone numbers, and bare domains inside a
-  # detail line so they can be linked; everything else ships as escaped text.
-  LINKABLE = %r{
-    (?<url>https?://[^\s<>",|]+) |
-    (?<email>[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}) |
-    (?<phone>\+\d[\d\s.\-()]*\d) |
-    (?<domain>(?:www\.)?[A-Za-z0-9](?:[A-Za-z0-9\-]*[A-Za-z0-9])?
-      (?:\.[A-Za-z0-9](?:[A-Za-z0-9\-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,}
-      (?:/[^\s<>",|]*)?)
-  }x.freeze
-
   class << self
-    # Plain-text signature: the saved lines, or derived from the legacy HTML
-    # when only HTML was supplied. Blank when nothing is configured.
     def text_for(setting)
-      setting.email_signature.presence || text_from_html(setting.email_signature_html).presence
+      text_from_html(setting.email_signature_html).presence || setting.email_signature.presence
     end
 
     # The signature as editable lines: what the text part and
@@ -67,10 +47,15 @@ module EmailSignature
 
       name, *details = lines
       detail_rows = details.map do |line|
-        %(<div style="font-size:13px;line-height:19px;color:#{DETAIL_COLOR};">#{linkify_detail(line)}</div>)
+        %(<div style="font-size:13px;line-height:19px;color:#{DETAIL_COLOR};">#{ERB::Util.html_escape(line)}</div>)
       end.join
+      content = if setting.email_signature_html.present?
+        sanitize(setting.email_signature_html)
+      else
+        %(<div style="font-family:Georgia,'Times New Roman',serif;font-size:16px;line-height:22px;color:#{NAME_COLOR};font-weight:bold;">#{ERB::Util.html_escape(name)}</div>#{detail_rows})
+      end
       <<~HTML.strip
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-top:20px;font-family:Arial,Helvetica,sans-serif;"><tr>#{logo_cell(setting, logo_src: logo_src)}<td style="padding:2px 0 2px 16px;vertical-align:middle;border-left:2px solid #{RULE_COLOR};"><div style="font-family:Georgia,'Times New Roman',serif;font-size:16px;line-height:22px;color:#{NAME_COLOR};font-weight:bold;">#{ERB::Util.html_escape(name)}</div>#{detail_rows}</td></tr></table>
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-top:20px;font-family:Arial,Helvetica,sans-serif;"><tr>#{logo_cell(setting, logo_src: logo_src)}<td style="padding:2px 0 2px 16px;vertical-align:middle;border-left:2px solid #{RULE_COLOR};font-size:13px;line-height:19px;color:#{DETAIL_COLOR};">#{content}</td></tr></table>
       HTML
     end
 
@@ -188,50 +173,6 @@ module EmailSignature
         %(<img src="#{src}" alt="Sherpa Holidays" style="display:block;border:0;">)
       end
       %(<td style="padding:0 16px 0 0;vertical-align:middle;">#{img}</td>)
-    end
-
-    # A detail line as escaped text with URLs, email addresses, bare
-    # domains, and phone-looking tokens linked. Phone tokens need a leading
-    # + and seven digits; anything else stays plain text.
-    def linkify_detail(line)
-      output = +""
-      rest = line.to_s
-      until rest.empty?
-        match = LINKABLE.match(rest)
-        break if match.nil?
-
-        output << ERB::Util.html_escape(match.pre_match)
-        token = match[0]
-        token, tail = split_trailing_punctuation(token)
-        href = link_href(match, token)
-        if href
-          output << %(<a href="#{ERB::Util.html_escape(href)}" style="color:#{LINK_COLOR};text-decoration:none;">#{ERB::Util.html_escape(token)}</a>)
-        else
-          output << ERB::Util.html_escape(token)
-        end
-        output << ERB::Util.html_escape(tail)
-        rest = match.post_match
-      end
-      output << ERB::Util.html_escape(rest)
-      output
-    end
-
-    def split_trailing_punctuation(token)
-      tail = token[/[.,;:!?)\]}]+\z/, 0].to_s
-      [ token.delete_suffix(tail), tail ]
-    end
-
-    def link_href(match, token)
-      if match[:url]
-        token
-      elsif match[:email]
-        "mailto:#{token}"
-      elsif match[:phone]
-        digits = token.gsub(/\D/, "")
-        digits.length >= 7 ? "tel:+#{digits}" : nil
-      elsif match[:domain]
-        "https://#{token}"
-      end
     end
 
     def parse_image_dimensions(bytes)

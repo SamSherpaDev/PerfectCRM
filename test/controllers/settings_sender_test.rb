@@ -40,6 +40,51 @@ class SettingsSenderTest < ActionDispatch::IntegrationTest
     assert_equal "Sam Sherpa\nTel 555-0100", EmailSignature.text_for(Setting.current.reload)
   end
 
+  test "legacy identity and safe links survive viewing and saving unchanged lines" do
+    Setting.current.update_columns(email_signature: "Sam Sherpa", email_signature_html:
+      '<p>Sam Sherpa<br>Sherpa Holidays<br><a href="tel:+15550100">Call Sam</a></p>')
+    sign_in
+    get edit_settings_path
+    assert_response :success
+    lines = "Sam Sherpa\nSherpa Holidays\nCall Sam"
+    assert_select 'textarea[name="setting[email_signature]"]', text: lines
+    assert_select '#signature-preview a[href="tel:+15550100"]', text: "Call Sam"
+    patch settings_path, params: { setting: { email_signature: lines.gsub("\n", "\r\n") } }
+    assert_redirected_to edit_settings_path
+    follow_redirect!
+    assert_select '#signature-preview a[href="tel:+15550100"]', text: "Call Sam"
+    assert_equal lines, EmailSignature.text_for(Setting.current.reload)
+  end
+
+  test "explicit empty submission clears legacy signatures including uninitialized lines" do
+    sign_in
+    [ "Sam Sherpa", "" ].each do |plain|
+      Setting.current.update_columns(email_signature: plain, email_signature_html: "<p>Sam Sherpa</p>")
+      patch settings_path, params: { setting: { email_signature: "" } }
+      assert_redirected_to edit_settings_path
+      settings = Setting.current.reload
+      assert_empty settings.email_signature_html
+      assert_nil EmailSignature.text_for(settings)
+      assert_empty EmailSignature.html_for(settings)
+      settings.update!(sender_name: "Sam")
+      assert_nil EmailSignature.text_for(settings.reload)
+      follow_redirect!
+      assert_select 'textarea[name="setting[email_signature]"]', text: ""
+      assert_select "#signature-preview table", count: 0
+    end
+  end
+
+  test "editing signature lines replaces legacy content" do
+    Setting.current.update_columns(email_signature: "Sam Sherpa", email_signature_html: "<p>Sam Sherpa<br>Old phone</p>")
+    sign_in
+    patch settings_path, params: { setting: { email_signature: "Sam Sherpa\r\nNew phone" } }
+    assert_redirected_to edit_settings_path
+    follow_redirect!
+    assert_select "#signature-preview", text: /New phone/
+    assert_select "#signature-preview", text: /Old phone/, count: 0
+    assert_equal "Sam Sherpa\nNew phone", EmailSignature.text_for(Setting.current.reload)
+  end
+
   test "logo upload attaches a PNG" do
     sign_in
     patch settings_path, params: { setting: { signature_logo: uploaded_logo } }

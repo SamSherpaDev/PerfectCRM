@@ -87,6 +87,31 @@ class ClientMailerTest < ActionMailer::TestCase
     assert_not_includes mail.text_part.body.to_s, "<table"
   end
 
+  test "legacy identity and explicit safe links deliver despite shorter plain lines" do
+    setting = Setting.current
+    setting.signature_logo.attach(
+      io: StringIO.new(png_bytes(600, 200)), filename: "logo.png", content_type: "image/png"
+    )
+    setting.update_columns(email_signature: "Sam Sherpa", email_signature_html:
+      '<p>Sam Sherpa<br>Sherpa Holidays<br><a href="https://sherpaholidays.com/contact">Contact us</a><br><a href="tel:+15550100">Call Sam</a><br><a href="javascript:alert(1)">Unsafe</a></p><script>alert(2)</script>')
+    message = Outbound::Composer.call(owner: @client,
+      params: { to: "maya@example.com", subject: "Your trek", body: "Hello Maya." })
+    mail = ClientMailer.outbound(message)
+    fragment = Loofah.fragment(mail.html_part.body.to_s)
+    assert_includes fragment.text, "Sherpa Holidays"
+    assert_equal "Contact us", fragment.at_css('a[href="https://sherpaholidays.com/contact"]').text
+    assert_equal "Call Sam", fragment.at_css('a[href="tel:+15550100"]').text
+    assert_empty fragment.css('a[href^="javascript:"], script')
+    img = fragment.at_css("img")
+    assert_equal "cid:#{EmailSignature::CID}", img["src"]
+    assert_equal "120", img["width"]
+    assert_equal "40", img["height"]
+    assert mail.attachments.find { |attachment| attachment.content_id == "<#{EmailSignature::CID}>" }.inline?
+    assert_includes mail.text_part.body.to_s, "Sherpa Holidays"
+    assert_includes mail.text_part.body.to_s, "Call Sam"
+    assert_equal 1, fragment.text.scan("Sam Sherpa").size
+  end
+
   test "a file attachment wraps the related signature part in mixed" do
     Setting.current.signature_logo.attach(
       io: StringIO.new(png_bytes(600, 200)), filename: "logo.png", content_type: "image/png"
