@@ -3,6 +3,7 @@ module EmailRedirects
 
   included do
     serialize :email_redirects, coder: JSON
+    serialize :ambiguous_emails, coder: JSON
     after_update :record_email_redirect_on_change
   end
 
@@ -18,12 +19,16 @@ module EmailRedirects
     {}
   end
 
+  def self.mailboxes(value)
+    ::Mail::AddressList.new(value.to_s.tr(";\n", ",,")).addresses.map { |address| address.address.to_s.strip.downcase }.compact_blank.uniq
+  end
+
   def resolve_redirected_email(address)
-    normalized = address.to_s.strip.downcase
+    normalized = EmailRedirects.mailboxes(address).first.to_s
     return "" if normalized.blank?
 
     redirects = redirect_map
-    active = current_recipient_emails
+    active = current_recipient_emails | ambiguous_recipient_emails
     seen = Set.new
     current = normalized
     while current.present? && redirects.key?(current) && !active.include?(current) && !seen.include?(current)
@@ -34,7 +39,7 @@ module EmailRedirects
   end
 
   def resolve_redirected_list(value)
-    parts = value.to_s.split(/[,\n;]/).map(&:strip).reject(&:blank?)
+    parts = EmailRedirects.mailboxes(value)
     resolved = parts.map { |part| resolve_redirected_email(part) }.reject(&:blank?).uniq
     # Preserve display order but drop duplicates case-insensitively.
     resolved.uniq { |addr| addr.downcase }
@@ -42,23 +47,29 @@ module EmailRedirects
 
   def resolve_redirected_field(value)
     resolve_redirected_list(value).join(", ")
+  rescue ::Mail::Field::ParseError
+    value.to_s
   end
 
   def record_email_redirect(old_address, new_address)
     old_key = old_address.to_s.strip.downcase
-    return if old_key.blank?
-
     new_value = new_address.to_s.strip.downcase
 
     self.class.transaction do
       current = self.class.unscoped.lock.find(id)
+      ambiguity = current.ambiguous_recipient_emails
+      ambiguity |= [ old_key, new_value ].select { |address| current.redirect_map.key?(address) }
       redirects = current.redirect_map.transform_values { |value| current.resolve_redirected_email(value) }
       redirects.transform_values! { |value| value == old_key ? new_value : value }
       redirects[new_value] = new_value if redirects.key?(new_value)
-      redirects.delete(old_key)
-      redirects[old_key] = new_value
-      current.update_columns(email_redirects: redirects)
+      if old_key.present?
+        redirects.delete(old_key)
+        redirects[old_key] = new_value
+      end
+      ambiguity |= redirects.keys & current.current_recipient_emails
+      current.update_columns(email_redirects: redirects, ambiguous_emails: ambiguity)
       self.email_redirects = redirects
+      self.ambiguous_emails = ambiguity
     end
   end
 
@@ -67,7 +78,7 @@ module EmailRedirects
   end
 
   def ambiguous_recipient_emails
-    redirect_map.keys & current_recipient_emails
+    Array(ambiguous_emails) | (redirect_map.keys & current_recipient_emails)
   end
 
   def recipient_confirmation_token
@@ -82,7 +93,7 @@ module EmailRedirects
 
   def recipient_confirmation_state
     Digest::SHA256.hexdigest([
-      self.class.name, id, email, updated_at, redirect_map.sort,
+      self.class.name, id, email, updated_at, redirect_map.sort, ambiguous_recipient_emails.sort,
       people.reorder(:id).pluck(:id, :email, :updated_at)
     ].to_json)
   end

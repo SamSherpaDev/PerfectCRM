@@ -314,6 +314,93 @@ class RecipientCorrectionTest < ActionDispatch::IntegrationTest
     assert_equal "first@example.test", original.reload.to_addrs
   end
 
+  test "reassignment ambiguity survives later edits and conversion without guessing" do
+    lead = Lead.create!(name: "History", email: "owner@example.test", source: "manual")
+    first_person = lead.people.create!(name: "One", email: "reused@example.test")
+    queued = Outbound::Composer.call(owner: lead, params: { to: first_person.email, body: "Original" })
+    draft = queued.conversation.create_draft!(owner: lead, to_addrs: first_person.email, body: "For One")
+    first_person.update!(email: "one@example.test")
+    second_person = lead.reload.people.create!(name: "Two", email: "reused@example.test")
+    sign_in
+    get lead_path(lead)
+    stale_confirmation = recipient_confirmation_from_form
+    second_person.update!(email: "two@example.test")
+
+    [ nil, stale_confirmation ].each do |confirmation|
+      assert_no_difference "Message.count" do
+        post lead_messages_path(lead), params: { conversation_id: queued.conversation_id,
+          message: { to: draft.to_addrs, body: draft.body, recipient_confirmation: confirmation } }
+      end
+      assert_match "Choose a current recipient", flash[:alert]
+    end
+    get lead_path(lead)
+    assert_select "input[name='message[to]'][value='reused@example.test']"
+    confirmation = recipient_confirmation_from_form
+    assert_no_difference "Message.count" do
+      post lead_messages_path(lead), params: { conversation_id: queued.conversation_id,
+        message: { to: draft.to_addrs, body: draft.body, recipient_confirmation: confirmation } }
+    end
+    assert_equal "reused@example.test", draft.reload.to_addrs
+    assert_equal "For One", draft.body
+
+    client = lead.reload.convert_to_client!
+    assert_no_difference "Message.count" do
+      post client_messages_path(client), params: { conversation_id: queued.conversation_id,
+        message: { to: draft.to_addrs, body: draft.body } }
+    end
+    assert_match "Choose a current recipient", flash[:alert]
+    get client_path(client)
+    confirmation = recipient_confirmation_from_form
+    assert_difference "Message.count", 1 do
+      post client_messages_path(client), params: { conversation_id: queued.conversation_id,
+        message: { to: "one@example.test", body: draft.body, recipient_confirmation: confirmation } }
+    end
+    assert_equal [ "one@example.test" ], ClientMailer.outbound(Message.order(:id).last).to
+    assert_equal "reused@example.test", queued.reload.to_addrs
+    assert_equal "queued", queued.status
+  end
+
+  test "formatted To Cc and Bcc mailboxes follow corrections and preserve alternates" do
+    lead = Lead.create!(name: "Alice", email: "old@example.test", source: "manual")
+    original = Outbound::Composer.call(owner: lead,
+      params: { to: '"Alice, Traveler" <old@example.test>', body: "Original" })
+    original.conversation.create_draft!(owner: lead, to_addrs: '"Alice, Traveler" <old@example.test>', body: "Draft")
+    lead.update!(email: "corrected@example.test")
+    sign_in
+    get lead_path(lead)
+    assert_select "input[name='message[to]'][value='corrected@example.test']"
+    post lead_messages_path(lead), params: { conversation_id: original.conversation_id, message: {
+      to: '"Alice, Traveler" <OLD@example.test>, Friend <alternate@example.test>',
+      cc: "Alice <old@example.test>", bcc: "Alice <old@example.test>", body: "Corrected"
+    } }
+    assert_response :redirect
+    mail = ClientMailer.outbound(Message.order(:id).last)
+    assert_equal [ "corrected@example.test", "alternate@example.test" ], mail.to
+    assert_equal [ "corrected@example.test" ], mail.cc
+    assert_equal [ "corrected@example.test" ], mail.bcc
+    assert_equal "old@example.test", original.reload.to_addrs
+  end
+
+  test "formatted recipients cannot bypass ambiguity confirmation in any envelope field" do
+    lead = Lead.create!(name: "Alice", email: "alice@example.test", source: "manual")
+    lead.update!(email: nil)
+    lead.update!(email: "alice@example.test")
+    sign_in
+    %i[to cc bcc].each do |field|
+      message = { to: "alternate@example.test", field => '"Alice, Traveler" <ALICE@example.test>', body: "Check recipient" }
+      assert_no_difference "Message.count" do
+        post lead_messages_path(lead), params: { message: message }
+      end
+      assert_match "confirm the current recipients", flash[:alert]
+      get lead_path(lead, new_thread: 1)
+      confirmation = recipient_confirmation_from_form
+      assert_difference "Message.count", 1 do
+        post lead_messages_path(lead), params: { message: message.merge(recipient_confirmation: confirmation) }
+      end
+      assert_equal [ "alice@example.test" ], ClientMailer.outbound(Message.order(:id).last).public_send(field)
+    end
+  end
+
   private
 
   def recipient_confirmation_from_form

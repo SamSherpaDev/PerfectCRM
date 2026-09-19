@@ -97,4 +97,69 @@ class GroupSendsRequestsTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_match(/Maya Gurung &lt;maya@example.com&gt;/, response.body)
   end
+
+  test "ambiguous batches confirm current contacts and queue nothing until every recipient validates" do
+    @client.update!(email: nil)
+    @client.update!(email: "maya@example.com")
+    sign_in
+    recipients = "stranger@example.test\nMaya <maya@example.com>\nMaya again <maya@example.com>"
+    assert_no_difference [ "Message.count", "GroupSend.count", "Conversation.count", "@template.reload.usage_count" ] do
+      assert_no_enqueued_jobs only: OutboundDeliveryJob do
+        post group_sends_path, params: { template_id: @template.id, recipients: recipients }
+      end
+    end
+    assert_match "confirm the current recipients", flash[:alert]
+    post merge_templates_path, params: { template_id: @template.id, recipients: recipients }
+    assert_response :success
+    assert_select "input[type='checkbox'][name^='recipient_confirmations']:not([checked])", count: 1
+    input = css_select("input[type='checkbox'][name^='recipient_confirmations']").first
+    confirmations = { @client.to_gid_param => input["value"] }
+
+    @client.update!(email: nil)
+    @client.update!(email: "maya@example.com")
+    assert_no_difference [ "Message.count", "GroupSend.count" ] do
+      assert_no_enqueued_jobs only: OutboundDeliveryJob do
+        post group_sends_path, params: { template_id: @template.id, recipients: recipients, recipient_confirmations: confirmations }
+      end
+    end
+    post merge_templates_path, params: { template_id: @template.id, recipients: recipients }
+    confirmations[@client.to_gid_param] = css_select("input[type='checkbox'][name^='recipient_confirmations']").first["value"]
+    assert_difference "Message.count", 3 do
+      assert_difference "GroupSend.count", 1 do
+        assert_enqueued_jobs 3, only: OutboundDeliveryJob do
+          post group_sends_path, params: { template_id: @template.id, recipients: recipients, recipient_confirmations: confirmations }
+        end
+      end
+    end
+    assert_equal [ "stranger@example.test", "maya@example.com", "maya@example.com" ], GroupSend.last.messages.order(:id).map(&:to_addrs)
+  end
+
+  test "a later invalid rendered message rolls back the entire group before queuing" do
+    @template.update!(subject: "{{first_name}}", body: "{{full_name}}")
+    sign_in
+    @template.stub(:rendered, ->(context) { { subject: "Hi", body: context["full_name"] == "Invalid" ? "" : "Valid" } }) do
+      Template.stub(:find_by, @template) do
+        assert_no_difference [ "Message.count", "GroupSend.count", "Conversation.count", "@template.reload.usage_count" ] do
+          assert_no_enqueued_jobs only: OutboundDeliveryJob do
+            post group_sends_path, params: { template_id: @template.id, recipients: "Valid <valid@example.test>\nInvalid <invalid@example.test>" }
+          end
+        end
+      end
+    end
+    assert_match "Could not send", flash[:alert]
+  end
+
+  test "group recipients with inactive ambiguous history must choose a current address" do
+    person = @client.people.create!(name: "One", email: "reused@example.test")
+    person.update!(email: "one@example.test")
+    second = @client.people.create!(name: "Two", email: "reused@example.test")
+    second.update!(email: "two@example.test")
+    sign_in
+    assert_no_difference [ "Message.count", "GroupSend.count" ] do
+      assert_no_enqueued_jobs only: OutboundDeliveryJob do
+        post group_sends_path, params: { template_id: @template.id, recipients: "first@example.test\nreused@example.test" }
+      end
+    end
+    assert_match "Choose a current recipient", flash[:alert]
+  end
 end

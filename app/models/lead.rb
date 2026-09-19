@@ -200,7 +200,8 @@ class Lead < ApplicationRecord
       redirect_map.each do |former, corrected|
         client.record_email_redirect(former, client.resolve_redirected_email(corrected))
       end
-      client.update!(pipeline_stage: "won")
+      client.update!(ambiguous_emails: client.ambiguous_recipient_emails | ambiguous_recipient_emails,
+        pipeline_stage: "won")
       client.update!(ai_opt_out: true) if ai_opt_out?
       people.find_each do |person|
         next if person.email.present? && client.people.exists?(email: person.email)

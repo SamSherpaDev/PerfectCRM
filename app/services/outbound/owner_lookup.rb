@@ -14,7 +14,9 @@ module Outbound
       return client if client
 
       Lead.open.find_by(email: normalized) ||
-        Person.where("lower(email) = ?", normalized).where.not(lead_id: nil).first&.lead
+        Person.where("lower(email) = ?", normalized).where.not(lead_id: nil).first&.lead ||
+        Client.where("EXISTS (SELECT 1 FROM json_each(ambiguous_emails) WHERE value = ?)", normalized).first ||
+        Lead.open.where("EXISTS (SELECT 1 FROM json_each(ambiguous_emails) WHERE value = ?)", normalized).first
     end
   end
 end

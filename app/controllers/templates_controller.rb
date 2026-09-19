@@ -144,6 +144,10 @@ class TemplatesController < ApplicationController
     else
       @batch = MergeBatch.build(template: @selected, recipient_lines: @recipient_lines,
         context_for: ->(recipient) { TemplateContext.for_recipient(recipient, departure_id: params[:departure_id]) })
+      @recipient_confirmation_owners = @batch.recipients.filter_map do |recipient|
+        owner = Outbound::OwnerLookup.for_email(recipient.email)
+        owner if owner.respond_to?(:ambiguous_recipient_emails) && owner.ambiguous_recipient_emails.include?(recipient.email.downcase)
+      end.uniq
       if @batch.errors.any?
         flash.now[:alert] = "#{@batch.errors.size} #{'line'.pluralize(@batch.errors.size)} need#{@batch.errors.size == 1 ? 's' : ''} fixing before this batch can send."
       elsif @batch.recipients.empty?

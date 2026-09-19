@@ -13,7 +13,7 @@ class Person < ApplicationRecord
 
   after_save :refresh_owner_search
   after_destroy :refresh_owner_search
-  after_update :record_owner_redirect_on_email_change
+  after_save :record_owner_redirect_on_email_change
 
   def owner
     client || lead
