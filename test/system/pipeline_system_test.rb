@@ -111,7 +111,7 @@ class PipelineSystemTest < ApplicationSystemTestCase
   test "suggested message copy button copies the rendered follow-up" do
     template = Template.create!(name: "Follow-up", purpose: "itinerary_follow_up",
       subject: "Your {{trip}}", body: "Hi {{first_name}}")
-    lead = Lead.create!(name: "Tashi Sherpa", trip_interest: "Annapurna")
+    lead = Lead.create!(name: "Tashi Sherpa", email: "tashi@example.com", trip_interest: "Annapurna")
     visit lead_path(lead, template: template.id, nudge: 1)
     assert_selector "h2", text: "Timeline"
     assert_no_selector "h2", text: "Suggested message"
