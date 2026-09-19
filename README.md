@@ -102,7 +102,9 @@ Replies send as `info@sherpaholidays.com` through the Microsoft 365 SMTP
 submission endpoint (`smtp.office365.com:587`, `SMTP_USERNAME`/`SMTP_PASSWORD`
 plus `MAIL_FROM` in `.env.app.example`), with
 `From` and `Reply-To` on the mailbox, `In-Reply-To`/`References` from the
-thread, a generated `Message-ID` that is kept, the signature from Settings → Email replies,
+thread, a generated `Message-ID` that is kept, the signature from Settings → Signature
+(a logo plus formatted HTML pasted from Outlook, or plain lines that build
+one; the logo travels embedded in the mail, never as a link),
 and uploaded attachments, subject to the [mail document restrictions](#mail).
 Delivery runs on Solid Queue
 (`OutboundDeliveryJob`, retries with backoff); the timeline shows each
@@ -130,8 +132,8 @@ to the booking with the latest start date, preferring active bookings, and
 let you choose another; a group departure uses a booking for that departure.
 Unknown or empty placeholder values render `[missing: name]`, never blanks
 or an email substituted for an unknown name. Sample values appear only in
-the labeled template-editor preview. Set Your name and Signature in
-Settings → Email replies and press Save email settings; these values also
+the labeled template-editor preview. Set Your name, Logo, and Signature in
+Settings → Signature and press Save email settings; these values also
 fill templates for recipients without CRM records.
 
 In Templates → Merge preview, select a template and a departure to fill the

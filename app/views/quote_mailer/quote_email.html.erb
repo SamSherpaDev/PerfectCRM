@@ -20,4 +20,6 @@
 <p>The full quote is attached as a PDF. To accept, tap this link — no account needed:</p>
 <p><%= link_to "Accept quote #{@quote.reference}", @accept_url %></p>
 
-<p>Questions? Just reply to this email.<br>Sam<br>Sherpa Holidays</p>
+<p>Questions? Just reply to this email.</p>
+
+<%= @signature_html.html_safe %>

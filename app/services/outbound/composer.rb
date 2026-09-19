@@ -47,7 +47,7 @@ module Outbound
         message.errors.add(:text_body, :blank)
         raise ActiveRecord::RecordInvalid, message
       end
-      message.text_body = with_signature(@params[:body].to_s)
+      message.text_body = with_signature(@params[:body].to_s.gsub("\r\n", "\n"))
       message.html_body = nil
       message.template_id = @params[:template_id].presence
       thread_under_parent(message)
@@ -87,22 +87,15 @@ module Outbound
     end
 
     def with_signature(body)
-      return body if template_has_signature?
+      return body if EmailSignature.template_carries_signature?(@params[:template_id])
 
-      signature = Setting.current.email_signature.presence
+      signature = EmailSignature.text_for(Setting.current).presence
       return body if signature.blank?
 
       stripped = body.rstrip
       return body if stripped.end_with?(signature.strip)
 
       "#{stripped}\n\n#{signature.strip}\n"
-    end
-
-    def template_has_signature?
-      id = @params[:template_id].presence
-      return false if id.blank?
-
-      TemplateRenderer.placeholders_in(Template.where(id: id).pick(:body)).include?("signature")
     end
 
     def thread_under_parent(message)

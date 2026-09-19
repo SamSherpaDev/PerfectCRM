@@ -24,6 +24,15 @@ class OutboundComposerTest < ActiveSupport::TestCase
     assert_equal "Hello\n\nSam Sherpa\n", again.text_body
   end
 
+  test "appends text derived from HTML when only HTML is supplied" do
+    Setting.current.update!(email_signature: "", email_signature_html: "<p>Sam Sherpa<br>Sherpa Holidays</p>")
+    message = Outbound::Composer.call(owner: @client,
+      params: { to: "maya@example.com", subject: "Hi", body: "Hello" })
+    assert_equal "Hello\n\nSam Sherpa\nSherpa Holidays\n", message.text_body
+  ensure
+    Setting.current.update!(email_signature: "Sam Sherpa", email_signature_html: "")
+  end
+
   test "skips the appended signature when the template carries {{signature}}" do
     template = Template.create!(name: "Signed", purpose: "custom",
       subject: "Hi", body: "Hello\n\n{{signature}}")

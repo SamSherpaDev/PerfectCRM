@@ -17,7 +17,7 @@ one-handed.
    then follow-ups. Tap the circle to mark one done.
 6. **Configure AI assistance** using the [AI setup guide](../README.md#ai-assistance),
    including the provider key and Voice guide in Settings → AI assistance.
-7. **Write your name and signature** in Settings → Email replies.
+7. **Write your name, upload your logo, and set your signature** in Settings → Signature.
 8. **Check the PerfectBook connection** in Settings → PerfectBook → Test
    connection. Bookings and the trip catalog mirror from there.
 9. **Walk the pipeline** and drag any stale card to its true stage. Lost

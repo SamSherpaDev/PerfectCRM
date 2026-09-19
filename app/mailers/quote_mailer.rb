@@ -10,6 +10,10 @@ class QuoteMailer < ApplicationMailer
     @accept_url = public_quote_url(@quote.accept_token)
     attachments["quote-#{@quote.reference}.pdf"] =
       QuotePdf.new(@quote, accept_url: @accept_url).render
+    setting = Setting.current
+    @signature_text = EmailSignature.text_for(setting).to_s
+    @signature_html = EmailSignature.html_for(setting)
+    attach_signature_logo(setting, @signature_html)
     mail(to: @quote.owner_email,
       subject: "Your Sherpa Holidays quote #{@quote.reference} — #{@quote.subject_label}")
   end

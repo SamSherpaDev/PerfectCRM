@@ -1,6 +1,8 @@
 class Setting < ApplicationRecord
   APPEARANCES = %w[paper night].freeze
 
+  has_one_attached :signature_logo
+
   encrypts :relay_secret, deterministic: false
 
   encrypts :ms_graph_refresh_token
@@ -13,6 +15,9 @@ class Setting < ApplicationRecord
   validates :singleton_key, inclusion: { in: [ 1 ] }, uniqueness: true
   validates :appearance, inclusion: { in: APPEARANCES }
   validates :lead_webhook_url, format: { with: %r{\Ahttps?://[^\s/]+(?:/[^\s]*)?\z}, allow_blank: true }
+  validate :signature_logo_requirements
+
+  before_save :normalize_signature
 
   def self.current
     find_by(singleton_key: 1) || create_or_find_by!(singleton_key: 1)
@@ -59,5 +64,28 @@ class Setting < ApplicationRecord
     rotate_site_key! if site_key.blank?
     rotate_relay_secret! if relay_secret.blank?
     self
+  end
+
+  private
+
+  # The email logo: PNG, JPEG, or GIF around 500 KB. No SVG, which mail
+  # clients do not render.
+  def signature_logo_requirements
+    return unless signature_logo.attached?
+
+    blob = signature_logo.blob
+    unless EmailSignature::LOGO_TYPES.include?(blob.content_type)
+      errors.add(:signature_logo, "must be a PNG, JPEG, or GIF")
+    end
+    if blob.byte_size > EmailSignature::MAX_LOGO_BYTES
+      errors.add(:signature_logo, "must be under 500 KB")
+    end
+  end
+
+  # Browser textareas submit CRLF; the signature is matched against LF
+  # bodies, so both signature shapes are stored with LF line endings.
+  def normalize_signature
+    self.email_signature = email_signature&.gsub("\r\n", "\n")
+    self.email_signature_html = EmailSignature.sanitize(email_signature_html)
   end
 end
