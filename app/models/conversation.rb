@@ -12,6 +12,7 @@ class Conversation < ApplicationRecord
 
   belongs_to :linkable, polymorphic: true, optional: true
   has_many :messages, -> { newest_first }, dependent: :destroy, inverse_of: :conversation
+  has_many :notes, as: :notable, dependent: :destroy
 
   serialize :participant_emails, coder: JSON
 
