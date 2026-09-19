@@ -158,6 +158,8 @@ Replace a former address that is no longer current instead of confirming it.
 Further contact edits can require a fresh confirmation; CRM does not guess
 which traveler an ambiguous old draft meant. Lead conversion preserves this
 correction and confirmation history, including when joining an existing client.
+If that client's correction history conflicts with the lead's recipients,
+choose the intended current recipient before sending a transferred draft.
 
 Template inserts, task and pipeline nudges, and group sends resolve identity
 from the recipient's effective email after correction, preferring their own

@@ -241,6 +241,44 @@ class RecipientCorrectionSystemTest < ApplicationSystemTestCase
     record("cycle-and-conflict", { cycle_destinations: "a@example.test", stale_confirmation_rejected: true, conflicting_batch_messages_created: Message.count - count })
   end
 
+  test "conversion into shared PerfectBook client blocks colliding draft until current recipient is selected" do
+    client = Client.create!(name: "Existing party", email: "d@example.test", perfectbook_contact_id: 9101)
+    person = client.people.create!(name: "Other traveler", email: "b@example.test")
+    person.update!(email: "c@example.test")
+    lead = Lead.create!(name: "Returning traveler", email: "a@example.test", source: "manual", perfectbook_contact_id: 9101)
+    original = Outbound::Composer.call(owner: lead, params: { to: lead.email, body: "Previously queued" })
+    original.conversation.create_draft!(owner: lead, to_addrs: lead.email, body: "For returning traveler")
+    browser_request(lead_path(lead), "PATCH", lead: { email: "b@example.test" })
+    browser_request(convert_lead_path(lead), "POST", expected_client_id: client.id)
+    assert_equal client, lead.reload.converted_client
+    [ client_path(client), inbox_thread_path(original.conversation) ].each do |path|
+      visit path
+      envelope
+      assert_field "To", with: "b@example.test"
+      assert_field "message_body", with: "For returning traveler"
+    end
+    count = Message.count
+    check "I confirm these are the intended current recipients."
+    click_button "Send", exact: true
+    assert_text "Choose a current recipient"
+    assert_equal count, Message.count
+    envelope
+    capture("shared-client-collision-blocked")
+    fill_in "To", with: "d@example.test"
+    check "I confirm these are the intended current recipients."
+    click_button "Send", exact: true
+    assert_text "Sending your reply"
+    assert_equal count + 1, Message.count
+    outgoing = Message.order(:id).last
+    assert_equal "d@example.test", outgoing.to_addrs
+    ClientMailer.outbound(outgoing).deliver_now
+    assert_equal [ "d@example.test" ], ActionMailer::Base.deliveries.last.to
+    assert_equal "a@example.test", original.reload.to_addrs
+    assert_equal "queued", original.status
+    record("shared-client-collision-delivery", { delivered_to: ActionMailer::Base.deliveries.last.to,
+      body: outgoing.text_body, historical_to: original.to_addrs, other_traveler: person.reload.email })
+  end
+
   private
 
   def envelope
