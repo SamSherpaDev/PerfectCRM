@@ -98,5 +98,26 @@ class TemplateContextTest < ActiveSupport::TestCase
       trip_name: "Everest", synced_at: Time.current)
     assert_equal "Everest", TemplateContext.for_reply(to: lead.email, owner: lead)[:context]["trip"]
   end
+  test "mirrored recipient retains matching lead trip interest without borrowing another lead trip" do
+    lead = Lead.create!(name: "Annapurna lead", email: "annapurna@example.com",
+      source: "manual", trip_interest: "Annapurna")
+    PerfectBook::Contact.create!(perfectbook_id: 8811, name: "Mirrored lead",
+      email: lead.email, synced_at: Time.current)
+    PerfectBook::Contact.create!(perfectbook_id: 8812, name: "Other traveler",
+      email: "other@example.com", synced_at: Time.current)
+
+    context = TemplateContext.for_reply(to: "  ANNAPURNA@example.com  ", owner: lead)[:context]
+    assert_equal "Mirrored lead", context["full_name"]
+    assert_equal "Annapurna", context["trip"]
+    assert_nil TemplateContext.for_reply(to: "other@example.com", owner: lead)[:context]["trip"]
+    assert_nil TemplateContext.for_reply(to: "", owner: lead)[:context]["trip"]
+
+    PerfectBook::Booking.create!(perfectbook_id: 8813, perfectbook_contact_id: 8811,
+      trip_name: "Everest", synced_at: Time.current)
+    assert_equal "Everest", TemplateContext.for_reply(to: lead.email, owner: lead)[:context]["trip"]
+
+    lead.update!(email: nil)
+    assert_nil TemplateContext.for_reply(to: "", owner: lead)[:context]["trip"]
+  end
 
 end

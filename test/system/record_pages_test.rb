@@ -261,6 +261,8 @@ class RecordPagesTest < ApplicationSystemTestCase
   test "lead nudge uses trip interest and envelope summary follows edits and insertion" do
     lead = Lead.create!(name: "Trip lead", email: "trip@example.com",
       source: "manual", trip_interest: "Annapurna")
+    PerfectBook::Contact.create!(perfectbook_id: 8821, name: lead.name,
+      email: lead.email, synced_at: Time.current)
     conversation = lead.conversations.create!(subject_line: "Dates")
     conversation.messages.create!(direction: "in", from_address: lead.email,
       subject: "Dates", text_body: "What dates?", message_id: "<dates@example.com>")
