@@ -6,7 +6,6 @@
     reply side; ?template= and ?nudge=1 arrive already rendered. %>
 <% conversation = @reply_conversation %>
 <% draft = @reply_draft || Draft.new(owner: record) %>
-<% subject_default = conversation ? "Re: #{conversation.display_subject.sub(/\ARe:\s*/i, '')}" : "" %>
 <% notes_url = record.is_a?(Lead) ? lead_notes_path(record) : client_notes_path(record) %>
 <div class="reply-dock composer" data-controller="reply-box"
      data-reply-box-default-context-value="<%= h @reply_context.to_json %>"
@@ -34,9 +33,6 @@
         </div>
       </div>
       <div class="composer-reply">
-        <p class="reply-to-line">
-          To <%= @reply_context["full_name"].presence || @reply_to.presence || "no address yet" %><% if subject_default.present? %> · <%= subject_default %><% end %> · sends as <%= Mail.mailbox_address %>
-        </p>
         <%= render "reply_box/form", owner: record, compact: true %>
       </div>
       <div class="composer-note">

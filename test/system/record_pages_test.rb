@@ -258,6 +258,47 @@ class RecordPagesTest < ApplicationSystemTestCase
     end
   end
 
+  test "lead nudge uses trip interest and envelope summary follows edits and insertion" do
+    lead = Lead.create!(name: "Trip lead", email: "trip@example.com",
+      source: "manual", trip_interest: "Annapurna")
+    conversation = lead.conversations.create!(subject_line: "Dates")
+    conversation.messages.create!(direction: "in", from_address: lead.email,
+      subject: "Dates", text_body: "What dates?", message_id: "<dates@example.com>")
+    template = Template.create!(name: "Trip details", subject: "Your {{trip}}",
+      body: "Hello {{first_name}}", usage_count: 10000)
+
+    visit lead_path(lead, nudge: 1, template: template.id)
+    assert_field "Message", with: "Hello Trip"
+    within(".composer-reply .reply-to-line") do
+      assert_text "trip@example.com"
+      assert_text "Your Annapurna"
+      assert_no_text "Re: Dates"
+    end
+    find(".reply-details > summary").click
+    assert_field "Subject", with: "Your Annapurna"
+    fill_in "Subject", with: "Custom subject"
+    fill_in "To", with: "changed@example.com"
+    within(".composer-reply .reply-to-line") do
+      assert_text "changed@example.com"
+      assert_text "Custom subject"
+      assert_no_text "trip@example.com"
+      assert_no_text "Your Annapurna"
+    end
+    fill_in "To", with: lead.email
+    find(".reply-details > summary").click
+    click_button "Trip details", exact: true
+    assert_selector ".composer-reply .reply-to-line", text: "Your Annapurna"
+    assert_equal "Your Annapurna", find("#message_subject", visible: :all).value
+
+    find(".reply-details > summary").click
+    fill_in "Subject", with: ""
+    fill_in "To", with: ""
+    within(".composer-reply .reply-to-line") do
+      assert_text "no address yet"
+      assert_no_text "Your Annapurna"
+    end
+  end
+
   private
 
   def assert_grid_columns(count)

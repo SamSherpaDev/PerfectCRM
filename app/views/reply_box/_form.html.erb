@@ -11,7 +11,13 @@
 <% conversation = @reply_conversation %>
 <% draft = @reply_draft || Draft.new(owner: owner) %>
 <% subject_default = conversation ? "Re: #{conversation.display_subject.sub(/\ARe:\s*/i, '')}" : "" %>
-<%= form_with url: send_url, scope: :message, html: { novalidate: false, multipart: true }, data: { "reply-box-target": "form" } do |form| %>
+<% subject = draft.subject.presence || subject_default %>
+<%= form_with url: send_url, scope: :message, html: { novalidate: false, multipart: true }, data: { "reply-box-target": "form", action: "input->reply-box#updateEnvelopeSummary change->reply-box#updateEnvelopeSummary" } do |form| %>
+  <% if compact %>
+    <p class="reply-to-line">
+      To <span data-reply-box-target="recipientSummary"><%= @reply_to.presence || "no address yet" %></span><span data-reply-box-target="subjectSummary"><%= " · #{subject}" if subject.present? %></span> · sends as <%= Mail.mailbox_address %>
+    </p>
+  <% end %>
   <%= hidden_field_tag :conversation_id, conversation&.id, data: { "reply-box-target": "conversation" } %>
   <%= form.hidden_field :template_id, value: draft.template_id, data: { "reply-box-target": "templateId" } %>
 
@@ -55,7 +61,7 @@
 
     <div class="mt-3">
       <%= form.label :subject, class: "label" %>
-      <%= form.text_field :subject, value: draft.subject.presence || subject_default,
+      <%= form.text_field :subject, value: subject,
             class: "input", required: true, autocomplete: "off", placeholder: "Re: your trek",
             data: { "reply-box-target": "subject" } %>
     </div>

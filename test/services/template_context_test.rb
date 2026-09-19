@@ -81,4 +81,22 @@ class TemplateContextTest < ActiveSupport::TestCase
     org = Organization.create!(name: "Operator GmbH", email: "op@example.com")
     assert_equal "Operator GmbH", TemplateContext.for(org)["full_name"]
   end
+  test "reply trip interest belongs only to the resolved lead and bookings take precedence" do
+    lead = Lead.create!(name: "Annapurna lead", email: "annapurna@example.com",
+      source: "manual", trip_interest: "Annapurna")
+    other = Lead.create!(name: "Langtang lead", email: "langtang@example.com",
+      source: "manual", trip_interest: "Langtang")
+
+    assert_equal "Annapurna", TemplateContext.for_reply(to: lead.email, owner: lead)[:context]["trip"]
+    assert_equal "Langtang", TemplateContext.for_reply(to: other.email, owner: lead)[:context]["trip"]
+    assert_nil TemplateContext.for_reply(to: "stranger@example.com", owner: lead)[:context]["trip"]
+    person = lead.people.create!(name: "Traveler", email: "traveler@example.com")
+    assert_nil TemplateContext.for_reply(to: person.email, owner: lead)[:context]["trip"]
+
+    lead.update!(perfectbook_contact_id: 7711)
+    PerfectBook::Booking.create!(perfectbook_id: 7712, perfectbook_contact_id: 7711,
+      trip_name: "Everest", synced_at: Time.current)
+    assert_equal "Everest", TemplateContext.for_reply(to: lead.email, owner: lead)[:context]["trip"]
+  end
+
 end

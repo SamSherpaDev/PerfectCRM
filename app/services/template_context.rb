@@ -20,7 +20,9 @@ class TemplateContext
   end
 
   def self.resolved_context(resolved, booking)
-    context = self.for(resolved[:identity], booking: booking)
+    identity = resolved[:identity]
+    context = self.for(identity, booking: booking)
+    context["trip"] ||= identity.trip_interest if identity.is_a?(Lead) && identity.trip_interest.present?
     owner = resolved[:owner]
     context["advisor_name"] = advisor_name_for(owner) if advisor_name_for(owner).present?
     context["booking_owner_name"] = owner.name if booking && resolved[:fallback] && owner

@@ -6,10 +6,11 @@ export default class extends Controller {
   static values = { defaultContext: Object, bookingContexts: Object, contextUrl: String, open: Boolean }
   static targets = [
     "form", "conversation", "templateId", "to", "subject", "body",
-    "booking", "bookingPanel", "bookingReference", "status", "details", "pill", "composer"
+    "recipientSummary", "subjectSummary", "booking", "bookingPanel", "bookingReference", "status", "details", "pill", "composer"
   ]
 
   connect() {
+    this.updateEnvelopeSummary()
     // The phone keeps the thread clear: the composer hides behind the
     // Reply pill until the captain opens it. Desktop always shows it.
     if (this.hasComposerTarget && this.hasPillTarget) {
@@ -66,8 +67,19 @@ export default class extends Controller {
     if (data.subject && this.hasSubjectTarget) this.subjectTarget.value = data.subject
     if (data.body && this.hasBodyTarget) this.insertAtCursor(this.bodyTarget, data.body)
     if (this.hasTemplateIdTarget) this.templateIdTarget.value = data.id ?? ""
+    this.updateEnvelopeSummary()
     const name = data.name ?? "template"
     this.setStatus(`Inserted ${name} - review and press Send.`)
+  }
+
+  updateEnvelopeSummary() {
+    if (this.hasRecipientSummaryTarget) {
+      this.recipientSummaryTarget.textContent = this.toTarget.value.trim() || "no address yet"
+    }
+    if (this.hasSubjectSummaryTarget) {
+      const subject = this.subjectTarget.value.trim()
+      this.subjectSummaryTarget.textContent = subject ? ` · ${subject}` : ""
+    }
   }
 
   // The floating Reply pill opens the composer as a bottom sheet; Close
