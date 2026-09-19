@@ -34,6 +34,7 @@ class Lead < ApplicationRecord
   include TaggedRecord
   include NestedPeople
   include ReferralCode
+  include EmailRedirects
 
   before_save :reject_converted_write, prepend: true
 

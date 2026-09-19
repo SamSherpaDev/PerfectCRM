@@ -75,6 +75,11 @@ module ReplyBox
     else
       @reply_owner.try(:display_email) || @reply_owner.try(:email)
     end
+    # A corrected owner address follows the edit; any other prefilled
+    # recipient (an intentionally different contact) stays as addressed.
+    if @reply_owner.respond_to?(:resolve_redirected_field)
+      @reply_to = @reply_owner.resolve_redirected_field(@reply_to)
+    end
     @reply_data = TemplateContext.for_reply(to: @reply_to, owner: @reply_owner,
       booking_id: @reply_draft.perfectbook_booking_id)
     @reply_context = @reply_data[:context]

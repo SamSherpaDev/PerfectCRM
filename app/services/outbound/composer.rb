@@ -68,12 +68,36 @@ module Outbound
       @conversation = @owner.conversations.build(subject_line: subject.presence || default_subject)
     end
 
+    # Corrections apply to drafts and future sends. An already-queued
+    # send keeps the envelope stored when Send was pressed; past messages
+    # keep their attribution and are never rewritten.
     def recipients
       explicit = @params[:to].to_s.split(/[,\n;]/).map(&:strip).reject(&:blank?)
-      return explicit if explicit.any?
+      if explicit.any?
+        # A stale cached form still carrying a corrected address follows
+        # the edit; any other explicit recipient stays exactly as typed.
+        return redirect_explicit(explicit)
+      end
       return [] if @owner.nil?
 
-      return @conversation.thread_parent.recipients if @conversation&.thread_parent
+      if @conversation&.thread_parent
+        return redirect_thread(@conversation.thread_parent.recipients)
+      end
+
+      Array(@owner.try(:display_email) || @owner.try(:email)).compact_blank
+    end
+
+    def redirect_explicit(list)
+      return list unless @owner.respond_to?(:resolve_redirected_list)
+
+      @owner.resolve_redirected_list(list.join(", "))
+    end
+
+    def redirect_thread(list)
+      return Array(list) unless @owner.respond_to?(:resolve_redirected_list)
+
+      resolved = @owner.resolve_redirected_list(Array(list).join(", "))
+      return resolved if resolved.any?
 
       Array(@owner.try(:display_email) || @owner.try(:email)).compact_blank
     end

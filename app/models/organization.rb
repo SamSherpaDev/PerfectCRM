@@ -13,6 +13,7 @@ class Organization < ApplicationRecord
   has_many :conversations, as: :linkable, dependent: :destroy
 
   include TaggedRecord
+  include EmailRedirects
 
   before_validation :normalize_email
   before_validation :normalize_website
