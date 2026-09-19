@@ -68,16 +68,19 @@ class SettingsAutomationsTest < ActionDispatch::IntegrationTest
     assert_select "p", text: /lead\.created to/
   end
 
-  test "leads page shows the automations strip" do
+  test "lead pages show no Automations heading; automations live in Settings" do
     Setting.current.update!(lead_webhook_url: "https://n8n.example.com/hook")
     lead = Lead.create!(name: "Website visitor", source: "website_form", received_at: Time.current)
     LeadWebhookDelivery.create!(lead: lead, event: "lead.created", url: Setting.current.lead_webhook_url)
     get leads_path
     assert_response :success
+    assert_select "h2", text: "Automations", count: 0
+    get lead_path(lead)
+    assert_response :success
+    assert_select "h2", text: "Automations", count: 0
+    get edit_settings_path
+    assert_response :success
     assert_select "h2", text: "Automations"
-    assert_select "p", text: "Website form"
-    assert_select "p", text: "Panda AI"
-    assert_select "p", text: "n8n webhooks"
   end
 
   test "lead page shows the inquiry section for website leads" do

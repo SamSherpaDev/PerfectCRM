@@ -28,8 +28,6 @@
     <%= tab_link "Converted", leads_path(tab: "converted", q: @query, sort: @sort), icon: :check, active: @tab == "converted", count: @counts["converted"] %>
   </nav>
 
-  <%= render "leads/automations", rows: @automations %>
-
   <section class="card" aria-labelledby="leads-heading">
     <div class="card-header">
       <h2 class="card-title" id="leads-heading"><%= @tab.humanize %></h2>

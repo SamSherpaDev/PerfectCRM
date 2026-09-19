@@ -146,6 +146,7 @@ class TaskWorkflowsTest < ApplicationSystemTestCase
       uncheck "Send the morning digest"
       click_button "Save"
     end
+    assert_text "Settings saved."
     assert_no_checked_field "Send the morning digest"
     assert_not Setting.current.reload.digest_enabled?
     visit edit_settings_path
@@ -153,6 +154,7 @@ class TaskWorkflowsTest < ApplicationSystemTestCase
       check "Send the morning digest"
       click_button "Save"
     end
+    assert_text "Settings saved."
     assert_checked_field "Send the morning digest"
     assert Setting.current.reload.digest_enabled?
     capture("digest-settings")
