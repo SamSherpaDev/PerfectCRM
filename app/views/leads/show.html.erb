@@ -9,7 +9,7 @@
       <%= link_to "Edit", edit_lead_path(@lead), class: "btn-secondary btn btn-sm" %>
       <% confirmation = @matching_client ? "This is an existing client: #{@matching_client.name}. Convert will attach this lead's history to them." : "Convert #{@lead.name} to a client? Their whole timeline moves with them. This cannot be undone." %>
       <%= button_to "Convert to client", convert_lead_path(@lead), method: :post, params: { expected_client_id: @matching_client&.id || "new" }, class: "btn-primary btn btn-sm", form: { data: { turbo_confirm: confirmation } } %>
-      <%= button_to "Delete", archive_lead_path(@lead), method: :patch, params: { confirm: true }, class: "btn btn-danger btn-sm", form: { data: { turbo_confirm: "Delete #{@lead.name}? They move to the archive and can be restored from the Archived tab." } } %>
+      <%= button_to "Delete", archive_lead_path(@lead), method: :patch, class: "btn btn-danger btn-sm", form: { data: { turbo_confirm: "Delete #{@lead.name}? They move to the archive and can be restored from the Archived tab." } } %>
     <% end %>
   <% end %>
   <%= render "shared/flash" %>

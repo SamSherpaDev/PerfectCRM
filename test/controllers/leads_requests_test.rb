@@ -145,14 +145,10 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     end
     assert_redirected_to lead_path(lead)
   end
-  test "archive needs confirmation, then lists under the archived tab" do
+  test "archive lists the lead under the archived tab" do
     lead = Lead.create!(name: "Deleteme", source: "manual", status: "new")
 
     patch archive_lead_path(lead)
-    assert_redirected_to lead_path(lead)
-    assert_not lead.reload.archived?
-
-    patch archive_lead_path(lead), params: { confirm: "1" }
     assert_redirected_to leads_path(tab: "archived")
     assert lead.reload.archived?
 
@@ -180,9 +176,20 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
   test "converted leads refuse archive" do
     lead = Lead.create!(name: "Won", source: "manual")
     lead.convert_to_client!
-    patch archive_lead_path(lead), params: { confirm: "1" }
+    patch archive_lead_path(lead)
     assert_redirected_to lead_path(lead)
     assert_not lead.reload.archived?
+  end
+
+  test "restore is refused while an open lead holds the same email" do
+    old = Lead.create!(name: "Old", source: "manual", email: "reuse@example.com")
+    old.archive!
+    Lead.create!(name: "New", source: "manual", email: "reuse@example.com")
+    patch unarchive_lead_path(old)
+    assert_redirected_to lead_path(old)
+    assert old.reload.archived?
+    follow_redirect!
+    assert_select ".flash-alert", text: /Email has already been taken/
   end
 
   test "archived lead page hides working actions and offers restore" do

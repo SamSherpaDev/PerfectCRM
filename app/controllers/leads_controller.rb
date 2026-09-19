@@ -116,9 +116,6 @@ class LeadsController < ApplicationController
     if @lead.converted?
       return redirect_to @lead, alert: "Converted leads stay read-only."
     end
-    unless params[:confirm].present?
-      return redirect_to @lead, alert: "Please confirm before archiving this lead."
-    end
     @lead.archive!
     redirect_to leads_path(tab: "archived"), notice: "Lead archived."
   rescue ActiveRecord::RecordInvalid => e

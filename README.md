@@ -394,7 +394,10 @@ Deleting a lead archives it after one confirmation naming the lead; the
 Archived tab restores it to its previous stage, and nothing is ever
 hard-deleted. Archived leads leave every working list, pipeline column,
 Today count, and digest, and Panda AI or n8n automations only act on
-active leads. Converted leads cannot be archived.
+active leads. New mail from an archived lead's address waits in triage
+instead of linking to it, and a new lead may take its email or PerfectBook
+contact ID; Restore is refused while an open lead holds that identity.
+Converted leads cannot be archived.
 
 Conversion is one-way and manual. Convert to client matches an existing
 client by PerfectBook contact ID first, then normalized primary email.

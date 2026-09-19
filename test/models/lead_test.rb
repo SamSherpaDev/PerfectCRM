@@ -124,10 +124,16 @@ class LeadTest < ActiveSupport::TestCase
     assert_not lead.reload.archived?
   end
 
-  test "an archived email does not block a new open lead" do
-    old = Lead.create!(name: "Old", source: "manual", email: "reuse@example.com")
+  test "an archived lead frees its identity for a new open lead and cannot be restored over it" do
+    old = Lead.create!(name: "Old", source: "manual", email: "reuse@example.com", perfectbook_contact_id: 4242)
     old.archive!
-    fresh = Lead.new(name: "New", source: "manual", email: "reuse@example.com")
-    assert fresh.valid?
+    fresh = Lead.create!(name: "New", source: "manual", email: "reuse@example.com", perfectbook_contact_id: 4242)
+    assert fresh.persisted?
+    error = assert_raises(ActiveRecord::RecordInvalid) { old.unarchive! }
+    assert_includes error.record.errors.attribute_names, :email
+    assert old.reload.archived?
+    fresh.archive!
+    old.unarchive!
+    assert_not old.reload.archived?
   end
 end

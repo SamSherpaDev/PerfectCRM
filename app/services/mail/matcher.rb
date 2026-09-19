@@ -14,7 +14,8 @@ module Mail
         next if normalized == Mail.mailbox_address
 
         if (identity = ::EmailIdentity.find_for(normalized))
-          return Result.new(linkable: self.class.current_owner(identity.linkable), via: "identity") if identity.linkable.present?
+          owner = self.class.current_owner(identity.linkable)
+          return Result.new(linkable: owner, via: "identity") if owner
           return Result.new(linkable: nil, via: "ignored") if identity.ignored?
         end
 
@@ -22,9 +23,8 @@ module Mail
           return Result.new(linkable: client, via: "client")
         end
         if (person = ::Person.find_by(email: normalized))
-          owner = person.client || person.lead
-          owner = self.class.current_owner(owner) if owner
-          return Result.new(linkable: owner, via: "person") if owner && !(owner.is_a?(::Lead) && owner.archived?)
+          owner = self.class.current_owner(person.client || person.lead)
+          return Result.new(linkable: owner, via: "person") if owner
         end
         if (lead = ::Lead.active.find_by(email: normalized))
           return Result.new(linkable: self.class.current_owner(lead), via: "lead")
@@ -37,7 +37,10 @@ module Mail
     end
 
     def self.current_owner(record)
-      record.is_a?(::Lead) && record.converted? ? record.converted_client : record
+      return record unless record.is_a?(::Lead)
+      return nil if record.archived?
+
+      record.converted? ? record.converted_client : record
     end
   end
 end
