@@ -64,6 +64,21 @@ class TriageRequestsTest < ActionDispatch::IntegrationTest
     assert_equal client, EmailIdentity.find_for("another-triage@example.com").linkable
   end
 
+  test "linking an archived lead asks for a restore first" do
+    lead = Lead.create!(name: "Archived", email: "archived-triage@example.com", source: "email")
+    lead.archive!
+    conversation = triage_conversation
+    post link_conversation_path(conversation), params: { linkable_type: "Lead", linkable_id: lead.id }
+    assert_redirected_to inbox_thread_path(conversation)
+    assert_equal "Restore this lead before linking.", flash[:alert]
+    assert_nil conversation.reload.linkable
+    assert_nil EmailIdentity.find_for("newbie@example.com")
+
+    lead.unarchive!
+    post link_conversation_path(conversation), params: { linkable_type: "Lead", linkable_id: lead.id }
+    assert_equal lead, conversation.reload.linkable
+  end
+
   test "Bcc only outbound mail can create a client from triage" do
     parsed = Mail::Ingester.parse_raw("From: info@sherpaholidays.com\r\nBcc: hidden@example.com\r\nSubject: Private invitation\r\n\r\nHello")
     conversation = Mail::Ingester.ingest(parsed: parsed, provider: {})[:conversation]
