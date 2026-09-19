@@ -69,6 +69,8 @@ class TemplateContext
       end,
       booking_contexts: bookings.to_h { |booking| [ booking.perfectbook_id, resolved_context(resolved, booking) ] }
     }
+  rescue ::Mail::Field::ParseError
+    { context: {}, selected_booking_id: nil, bookings: [], booking_contexts: {} }
   end
 
   def self.for(record, booking: default_booking_for(record))

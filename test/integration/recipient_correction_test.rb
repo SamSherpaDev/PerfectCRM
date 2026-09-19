@@ -546,6 +546,48 @@ class RecipientCorrectionTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "malformed saved recipients remain editable on record and thread pages" do
+    lead = Lead.create!(name: "Alice", email: "alice@example.test", source: "manual", perfectbook_contact_id: 8501)
+    PerfectBook::Booking.create!(perfectbook_id: 8502, perfectbook_contact_id: 8501,
+      trip_name: "Private booking", synced_at: Time.current)
+    original = Outbound::Composer.call(owner: lead, params: { to: lead.email, body: "Original" })
+    conversation = original.conversation
+    malformed = "Alice <alice@example.test"
+    sign_in
+    patch lead_draft_path(lead), params: { conversation_id: conversation.id,
+      message: { to: malformed, subject: "Unfinished", body: "Words to keep" } }
+    assert_response :redirect
+    assert_equal malformed, conversation.reload.draft.to_addrs
+
+    [ lead_path(lead), inbox_thread_path(conversation) ].each do |path|
+      get path
+      assert_response :success
+      assert_select "input[name='message[to]']" do |fields|
+        assert_equal malformed, fields.first["value"]
+      end
+      assert_select "textarea[name='message[body]']", text: "Words to keep"
+    end
+    get reply_context_templates_path, params: { owner_type: "Lead", owner_id: lead.id, to: malformed }
+    assert_response :success
+    assert_equal({ "context" => {}, "selected_booking_id" => nil, "bookings" => [], "booking_contexts" => {} }, response.parsed_body)
+
+    assert_no_difference "Message.count" do
+      post lead_messages_path(lead), params: { conversation_id: conversation.id,
+        message: { to: malformed, subject: "Unfinished", body: "Words to keep" } }
+    end
+    assert_match "Enter valid recipient email addresses", flash[:alert]
+    follow_redirect!
+    assert_response :success
+    assert_equal malformed, conversation.reload.draft.to_addrs
+    assert_equal "Words to keep", conversation.draft.body
+    assert_difference "Message.count", 1 do
+      post lead_messages_path(lead), params: { conversation_id: conversation.id,
+        message: { to: "Alice <alice@example.test>", subject: "Finished", body: "Words to keep" } }
+    end
+    assert_equal [ "alice@example.test" ], ClientMailer.outbound(Message.order(:id).last).to
+    assert_equal "alice@example.test", original.reload.to_addrs
+  end
+
   private
 
   def recipient_confirmation_from_form
