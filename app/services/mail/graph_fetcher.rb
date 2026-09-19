@@ -78,7 +78,12 @@ module Mail
     # The folder listing carries enough to judge a message without opening
     # it: everything Mail.keeps? looks at bar the delivery headers.
     HISTORY_SELECT = "id,receivedDateTime,from,toRecipients,ccRecipients,bccRecipients".freeze
-    FOLDER_SELECT = "id,displayName,wellKnownName,childFolderCount".freeze
+    # wellKnownName is a beta-only mailFolder property: selecting it on
+    # v1.0 fails the whole folder listing with 400 ("Could not find a
+    # property named 'wellKnownName' on type 'microsoft.graph.mailFolder'").
+    # Skipped folders are resolved to ids instead (see skipped_folder_ids),
+    # so this lists only what v1.0 answers.
+    FOLDER_SELECT = "id,displayName,childFolderCount".freeze
     ATTACHMENT_SELECT = "id,name,contentType,size,isInline".freeze
     # The documented shape for reading a forwarded message: one level, no
     # $select inside the cast.
@@ -224,21 +229,38 @@ module Mail
     # lands in the same place. Skipped folders take their children with
     # them: a subfolder of Deleted Items is still deleted mail.
     def mail_folders(client)
-      collect_folders(client, "#{GraphClient::BASE}/me/mailFolders?#{folder_params}").sort_by(&:id)
+      skipped_ids = skipped_folder_ids(client)
+      collect_folders(client, "#{GraphClient::BASE}/me/mailFolders?#{folder_params}", skipped_ids).sort_by(&:id)
     end
 
-    def collect_folders(client, url)
+    # Resolves each skipped well-known folder name to its id, once per run.
+    # v1.0 accepts a well-known name in place of the folder id in the path
+    # (/me/mailFolders/deleteditems), while displayName matching is off the
+    # table: display names are locale-dependent. 404 means this mailbox has
+    # no such folder, so the run carries on without it.
+    def skipped_folder_ids(client)
+      SKIPPED_FOLDERS.filter_map do |name|
+        begin
+          folder = client.get_json("/me/mailFolders/#{name}", params: { "$select" => "id" })
+          folder["id"].to_s.presence
+        rescue GraphClient::NotFoundError
+          nil
+        end
+      end
+    end
+
+    def collect_folders(client, url, skipped_ids)
       found = []
       while url.present?
         page = client.get_json(url)
         Array(page["value"]).each do |folder|
           id = folder["id"].to_s
-          next if id.blank? || SKIPPED_FOLDERS.include?(folder["wellKnownName"].to_s.downcase)
+          next if id.blank? || skipped_ids.include?(id)
 
           found << Folder.new(id: id, name: folder["displayName"].to_s.presence || id)
           next unless folder["childFolderCount"].to_i.positive?
 
-          found.concat(collect_folders(client, "#{GraphClient::BASE}/me/mailFolders/#{id}/childFolders?#{folder_params}"))
+          found.concat(collect_folders(client, "#{GraphClient::BASE}/me/mailFolders/#{id}/childFolders?#{folder_params}", skipped_ids))
         end
         url = page["@odata.nextLink"]
       end

@@ -123,6 +123,13 @@ class FakeMailbox
 
   HISTORY_PAGE_SIZE = 2
 
+  # The v1.0 mailFolder properties a listing can select. wellKnownName is
+  # not one of them (beta only): the records below keep it solely so the
+  # /me/mailFolders/{wellKnownName} path lookup can resolve a name, and a
+  # listing never returns it. Selecting anything else fails the whole
+  # listing with the production 400 this double guards against.
+  LISTING_FIELDS = %w[id displayName childFolderCount].freeze
+
   DEFAULT_FOLDERS = [
     { "id" => "inbox", "displayName" => "Inbox", "wellKnownName" => "inbox", "childFolderCount" => 0 },
     { "id" => "sentitems", "displayName" => "Sent Items", "wellKnownName" => "sentitems", "childFolderCount" => 0 },
@@ -190,6 +197,15 @@ class FakeMailbox
     @child_folders.delete(id)
   end
 
+  # Adds a child folder under a top-level folder, as filing one in Outlook would.
+  def add_child_folder(parent_id, id, display_name: nil)
+    @child_folders[parent_id] ||= []
+    @child_folders[parent_id] << { "id" => id, "displayName" => display_name || id.titleize,
+      "wellKnownName" => nil, "childFolderCount" => 0 }
+    parent = @folders.find { |folder| folder["id"] == parent_id }
+    parent["childFolderCount"] = @child_folders[parent_id].length if parent
+  end
+
   # Which Microsoft account the delegated grant belongs to (/me).
   def signed_in_as(address, upn: nil)
     @account = { "id" => "other", "mail" => address, "userPrincipalName" => upn || address }
@@ -240,7 +256,7 @@ class FakeMailbox
     end
 
     @transport.on_get("mailFolders") do |url, token:, params:, headers:|
-      { status: 200, json: { "value" => @folders } }
+      folder_listing(@folders, url)
     end
 
     @transport.on_get("mailFolders/") do |url, token:, params:, headers:|
@@ -269,14 +285,41 @@ class FakeMailbox
   end
 
   def route_folder_get(url, headers)
-    folder = url[%r{mailFolders/([^/]+)}, 1]
+    folder = url[%r{mailFolders/([^/?]+)}, 1].to_s
     if url.include?("/childFolders")
-      { status: 200, json: { "value" => @child_folders.fetch(folder, []) } }
+      folder_listing(@child_folders.fetch(folder, []), url)
     elsif url.include?("/messages/delta")
       delta_get(folder, url)
-    else
+    elsif url.include?("/messages")
       history_get(folder, url)
+    else
+      folder_get(folder)
     end
+  end
+
+  # v1.0 accepts a well-known folder name in place of the folder id in the
+  # path; an unknown name (or id) answers 404 like the missing folder it is.
+  def folder_get(name)
+    folder = @folders.find { |entry| entry["id"] == name || entry["wellKnownName"] == name } ||
+      @child_folders.values.flatten.find { |entry| entry["id"] == name }
+    folder.nil? ? { status: 404, json: {} } : { status: 200, json: { "id" => folder["id"] } }
+  end
+
+  # A listing answers only the v1.0 properties it was asked for (all of
+  # them without $select), and 400 for a property v1.0 does not have.
+  def folder_listing(folders, url)
+    fields = URI.decode_www_form(URI.parse(url).query.to_s).to_h["$select"].to_s.split(",").map(&:strip)
+    unknown = fields.find { |field| !LISTING_FIELDS.include?(field) }
+    return { status: 400, json: select_error(unknown) } if unknown
+
+    fields = LISTING_FIELDS if fields.empty?
+    { status: 200, json: { "value" => folders.map { |entry| entry.slice("id", *fields) } } }
+  end
+
+  def select_error(property)
+    { "error" => { "code" => "BadRequest",
+      "message" => "Parsing OData Select and Expand failed: Could not find a property named " \
+        "'#{property}' on type 'microsoft.graph.mailFolder'." } }
   end
 
   def delta_get(folder, url)
