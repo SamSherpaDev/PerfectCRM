@@ -37,11 +37,14 @@ module EmailRedirects
     current
   end
 
+  def effective_recipient_email(address)
+    current = resolve_redirected_email(address)
+    head = follow_correction_head(current, redirect_map, Set.new)
+    head.present? && head == email.to_s.strip.downcase ? head : current
+  end
+
   def resolve_redirected_list(value)
-    parts = EmailRedirects.mailboxes(value)
-    resolved = parts.map { |part| resolve_redirected_email(part) }.reject(&:blank?).uniq
-    # Preserve display order but drop duplicates case-insensitively.
-    resolved.uniq { |addr| addr.downcase }
+    EmailRedirects.mailboxes(value).map { |part| effective_recipient_email(part) }.compact_blank.uniq
   end
 
   def resolve_redirected_field(value)
@@ -91,6 +94,24 @@ module EmailRedirects
   end
 
   private
+
+  # Stop at the owner's current address even when a person's later correction
+  # continues from it, so that person's chain cannot override the owner correction.
+  # Other still-current addresses do not stop this walk; restored self-loops and
+  # cycles do. The caller accepts only the owner's address from this walk and
+  # otherwise keeps the reassignment-aware result from resolve_redirected_email.
+  def follow_correction_head(start, redirects, seen)
+    current = start
+    loop do
+      break if current == email.to_s.strip.downcase
+      break if current.blank? || !redirects.key?(current) || seen.include?(current)
+      nxt = redirects[current].to_s.strip.downcase
+      break if nxt == current
+      seen << current
+      current = nxt
+    end
+    seen.include?(current) && current != start ? start : current
+  end
 
   def recipient_confirmation_state
     Digest::SHA256.hexdigest([

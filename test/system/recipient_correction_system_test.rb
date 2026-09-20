@@ -279,6 +279,104 @@ class RecipientCorrectionSystemTest < ApplicationSystemTestCase
       body: outgoing.text_body, historical_to: original.to_addrs, other_traveler: person.reload.email })
   end
 
+  [ false, true ].each do |subsequent_correction|
+    test "retained old person address uses corrected owner for reply and group with later correction #{subsequent_correction}" do
+      lead = Lead.create!(name: "Intended Traveler", email: "old@example.test", source: "manual")
+      lead.people.create!(name: "Other Traveler", email: lead.email)
+      moving = lead.people.create!(name: "Moving Traveler", email: "new@example.test") if subsequent_correction
+      original = Outbound::Composer.call(owner: lead, params: { to: lead.email, body: "Original history" })
+      original.conversation.create_draft!(owner: lead, to_addrs: lead.email, body: "Saved draft")
+      [ [ 8301, "Other Traveler", "old@example.test", "OTHER", 11100 ],
+        [ 8302, "Intended Traveler", "new@example.test", "INTENDED", 22200 ] ].each do |id, name, email, invoice, balance|
+        PerfectBook::Contact.create!(perfectbook_id: id, name: name, email: email, synced_at: Time.current)
+        PerfectBook::Booking.create!(perfectbook_id: id, perfectbook_contact_id: id,
+          trip_name: "#{name} trek", invoice_number: invoice, balance_due_minor: balance, synced_at: Time.current)
+      end
+      template = Template.create!(name: "Corrected details", purpose: "first_reply",
+        subject: "For {{full_name}}", body: "{{full_name}}: {{trip}} {{balance_due}} {{invoice_number}}")
+      expected_body = "Intended Traveler: Intended Traveler trek $222.00 INTENDED"
+      visit edit_lead_path(lead)
+      fill_in "Primary email", with: "new@example.test"
+      click_button "Save changes"
+      assert_selector "h1", text: lead.name
+      if moving
+        browser_request(lead_path(lead), "PATCH", lead: { people_attributes: {
+          "0" => { id: moving.id, name: moving.name, email: "person-new@example.test" }
+        } })
+      end
+      count = Message.count
+      response = browser_request(lead_messages_path(lead), "POST", conversation_id: original.conversation_id,
+        message: { to: "old@example.test", body: "Unconfirmed stale form" })
+      assert_includes response["body"], "confirm the current recipients"
+      assert_equal count, Message.count
+      visit lead_path(lead)
+      envelope
+      assert_field "To", with: "new@example.test"
+      fill_in "Message", with: ""
+      click_button "Corrected details", match: :first
+      assert_field "Message", with: expected_body
+      assert_unchecked_field "I confirm these are the intended current recipients."
+      confirmation = find("input[name='message[recipient_confirmation]']").value
+      capture("retained-reply-confirmation-#{subsequent_correction}")
+      check "I confirm these are the intended current recipients."
+      click_button "Send", exact: true
+      assert_text "Sending your reply"
+      reply = Message.order(:id).last
+      assert_equal "new@example.test", reply.to_addrs
+      assert_includes reply.text_body, expected_body
+      assert_not_includes reply.text_body, "OTHER"
+      browser_request(lead_messages_path(lead), "POST", conversation_id: original.conversation_id,
+        message: { to: "old@example.test", subject: "Confirmed stale form", body: expected_body,
+          recipient_confirmation: confirmation })
+      stale_reply = Message.order(:id).last
+      assert_not_equal reply.id, stale_reply.id
+      assert_equal "new@example.test", stale_reply.to_addrs
+
+      visit merge_templates_path(template_id: template.id)
+      fill_in "Recipients", with: "old@example.test"
+      tolerate_submit_navigation { click_button "Preview merge" }
+      tolerate_navigation_assertion { assert_text "1 message ready" }
+      within("section[aria-label='Merged messages']") do
+        assert_text "<new@example.test>"
+        assert_text expected_body
+        assert_no_text "OTHER"
+      end
+      assert_unchecked_field "I confirm the listed recipients for Intended Traveler."
+      capture("retained-group-confirmation-#{subsequent_correction}")
+      count = Message.count
+      tolerate_submit_navigation { click_button "Send 1 personal emails" }
+      tolerate_navigation_assertion { assert_text "confirm the current recipients" }
+      assert_equal count, Message.count
+      assert_equal 0, GroupSend.count
+      tolerate_submit_navigation { click_button "Preview merge" }
+      check "I confirm the listed recipients for Intended Traveler."
+      tolerate_submit_navigation { click_button "Send 1 personal emails" }
+      tolerate_navigation_assertion { assert_selector "h1", text: "Send summary" }
+      group_message = GroupSend.last.messages.last
+      [ reply, stale_reply, group_message ].each_with_index do |message, index|
+        OutboundDeliveryJob.perform_now(message.id)
+        assert_equal "sent", message.reload.status
+        mail = ActionMailer::Base.deliveries.last
+        assert_equal [ "new@example.test" ], mail.to
+        assert_includes mail.text_part.decoded, expected_body
+        assert_not_includes mail.text_part.decoded, "OTHER"
+        if ENV["RECIPIENT_EVIDENCE_DIR"]
+          File.write(File.join(ENV.fetch("RECIPIENT_EVIDENCE_DIR"), "retained-owner-#{subsequent_correction}-#{index}.eml"), mail.encoded)
+        end
+      end
+      assert_equal "old@example.test", original.reload.to_addrs
+      record("retained-owner-delivery-#{subsequent_correction}", {
+        reply: reply.slice(:to_addrs, :subject, :text_body, :status),
+        stale_reply: stale_reply.slice(:to_addrs, :subject, :text_body, :status),
+        group: group_message.slice(:to_addrs, :subject, :text_body, :status), historical_to: original.to_addrs
+      })
+      if moving
+        browser_request(lead_messages_path(lead), "POST", message: { to: moving.reload.email, body: "Deliberate alternate" })
+        assert_equal "person-new@example.test", Message.order(:id).last.to_addrs
+      end
+    end
+  end
+
   private
 
   def envelope

@@ -240,45 +240,66 @@ class GroupSendsRequestsTest < ActionDispatch::IntegrationTest
     assert_equal [ "restored@example.test" ], ClientMailer.outbound(Message.order(:id).last).to
   end
 
-  test "corrected group delivery uses the corrected mirrored identity and bookings" do
-    @template.update!(subject: "Trip for {{full_name}}", body: "{{full_name}}: {{trip}} {{balance_due}} {{invoice_number}}")
-    lead = Lead.create!(name: "Intended Traveler", email: "wrong@example.test", source: "manual", perfectbook_contact_id: 8202)
-    PerfectBook::Contact.create!(perfectbook_id: 8201, name: "Other Traveler", email: "wrong@example.test", synced_at: Time.current)
-    PerfectBook::Contact.create!(perfectbook_id: 8202, name: "Intended Traveler", email: "correct@example.test", synced_at: Time.current)
-    PerfectBook::Contact.create!(perfectbook_id: 8203, name: "Alternate Traveler", email: "alternate@example.test", synced_at: Time.current)
-    [ [ 8201, "Other secret trip", 11100, "OTHER-INVOICE" ],
-      [ 8202, "Intended trek", 22200, "INTENDED-INVOICE" ],
-      [ 8203, "Alternate trek", 33300, "ALTERNATE-INVOICE" ] ].each do |id, trip, balance, invoice|
-      PerfectBook::Booking.create!(perfectbook_id: id, perfectbook_contact_id: id,
-        trip_name: trip, balance_due_minor: balance, invoice_number: invoice, synced_at: Time.current)
-    end
-    original = Outbound::Composer.call(owner: lead, params: { to: lead.email, body: "Previously queued" })
-    recipients = "wrong@example.test\nalternate@example.test"
-    sign_in
-    post merge_templates_path, params: { template_id: @template.id, recipients: recipients }
-    assert_response :success
-    patch lead_path(lead), params: { lead: { email: "correct@example.test" } }
-    assert_response :redirect
-
-    assert_difference "Message.count", 2 do
-      assert_enqueued_jobs 2, only: OutboundDeliveryJob do
-        post group_sends_path, params: { template_id: @template.id, recipients: recipients }
+  [ false, true ].each do |retained|
+    test "corrected group delivery uses the corrected mirrored identity when old address retained is #{retained}" do
+      @template.update!(subject: "Trip for {{full_name}}", body: "{{full_name}}: {{trip}} {{balance_due}} {{invoice_number}}")
+      lead = Lead.create!(name: "Intended Traveler", email: "wrong@example.test", source: "manual", perfectbook_contact_id: 8202)
+      PerfectBook::Contact.create!(perfectbook_id: 8201, name: "Other Traveler", email: "wrong@example.test", synced_at: Time.current)
+      PerfectBook::Contact.create!(perfectbook_id: 8202, name: "Intended Traveler", email: "correct@example.test", synced_at: Time.current)
+      PerfectBook::Contact.create!(perfectbook_id: 8203, name: "Alternate Traveler", email: "alternate@example.test", synced_at: Time.current)
+      [ [ 8201, "Other secret trip", 11100, "OTHER-INVOICE" ],
+        [ 8202, "Intended trek", 22200, "INTENDED-INVOICE" ],
+        [ 8203, "Alternate trek", 33300, "ALTERNATE-INVOICE" ] ].each do |id, trip, balance, invoice|
+        PerfectBook::Booking.create!(perfectbook_id: id, perfectbook_contact_id: id,
+          trip_name: trip, balance_due_minor: balance, invoice_number: invoice, synced_at: Time.current)
       end
-    end
-    messages = GroupSend.last.messages.order(:id).to_a
-    assert_equal [ "correct@example.test" ], ClientMailer.outbound(messages.first).to
-    assert_equal "Trip for Intended Traveler", messages.first.subject
-    assert_includes messages.first.text_body, "Intended Traveler: Intended trek $222.00 INTENDED-INVOICE"
-    assert_not_includes messages.first.text_body, "Other"
-    assert_not_includes messages.first.text_body, "OTHER-INVOICE"
-    assert_equal [ "alternate@example.test" ], ClientMailer.outbound(messages.last).to
-    assert_includes messages.last.text_body, "Alternate Traveler: Alternate trek $333.00 ALTERNATE-INVOICE"
-    assert_equal "wrong@example.test", original.reload.to_addrs
-    assert_includes original.text_body, "Previously queued"
+      lead.people.create!(name: "Other Traveler", email: lead.email) if retained
+      original = Outbound::Composer.call(owner: lead, params: { to: lead.email, body: "Previously queued" })
+      recipients = "wrong@example.test\nalternate@example.test"
+      sign_in
+      post merge_templates_path, params: { template_id: @template.id, recipients: recipients }
+      assert_response :success
+      patch lead_path(lead), params: { lead: { email: "correct@example.test" } }
+      assert_response :redirect
 
-    post merge_templates_path, params: { template_id: @template.id, recipients: recipients }
-    assert_response :success
-    assert_select "section[aria-label='Merged messages']", text: /Intended Traveler: Intended trek/
-    assert_select "section[aria-label='Merged messages']", text: /OTHER-INVOICE/, count: 0
+      post merge_templates_path, params: { template_id: @template.id, recipients: recipients }
+      assert_response :success
+      assert_select "section[aria-label='Merged messages'] li" do |rows|
+        assert_includes rows.first.text, "correct@example.test"
+        assert_not_includes rows.first.text, "wrong@example.test"
+        assert_includes rows.first.text, "Intended Traveler: Intended trek $222.00 INTENDED-INVOICE"
+        assert_not_includes rows.first.text, "OTHER-INVOICE"
+      end
+      confirmations = {}
+      if retained
+        token = css_select("input[type='checkbox'][name^='recipient_confirmations']").first["value"]
+        confirmations[lead.to_gid_param] = token
+        assert_no_difference "Message.count" do
+          post group_sends_path, params: { template_id: @template.id, recipients: recipients }
+        end
+        assert_match "confirm the current recipients", flash[:alert]
+      end
+
+      assert_difference "Message.count", 2 do
+        assert_enqueued_jobs 2, only: OutboundDeliveryJob do
+          post group_sends_path, params: { template_id: @template.id, recipients: recipients, recipient_confirmations: confirmations }
+        end
+      end
+      messages = GroupSend.last.messages.order(:id).to_a
+      assert_equal [ "correct@example.test" ], ClientMailer.outbound(messages.first).to
+      assert_equal "Trip for Intended Traveler", messages.first.subject
+      assert_includes messages.first.text_body, "Intended Traveler: Intended trek $222.00 INTENDED-INVOICE"
+      assert_not_includes messages.first.text_body, "Other"
+      assert_not_includes messages.first.text_body, "OTHER-INVOICE"
+      assert_equal [ "alternate@example.test" ], ClientMailer.outbound(messages.last).to
+      assert_includes messages.last.text_body, "Alternate Traveler: Alternate trek $333.00 ALTERNATE-INVOICE"
+      assert_equal "wrong@example.test", original.reload.to_addrs
+      assert_includes original.text_body, "Previously queued"
+
+      post merge_templates_path, params: { template_id: @template.id, recipients: recipients }
+      assert_response :success
+      assert_select "section[aria-label='Merged messages']", text: /Intended Traveler: Intended trek/
+      assert_select "section[aria-label='Merged messages']", text: /OTHER-INVOICE/, count: 0
+    end
   end
 end

@@ -11,7 +11,7 @@ class TemplateContext
 
   def self.resolve_recipient(recipient, owner:)
     email = recipient.email.to_s.strip.downcase
-    email = owner.resolve_redirected_email(email) if owner.respond_to?(:resolve_redirected_email)
+    email = owner.effective_recipient_email(email) if owner.respond_to?(:effective_recipient_email)
     contact = PerfectBook::Contact.find_by("lower(email) = ?", email) if email.present?
     person = owner.people.find_by("lower(email) = ?", email) if email.present? && owner.respond_to?(:people)
     owner_address = email.blank? || owner.try(:email).to_s.downcase == email
@@ -51,7 +51,7 @@ class TemplateContext
     resolved = resolve_recipient(recipient, owner: Outbound::OwnerLookup.for_email(recipient.email))
     bookings = resolved[:bookings]
     booking = departure_id.present? ? bookings.find { |row| row.departure_id.to_s == departure_id.to_s } : bookings.first
-    resolved_context(resolved, booking)
+    resolved_context(resolved, booking).merge("recipient_email" => resolved[:recipient_email])
   end
 
   def self.for_reply(to:, owner:, booking_id: nil)

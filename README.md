@@ -155,6 +155,11 @@ original recipients, including when retried.
 If an address was reassigned or restored, review To, Cc, and Bcc against the
 listed current contacts and confirm the intended recipients before sending.
 Replace a former address that is no longer current instead of confirming it.
+When a former owner address is still attached to the record, reply fields,
+template context, group previews and delivery follow the recorded owner
+correction to the owner's current address before confirmation. Confirmation
+authorizes sending without changing the resolved destination; reassigned or
+restored addresses with no outstanding owner correction stay as addressed.
 Further contact edits can require a fresh confirmation; CRM does not guess
 which traveler an ambiguous old draft meant. Lead conversion preserves this
 correction and confirmation history, including when joining an existing client.
