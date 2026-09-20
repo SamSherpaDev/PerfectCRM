@@ -656,7 +656,7 @@ class RecipientCorrectionTest < ActionDispatch::IntegrationTest
     assert_response :redirect
     assert_equal "owner-new@example.test", lead.reload.email
     assert_equal "owner-new@example.test",
-      lead.resolve_redirected_email("owner-old@example.test", confirmed: true)
+      lead.effective_recipient_email("owner-old@example.test")
 
     # A stale submit carrying the old address cannot slip through unconfirmed.
     assert_no_difference "Message.count" do
@@ -697,6 +697,47 @@ class RecipientCorrectionTest < ActionDispatch::IntegrationTest
 
     # History keeps its attribution; nothing rewrites the first send.
     assert_equal "owner-old@example.test", first.reload.to_addrs
+  end
+
+  test "retained old owner address resolves before reply template insertion and confirmation" do
+    lead = Lead.create!(name: "Intended Traveler", email: "old@example.test", source: "manual")
+    lead.people.create!(name: "Other Traveler", email: lead.email)
+    original = Outbound::Composer.call(owner: lead, params: { to: lead.email, body: "Original" })
+    [ [ 8301, "Other Traveler", "old@example.test", "OTHER", 11100 ],
+      [ 8302, "Intended Traveler", "new@example.test", "INTENDED", 22200 ] ].each do |id, name, email, invoice, balance|
+      PerfectBook::Contact.create!(perfectbook_id: id, name: name, email: email, synced_at: Time.current)
+      PerfectBook::Booking.create!(perfectbook_id: id, perfectbook_contact_id: id,
+        trip_name: "#{name} trek", invoice_number: invoice, balance_due_minor: balance, synced_at: Time.current)
+    end
+    template = Template.create!(name: "Personal details", purpose: "custom", subject: "For {{full_name}}",
+      body: "{{full_name}}: {{trip}} {{balance_due}} {{invoice_number}}")
+    sign_in
+    patch lead_path(lead), params: { lead: { email: "new@example.test" } }
+    assert_response :redirect
+    get lead_path(lead)
+    assert_response :success
+    assert_select "input[name='message[to]'][value='new@example.test']"
+    confirmation = recipient_confirmation_from_form
+
+    get reply_context_templates_path, params: { owner_type: "Lead", owner_id: lead.id, to: "old@example.test" }
+    assert_response :success
+    post use_template_path(template, format: :json), params: { context: response.parsed_body["context"] }
+    assert_response :success
+    rendered = response.parsed_body
+    assert_equal "For Intended Traveler", rendered["subject"]
+    assert_includes rendered["body"], "Intended Traveler: Intended Traveler trek $222.00 INTENDED"
+    assert_not_includes rendered["body"], "OTHER"
+    assert_difference "Message.count", 1 do
+      post lead_messages_path(lead), params: { conversation_id: original.conversation_id, message: {
+        to: "old@example.test", subject: rendered["subject"], body: rendered["body"],
+        template_id: template.id, recipient_confirmation: confirmation
+      } }
+    end
+    mail = ClientMailer.outbound(Message.order(:id).last)
+    assert_equal [ "new@example.test" ], mail.to
+    assert_includes mail.text_part.decoded, "Intended Traveler: Intended Traveler trek $222.00 INTENDED"
+    assert_not_includes mail.text_part.decoded, "OTHER"
+    assert_equal "old@example.test", original.reload.to_addrs
   end
 
   private

@@ -76,9 +76,8 @@ When updating this file, preserve this bar for all agents and keep entries conci
   write `::Message` and `::Conversation` because `Mail::Message` is the mail gem.
 - Outbound email: see README.md, "Replying"; recipient context is shared
   through `TemplateContext.resolve_recipient` for reply and group rendering.
-  Corrected-address redirects live in `EmailRedirects`: unconfirmed sends
-  stop at still-current addresses, while a valid confirmation follows an
-  outstanding owner correction only to the owner's own address.
+  Corrected-address redirects live in `EmailRedirects`: effective recipients follow outstanding owner corrections before rendering
+  or confirmation; history bookkeeping retains reassignment boundaries.
   Signature rendering lives in `EmailSignature`; signature editing and legacy
   compatibility are documented in README.md, "Replying";
   the composer owns the text signature in stored `text_body`, mailers own

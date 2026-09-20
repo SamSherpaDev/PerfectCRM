@@ -23,11 +23,11 @@ class GroupSendsController < ApplicationController
       group = GroupSend.create!(template: @template,
         perfectbook_departure_id: params[:departure_id].presence,
         total_count: batch.size, recipient_lines: lines)
-      prepared = batch.messages.map do |preview|
-        owner = match_owner(preview.email)
+      prepared = batch.recipients.zip(batch.messages).map do |recipient, preview|
+        owner = match_owner(recipient.email)
         confirmation = params.dig(:recipient_confirmations, owner.to_gid_param) if owner
         Outbound::Composer.new(owner,
-          { to: preview.email, subject: preview.subject, body: preview.body,
+          { to: recipient.email, subject: preview.subject, body: preview.body,
             template_id: @template.id, recipient_confirmation: confirmation }, nil, group).build
       end
       prepared.each do |message|

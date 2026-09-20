@@ -18,7 +18,7 @@ class MergeBatch
       context = { "first_name" => first_name_for(recipient.name), "full_name" => recipient.name }
       context.merge!(context_for.call(recipient)) if context_for
       rendered = template.rendered(context)
-      Message.new(name: recipient.name, email: recipient.email,
+      Message.new(name: recipient.name, email: context["recipient_email"] || recipient.email,
         subject: rendered[:subject], body: rendered[:body], booking_owner_name: context["booking_owner_name"])
     end
     new(template: template, recipients: recipients, messages: messages, errors: errors)
