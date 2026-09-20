@@ -95,11 +95,11 @@ module EmailRedirects
 
   private
 
-  # Head of the recorded correction chain ignoring still-current stops.
-  # Self-loops (a restored address pointing at itself) end here; a cycle
-  # means reassignment churn with no single head, so the confirmed address
-  # stays as-addressed instead of guessing a traveler. Callers only use
-  # the head when it is the owner's own address.
+  # Stop at the owner's current address even when a person's later correction
+  # continues from it, so that person's chain cannot override the owner correction.
+  # Other still-current addresses do not stop this walk; restored self-loops and
+  # cycles do. The caller accepts only the owner's address from this walk and
+  # otherwise keeps the reassignment-aware result from resolve_redirected_email.
   def follow_correction_head(start, redirects, seen)
     current = start
     loop do
