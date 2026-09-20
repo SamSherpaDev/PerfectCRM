@@ -103,6 +103,7 @@ module EmailRedirects
   def follow_correction_head(start, redirects, seen)
     current = start
     loop do
+      break if current == email.to_s.strip.downcase
       break if current.blank? || !redirects.key?(current) || seen.include?(current)
       nxt = redirects[current].to_s.strip.downcase
       break if nxt == current
