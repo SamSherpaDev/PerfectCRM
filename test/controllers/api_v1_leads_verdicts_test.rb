@@ -120,16 +120,25 @@ class ApiV1LeadsVerdictsTest < ActionDispatch::IntegrationTest
     post_verdict @lead.id, { "status" => "lost", "lost_reason" => "not_a_fit" }
     assert_response :unprocessable_entity
   end
-  test "reopening an older lead with an open duplicate returns validation" do
-    @lead.update!(status: "lost", lost_reason: "no_reply")
-    Lead.create!(name: "New inquiry", email: @lead.email)
+  test "reopening an older lead with an open PerfectBook duplicate returns validation" do
+    @lead.update!(status: "lost", lost_reason: "no_reply", perfectbook_contact_id: 777)
+    Lead.create!(name: "New inquiry", perfectbook_contact_id: 777)
     assert_no_difference("ActivityEvent.count") do
       post_verdict @lead.id, { "status" => "new", "fit_score" => 80 }
     end
     assert_response :unprocessable_entity
-    assert_equal "taken", response.parsed_body["fields"]["email"]
+    assert_equal "taken", response.parsed_body["fields"]["perfectbook_contact_id"]
     assert_equal "lost", @lead.reload.status
     assert_nil @lead.fit_score
+  end
+
+  test "reopening an older lead with an open email duplicate succeeds" do
+    @lead.update!(status: "lost", lost_reason: "no_reply")
+    Lead.create!(name: "New inquiry", email: @lead.email)
+    post_verdict @lead.id, { "status" => "new", "fit_score" => 80 }
+    assert_response :ok
+    assert_equal "new", @lead.reload.status
+    assert_equal 80, @lead.fit_score
   end
 
   test "conversion before lock rejects a stale verdict" do

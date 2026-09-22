@@ -65,8 +65,6 @@ module Api
             LeadNotification.enqueue_pending(lead.id)
             render json: lead_response(lead.reload), status: :accepted
           elsif (field_errors = mappable_field_errors(lead))
-            # A second open inquiry from the same email trips the model's
-            # uniqueness guard: answer 400 with the field mapped, never 500.
             render json: { error: "validation", fields: field_errors }, status: :bad_request
           else
             Rails.logger.warn("[intake] lead save failed: #{lead.errors.full_messages.to_sentence}")

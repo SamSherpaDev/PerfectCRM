@@ -288,26 +288,31 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
 
   test "the 4th request for one email in an hour gets 429" do
     with_memory_cache do
-      post_intake intake_body
-      assert_response :accepted
-      # Repeat asks from the same address are field errors, but every
-      # attempt still counts toward the email window.
-      2.times do
+      # Each new submission_id opens its own inquiry, and every attempt
+      # still counts toward the email window.
+      3.times do
         post_intake intake_body
-        assert_response :bad_request
+        assert_response :accepted
       end
       post_intake intake_body
       assert_response :too_many_requests
     end
   end
 
-  test "a second open inquiry from the same email maps to its field" do
-    post_intake intake_body
+  test "a second inquiry from the same email opens its own lead" do
+    first_body = intake_body
+    post_intake first_body
     assert_response :accepted
-    post_intake intake_body
-    assert_response :bad_request
-    assert_equal "validation", response.parsed_body["error"]
-    assert_equal "taken", response.parsed_body["fields"]["contact.email"]
+    first = response.parsed_body
+
+    assert_difference("Lead.count", 1) do
+      post_intake intake_body
+    end
+    assert_response :accepted
+    second = response.parsed_body
+    assert_not_equal first["id"], second["id"]
+    assert_not_equal first["reference"], second["reference"]
+    assert_equal 2, Lead.where(email: "anna@example.com").count
   end
 
   # -- suspicion scoring -------------------------------------------------------------------
