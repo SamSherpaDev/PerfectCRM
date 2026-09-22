@@ -304,35 +304,59 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
     end
   end
 
-  test "only open leads reserve identities and external references remain unique" do
-    [ { email: "open@example.com" }, { perfectbook_contact_id: 765 } ].each do |identity|
-      active = Lead.create!(name: "Active inquiry", **identity)
-      visit new_lead_path
-      fill_in "Display name", with: "Next inquiry"
-      fill_in(identity.key?(:email) ? "Primary email" : "PerfectBook contact id", with: identity.values.first)
-      click_button "Save lead"
-      assert_selector "[role=alert]", text: "has already been taken"
-      select "Lost", from: "Status"
-      select "Dates", from: "Lost reason"
-      click_button "Save lead"
-      assert_selector "h1", text: "Next inquiry"
-      lost = Lead.order(:id).last
-      visit edit_lead_path(lost)
-      select "Chatting", from: "Status"
-      click_button "Save changes"
-      assert_selector "[role=alert]", text: "has already been taken"
-      capture("lead-#{identity.keys.first}-open-guard")
-      visit edit_lead_path(active)
-      select "Lost", from: "Status"
-      select "Dates", from: "Lost reason"
-      click_button "Save changes"
-      assert_selector "h1", text: "Active inquiry"
-      visit edit_lead_path(lost)
-      select "Chatting", from: "Status"
-      click_button "Save changes"
-      assert_selector "h1", text: "Next inquiry"
-      assert_equal "chatting", lost.reload.status
-    end
+  test "open leads can share an email when created and reopened" do
+    active = Lead.create!(name: "Active inquiry", email: "open@example.com")
+    visit new_lead_path
+    fill_in "Display name", with: "Next inquiry"
+    fill_in "Primary email", with: active.email
+    click_button "Save lead"
+    assert_selector "h1", text: "Next inquiry"
+    repeat = Lead.find_by!(name: "Next inquiry")
+    assert_not_equal active.id, repeat.id
+    assert_equal active.email, repeat.email
+
+    visit edit_lead_path(repeat)
+    select "Lost", from: "Status"
+    select "Dates", from: "Lost reason"
+    click_button "Save changes"
+    assert_selector "h1", text: "Next inquiry"
+    assert_equal "lost", repeat.reload.status
+
+    visit edit_lead_path(repeat)
+    select "Chatting", from: "Status"
+    click_button "Save changes"
+    assert_selector "h1", text: "Next inquiry"
+    assert_equal "chatting", repeat.reload.status
+    assert_equal active.email, repeat.email
+  end
+
+  test "only open leads reserve PerfectBook contacts and external references remain unique" do
+    active = Lead.create!(name: "Active inquiry", perfectbook_contact_id: 765)
+    visit new_lead_path
+    fill_in "Display name", with: "Next inquiry"
+    fill_in "PerfectBook contact id", with: "765"
+    click_button "Save lead"
+    assert_selector "[role=alert]", text: "has already been taken"
+    select "Lost", from: "Status"
+    select "Dates", from: "Lost reason"
+    click_button "Save lead"
+    assert_selector "h1", text: "Next inquiry"
+    lost = Lead.order(:id).last
+    visit edit_lead_path(lost)
+    select "Chatting", from: "Status"
+    click_button "Save changes"
+    assert_selector "[role=alert]", text: "has already been taken"
+    capture("lead-perfectbook_contact_id-open-guard")
+    visit edit_lead_path(active)
+    select "Lost", from: "Status"
+    select "Dates", from: "Lost reason"
+    click_button "Save changes"
+    assert_selector "h1", text: "Active inquiry"
+    visit edit_lead_path(lost)
+    select "Chatting", from: "Status"
+    click_button "Save changes"
+    assert_selector "h1", text: "Next inquiry"
+    assert_equal "chatting", lost.reload.status
     Lead.create!(name: "Historical import", status: "lost", lost_reason: "dates", external_ref: "import-123")
     visit new_lead_path
     fill_in "Display name", with: "Duplicate import"
