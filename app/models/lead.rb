@@ -52,9 +52,7 @@ class Lead < ApplicationRecord
   validates :source, inclusion: { in: SOURCES }
   validates :status, inclusion: { in: STATUSES }
   validates :email, format: { with: URI::MailTo::EMAIL_REGEXP, allow_blank: true }
-  # Repeat visitors may hold several open inquiries under one address: each
-  # website_form submission is its own lead. Only the PerfectBook contact
-  # link stays unique across open leads.
+  # Email is not an inquiry identity: repeat visitors can ask about different trips.
   validates :perfectbook_contact_id,
     uniqueness: { allow_nil: true, conditions: -> { open } },
     if: -> { converted_client_id.nil? && status != "lost" && archived_at.nil? }

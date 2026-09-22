@@ -455,10 +455,9 @@ AI fit (`fit_score`, `fit_band`, `fit_reason`), and status (`new`,
 Nudged, Lost, Converted, and Archived. A PerfectBook contact ID can recur
 across lost or converted inquiries, but only one open lead (unconverted,
 not lost, not archived) can hold it. The same email address may hold several
-open inquiries at once: each storefront submission is its own lead, and
-replaying a `submission_id` returns the original instead of duplicating it.
-`external_ref` remains unique across
-all leads.
+open inquiries at once. Storefront submission and replay behavior follows the
+[website intake contract](docs/leads-intake.md#browser-mode-the-storefront-form).
+`external_ref` remains unique across all leads.
 
 More → Delete lead archives it after one confirmation naming the lead; the
 Archived tab restores it to its previous stage, and nothing is ever
