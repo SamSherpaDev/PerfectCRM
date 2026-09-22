@@ -452,9 +452,12 @@ A lead carries source (`google_ads`, `meta_ads`, `website_form`, `email`,
 advisor `referral_code` from the storefront `?ref=` links, Panda
 AI fit (`fit_score`, `fit_band`, `fit_reason`), and status (`new`,
 `chatting`, `quoted`, `nudged`, `lost`). Tabs are New, Chatting, Quoted,
-Nudged, Lost, Converted, and Archived. An email or PerfectBook contact ID can recur
+Nudged, Lost, Converted, and Archived. A PerfectBook contact ID can recur
 across lost or converted inquiries, but only one open lead (unconverted,
-not lost, not archived) can hold each identity. `external_ref` remains unique across
+not lost, not archived) can hold it. The same email address may hold several
+open inquiries at once: each storefront submission is its own lead, and
+replaying a `submission_id` returns the original instead of duplicating it.
+`external_ref` remains unique across
 all leads.
 
 More → Delete lead archives it after one confirmation naming the lead; the
@@ -464,7 +467,7 @@ Today count, and digest, and Panda AI or n8n automations only act on
 active leads. New mail from an archived lead's address waits in triage
 instead of linking to it, Link in triage refuses an archived lead until it
 is restored, and a new lead may take its email or PerfectBook contact ID;
-Restore is refused while an open lead holds that identity.
+Restore is refused while an open lead holds its PerfectBook contact ID.
 Converted leads cannot be archived. The archived record presentation is
 described under [Clients](#clients).
 

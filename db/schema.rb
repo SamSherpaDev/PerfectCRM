@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_19_192509) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_22_040937) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -278,7 +278,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_19_192509) do
     t.datetime "updated_at", null: false
     t.index ["archived_at"], name: "index_leads_on_archived_at"
     t.index ["converted_client_id"], name: "index_leads_on_converted_client_id"
-    t.index ["email"], name: "index_leads_on_email", unique: true, where: "email IS NOT NULL AND email != '' AND converted_client_id IS NULL AND status != 'lost' AND archived_at IS NULL"
     t.index ["external_ref"], name: "index_leads_on_external_ref", unique: true, where: "external_ref IS NOT NULL AND external_ref != ''"
     t.index ["last_activity_at"], name: "index_leads_on_last_activity_at"
     t.index ["last_touch_at"], name: "index_leads_on_last_touch_at"

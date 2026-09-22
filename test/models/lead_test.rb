@@ -155,7 +155,7 @@ class LeadTest < ActiveSupport::TestCase
     fresh = Lead.create!(name: "New", source: "manual", email: "reuse@example.com", perfectbook_contact_id: 4242)
     assert fresh.persisted?
     error = assert_raises(ActiveRecord::RecordInvalid) { old.unarchive! }
-    assert_includes error.record.errors.attribute_names, :email
+    assert_includes error.record.errors.attribute_names, :perfectbook_contact_id
     assert old.reload.archived?
     fresh.archive!
     old.unarchive!

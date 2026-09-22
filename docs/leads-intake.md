@@ -66,8 +66,8 @@ a completed lookup with no MX or A record rejects the address.
 Replays pass authentication, rate limits, and required-field validation first.
 Replaying the same `submission_id` returns `200` with the original
 reference and re-enqueues pending notifications without replacing the inquiry.
-A second open inquiry from the same email is a `400` validation with `{ "contact.email": "taken" }` - reply in the
-existing thread instead.
+A new `submission_id` from the same email opens a separate inquiry (`202`
+with its own reference), so repeat visitors can ask about different trips.
 
 Source derivation: `google_ads` on `gclid`/`gbraid`/`wbraid`, or
 `utm_source=google` with a paid medium (`cpc`, `ppc`, `paid`); `meta_ads`

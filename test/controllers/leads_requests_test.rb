@@ -211,15 +211,26 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     assert_not lead.reload.archived?
   end
 
-  test "restore is refused while an open lead holds the same email" do
+  test "restore succeeds while an open lead holds the same email" do
     old = Lead.create!(name: "Old", source: "manual", email: "reuse@example.com")
     old.archive!
     Lead.create!(name: "New", source: "manual", email: "reuse@example.com")
     patch unarchive_lead_path(old)
     assert_redirected_to lead_path(old)
+    assert_not old.reload.archived?
+    follow_redirect!
+    assert_select ".flash-notice", text: /restored/i
+  end
+
+  test "restore is refused while an open lead holds the same PerfectBook link" do
+    old = Lead.create!(name: "Old", source: "manual", perfectbook_contact_id: 321)
+    old.archive!
+    Lead.create!(name: "New", source: "manual", perfectbook_contact_id: 321)
+    patch unarchive_lead_path(old)
+    assert_redirected_to lead_path(old)
     assert old.reload.archived?
     follow_redirect!
-    assert_select ".flash-alert", text: /Email has already been taken/
+    assert_select ".flash-alert", text: /already been taken/
   end
 
   test "archived lead page hides working actions and offers restore" do
