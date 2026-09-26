@@ -1,4 +1,7 @@
 class SettingsController < ApplicationController
+  # Weeks offered for typing in ad spend, newest complete week first.
+  SPEND_WEEKS = 8
+
   def edit
     @settings = Setting.current.ensure_intake_credentials!
     load_settings_supporting_data!
@@ -20,6 +23,13 @@ class SettingsController < ApplicationController
       raw = setting_params[:digest_enabled].nil? ? setting_params["digest_enabled"] : setting_params[:digest_enabled]
       @settings.update!(digest_enabled: ActiveModel::Type::Boolean.new.cast(raw))
       redirect_to edit_settings_path, notice: "Settings saved.", status: :see_other
+    elsif setting_params.key?(:weekly_report_recipient)
+      if @settings.update(weekly_report_params)
+        redirect_to edit_settings_path(anchor: "weekly-report-heading"), notice: "Weekly report saved.", status: :see_other
+      else
+        load_settings_supporting_data!
+        render :edit, status: :unprocessable_entity
+      end
     elsif setting_params.key?(:pipeline_digest)
       @settings.update!(pipeline_digest: setting_params[:pipeline_digest] == "1")
       redirect_to edit_settings_path, notice: "Settings saved.", status: :see_other
@@ -176,6 +186,12 @@ class SettingsController < ApplicationController
     @ad_conversions_recent = AdConversion.newest_first.includes(:lead).limit(10)
     @ad_conversion_meta_counts = AdConversion.group(:meta_status).count
     @google_feed_waiting = @settings.google_feed_configured? ? AdConversions::GoogleFeed.rows.size : 0
+    @spend_weeks = (0...SPEND_WEEKS).map { |ago| WeeklyReport::Summary.last_complete_week - (7 * ago) }
+    @ad_spends = AdSpend.where(week_start: @spend_weeks.last..).newest_first
+  end
+
+  def weekly_report_params
+    params.require(:setting).permit(:weekly_report_recipient)
   end
 
   def sender_params

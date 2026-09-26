@@ -17,6 +17,7 @@ class Setting < ApplicationRecord
   validates :appearance, inclusion: { in: APPEARANCES }
   validates :meta_dataset_id, format: { with: /\A\d{5,20}\z/, message: "is the number shown in Meta Events Manager" }, allow_blank: true
   validates :ad_booking_value_percent, numericality: { only_integer: true, greater_than_or_equal_to: 1, less_than_or_equal_to: 100 }
+  validates :weekly_report_recipient, format: { with: URI::MailTo::EMAIL_REGEXP, allow_blank: true }
   validates :lead_webhook_url, format: { with: %r{\Ahttps?://[^\s/]+(?:/[^\s]*)?\z}, allow_blank: true }
   validates :google_review_url, format: { with: %r{\Ahttps://[^\s/]+(?:/[^\s]*)?\z}, allow_blank: true,
     message: "must be a full link starting with https://" }
@@ -25,8 +26,20 @@ class Setting < ApplicationRecord
   before_save :normalize_signature
   before_validation { self.google_review_url = google_review_url.to_s.strip }
 
+  normalizes :weekly_report_recipient, with: ->(value) { value.to_s.strip.downcase }
+
   def self.current
     find_by(singleton_key: 1) || create_or_find_by!(singleton_key: 1)
+  end
+
+  # The captain's own address: the first allowlisted Google sign-in.
+  def self.captain_email
+    ENV.fetch("ALLOWED_GOOGLE_EMAILS", "").split(/[,\s]+/).reject(&:blank?).first || "info@sherpaholidays.com"
+  end
+
+  # Where the Monday ads report goes: the saved address, else the captain.
+  def weekly_report_to
+    weekly_report_recipient.presence || self.class.captain_email
   end
 
   def email_signature=(value)

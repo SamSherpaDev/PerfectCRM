@@ -129,6 +129,10 @@ Rails.application.routes.draw do
     patch :ai, on: :collection
     patch :ad_conversions, on: :collection
     post :rotate_google_feed_password, on: :collection
+    resource :weekly_report, only: :show do
+      post :deliver
+    end
+    resources :ad_spends, only: %i[create destroy]
   end
   get "feeds/google-conversions.csv", to: "google_conversion_feeds#show", as: :google_conversions_feed, format: false
   namespace :ai do

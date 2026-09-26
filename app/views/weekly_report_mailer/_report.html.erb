@@ -1,0 +1,83 @@
+<%# locals: (summary:) %>
+<%# Shared by the Monday email and its preview on Settings; inline styles only, for mail clients. %>
+<% cell = "padding:4px;text-align:right;white-space:nowrap;border-bottom:1px solid #e7e2d8;" %>
+<% name_cell = "padding:4px 4px 4px 0;text-align:left;border-bottom:1px solid #e7e2d8;" %>
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.45;color:#26231f;max-width:600px;">
+  <p style="margin:0 0 2px;font-size:17px;font-weight:600;">SherpaHolidays ads, week of <%= summary.week_label %></p>
+  <% if summary.travelers_goal %><p style="margin:0 0 14px;color:#5c574f;"><%= report_goal_line(summary) %></p><% end %>
+
+  <table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums;">
+    <thead>
+      <tr style="color:#5c574f;font-size:12px;">
+        <th style="<%= name_cell %>font-weight:500;"></th>
+        <th style="<%= cell %>font-weight:500;">Spend</th>
+        <th style="<%= cell %>font-weight:500;">Inq</th>
+        <th style="<%= cell %>font-weight:500;">Qual</th>
+        <th style="<%= cell %>font-weight:500;">Quote</th>
+        <th style="<%= cell %>font-weight:500;">Booked</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% rows = summary.rows.map { |row| [ row.label, row, false ] } + [ [ "Paid total", summary.paid_total, true ], [ "All sources", summary.total, true ] ] %>
+      <% rows.each do |label, row, total| %>
+        <% costs = row.spend_minor && label != "All sources" %>
+        <tr style="<%= 'font-weight:600;' if total %>">
+          <td style="<%= name_cell %>">
+            <%= label %>
+            <% if row.booked.positive? %><br><span style="font-size:12px;font-weight:400;"><%= report_money(row.booked_value_minor) %> booked value</span><% end %>
+            <% if label != "All sources" %>
+              <br><span style="font-size:12px;font-weight:400;color:#5c574f;"><%= [ "#{report_money(row.cost_per_inquiry)}/inq", "#{report_money(row.cost_per_qualified)}/qual", row.booked.positive? && "#{report_money(row.cost_per_booking)}/booking" ].select(&:itself).join(" · ") %></span>
+            <% end %>
+          </td>
+          <td style="<%= cell %>"><%= costs ? report_money(row.spend_minor) : "-" %></td>
+          <td style="<%= cell %>"><%= row.inquiries %></td>
+          <td style="<%= cell %>"><%= row.qualified %></td>
+          <td style="<%= cell %>"><%= row.quoted %></td>
+          <td style="<%= cell %>"><%= row.booked %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+  <% if summary.paid_total.booked.positive? %>
+    <p style="margin:8px 0 0;">Paid cost per booking <%= report_money(summary.paid_total.cost_per_booking) %>, ROAS <%= summary.roas ? "#{summary.roas}x" : "-" %>.</p>
+  <% end %>
+  <% unless summary.spend_entered? %>
+    <p style="margin:8px 0 0;color:#8a4b12;"><%= report_missing_spend_line(summary) %> <%= link_to "Add it on Settings", edit_settings_url(anchor: "weekly-report-heading"), style: "color:#8a4b12;" %>.</p>
+  <% end %>
+
+  <p style="margin:14px 0 0;">
+    <%= report_flags_line(summary) %><br>
+    Next review: <%= summary.next_review.strftime('%b %-d, %Y') %><br>
+    <% if summary.milestone %><%= report_milestone_line(summary) %><br><% end %>
+    <% summary.periods.each do |period| %><%= report_period_line(period) %><br><% end %>
+  </p>
+
+  <p style="margin:14px 0 0;"><%= report_speed_line(summary) %></p>
+  <% if summary.waiting.any? %>
+    <ul style="margin:4px 0 0;padding-left:18px;">
+      <% summary.waiting.each do |lead| %>
+        <li><%= link_to report_lead_name(lead), lead_url(lead), style: "color:#26231f;" %></li>
+      <% end %>
+    </ul>
+  <% end %>
+
+  <% if summary.trips.any? %>
+    <p style="margin:14px 0 0;font-weight:600;">Trips this week</p>
+    <ul style="margin:4px 0 0;padding-left:18px;">
+      <% summary.trips.each do |trip| %>
+        <li><%= trip.trip %>: <%= trip.inquiries %> inq, <%= trip.qualified %> qual, <%= trip.booked %> booked</li>
+      <% end %>
+    </ul>
+  <% end %>
+
+  <p style="margin:14px 0 0;">
+    <% if summary.total.inquiries.positive? %>
+      Came in from: <%= report_placements(summary) %><br>
+      Trip, month and party size filled: <%= summary.details_filled %> of <%= summary.total.inquiries %><br>
+    <% end %>
+    <% if summary.suspected_spam_count.positive? %>Held back as suspected spam: <%= summary.suspected_spam_count %><br><% end %>
+    <%= report_agreement_line(summary) %>
+  </p>
+
+  <p style="margin:14px 0 0;font-size:12px;color:#5c574f;">Qualified = AI fit strong or possible and you moved the lead to Chatting or Quoted. Booked = deposit paid. <%= link_to "Open the report", settings_weekly_report_url(week: summary.week_start.iso8601), style: "color:#5c574f;" %>.</p>
+</div>

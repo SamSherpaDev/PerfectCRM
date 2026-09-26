@@ -40,7 +40,7 @@ module PerfectBook
         seen_ids << booking.id
         Booking.transaction(requires_new: true) do
           booking_mirror = Booking.find_or_initialize_by(perfectbook_id: booking.id)
-          booking_mirror.update!(
+          booking_mirror.assign_attributes(
             perfectbook_contact_id: mirror.perfectbook_id, ref: booking.ref, status: booking.status,
             trip_id: booking.trip_id, trip_name: booking.trip_name,
             departure_id: booking.departure_id, departure_place: booking.departure_place,
@@ -54,6 +54,7 @@ module PerfectBook
             checklist_json: booking.checklist.presence || [],
             synced_at: now
           )
+          booking_mirror.save!
           DemoRecord.where(record_type: Booking.name, record_id: booking_mirror.id).delete_all
         end
       end

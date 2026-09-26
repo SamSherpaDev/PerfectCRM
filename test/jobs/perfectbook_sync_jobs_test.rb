@@ -222,6 +222,19 @@ class PerfectBookSyncJobsTest < ActiveSupport::TestCase
     assert_equal "Lukla", booking.departure_place
   end
 
+  test "bookings sync stamps the first sync that sees money paid and keeps it" do
+    PerfectBook::Contact.create!(perfectbook_id: 7, kind: "customer", name: "Ama", synced_at: Time.current)
+    PerfectBook::Booking.create!(perfectbook_id: 11, perfectbook_contact_id: 7, ref: "BK-11",
+      status: "quoted", paid_minor: 0, synced_at: Time.current)
+    client = FakePbCatalogClient.new(bookings_by_contact: { 7 => [ pb_booking ] })
+    first = Time.zone.local(2026, 9, 16, 9)
+    travel_to(first) { PerfectBook::SyncBookingsJob.perform_now(client: client) }
+    assert_equal first, PerfectBook::Booking.find_by(perfectbook_id: 11).first_paid_at
+
+    travel_to(first + 1.day) { PerfectBook::SyncBookingsJob.perform_now(client: client) }
+    assert_equal first, PerfectBook::Booking.find_by(perfectbook_id: 11).first_paid_at
+  end
+
   test "bookings sync drops rows the server no longer returns" do
     PerfectBook::Contact.create!(perfectbook_id: 7, kind: "customer", name: "Ama", synced_at: Time.current)
     PerfectBook::Booking.create!(perfectbook_id: 99, perfectbook_contact_id: 7, ref: "GONE", synced_at: Time.current)

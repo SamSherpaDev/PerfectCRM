@@ -18,6 +18,6 @@ class CaptainDigestMailer < ApplicationMailer
   end
 
   def recipient
-    ENV.fetch("ALLOWED_GOOGLE_EMAILS", "info@sherpaholidays.com").split(/[,\s]+/).reject(&:blank?).first
+    Setting.captain_email
   end
 end

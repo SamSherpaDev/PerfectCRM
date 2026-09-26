@@ -140,6 +140,8 @@
     <% end %>
   </section>
 
+  <%= render "settings/weekly_report", settings: @settings, spend_weeks: @spend_weeks, ad_spends: @ad_spends %>
+
   <section class="card card-pad mt-6" aria-labelledby="automations-heading">
     <h2 class="section-title" id="automations-heading">Automations</h2>
     <%= card_caption "The website form, Panda AI scoring, and the n8n webhooks. Automations may create leads, score them, and move them between New, Chatting and Lost. Quoted, Nudged, conversion to client, and everything after stay manual." %>

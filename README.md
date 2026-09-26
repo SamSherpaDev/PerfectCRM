@@ -56,7 +56,7 @@ out. On mobile, use Open menu to show the drawer. The rail holds **Today**
 (root), **Inbox**, **Leads**, **Clients**, **Pipeline**, **Quotes**, **Templates**, and
 **Settings**. See [Today and follow-ups](#today-and-follow-ups), [Mail](#mail),
 [Replying](#replying), [Templates](#templates), [Pipeline](#pipeline), and [Quotes](#quotes) for the live features. Settings provides appearance,
-morning and pipeline digests, connections, history import, automation settings, email sender settings, and export controls.
+morning and pipeline digests, the [weekly ads report](#weekly-ads-report), connections, history import, automation settings, email sender settings, and export controls.
 
 On phones (under 750px) a bottom tab bar holds **Today**, **Inbox**,
 **Leads**, **Clients**, and **More** (Pipeline, Quotes, Templates,
@@ -542,9 +542,12 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
   click IDs when marketing consent is off. Archived, suspected-spam, and
   lost "not a fit" leads are never reported. Tests using the business mailbox
   or an owner address in `ALLOWED_GOOGLE_EMAILS` are also excluded.
-- Purchase time is the first observation of `paid_minor > 0` on the booking
-  mirror, retained across later syncs and refunds. Existing paid mirrors are
-  first observed when the payment-time migration runs. Qualification and quote
+- Purchase time is `first_paid_at`, stamped by the booking model on the first
+  observation of `paid_minor > 0` and retained across later syncs and refunds.
+  The repair migration replaces the original shared backfill timestamp with
+  each mirror's creation date for still-paid rows created before that timestamp;
+  see `test/models/first_paid_at_repair_migration_test.rb`.
+  Qualification and quote
   milestones use activity history; qualification also requires the current
   fit band to be strong/possible at sweep time, without requiring an AI verdict
   in history. Its timestamp is the first owner transition to Chatting or Quoted.
@@ -765,6 +768,85 @@ lead value. Its production schedule is in [`config/recurring.yml`](config/recurr
 Settings → Monday pipeline note controls delivery to info@sherpaholidays.com;
 it is enabled by default. It is separate from the morning digest described
 in [Today and follow-ups](#today-and-follow-ups); combining them is pending.
+
+## Weekly ads report
+
+Every Monday at 7am Pacific (schedule in
+[`config/recurring.yml`](config/recurring.yml)) the captain gets last
+week's numbers that decide the ads: inquiries, qualified leads, quotes, and
+bookings by channel and campaign, with spend, cost per inquiry, and cost per
+qualified inquiry. Month and year to date, the travelers goal pace, median
+first reply and leads waiting over 24 hours, trips, landing placement,
+inquiries with trip, month, and party size filled, suspected spam held
+back, and how often the AI fit matched the captain's own calls follow.
+Weeks run Monday to Sunday, Pacific time.
+
+Definitions, in `WeeklyReport::Summary`:
+
+- **Inquiry**: a lead received in the week, not archived (tests and junk
+  are archived) and not tagged suspected spam.
+- **Qualified**: current AI fit strong or possible, and the captain (never an
+  automation) moved the lead to Chatting or Quoted, dated by the first such move.
+- **Quote**: a lead's first captain move to Quoted or first sent quote,
+  whichever came first. Inquiry, qualified, and quote counts exclude archived
+  and suspected-spam leads across all sources; Paid total includes only Google
+  Ads and Meta Ads.
+- **Booked**: a mirrored PerfectBook booking whose deposit was first seen
+  paid that week (`first_paid_at`; payment timing and historical backfill are
+  defined in [Ad conversions](#ad-conversions)), unless
+  since cancelled, voided, or refunded. It counts toward the channel and
+  campaign selected by the attribution rules below; travelers are its party
+  size. Booked value
+  sums the full booking total for USD bookings only, not the deposit amount;
+  non-USD bookings still count as bookings and travelers.
+- **Attribution**: the lead's own `source` and `campaign_name`. Ad
+  platforms' own conversion counts are for tuning inside each platform.
+
+Reply speed uses only sent or received outbound email in the lead's or
+converted client's conversations. Notes, visitor details, stage changes, and
+conversion are not replies. Open unanswered inquiries stay listed after 24
+hours until answered or closed. Waiting is a live list even in past-week
+previews; historical reports are recomputed from current records, not saved
+snapshots. Every trip is listed; unknown timing does not count as a filled
+month. AI agreement uses the latest owner move to Chatting, Quoted, or Lost,
+or conversion, within the 28 days ending on the report week's Sunday. A latest
+Lost judgment counts only when its reason is not a fit; other loss reasons
+exclude the lead from the comparison. The window uses judgment dates, not inquiry dates.
+Owner stage changes retain their loss reason even if automation later changes
+the lead; older events without that snapshot use the lead's current reason.
+
+Booking attribution uses the client's latest lead converted at or before the
+deposit event, then an unconverted lead with the same PerfectBook contact,
+then the client's source and campaign. Source and campaign always come from
+the same selected record, even when its campaign is empty. Bookings with no
+CRM origin appear as "Booked outside the CRM". Booked value and cost per
+booking are shown by campaign whenever bookings exist, independent of ROAS;
+cost per booking requires spend. ROAS is paid booked value divided by paid
+spend. Missing spend for any paid campaign with activity makes paid total
+spend, costs, and ROAS
+unknown, shown as "-", and names the campaigns needing spend.
+
+Settings → Monday ads report sets the recipient (empty sends to the first
+allowlisted Google sign-in, or info@sherpaholidays.com if none is configured).
+The Monday email always sends. Enter USD spend from Google Ads and Meta for
+one of the last eight complete weeks, per channel and required campaign name,
+matching the lead's campaign exactly, including capitalization (surrounding
+whitespace is ignored). Saving the same week, channel, and campaign replaces
+its amount; Remove deletes that entry. There is no channel-total entry. Preview
+past weeks or the current week in progress at `/settings/weekly_report`, where
+"Send it now" queues the displayed week's report to the recipient.
+
+Goals are year-specific: 10 total travelers booked in 2026 and 100 travelers
+who book during 2027. Other years show no goal. Month and year lines show
+inquiries, qualified leads, bookings, and travelers, without spend totals.
+The 2026 milestone line counts new travelers booked since Oct 1 against the
+next unpassed target: 2 by Oct 31, 6 by Nov 30, and 8 by Dec 31. Flags highlight
+cost per qualified inquiry over $300, inquiries waiting over 24 hours, and
+missing spend. Next review is the next date on or after the report date from
+Oct 10, Oct 24, Nov 7, 2026 and Jan 31, 2027, then each month end. Review dates
+and milestone deadlines use the day the report is generated, even when
+previewing a past week. Conversion upload counts are not included in this
+report; delivery and export status are covered in [Ad conversions](#ad-conversions).
 
 ## AI assistance
 

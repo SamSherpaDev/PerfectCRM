@@ -65,12 +65,14 @@ class Leads::Transition
         @lead.lost_note = nil
       end
       @lead.save!
+      metadata = { "from" => from, "to" => @to, "actor" => @actor.to_s }
+      metadata["lost_reason"] = @lead.lost_reason if @actor == :captain
       ActivityEvent.create!(
         subject: @lead,
         kind: "stage_change",
         summary: "Moved from #{from.humanize} to #{@to.humanize}",
         occurred_at: Time.current,
-        metadata: { "from" => from, "to" => @to, "actor" => @actor.to_s }
+        metadata: metadata
       )
     end
     notify_tasks(@lead, from: from, to: @to)
