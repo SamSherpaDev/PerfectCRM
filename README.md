@@ -535,7 +535,7 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
 | Inquiry | Lead created | Existing web tag, not in the feed | `Lead`, sent at intake | $300 |
 | Qualified | Current fit band strong or possible, and you moved it to Chatting or Quoted | `Qualified inquiry` | `QualifiedLead` | $1,000 |
 | Quote | Status Quoted, or a CRM quote sent | `Quote sent` | `Quote` | $2,000 |
-| Booked | A linked PerfectBook booking with money first observed paid after the inquiry | `Booking (deposit paid)` | `Purchase` | Booking total times the booking value percent (default 35) |
+| Booked | A linked PerfectBook booking with money first observed paid after the inquiry | `Booking (deposit paid)` | `Purchase` | USD booking total times the booking value percent (default 35); other currencies report a fixed 2,000 USD |
 
 - Only leads that arrived with a click ID (`gclid`, `gbraid`, `wbraid`, or
   `fbclid`, including one in the landing URL) are reported: the form drops

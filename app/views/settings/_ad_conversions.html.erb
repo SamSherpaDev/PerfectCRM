@@ -42,7 +42,8 @@
     <div class="sm:w-1/2">
       <%= form.label :ad_booking_value_percent, "Booking value (% of the booking total)", class: "label" %>
       <%= form.number_field :ad_booking_value_percent, class: "input", min: 1, max: 100, step: 1 %>
-      <p class="hint">A paid booking reports this share of its total as the conversion value, your margin, to both Google and Meta.</p>
+      <p class="hint">A paid USD booking reports this share of its total as the conversion value, your margin, to both Google and Meta.</p>
+      <p class="hint">Bookings in other currencies report a fixed 2,000 USD.</p>
     </div>
     <% if settings.errors.any? %>
       <p class="text-sm text-bad"><%= settings.errors.full_messages.to_sentence %></p>

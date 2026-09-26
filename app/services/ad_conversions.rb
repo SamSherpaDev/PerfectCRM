@@ -156,6 +156,8 @@ module AdConversions
   end
 
   def booking_value_minor(booking, settings: Setting.current)
+    return VALUES_MINOR["quote"] unless booking.currency == "USD"
+
     total = booking.total_minor.presence || booking.paid_minor.to_i
     (total * settings.ad_booking_value_percent / 100.0).round
   end

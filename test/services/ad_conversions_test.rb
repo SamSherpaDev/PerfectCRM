@@ -156,6 +156,23 @@ class AdConversionsTest < ActiveSupport::TestCase
     assert_equal "Purchase", row.meta_event_name
   end
 
+  test "a paid non-USD booking reports the fixed quote value in USD" do
+    lead = ad_lead(perfectbook_contact_id: 77)
+    PerfectBook::Booking.create!(perfectbook_id: 9002, perfectbook_contact_id: 77, status: "deposit_received",
+      paid_minor: 50_000, total_minor: 14_000_000, currency: "NPR", synced_at: @now)
+    row = AdConversions.record!(lead, now: @now).find { |item| item.event == "booked" }
+    assert_equal AdConversions::VALUES_MINOR["quote"], row.value_minor
+    assert_equal "USD", row.currency
+    csv = CSV.parse(AdConversions::GoogleFeed.csv([ row ]))
+    assert_equal [ "2000.00", "USD" ], csv.last.values_at(5, 6)
+    with_meta do |fake|
+      assert_equal :sent, AdConversions.deliver_meta!(row, settings: @settings, now: @now)
+      event = JSON.parse(fake.requests.sole.body)["data"].sole
+      assert_equal "Purchase", event["event_name"]
+      assert_equal({ "value" => 2000.0, "currency" => "USD" }, event["custom_data"])
+    end
+  end
+
   test "Meta receives hashed user data, fbc from the landing URL, and the event id" do
     lead = ad_lead(attribution: {
       "landing_url" => "https://www.sherpaholidays.com/pages/ebc?fbclid=IwAR-abc&utm_source=facebook",
