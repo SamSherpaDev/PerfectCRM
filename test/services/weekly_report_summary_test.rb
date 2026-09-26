@@ -288,5 +288,4 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
     assert_includes flags, "Google EBC cost per qualified inquiry over $300"
     assert_includes flags, "1 inquiry waiting over 24 h"
   end
-
 end

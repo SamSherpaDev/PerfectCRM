@@ -75,5 +75,4 @@ class WeeklyReportMailerTest < ActionMailer::TestCase
     mail = WeeklyReportMailer.weekly(week_start: Date.new(2028, 1, 3))
     [ mail.text_part, mail.html_part ].each { |part| assert_not_includes part.body.decoded, "Goal:" }
   end
-
 end

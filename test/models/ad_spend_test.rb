@@ -26,5 +26,4 @@ class AdSpendTest < ActiveSupport::TestCase
     end
     assert_includes error.record.errors.full_messages, "Campaign name can't be blank"
   end
-
 end

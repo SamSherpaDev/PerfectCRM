@@ -6,7 +6,6 @@ class WeeklyReportJobTest < ActiveJob::TestCase
       WeeklyReportJob.perform_now
     end
     assert_match(/\ASherpaHolidays ads, /, ActionMailer::Base.deliveries.last.subject)
-
   end
 
   test "is scheduled for Monday mornings" do
