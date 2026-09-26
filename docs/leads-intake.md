@@ -71,7 +71,8 @@ with its own reference), so repeat visitors can ask about different trips.
 
 Source derivation: `google_ads` on `gclid`/`gbraid`/`wbraid`, or
 `utm_source=google` with a paid medium (`cpc`, `ppc`, `paid`); `meta_ads`
-on `facebook`/`instagram`/`meta` with a paid medium; else `website_form`.
+on `facebook`/`instagram`/`meta` with a paid medium; `trade_show` on
+`utm_medium=event` (travel show booth links and QR codes); else `website_form`.
 `campaign_name` copies `utm_campaign`. The reference is `SH-XXXX`.
 
 Referral: `attribution.referral_code` is optional. The storefront sends the

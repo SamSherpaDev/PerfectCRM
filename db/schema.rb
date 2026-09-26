@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_26_205306) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_26_205355) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -50,6 +50,30 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_26_205306) do
     t.datetime "updated_at", null: false
     t.index ["occurred_at"], name: "index_activity_events_on_occurred_at"
     t.index ["subject_type", "subject_id"], name: "index_activity_events_on_subject_type_and_subject_id"
+  end
+
+  create_table "ad_conversions", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "currency", default: "USD", null: false
+    t.string "event", null: false
+    t.string "event_id", null: false
+    t.boolean "google", default: false, null: false
+    t.datetime "google_first_served_at"
+    t.datetime "google_last_served_at"
+    t.integer "google_serve_count", default: 0, null: false
+    t.integer "lead_id", null: false
+    t.integer "meta_attempts", default: 0, null: false
+    t.text "meta_error"
+    t.datetime "meta_sent_at"
+    t.string "meta_status", default: "not_applicable", null: false
+    t.datetime "occurred_at", null: false
+    t.datetime "updated_at", null: false
+    t.integer "value_minor", default: 0, null: false
+    t.index ["event_id"], name: "index_ad_conversions_on_event_id", unique: true
+    t.index ["lead_id", "event"], name: "index_ad_conversions_on_lead_id_and_event", unique: true
+    t.index ["lead_id"], name: "index_ad_conversions_on_lead_id"
+    t.index ["meta_status"], name: "index_ad_conversions_on_meta_status"
+    t.index ["occurred_at"], name: "index_ad_conversions_on_occurred_at"
   end
 
   create_table "ai_calls", force: :cascade do |t|
@@ -585,6 +609,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_26_205306) do
   end
 
   create_table "settings", force: :cascade do |t|
+    t.integer "ad_booking_value_percent", default: 35, null: false
+    t.datetime "ad_export_last_run_at"
+    t.text "ad_export_last_summary"
     t.string "ai_api_key"
     t.string "ai_base_url"
     t.integer "ai_daily_cost_cap_cents", default: 200, null: false
@@ -597,12 +624,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_26_205306) do
     t.boolean "digest_enabled", default: true, null: false
     t.text "email_signature", default: "", null: false
     t.text "email_signature_html", default: "", null: false
+    t.datetime "google_feed_last_fetched_at"
+    t.integer "google_feed_last_row_count"
+    t.text "google_feed_password"
     t.string "google_review_url", default: "", null: false
     t.string "lead_webhook_url"
     t.text "mailbox_last_error"
     t.datetime "mailbox_last_error_at"
     t.datetime "mailbox_last_sync_at"
     t.datetime "mailbox_watched_since"
+    t.text "meta_access_token"
+    t.string "meta_dataset_id"
+    t.string "meta_test_event_code"
     t.text "ms_graph_refresh_token"
     t.boolean "pipeline_digest", default: true, null: false
     t.datetime "relay_last_used_at"
@@ -686,6 +719,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_26_205306) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "ad_conversions", "leads"
   add_foreign_key "clients", "organizations", column: "referred_by_organization_id"
   add_foreign_key "drafts", "conversations"
   add_foreign_key "drafts", "templates"

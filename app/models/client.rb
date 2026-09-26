@@ -1,6 +1,6 @@
 class Client < ApplicationRecord
   KINDS = %w[individual company].freeze
-  SOURCES = %w[website email instagram whatsapp referral repeat other google_ads meta_ads website_form manual].freeze
+  SOURCES = %w[website email instagram whatsapp referral repeat other google_ads meta_ads trade_show website_form manual].freeze
   PIPELINE_STAGES = %w[won post_trip].freeze
 
   encrypts :phone

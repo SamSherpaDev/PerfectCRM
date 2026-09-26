@@ -265,12 +265,6 @@
     @apply mt-1.5 text-xs leading-relaxed text-ink-3;
   }
   /* Settings rows: name and hint on the left, one control on the right. */
-  .setting {
-    @apply flex flex-wrap items-start justify-between gap-3 border-t border-rule-2 pt-4;
-  }
-  .setting:first-child {
-    @apply border-t-0 pt-0;
-  }
   .muted {
     @apply text-ink-3;
   }
@@ -290,7 +284,8 @@
     @apply px-6 pb-3 text-[12.5px] leading-snug text-ink-3 sm:px-7;
   }
   .card-pad > .card-caption,
-  .card-pad .card-header + .card-caption {
+  .card-pad .card-header + .card-caption,
+  .card-pad .card-title + .card-caption {
     @apply px-0;
   }
   .card-pad > .card-header {
