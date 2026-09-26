@@ -12,7 +12,7 @@ class OutboundComposerTest < ActiveSupport::TestCase
     assert_equal "queued", message.status
     assert_equal "out", message.direction
     assert_equal "maya@example.com", message.to_addrs
-    assert_equal "Hello from Sherpa Holidays", message.subject
+    assert_equal "Hello from SherpaHolidays", message.subject
   end
 
   test "appends the signature once" do

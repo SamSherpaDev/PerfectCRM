@@ -169,9 +169,9 @@ module EmailSignature
       fitted = logo_box(setting)
       img = if fitted
         width, height = fitted
-        %(<img src="#{src}" alt="Sherpa Holidays" width="#{width}" height="#{height}" style="display:block;width:#{width}px;height:#{height}px;border:0;">)
+        %(<img src="#{src}" alt="SherpaHolidays" width="#{width}" height="#{height}" style="display:block;width:#{width}px;height:#{height}px;border:0;">)
       else
-        %(<img src="#{src}" alt="Sherpa Holidays" style="display:block;border:0;">)
+        %(<img src="#{src}" alt="SherpaHolidays" style="display:block;border:0;">)
       end
       %(<td style="padding:0 16px 0 0;vertical-align:middle;">#{img}</td>)
     end

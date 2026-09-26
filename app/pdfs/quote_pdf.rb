@@ -51,7 +51,7 @@ class QuotePdf
 
   def header(pdf)
     pdf.fill_color OCHRE
-    pdf.text "Sherpa Holidays", size: 11, style: :bold
+    pdf.text "SherpaHolidays", size: 11, style: :bold
     pdf.fill_color MUTED
     pdf.text "Family-run Himalayan adventure travel · info@sherpaholidays.com", size: 8
     pdf.move_down 10
@@ -131,7 +131,7 @@ class QuotePdf
 
   def footer(pdf)
     pdf.fill_color MUTED
-    pdf.text "Sherpa Holidays · info@sherpaholidays.com · " \
+    pdf.text "SherpaHolidays · info@sherpaholidays.com · " \
       "Bookings, invoices, and travel documents are handled in PerfectBook.",
       size: 8, align: :center
     pdf.fill_color INK

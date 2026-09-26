@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_22_040937) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_26_205306) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -597,6 +597,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_22_040937) do
     t.boolean "digest_enabled", default: true, null: false
     t.text "email_signature", default: "", null: false
     t.text "email_signature_html", default: "", null: false
+    t.string "google_review_url", default: "", null: false
     t.string "lead_webhook_url"
     t.text "mailbox_last_error"
     t.datetime "mailbox_last_error_at"

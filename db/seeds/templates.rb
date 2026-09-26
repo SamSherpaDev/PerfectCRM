@@ -1,19 +1,20 @@
 # Launch template library: the messages the captain sends over and over,
-# in his voice — warm, personal, premium, sentence case. Idempotent: existing
-# templates (matched by name) are left alone so captain edits survive reseeds.
+# in his own plain voice. No em dashes, American spelling. Idempotent:
+# existing templates (matched by name) are left alone so captain edits
+# survive reseeds.
 TEMPLATES = [
   {
     name: "First reply to a new inquiry",
     purpose: "first_reply",
-    subject: "Your {{trip}} — let us plan it together",
+    subject: "Planning your {{trip}}",
     body: <<~BODY.strip
       Hi {{first_name}},
 
-      Thank you for writing to Sherpa Holidays. {{trip}} is a wonderful choice, and I would love to help you plan it well.
+      Thank you for reaching out to SherpaHolidays. I would love to help you plan {{trip}}.
 
-      Tell me a little about your dates, your group, and how you like to walk, and I will put together an itinerary that fits you.
+      Could you tell me your preferred dates, how many people are coming, and how much hiking you are comfortable with? I will put together an itinerary that fits your group.
 
-      Warmly,
+      Best,
       {{my_name}}
     BODY
   },
@@ -24,101 +25,109 @@ TEMPLATES = [
     body: <<~BODY.strip
       Hi {{first_name}},
 
-      Your {{trip}} itinerary for {{departure_dates}} is ready. I have shaped the days around good acclimatization and the views you should not miss.
+      Your {{trip}} itinerary for {{departure_dates}} is ready. I planned the days with enough time to acclimatize and stops at the best viewpoints.
 
-      Have a look and tell me what you would change. Nothing is fixed until it feels right to you.
+      Take a look and let me know what you would like to change. We can adjust anything until it works for you.
 
-      Warmly,
+      Best,
       {{my_name}}
     BODY
   },
   {
     name: "Deposit nudge",
     purpose: "deposit_nudge",
-    subject: "Holding your {{trip}} seats with {{deposit_due}}",
+    subject: "Your {{trip}} seats are on hold",
     body: <<~BODY.strip
       Hi {{first_name}},
 
-      A gentle note that your {{trip}} seats for {{departure_dates}} are held until your deposit of {{deposit_due}} arrives.
+      A quick reminder that your {{trip}} seats for {{departure_dates}} are on hold until we receive your deposit of {{deposit_due}}.
 
-      Invoice {{invoice_number}} has the details, and your payment reference is {{payment_reference}}. Once the deposit lands, everything else is confirmed.
+      Invoice {{invoice_number}} has the details, and your payment reference is {{payment_reference}}. Once the deposit arrives, your seats are confirmed.
 
-      Warmly,
+      Best,
       {{my_name}}
     BODY
   },
   {
     name: "Document request",
     purpose: "document_request",
-    subject: "Two small things before your {{trip}}",
+    subject: "Documents needed for your {{trip}}",
     body: <<~BODY.strip
       Hi {{first_name}},
 
-      Before we finalize your {{trip}} booking, please send over what is still missing: {{missing_documents}}.
+      Before we finalize your {{trip}} booking, please send us what is still missing: {{missing_documents}}.
 
-      A clear phone photo of each is plenty. Everything is stored securely with our bookkeeping, never over email threads.
+      A clear phone photo of each is fine. We store them securely in our booking system, not in email threads.
 
-      Warmly,
+      Best,
       {{my_name}}
     BODY
   },
   {
     name: "Pre-trip briefing",
     purpose: "pre_trip_briefing",
-    subject: "Before you fly — your {{trip}} briefing",
+    subject: "Getting ready for your {{trip}}",
     body: <<~BODY.strip
       Hi {{first_name}},
 
-      Your {{trip}} is almost here, departing {{departure_dates}}. Pack warm layers, broken-in boots, and a sense of unhurried mornings.
+      Your {{trip}} is coming up soon, departing {{departure_dates}}. Pack warm layers and boots you have already broken in.
 
-      Your remaining balance of {{balance_due}} is due before we meet in Kathmandu. I will write again the week you fly with our meeting point and your guide's name.
+      Your remaining balance of {{balance_due}} is due before we meet in Kathmandu. I will email you again the week you fly with the meeting point and your guide's name.
 
-      Warmly,
+      Best,
       {{my_name}}
     BODY
   },
   {
     name: "During-trip check-in",
     purpose: "during_trip_checkin",
-    subject: "Enjoying the trail, {{first_name}}?",
+    subject: "How is the trip going, {{first_name}}?",
     body: <<~BODY.strip
       Hi {{first_name}},
 
-      Just checking in while you are out on {{trip}}. I hope the legs feel strong and the mountains are showing themselves.
+      I wanted to check in while you are on {{trip}}. I hope everything is going well.
 
-      If anything needs adjusting — pace, rooms, an extra rest day — tell your guide or reply here and I will sort it.
+      If anything needs to change, like the pace, your room, or an extra rest day, tell your guide or reply to this email and I will take care of it.
 
-      Warmly,
+      Best,
       {{my_name}}
     BODY
   },
   {
     name: "Review ask",
     purpose: "review_ask",
-    subject: "Welcome home — how was {{trip}}?",
+    subject: "How was {{trip}}?",
     body: <<~BODY.strip
       Hi {{first_name}},
 
-      Welcome home from {{trip}}. I hope you are still carrying a little of the mountain quiet with you.
+      Welcome home. I hope the trip was everything you wanted.
 
-      If you have a minute, an honest review in your own words would mean a lot to our small family company. Just reply here and I will treasure it.
+      Could you take two minutes to leave a review on Google? It is the main way other travelers find a small family company like ours.
 
-      Warmly,
+      {{google_review_link}}
+
+      If anything could have gone better, please reply and tell me. I read every message.
+
+      And if a friend is thinking about Nepal, ask them to mention your name when they write to us, or reply with their name.
+
+      Thank you,
       {{my_name}}
     BODY
   },
   {
     name: "Repeat-trip nudge",
     purpose: "repeat_nudge",
-    subject: "{{first_name}}, another trail is calling",
+    subject: "Thinking about another trip, {{first_name}}?",
     body: <<~BODY.strip
       Hi {{first_name}},
 
-      It has been a season since your {{trip}}, and I keep thinking how well you walked it. The {{trip}} departures for {{departure_dates}} are shaping up beautifully.
+      It has been almost a year since your {{trip}}. I hope you are doing well.
 
-      If your feet are restless, tell me where your mind wanders and I will plan something worthy of it.
+      If you are ready for another trip, tell me what you have in mind and I will put together a plan for you.
 
-      Warmly,
+      And if a friend is thinking about Nepal, ask them to mention your name when they write to us, or reply with their name.
+
+      Best,
       {{my_name}}
     BODY
   }

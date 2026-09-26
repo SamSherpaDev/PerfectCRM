@@ -86,7 +86,9 @@ Placeholders render through `TemplateRenderer` against live values; see
 [Replying](#replying) for context resolution and missing-value behavior.
 The placeholder chooser uses `TemplateRenderer::PLACEHOLDERS` as its source.
 Templates are seeded from `db/seeds/templates.rb` (idempotent; reruns never
-overwrite captain edits).
+overwrite captain edits). A wording change to the defaults reaches existing
+installs through a data migration that only rewrites templates still
+matching the old default word for word.
 
 The reply box embeds a searchable template picker. Insert fills the subject
 and inserts the body at the cursor for review; usage is counted when a
@@ -180,10 +182,13 @@ When the booking supplies no trip, the resolved lead owner's trip interest
 fills `trip` only if its nonblank email matches the actual recipient after
 trimming and ignoring case, including with a same-email mirrored contact.
 Unknown or empty placeholder values render `[missing: name]`, never blanks
-or an email substituted for an unknown name. Sample values appear only in
-the labeled template-editor preview. Set Your name, Logo, and Signature in
-Settings → Signature and press Save email settings; these values also
-fill templates for recipients without CRM records.
+or an email substituted for an unknown name. The one exception is
+`google_review_link` (`TemplateRenderer::OPTIONAL_PLACEHOLDERS`): it comes
+from Settings, Google reviews, and until that link is saved its whole line
+is left out of the email. Sample values appear only in the labeled
+template-editor preview, which uses the real review link. Set Your name,
+Logo, and Signature in Settings → Signature and press Save email settings;
+these values also fill templates for recipients without CRM records.
 
 In Templates → Merge preview, select a template and a departure to fill the
 recipient list from mirrored bookings, or paste one `Name <email>` or bare

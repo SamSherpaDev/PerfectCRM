@@ -74,12 +74,14 @@ class TemplateContext
   end
 
   def self.for(record, booking: default_booking_for(record))
+    settings = Setting.current
     context = {
       "first_name" => first_name_for(record),
       "full_name" => record.name.to_s,
       "advisor_name" => advisor_name_for(record),
-      "my_name" => Setting.current.sender_name.presence,
-      "signature" => EmailSignature.text_for(Setting.current).presence
+      "my_name" => settings.sender_name.presence,
+      "signature" => EmailSignature.text_for(settings).presence,
+      "google_review_link" => settings.google_review_url.presence
     }
     context.merge!(booking_context(booking)) if booking
     context.compact_blank

@@ -7,15 +7,20 @@
 # The chooser's supported keys are defined in PLACEHOLDERS below.
 #
 # Unknown placeholders render as a visible "[missing: name]" marker so a
-# half-filled message is never sent silently. Values are substituted raw by
-# .render (for plain-text mail); .render_html escapes values so the Turbo
-# preview pane stays safe to embed.
+# half-filled message is never sent silently. OPTIONAL_PLACEHOLDERS are the
+# exception: when one has no value, its whole line is left out instead.
+# Values are substituted raw by .render (for plain-text mail); .render_html
+# escapes values so the Turbo preview pane stays safe to embed.
 class TemplateRenderer
   PLACEHOLDERS = %w[
     first_name full_name trip departure_dates balance_due deposit_due
     invoice_number payment_reference missing_documents advisor_name
-    my_name signature
+    my_name signature google_review_link
   ].freeze
+
+  # Settings-backed links a template may carry before the captain has set
+  # them up. Empty means "leave the line out", not "missing".
+  OPTIONAL_PLACEHOLDERS = %w[google_review_link].freeze
 
   PATTERN = /{{\s*([A-Za-z0-9_]+)\s*}}/.freeze
 
@@ -50,7 +55,7 @@ class TemplateRenderer
   end
 
   def self.substitute(text, values)
-    text.gsub(PATTERN) do
+    drop_empty_optional_lines(text, values).gsub(PATTERN) do
       name = Regexp.last_match(1)
       if values.key?(name)
         yield values.fetch(name)
@@ -60,6 +65,30 @@ class TemplateRenderer
     end
   end
   private_class_method :substitute
+
+  # Removes each line holding an optional placeholder without a value, plus
+  # the extra blank line that would leave a double gap between paragraphs.
+  def self.drop_empty_optional_lines(text, values)
+    lines = text.split("\n", -1)
+    kept = []
+    dropped = false
+    lines.each do |line|
+      empty_optional = line.scan(PATTERN).flatten.any? do |name|
+        OPTIONAL_PLACEHOLDERS.include?(name) && !values.key?(name)
+      end
+      if empty_optional
+        dropped = true
+        next
+      end
+      next if dropped && line.strip.empty? && (kept.empty? || kept.last.strip.empty?)
+
+      dropped = false
+      kept << line
+    end
+    kept.pop while dropped && kept.last&.strip&.empty?
+    kept.join("\n")
+  end
+  private_class_method :drop_empty_optional_lines
 
   # Unknown AND empty values render [missing: name]: a half-filled message
   # is never sent silently (correction A from the templates review).

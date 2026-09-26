@@ -125,7 +125,7 @@ module Outbound
     def default_subject
       parent = @conversation&.thread_parent
       parent_subject = parent&.subject.presence || @conversation&.subject_line.presence
-      return "Hello from Sherpa Holidays" if parent_subject.blank?
+      return "Hello from SherpaHolidays" if parent_subject.blank?
 
       parent ? "Re: #{parent_subject.sub(/\ARe:\s*/i, '')}" : parent_subject
     end

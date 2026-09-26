@@ -1,7 +1,7 @@
 # Quote emails, sent through the same SMTP settings as every other
 # CRM mail (config/environments/production.rb), always from info@.
 class QuoteMailer < ApplicationMailer
-  default from: "Sherpa Holidays <info@sherpaholidays.com>"
+  default from: "SherpaHolidays <info@sherpaholidays.com>"
   helper ApplicationHelper
 
   # The quote itself: rendered body plus the Washi PDF and tap-to-accept link.
@@ -15,7 +15,7 @@ class QuoteMailer < ApplicationMailer
     @signature_html = EmailSignature.html_for(setting)
     attach_signature_logo(setting, @signature_html)
     mail(to: @quote.owner_email,
-      subject: "Your Sherpa Holidays quote #{@quote.reference} — #{@quote.subject_label}")
+      subject: "Your SherpaHolidays quote #{@quote.reference} for #{@quote.subject_label}")
   end
 
   # Tells the captain the moment a client taps accept.

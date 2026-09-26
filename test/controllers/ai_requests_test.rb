@@ -45,7 +45,7 @@ class AiRequestsTest < ActionDispatch::IntegrationTest
     assert_match "Hi Tashi", response.body
     call = AiCall.order(:created_at).last
     assert_equal "draft_reply", call.purpose
-    assert_equal "v1", call.prompt_version
+    assert_equal "v2", call.prompt_version
     assert_equal "mini", call.model
     assert_equal "ok", call.status
     assert_equal @conversation.id, call.conversation_id

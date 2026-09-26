@@ -242,7 +242,7 @@
       </div>
       <div>
         <%= form.label :email_signature, "Signature lines", class: "label" %>
-        <%= form.text_area :email_signature, value: EmailSignature.text_for(@settings), rows: 3, class: "textarea", placeholder: "Sam Sherpa\nSherpa Holidays" %>
+        <%= form.text_area :email_signature, value: EmailSignature.text_for(@settings), rows: 3, class: "textarea", placeholder: "Sam Sherpa\nSherpaHolidays" %>
         <p class="hint">First line is your name. Added under every reply and fills {{signature}} too.</p>
       </div>
       <% if @settings.errors[:signature_logo].any? %>
@@ -255,6 +255,24 @@
       </div>
       <div>
         <%= form.submit "Save email settings", class: "btn-secondary btn btn-sm" %>
+      </div>
+    <% end %>
+  </section>
+
+  <section class="card card-pad" aria-labelledby="reviews-heading">
+    <h2 class="section-title" id="reviews-heading">Google reviews</h2>
+    <%= card_caption "The link travelers tap to write a review. It fills {{google_review_link}} in the Review ask template." %>
+    <%= form_with model: @settings, url: settings_path, method: :patch, class: "mt-4 space-y-4" do |form| %>
+      <div>
+        <%= form.label :google_review_url, "Write-review link", class: "label" %>
+        <%= form.url_field :google_review_url, class: "input", autocomplete: "off", placeholder: "https://g.page/r/…/review" %>
+        <p class="hint">Copy it from your Google Business Profile under "Ask for reviews". Until it is set, the link line is left out of the email.</p>
+      </div>
+      <% if @settings.errors[:google_review_url].any? %>
+        <p class="text-sm text-bad" role="alert">Write-review link <%= @settings.errors[:google_review_url].to_sentence %>.</p>
+      <% end %>
+      <div>
+        <%= form.submit "Save review link", class: "btn-secondary btn btn-sm" %>
       </div>
     <% end %>
   </section>

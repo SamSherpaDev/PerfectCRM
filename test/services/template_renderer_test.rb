@@ -7,7 +7,8 @@ class TemplateRendererTest < ActiveSupport::TestCase
       departure_dates: "May 4 – May 18, 2027", balance_due: "$1,850.00",
       deposit_due: "$500.00", invoice_number: "SH-2027-0142",
       payment_reference: "SH-0142-MAYA", missing_documents: "passport copy",
-      advisor_name: "Adventure Co.", my_name: "Sam", signature: "Sam"
+      advisor_name: "Adventure Co.", my_name: "Sam", signature: "Sam",
+      google_review_link: "https://g.page/r/sample/review"
     }
     text = TemplateRenderer::PLACEHOLDERS.map { |name| "{{#{name}}}" }.join("|")
     rendered = TemplateRenderer.render(text, context)
@@ -38,6 +39,21 @@ class TemplateRendererTest < ActiveSupport::TestCase
   test "render_html escapes template text itself" do
     html = TemplateRenderer.render_html("<b>{{first_name}}</b>", first_name: "Maya")
     assert_includes html, "&lt;b&gt;Maya&lt;/b&gt;"
+  end
+
+  test "an empty optional placeholder drops its line and the gap it leaves" do
+    text = "Please leave a review.\n\n{{google_review_link}}\n\nThank you,\n{{my_name}}"
+    assert_equal "Please leave a review.\n\nThank you,\nSam", TemplateRenderer.render(text, my_name: "Sam")
+    assert_equal "Please leave a review.\n\nThank you,\nSam",
+      TemplateRenderer.render(text, my_name: "Sam", google_review_link: " ")
+    assert_equal "Please leave a review.\n\nThank you,\nSam", TemplateRenderer.render_html(text, my_name: "Sam")
+    assert_equal "Review: done", TemplateRenderer.render("Review: done\n\n{{google_review_link}}", {})
+  end
+
+  test "a set optional placeholder renders like any other" do
+    text = "Please leave a review.\n\n{{google_review_link}}\n\nThanks"
+    assert_equal "Please leave a review.\n\nhttps://g.page/r/x/review\n\nThanks",
+      TemplateRenderer.render(text, google_review_link: "https://g.page/r/x/review")
   end
 
   test "placeholders_in lists unique names in order" do
