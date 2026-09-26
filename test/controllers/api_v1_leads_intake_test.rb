@@ -149,6 +149,8 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     "instagram paid" => [ { "utm_source" => "instagram", "utm_medium" => "ppc" }, "meta_ads" ],
     "meta paid" => [ { "utm_source" => "meta", "utm_medium" => "paid" }, "meta_ads" ],
     "facebook organic" => [ { "utm_source" => "facebook", "utm_medium" => "social" }, "website_form" ],
+    "trade show booth" => [ { "utm_source" => "bay-area-travel-show", "utm_medium" => "event" }, "trade_show" ],
+    "trade show medium any case" => [ { "utm_medium" => " Event " }, "trade_show" ],
     "no attribution" => [ {}, "website_form" ]
   }.each do |name, (attribution, expected)|
     test "source derivation: #{name} is #{expected}" do
@@ -156,6 +158,23 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
       assert_response :accepted
       assert_equal expected, Lead.last.source
     end
+  end
+
+  test "business test inquiries never queue ad conversions" do
+    body = intake_body("attribution" => { "gclid" => "Cj0K" })
+    body["contact"]["email"] = Mail.mailbox_address
+    assert_no_enqueued_jobs only: AdConversions::LeadJob do
+      post_intake body
+    end
+    assert_response :accepted
+    assert_empty AdConversions.record!(Lead.last)
+  end
+
+  test "a new lead queues its ad conversion job" do
+    assert_enqueued_with(job: AdConversions::LeadJob) do
+      post_intake intake_body("attribution" => { "gclid" => "Cj0K" })
+    end
+    assert_response :accepted
   end
 
   # -- replay -----------------------------------------------------------------

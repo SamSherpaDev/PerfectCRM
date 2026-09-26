@@ -127,7 +127,10 @@ Rails.application.routes.draw do
     delete :signature_logo, to: "settings#remove_signature_logo", on: :collection
     get :logo, to: "settings#logo", on: :collection
     patch :ai, on: :collection
+    patch :ad_conversions, on: :collection
+    post :rotate_google_feed_password, on: :collection
   end
+  get "feeds/google-conversions.csv", to: "google_conversion_feeds#show", as: :google_conversions_feed, format: false
   namespace :ai do
     post "conversations/:conversation_id/draft", to: "drafts#create", as: :conversation_draft
     post "conversations/:conversation_id/summary", to: "summaries#create", as: :conversation_summary

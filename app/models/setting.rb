@@ -7,13 +7,16 @@ class Setting < ApplicationRecord
 
   encrypts :ms_graph_refresh_token
   encrypts :ai_api_key
-
+  encrypts :meta_access_token
+  encrypts :google_feed_password
 
   validates :ai_daily_cost_cap_cents, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
   validates :ai_rate_limit_per_minute, numericality: { only_integer: true, greater_than_or_equal_to: 1, less_than_or_equal_to: 120 }
 
   validates :singleton_key, inclusion: { in: [ 1 ] }, uniqueness: true
   validates :appearance, inclusion: { in: APPEARANCES }
+  validates :meta_dataset_id, format: { with: /\A\d{5,20}\z/, message: "is the number shown in Meta Events Manager" }, allow_blank: true
+  validates :ad_booking_value_percent, numericality: { only_integer: true, greater_than_or_equal_to: 1, less_than_or_equal_to: 100 }
   validates :lead_webhook_url, format: { with: %r{\Ahttps?://[^\s/]+(?:/[^\s]*)?\z}, allow_blank: true }
   validates :google_review_url, format: { with: %r{\Ahttps://[^\s/]+(?:/[^\s]*)?\z}, allow_blank: true,
     message: "must be a full link starting with https://" }
@@ -69,6 +72,24 @@ class Setting < ApplicationRecord
     return "Not set" if relay_secret.blank?
 
     "••••#{relay_secret.to_s.last(4)}"
+  end
+
+  # Meta Conversions API is on once both the dataset and its token are set.
+  def meta_configured?
+    meta_dataset_id.present? && meta_access_token.present?
+  end
+
+  # Google's scheduled pull is on once a feed password exists.
+  def google_feed_configured?
+    google_feed_password.present?
+  end
+
+  # The password Google Ads uses to pull the conversions feed. Shown once
+  # right after rotation, like the relay secret.
+  def rotate_google_feed_password!
+    password = SecureRandom.alphanumeric(32)
+    update!(google_feed_password: password)
+    password
   end
 
   def ensure_intake_credentials!

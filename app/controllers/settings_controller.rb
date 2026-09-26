@@ -4,6 +4,7 @@ class SettingsController < ApplicationController
     load_settings_supporting_data!
     # Shown once, right after rotation; never rendered again.
     @fresh_relay_secret = session.delete(:fresh_relay_secret)
+    @fresh_google_feed_password = session.delete(:fresh_google_feed_password)
   end
 
   def update
@@ -133,6 +134,31 @@ class SettingsController < ApplicationController
     end
   end
 
+  # Ad conversions (README.md, "Ad conversions"): the Meta dataset and its
+  # token (stored encrypted; blank keeps the saved token) and the booking
+  # value share. Clearing the dataset ID turns Meta off.
+  def ad_conversions
+    @settings = Setting.current
+    attrs = params.require(:setting).permit(:meta_dataset_id, :ad_booking_value_percent)
+    @settings.assign_attributes(attrs.transform_values { |value| value.to_s.strip.presence })
+    token = params.dig(:setting, :meta_access_token).to_s.strip
+    @settings.meta_access_token = token if token.present?
+    if @settings.save
+      redirect_to edit_settings_path(anchor: "ad-conversions-heading"), notice: "Ad conversions saved.", status: :see_other
+    else
+      load_settings_supporting_data!
+      render :edit, status: :unprocessable_entity
+    end
+  end
+
+  def rotate_google_feed_password
+    password = Setting.current.rotate_google_feed_password!
+    session[:fresh_google_feed_password] = password
+    redirect_to edit_settings_path(anchor: "ad-conversions-heading"),
+      notice: "Feed password created. Copy it into Google Ads now: it is shown once.",
+      status: :see_other
+  end
+
   private
 
   def load_settings_supporting_data!
@@ -147,6 +173,9 @@ class SettingsController < ApplicationController
     @imports = MailImport.ordered.limit(5)
     @ai_calls_today = AiCall.today.count
     @ai_cost_today = AiCall.daily_cost_cents
+    @ad_conversions_recent = AdConversion.newest_first.includes(:lead).limit(10)
+    @ad_conversion_meta_counts = AdConversion.group(:meta_status).count
+    @google_feed_waiting = @settings.google_feed_configured? ? AdConversions::GoogleFeed.rows.size : 0
   end
 
   def sender_params

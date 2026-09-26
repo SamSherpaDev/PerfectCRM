@@ -40,6 +40,9 @@ production:
   lead_notifications:
     command: "LeadNotification.enqueue_pending"
     schedule: every minute
+  ad_conversions_export:
+    class: AdConversions::ExportJob
+    schedule: every day at 2:40am America/Los_Angeles
   ai_prune_calls:
     class: Ai::PruneCallsJob
     schedule: every day at 3am

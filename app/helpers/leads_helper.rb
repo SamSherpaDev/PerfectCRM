@@ -2,6 +2,7 @@ module LeadsHelper
   LEAD_SOURCE_ICONS = {
     "google_ads" => :megaphone,
     "meta_ads" => :megaphone,
+    "trade_show" => :people,
     "website_form" => :globe,
     "email" => :mail,
     "referral" => :people,

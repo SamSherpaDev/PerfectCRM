@@ -63,6 +63,7 @@ module Api
 
           if saved
             LeadNotification.enqueue_pending(lead.id)
+            enqueue_ad_conversion(lead)
             render json: lead_response(lead.reload), status: :accepted
           elsif (field_errors = mappable_field_errors(lead))
             render json: { error: "validation", fields: field_errors }, status: :bad_request
@@ -73,6 +74,14 @@ module Api
         end
 
         private
+
+        # The Meta Lead event rides a job; a queue hiccup never fails intake,
+        # and the nightly AdConversions::ExportJob picks the lead up anyway.
+        def enqueue_ad_conversion(lead)
+          AdConversions::LeadJob.perform_later(lead.id) if AdConversions.reportable?(lead)
+        rescue StandardError => error
+          Rails.logger.error("[intake] ad conversion enqueue failed: #{error.class}")
+        end
 
         def honeypot_response
           Rails.cache.increment("intake:honeypot:dropped", 1, expires_in: 30.days)

@@ -39,7 +39,8 @@ module Leads
   end
 
   # google_ads on a click id or google+paid; meta_ads on a meta
-  # source+paid medium; else website_form.
+  # source+paid medium; trade_show on utm_medium=event (booth QR codes);
+  # else website_form.
   def derive_source(attribution)
     attribution = (attribution || {}).with_indifferent_access
     return "google_ads" if attribution[:gclid].present? ||
@@ -50,6 +51,7 @@ module Leads
     paid = PAID_MEDIUMS.include?(medium)
     return "google_ads" if source == "google" && paid
     return "meta_ads" if META_SOURCES.include?(source) && paid
+    return "trade_show" if medium == "event"
 
     "website_form"
   end

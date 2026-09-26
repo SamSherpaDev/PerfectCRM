@@ -1,0 +1,109 @@
+<%# locals: (settings:, recent:, meta_counts:, google_waiting:, fresh_password: nil) %>
+<%# Ad conversions card: Meta Conversions API setup, the Google Ads feed, and the last run. %>
+<% stamp = ->(time) { time ? "#{date_short(time)}, #{time_24_12(time)}" : "Never" } %>
+<section class="card card-pad mt-6" aria-labelledby="ad-conversions-heading">
+  <h2 class="section-title" id="ad-conversions-heading">Ad conversions</h2>
+  <%= card_caption "Tells Google Ads and Meta which ad clicks became qualified inquiries, quotes, and paid bookings, so they bid for travelers rather than form-fills. Only leads that arrived from an ad click with marketing consent are reported; archived, spam, business-test, and not-a-fit leads never are." %>
+
+  <div class="mt-4 flex flex-wrap items-center gap-2">
+    <%= settings.meta_configured? ? status_badge("connected", label: "Meta on") : status_badge("disconnected", label: "Meta off") %>
+    <%= settings.google_feed_configured? ? status_badge("connected", label: "Google on") : status_badge("disconnected", label: "Google off") %>
+    <span class="hint">Checked nightly. Off until set up below.</span>
+  </div>
+  <dl class="mt-4 space-y-1 text-sm">
+    <div class="flex flex-wrap gap-x-2">
+      <dt class="muted">Last run:</dt>
+      <dd><%= stamp.(settings.ad_export_last_run_at) %></dd>
+      <% if settings.ad_export_last_summary.present? %>
+        <dd class="hint w-full"><%= settings.ad_export_last_summary %></dd>
+      <% end %>
+    </div>
+    <div class="flex flex-wrap gap-x-2">
+      <dt class="muted">Meta events:</dt>
+      <dd><%= meta_counts.fetch("sent", 0) %> sent · <%= (meta_counts.fetch("pending", 0) + meta_counts.fetch("sending", 0)) %> waiting · <%= meta_counts.fetch("failed", 0) %> failed · <%= meta_counts.fetch("skipped", 0) %> skipped</dd>
+    </div>
+    <div class="flex flex-wrap gap-x-2">
+      <dt class="muted">Google pulls:</dt>
+      <dd><%= stamp.(settings.google_feed_last_fetched_at) %><% if settings.google_feed_last_fetched_at %> · <%= pluralize(settings.google_feed_last_row_count.to_i, "row") %><% end %> · <%= google_waiting %> in the feed now</dd>
+    </div>
+  </dl>
+
+  <h3 class="card-title mt-6">Meta Conversions API</h3>
+  <%= form_with model: settings, url: ad_conversions_settings_path, method: :patch, class: "mt-2 space-y-3" do |form| %>
+    <div>
+      <%= form.label :meta_dataset_id, "Dataset ID", class: "label" %>
+      <%= form.text_field :meta_dataset_id, class: "input mono text-xs", inputmode: "numeric", autocomplete: "off", placeholder: "Events Manager > Datasets" %>
+    </div>
+    <div>
+      <%= form.label :meta_access_token, "Access token", class: "label" %>
+      <%= form.password_field :meta_access_token, value: nil, class: "input mono text-xs", autocomplete: "new-password", placeholder: settings.meta_access_token.present? ? "Saved. Enter a new one to replace it" : "Events Manager > Settings > Generate access token" %>
+      <p class="hint">Stored encrypted. Leaving it blank keeps the saved token. Clear the dataset ID to turn Meta off.</p>
+    </div>
+    <div class="sm:w-1/2">
+      <%= form.label :ad_booking_value_percent, "Booking value (% of the booking total)", class: "label" %>
+      <%= form.number_field :ad_booking_value_percent, class: "input", min: 1, max: 100, step: 1 %>
+      <p class="hint">A paid USD booking reports this share of its total as the conversion value, your margin, to both Google and Meta.</p>
+      <p class="hint">Bookings in other currencies report a fixed 2,000 USD.</p>
+    </div>
+    <% if settings.errors.any? %>
+      <p class="text-sm text-bad"><%= settings.errors.full_messages.to_sentence %></p>
+    <% end %>
+    <%= form.submit "Save ad conversions", class: "btn-primary btn btn-sm" %>
+  <% end %>
+
+  <h3 class="card-title mt-6">Google Ads scheduled upload</h3>
+  <p class="hint mt-1">In Google Ads, open Goals > Conversions > Uploads > Schedules, choose HTTPS, paste the URL, username, and password below, and pick a daily schedule. First create the conversion actions <span class="text-ink">Qualified inquiry</span>, <span class="text-ink">Quote sent</span>, and <span class="text-ink">Booking (deposit paid)</span> as imports from clicks.</p>
+  <p class="hint mt-1">Braid-only clicks (gbraid/wbraid) use email/phone matching; this scheduled feed does not send braid identifiers.</p>
+  <p class="hint mt-1">Google's accept/reject counts are in Google Ads > Goals > Conversions > Uploads.</p>
+  <div class="mt-3 space-y-4">
+    <div class="setting">
+      <div class="k">
+        <p class="font-medium text-sm">Feed URL</p>
+        <p class="mono mt-1 text-xs break-all"><%= google_conversions_feed_url %></p>
+        <p class="hint mt-1">Username <span class="mono text-ink"><%= AdConversions::GoogleFeed::USERNAME %></span></p>
+      </div>
+    </div>
+    <div class="setting">
+      <div class="k">
+        <p class="font-medium text-sm">Password</p>
+        <% if fresh_password %>
+          <p class="mono mt-1 text-xs break-all" role="status">New password (shown once): <%= fresh_password %></p>
+        <% elsif settings.google_feed_configured? %>
+          <p class="mono mt-1 text-xs">••••<%= settings.google_feed_password.to_s.last(4) %></p>
+        <% else %>
+          <p class="hint mt-1">Not set. The feed stays closed until you create one.</p>
+        <% end %>
+      </div>
+      <%= button_to settings.google_feed_configured? ? "Rotate" : "Create password", rotate_google_feed_password_settings_path, method: :post, class: "btn-secondary btn btn-sm",
+        form: (settings.google_feed_configured? ? { data: { turbo_confirm: "Rotate the feed password? Update the Google Ads schedule right after." } } : {}) %>
+    </div>
+  </div>
+
+  <div class="mt-6">
+    <h3 class="card-title">Recent outcomes</h3>
+    <%= card_caption "The last 10 outcomes recorded for the ad platforms, newest first." %>
+    <% if recent.any? %>
+      <ul class="mt-2 space-y-3">
+        <% recent.each do |row| %>
+          <li class="flex items-start gap-3">
+            <%= render "shared/icon", name: :megaphone, class: "h-4 w-4 mt-0.5 muted" %>
+            <div class="min-w-0 flex-1">
+              <p class="text-sm text-ink"><%= row.label %> · <%= money(row.value_minor) %> · <%= link_to row.lead.reference || row.lead.name, lead_path(row.lead), class: "link-quiet" %></p>
+              <p class="text-xs muted"><%= stamp.(row.occurred_at) %> · Google: <%= row.google? ? (row.google_serve_count.positive? ? "pulled #{pluralize(row.google_serve_count, 'time')}" : "waiting") : "not sent" %></p>
+              <% if row.meta_error.present? %>
+                <p class="text-xs <%= row.meta_status == "failed" ? "text-bad" : "muted" %>"><%= row.meta_error %></p>
+              <% end %>
+            </div>
+            <%= row.meta_status == "not_applicable" ? badge("Meta n/a") : status_badge(row.meta_status == "failed" ? "error" : row.meta_status, label: "Meta #{row.meta_status}") %>
+          </li>
+        <% end %>
+      </ul>
+    <% else %>
+      <div class="empty-inline">
+        <%= sketch :enso, class: "enso" %>
+        <p class="text-sm text-ink">No outcomes reported yet.</p>
+        <p class="text-xs muted">Ad-click inquiries, qualified leads, quotes, and paid bookings will appear here once Meta or Google is on.</p>
+      </div>
+    <% end %>
+  </div>
+</section>

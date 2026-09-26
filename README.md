@@ -462,8 +462,8 @@ Both lead and client CSVs include a `referral_code` column.
 ## Leads
 
 Leads are asks that have not booked yet; clients are everyone else.
-A lead carries source (`google_ads`, `meta_ads`, `website_form`, `email`,
-`referral`, `manual`), campaign, `external_ref` for n8n idempotency, an optional
+A lead carries source (`google_ads`, `meta_ads`, `trade_show`, `website_form`,
+`email`, `referral`, `manual`), campaign, `external_ref` for n8n idempotency, an optional
 advisor `referral_code` from the storefront `?ref=` links, Panda
 AI fit (`fit_score`, `fit_band`, `fit_reason`), and status (`new`,
 `chatting`, `quoted`, `nudged`, `lost`). Tabs are New, Chatting, Quoted,
@@ -522,6 +522,56 @@ and review machine events and delivery results. The website form and external
 n8n/Panda AI workflows are configured separately; see the
 [website intake contract](docs/leads-intake.md) for setup, delivery behavior,
 and the allowed automation actions.
+
+## Ad conversions
+
+PerfectCRM tells Google Ads and Meta which ad clicks became real inquiries
+and bookings, so the platforms bid for travelers rather than form-fills.
+Code: `AdConversions` (rules), `AdConversions::MetaClient`,
+`AdConversions::GoogleFeed`, and the `AdConversions::ExportJob` nightly sweep.
+
+| Outcome | When | Google conversion action | Meta event | Value |
+|---|---|---|---|---|
+| Inquiry | Lead created | Existing web tag, not in the feed | `Lead`, sent at intake | $300 |
+| Qualified | Current fit band strong or possible, and you moved it to Chatting or Quoted | `Qualified inquiry` | `QualifiedLead` | $1,000 |
+| Quote | Current or recorded past status Quoted, or a CRM quote sent | `Quote sent` | `Quote` | $2,000 |
+| Booked | A linked active PerfectBook booking with money still paid, first observed at or after the inquiry | `Booking (deposit paid)` | `Purchase` | USD booking total times the booking value percent (default 35); other currencies report a fixed 2,000 USD |
+
+- Only leads that arrived with a click ID (`gclid`, `gbraid`, `wbraid`, or
+  `fbclid`, with `fbclid` also read from the landing URL) are reported: the form drops
+  click IDs when marketing consent is off. Archived, suspected-spam, and
+  lost "not a fit" leads are never reported. Tests using the business mailbox
+  or an owner address in `ALLOWED_GOOGLE_EMAILS` are also excluded.
+- Purchase time is the first observation of `paid_minor > 0` on the booking
+  mirror, retained across later syncs and refunds. Existing paid mirrors are
+  first observed when the payment-time migration runs. Qualification and quote
+  milestones use activity history; qualification also requires the current
+  fit band to be strong/possible at sweep time, without requiring an AI verdict
+  in history. Its timestamp is the first owner transition to Chatting or Quoted.
+  Lowering the band before the sweep prevents qualification; already recorded
+  outcomes are retained.
+- Each outcome is one `AdConversion` row per lead, recorded once, so a status
+  moving back and forth never reports twice. The Lead event ID is the form's
+  `submission_id`, so a browser pixel Lead with the same event ID deduplicates.
+- Meta: Settings → Ad conversions takes the dataset ID and access token
+  (stored encrypted). Email and phone are
+  SHA-256 hashed; `fbc` comes from the click. Failures become eligible for retry after 1, 4, 9,
+  and 16 hours (five attempts), checked by the nightly sweep; events older than Meta's 7-day limit are
+  skipped. Delivery claims prevent overlapping sends; interrupted claims become
+  retryable after five minutes, and only the owning attempt can save its result.
+- Google: create a feed password in the same card, then in Google Ads add a
+  daily schedule under Goals → Conversions → Uploads → Schedules with source
+  HTTPS, the feed URL (`/feeds/google-conversions.csv`), username
+  `sherpaholidays`, and the password. The CSV carries the gclid, hashed email
+  and phone (enhanced conversions for leads), and Pacific-time conversion
+  times. A row stays in the feed for three days after Google first pulls it;
+  Google ignores the repeats by Order ID. The feed includes gclid rows up to 90
+  days after the click and rows matched by email/phone up to 63 days. Braid-only clicks
+  use email/phone matching; this scheduled feed does not send gbraid/wbraid.
+  Accept/reject counts are in Google Ads > Goals > Conversions > Uploads.
+- Both are off until configured. The card shows the last run, Meta sent,
+  waiting, failed, and skipped counts, Google's last pull, and the latest
+  outcomes with any error.
 
 ## Mail
 

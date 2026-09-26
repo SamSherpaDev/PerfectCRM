@@ -146,7 +146,7 @@
 
     <div class="mt-4 space-y-4">
       <div class="setting">
-        <div>
+        <div class="k">
           <p class="font-medium text-sm">Site key</p>
           <p class="hint">Public identifier the storefront form sends with every inquiry. Last used <%= @settings.site_key_last_used_at ? time_24_12(@settings.site_key_last_used_at) : "never" %>.</p>
           <p class="mono mt-1 text-xs"><%= @settings.site_key %></p>
@@ -155,7 +155,7 @@
       </div>
 
       <div class="setting">
-        <div>
+        <div class="k">
           <p class="font-medium text-sm">Relay secret</p>
           <p class="hint">Signs server calls from n8n and Panda AI, and signs the webhooks sent to n8n. Last used <%= @settings.relay_last_used_at ? time_24_12(@settings.relay_last_used_at) : "never" %>.</p>
           <% if @fresh_relay_secret %>
@@ -218,6 +218,9 @@
       <% end %>
     </div>
   </section>
+
+  <%= render "settings/ad_conversions", settings: @settings, recent: @ad_conversions_recent,
+    meta_counts: @ad_conversion_meta_counts, google_waiting: @google_feed_waiting, fresh_password: @fresh_google_feed_password %>
 
   <section class="card card-pad" aria-labelledby="signature-heading">
     <h2 class="section-title" id="signature-heading">Signature</h2>

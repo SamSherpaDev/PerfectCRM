@@ -1,6 +1,6 @@
 class Lead < ApplicationRecord
   KINDS = %w[individual company].freeze
-  SOURCES = %w[google_ads meta_ads website_form email referral manual].freeze
+  SOURCES = %w[google_ads meta_ads trade_show website_form email referral manual].freeze
   STATUSES = %w[new chatting quoted nudged lost].freeze
   # Stages an automation (n8n, Panda AI) may set. Quoted, nudged, and won
   # stay manual; conversion is manual too. Enforced in Leads::Transition.
@@ -27,6 +27,7 @@ class Lead < ApplicationRecord
   has_many :lead_notifications, dependent: :destroy
   has_many :activity_events, as: :subject, dependent: :destroy
   has_many :conversations, as: :linkable, dependent: :destroy
+  has_many :ad_conversions, dependent: :destroy
 
   accepts_nested_attributes_for :people, allow_destroy: true,
     reject_if: proc { |attrs| attrs["name"].blank? && attrs["email"].blank? && attrs["phone"].blank? }

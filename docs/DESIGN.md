@@ -67,7 +67,7 @@ Fixed brand colours that never change with the scheme: cream `#fcfaee`, ochre `#
 | Inbound vs outbound | inbound `--paper-2` raised; outbound `--paper-3` pressed, indented 40px | Relief tells the two apart at a glance in both schemes; the stone and the name confirm it. |
 | AI draft | `--seal-tint` fill, `1px dashed rgba(201,111,26,.45)`, `--ink` text, a `--seal-text` tag "AI draft, yours to edit" | A dashed edge means "a machine wrote this". It becomes an ordinary pressed reply box the moment the captain edits it. |
 | Automation event (timeline) | stone: `--paper-2` with a 2px `--info-mark` ring; body: transparent with `1px dashed --rule`; meta icon: bolt (n8n) or robot (Panda AI) | The second use of the dashed edge: something a machine did. The meta line names the machine ("Website form via n8n", "Panda AI"). |
-| Source | `.src`: 14px `--ink-4` icon plus 12.5px `--ink-2` text; icons: megaphone (Google Ads, Meta Ads), globe (website form), mail (email), person (referral), pencil (manual) | Every lead shows where it came from, with the campaign name after a middle dot where an ad supplies one. |
+| Source | `.src`: 14px `--ink-4` icon plus 12.5px `--ink-2` text; source icons follow `LeadsHelper::LEAD_SOURCE_ICONS` in `app/helpers/leads_helper.rb`. | Every lead shows where it came from, with the campaign name after a middle dot where an ad supplies one. |
 | Fit | `.fit`: a 56px `.bar` (band semantics are owned by [README Leads](../README.md#leads)) plus the word and the number ("Strong · 82", "Possible · 61", "Weak · 34"); "Scoring" as an info badge with the robot icon while Panda AI has not answered | Colour, word and number together; never the bar alone. |
 | Automated | info badge with the bolt icon | On any row, card or setting whose last change was made by n8n. |
 
@@ -175,12 +175,12 @@ The captain's words: "in the future I want to implement google ads/meta ads to P
 
 What the design prepares, so that the ecosystem plugs in without a redesign:
 
-- **Every lead has a source and a campaign.** Source is an enumeration the Settings page shows (Google Ads, Meta Ads, Website form, Email, Referral, Manual) and can grow; campaign is free text supplied by the ad platform. Both render through `.src`.
+- **Every lead has a source and a campaign.** Source choices are documented in [Leads in the README](../README.md#leads); campaign is free text supplied by the ad platform. Both render through `.src`.
 - **Fit is a first-class field**, not a note: a 0 to 100 score, a word band, and a one-line reason, all from Panda AI through n8n, shown in the table, the tiles and the stream. While unanswered the field shows "Scoring". Panda AI has no logo in the CRM until it exists; it is named in text with the robot icon.
 - **Automation events are a timeline kind.** Anything n8n or Panda AI does lands on the stream as an `automation` event with the machine's name in the meta line, a bolt or robot icon, and the dashed edge. The captain can always tell what a machine did.
 - **Automations have limits the UI states.** Settings lists what automations may do (create leads, score them, move between New, Chatting and Lost) and what stays manual (Quoted, Nudged, Won, Convert). These are the permissions the inbound API enforces.
 - **The inbound API is visible.** Settings shows the public site key, masked relay secret, last use, and separate rotation controls. Credential behavior is defined in the [website intake contract](leads-intake.md). Automations live only in Settings: the credentials with their last use, the n8n webhook, and the recent automation activity (machine events with the Automated badge, webhook deliveries with their status). No lead page carries an Automations card.
-- **Outbound is symmetric (design goal).** Notifications for captain stage changes, quote sends, and conversions remain a design goal so Panda AI and the ad platforms can learn from outcomes. Currently supported events and delivery behavior are defined in the [website intake contract](leads-intake.md#what-happens-after-intake).
+- **Outbound is symmetric (design goal).** Notifications for captain stage changes, quote sends, and conversions to Panda AI remain a design goal. Supported webhook events and delivery behavior are defined in the [website intake contract](leads-intake.md#what-happens-after-intake). Direct outcome reporting to ad platforms is documented in [Ad conversions in the README](../README.md#ad-conversions).
 
 ### 4.13 Thinking orbs
 
