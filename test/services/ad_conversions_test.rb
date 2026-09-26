@@ -101,6 +101,27 @@ class AdConversionsTest < ActiveSupport::TestCase
     assert_equal 1_000_00, rows.first.value_minor
   end
 
+  test "owner fit edits before the sweep prevent qualification without retracting recorded outcomes" do
+    lead = ad_lead(fit_band: "strong")
+    lead.update!(fit_band: "weak")
+    Leads::Transition.call(lead, to: "chatting")
+    with_meta { AdConversions::ExportJob.perform_now(now: @now) }
+    assert_equal %w[lead], lead.ad_conversions.pluck(:event)
+
+    lead.update!(fit_band: "possible")
+    with_meta { AdConversions::ExportJob.perform_now(now: @now) }
+    qualified = lead.ad_conversions.find_by!(event: "qualified")
+    assert_equal "sent", qualified.meta_status
+    lead.update!(fit_band: "weak")
+    with_meta { AdConversions::ExportJob.perform_now(now: @now) }
+    assert_equal "sent", qualified.reload.meta_status
+    assert_equal 1, lead.ad_conversions.where(event: "qualified").count
+
+    other = ad_lead(fit_band: "strong", status: "chatting")
+    other.update!(fit_band: "weak")
+    assert_equal %w[lead], AdConversions.record!(other).map(&:event)
+  end
+
   test "each outcome is recorded once even when the status moves back and forth" do
     lead = ad_lead(fit_band: "strong", status: "quoted")
     assert_equal %w[lead qualified quote], AdConversions.record!(lead, now: @now).map(&:event)
@@ -173,6 +194,82 @@ class AdConversionsTest < ActiveSupport::TestCase
       assert_equal :sent, AdConversions.deliver_meta!(row, settings: @settings, now: @now + 61.minutes)
     end
     assert_equal 2, row.reload.meta_attempts
+  end
+
+  test "the nightly sweep cannot deliver an intake event already in flight" do
+    lead = ad_lead
+    row = AdConversions.record!(lead).first
+    calls = 0
+    with_meta do |fake|
+      fake.define_singleton_method(:request) do |_request|
+        calls += 1
+        AdConversions::ExportJob.perform_now if calls == 1
+        FakeResponse.new("200", { "events_received" => 1 }.to_json)
+      end
+      AdConversions::LeadJob.perform_now(lead.id)
+    end
+    assert_equal 1, calls
+    assert_equal "sent", row.reload.meta_status
+    assert_equal 1, row.meta_attempts
+  end
+
+  test "the nightly sweep recovers an interrupted delivery claim" do
+    row = AdConversions.record!(ad_lead).first
+    row.update!(meta_status: "sending", meta_attempts: 1, updated_at: @now)
+    with_meta do |fake|
+      AdConversions::ExportJob.perform_now(now: @now + 4.minutes)
+      assert_empty fake.requests
+      AdConversions::ExportJob.perform_now(now: @now + 6.minutes)
+      assert_equal 1, fake.requests.size
+    end
+    assert_equal "sent", row.reload.meta_status
+    assert_equal 2, row.meta_attempts
+  end
+
+  test "a late failure cannot overwrite a successful replacement attempt" do
+    row = AdConversions.record!(ad_lead).first
+    calls = 0
+    later = @now + 6.minutes
+    with_meta do |fake|
+      fake.define_singleton_method(:request) do |_request|
+        calls += 1
+        if calls == 1
+          AdConversions.deliver_meta!(AdConversion.find(row.id), now: later)
+          FakeResponse.new("500", { "error" => { "message" => "Late failure" } }.to_json)
+        else
+          FakeResponse.new("200", { "events_received" => 1 }.to_json)
+        end
+      end
+      assert_nil AdConversions.deliver_meta!(row, now: @now)
+    end
+    assert_equal 2, calls
+    assert_equal "sent", row.reload.meta_status
+    assert_equal later, row.meta_sent_at
+    assert_nil row.meta_error
+    assert_equal 2, row.meta_attempts
+  end
+
+  test "a stale excluded row cannot overwrite a completed delivery" do
+    lead = ad_lead
+    row = AdConversions.record!(lead).first
+    stale = AdConversion.find(row.id)
+    with_meta { assert_equal :sent, AdConversions.deliver_meta!(row) }
+    lead.update!(archived_at: @now)
+    assert_nil AdConversions.deliver_meta!(stale)
+    assert_equal "sent", row.reload.meta_status
+  end
+
+  test "interrupted claims stop retrying at the attempt limit" do
+    row = AdConversions.record!(ad_lead).first
+    row.update!(meta_status: "sending", meta_attempts: 5, updated_at: @now - 6.minutes)
+    with_meta do |fake|
+      AdConversions::ExportJob.perform_now(now: @now)
+      AdConversions::ExportJob.perform_now(now: @now + 1.day)
+      assert_empty fake.requests
+    end
+    assert_equal "failed", row.reload.meta_status
+    assert_equal 5, row.meta_attempts
+    assert_match(/attempt limit reached/, row.meta_error)
   end
 
   test "events past Meta's 7-day limit are skipped, and nothing leaves while Meta is off" do

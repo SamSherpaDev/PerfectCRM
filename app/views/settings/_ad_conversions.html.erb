@@ -20,7 +20,7 @@
     </div>
     <div class="flex flex-wrap gap-x-2">
       <dt class="muted">Meta events:</dt>
-      <dd><%= meta_counts.fetch("sent", 0) %> sent · <%= meta_counts.fetch("pending", 0) %> waiting · <%= meta_counts.fetch("failed", 0) %> failed · <%= meta_counts.fetch("skipped", 0) %> skipped</dd>
+      <dd><%= meta_counts.fetch("sent", 0) %> sent · <%= (meta_counts.fetch("pending", 0) + meta_counts.fetch("sending", 0)) %> waiting · <%= meta_counts.fetch("failed", 0) %> failed · <%= meta_counts.fetch("skipped", 0) %> skipped</dd>
     </div>
     <div class="flex flex-wrap gap-x-2">
       <dt class="muted">Google pulls:</dt>

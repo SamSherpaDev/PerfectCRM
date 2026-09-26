@@ -40,6 +40,7 @@ module AdConversions
   # Meta rejects events older than seven days.
   META_WINDOW = 7.days
   META_MAX_ATTEMPTS = 5
+  META_CLAIM_TIMEOUT = 5.minutes
   TIME_ZONE = "America/Los_Angeles"
 
   module_function
@@ -115,7 +116,7 @@ module AdConversions
     events = { "lead" => { occurred_at: clamp.(lead.received_at || lead.created_at), value_minor: VALUES_MINOR["lead"] } }
 
     history = lead.activity_events.where(kind: %w[stage_change automation]).order(:occurred_at, :id).to_a
-    if (at = qualified_at(history))
+    if QUALIFIED_BANDS.include?(lead.fit_band) && (at = qualified_at(history))
       events["qualified"] = { occurred_at: clamp.(at), value_minor: VALUES_MINOR["qualified"] }
     end
 
@@ -217,30 +218,43 @@ module AdConversions
   def deliver_meta!(row, settings: Setting.current, now: Time.current)
     return nil unless meta_due?(row, now)
 
+    claim = AdConversion.where(id: row.id, meta_status: row.meta_status,
+      meta_attempts: row.meta_attempts, updated_at: row.updated_at)
     lead = row.lead
-    if excluded?(lead)
-      row.update!(meta_status: "skipped", meta_error: "Archived, spam, not a fit, or business test")
-      return :skipped
+    skip_reason = if excluded?(lead)
+      "Archived, spam, not a fit, or business test"
+    elsif row.occurred_at < now - META_WINDOW
+      "Older than Meta's 7-day limit"
     end
-    if row.occurred_at < now - META_WINDOW
-      row.update!(meta_status: "skipped", meta_error: "Older than Meta's 7-day limit")
-      return :skipped
+    if skip_reason
+      changed = claim.update_all(meta_status: "skipped", meta_error: skip_reason, updated_at: now)
+      row.reload
+      return changed.positive? ? :skipped : nil
     end
     return nil unless settings.meta_configured?
 
-    claimed = AdConversion.where(id: row.id, meta_status: row.meta_status, meta_attempts: row.meta_attempts)
-      .update_all(meta_attempts: row.meta_attempts + 1, updated_at: now)
-    return nil if claimed.zero?
+    if row.meta_attempts >= META_MAX_ATTEMPTS
+      changed = claim.update_all(meta_status: "failed", meta_error: "Delivery interrupted; attempt limit reached", updated_at: now)
+      row.reload
+      return changed.positive? ? :failed : nil
+    end
 
-    row.reload
+    attempt = row.meta_attempts + 1
+    return nil if claim.update_all(meta_status: "sending", meta_attempts: attempt, updated_at: now).zero?
+
+    delivery = AdConversion.where(id: row.id, meta_status: "sending", meta_attempts: attempt)
     begin
       MetaClient.new(settings).deliver(row)
-      row.update!(meta_status: "sent", meta_sent_at: now, meta_error: nil)
-      :sent
+      changed = delivery.update_all(meta_status: "sent", meta_sent_at: now, meta_error: nil, updated_at: now)
+      changed.positive? ? :sent : nil
     rescue MetaClient::Error => error
-      row.update!(meta_status: "failed", meta_error: error.message.truncate(300))
-      Rails.logger.warn("[ad conversions] meta #{row.event} for lead #{row.lead_id} failed: #{error.message.truncate(200)}")
-      :failed
+      changed = delivery.update_all(meta_status: "failed", meta_error: error.message.truncate(300), updated_at: now)
+      if changed.positive?
+        Rails.logger.warn("[ad conversions] meta #{row.event} for lead #{row.lead_id} failed: #{error.message.truncate(200)}")
+        :failed
+      end
+    ensure
+      row.reload
     end
   end
 
@@ -249,6 +263,7 @@ module AdConversions
   def meta_due?(row, now)
     case row.meta_status
     when "pending" then true
+    when "sending" then row.updated_at <= now - META_CLAIM_TIMEOUT
     when "failed"
       row.meta_attempts < META_MAX_ATTEMPTS && row.updated_at <= now - (row.meta_attempts**2).hours
     else false

@@ -5,7 +5,7 @@
 # (AdConversions::MetaClient). Rules live in AdConversions.
 class AdConversion < ApplicationRecord
   EVENTS = %w[lead qualified quote booked].freeze
-  META_STATUSES = %w[not_applicable pending sent failed skipped].freeze
+  META_STATUSES = %w[not_applicable pending sending sent failed skipped].freeze
   LABELS = {
     "lead" => "Inquiry", "qualified" => "Qualified inquiry",
     "quote" => "Quote sent", "booked" => "Booking (deposit paid)"

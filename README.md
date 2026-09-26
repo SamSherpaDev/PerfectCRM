@@ -545,8 +545,9 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
 - Purchase time is the first observation of `paid_minor > 0` on the booking
   mirror, retained across later syncs and refunds. Existing paid mirrors are
   first observed when the payment-time migration runs. Qualification and quote
-  milestones use activity history; qualification waits for both the owner
-  transition and a strong/possible AI verdict.
+  milestones use activity history; qualification also requires the current
+  fit band to remain strong/possible at sweep time. Lowering the band before
+  the sweep prevents qualification; already recorded outcomes are retained.
 - Each outcome is one `AdConversion` row per lead, recorded once, so a status
   moving back and forth never reports twice. The Lead event ID is the form's
   `submission_id`, so a browser pixel Lead with the same event ID deduplicates.
@@ -554,7 +555,8 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
   (stored encrypted). Email and phone are
   SHA-256 hashed; `fbc` comes from the click. Failures become eligible for retry after 1, 4, 9,
   and 16 hours (five attempts), checked by the nightly sweep; events older than Meta's 7-day limit are
-  skipped.
+  skipped. Delivery claims prevent overlapping sends; interrupted claims become
+  retryable after five minutes, and only the owning attempt can save its result.
 - Google: create a feed password in the same card, then in Google Ads add a
   daily schedule under Goals → Conversions → Uploads → Schedules with source
   HTTPS, the feed URL (`/feeds/google-conversions.csv`), username
