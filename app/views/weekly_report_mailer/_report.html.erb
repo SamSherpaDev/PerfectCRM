@@ -4,7 +4,7 @@
 <% name_cell = "padding:4px 4px 4px 0;text-align:left;border-bottom:1px solid #e7e2d8;" %>
 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.45;color:#26231f;max-width:600px;">
   <p style="margin:0 0 2px;font-size:17px;font-weight:600;">SherpaHolidays ads, week of <%= summary.week_label %></p>
-  <p style="margin:0 0 14px;color:#5c574f;"><%= report_goal_line(summary) %></p>
+  <% if summary.travelers_goal %><p style="margin:0 0 14px;color:#5c574f;"><%= report_goal_line(summary) %></p><% end %>
 
   <table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums;">
     <thead>
@@ -24,8 +24,9 @@
         <tr style="<%= 'font-weight:600;' if total %>">
           <td style="<%= name_cell %>">
             <%= label %>
-            <% if costs && (row.cost_per_inquiry || row.cost_per_qualified) %>
-              <br><span style="font-size:12px;font-weight:400;color:#5c574f;"><%= [ row.cost_per_inquiry && "#{report_money(row.cost_per_inquiry)}/inq", row.cost_per_qualified && "#{report_money(row.cost_per_qualified)}/qual" ].compact.join(" · ") %></span>
+            <% if row.booked.positive? %><br><span style="font-size:12px;font-weight:400;"><%= report_money(row.booked_value_minor) %> booked value</span><% end %>
+            <% if label != "All sources" %>
+              <br><span style="font-size:12px;font-weight:400;color:#5c574f;"><%= [ "#{report_money(row.cost_per_inquiry)}/inq", "#{report_money(row.cost_per_qualified)}/qual", row.booked.positive? && "#{report_money(row.cost_per_booking)}/booking" ].select(&:itself).join(" · ") %></span>
             <% end %>
           </td>
           <td style="<%= cell %>"><%= costs ? report_money(row.spend_minor) : "-" %></td>
@@ -37,21 +38,24 @@
       <% end %>
     </tbody>
   </table>
-  <% if summary.paid_total.booked.positive? && summary.paid_total.spend_minor %>
-    <p style="margin:8px 0 0;">Paid cost per booking <%= report_money(summary.paid_total.cost_per_booking) %><% if summary.roas %>, paid booked value <%= report_money(summary.paid_total.booked_value_minor) %>, ROAS <%= summary.roas %>x<% end %>.</p>
+  <% if summary.paid_total.booked.positive? %>
+    <p style="margin:8px 0 0;">Paid cost per booking <%= report_money(summary.paid_total.cost_per_booking) %>, ROAS <%= summary.roas ? "#{summary.roas}x" : "-" %>.</p>
   <% end %>
   <% unless summary.spend_entered? %>
-    <p style="margin:8px 0 0;color:#8a4b12;">Spend not entered for this week yet. <%= link_to "Add it on Settings", edit_settings_url(anchor: "weekly-report-heading"), style: "color:#8a4b12;" %>.</p>
+    <p style="margin:8px 0 0;color:#8a4b12;"><%= report_missing_spend_line(summary) %> <%= link_to "Add it on Settings", edit_settings_url(anchor: "weekly-report-heading"), style: "color:#8a4b12;" %>.</p>
   <% end %>
 
   <p style="margin:14px 0 0;">
+    <%= report_flags_line(summary) %><br>
+    Next review: <%= summary.next_review.strftime('%b %-d, %Y') %><br>
+    <% if summary.milestone %><%= report_milestone_line(summary) %><br><% end %>
     <% summary.periods.each do |period| %><%= report_period_line(period) %><br><% end %>
   </p>
 
   <p style="margin:14px 0 0;"><%= report_speed_line(summary) %></p>
   <% if summary.waiting.any? %>
     <ul style="margin:4px 0 0;padding-left:18px;">
-      <% summary.waiting.first(5).each do |lead| %>
+      <% summary.waiting.each do |lead| %>
         <li><%= link_to report_lead_name(lead), lead_url(lead), style: "color:#26231f;" %></li>
       <% end %>
     </ul>

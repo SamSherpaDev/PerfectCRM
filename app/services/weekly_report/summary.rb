@@ -12,11 +12,10 @@ module WeeklyReport
     }.freeze
     UNLINKED_LABEL = "Booked outside the CRM"
     QUALIFIED_FITS = %w[strong possible].freeze
-    QUALIFIED_STAGES = %w[chatting quoted nudged].freeze
+    QUALIFIED_STAGES = %w[chatting quoted].freeze
     WAITING_AFTER = 24.hours
-    WAITING_LOOKBACK = 30.days
     AGREEMENT_WINDOW = 28.days
-    TOP_TRIPS = 5
+    TRAVELERS_GOALS = { 2026 => 10, 2027 => 100 }.freeze
 
     Row = Struct.new(:source, :campaign, :spend_minor, :inquiries, :qualified, :quoted, :booked,
       :booked_value_minor, keyword_init: true) do
@@ -30,7 +29,7 @@ module WeeklyReport
       def cost_per_booking = Summary.ratio(spend_minor, booked)
     end
 
-    Period = Struct.new(:label, :inquiries, :qualified, :booked, :travelers, :spend_minor, keyword_init: true)
+    Period = Struct.new(:label, :inquiries, :qualified, :booked, :travelers, keyword_init: true)
     TripRow = Struct.new(:trip, :inquiries, :qualified, :booked, keyword_init: true)
 
     attr_reader :week_start, :week_end, :today
@@ -81,7 +80,7 @@ module WeeklyReport
     end
 
     def spend_entered?
-      AdSpend.for_week(week_start).exists?
+      AdSpend.for_week(week_start).exists? && missing_spend_labels.empty?
     end
 
     # Paid bookings' value over spend.
@@ -104,7 +103,7 @@ module WeeklyReport
     end
 
     def travelers_goal
-      Setting.current.travelers_goal
+      TRAVELERS_GOALS[week_end.year]
     end
 
     def year_travelers
@@ -148,7 +147,6 @@ module WeeklyReport
     def waiting
       @waiting ||= counted_leads
         .where(converted_client_id: nil).where.not(status: "lost")
-        .where("COALESCE(received_at, leads.created_at) >= ?", (range.last - WAITING_LOOKBACK))
         .where("COALESCE(received_at, leads.created_at) <= ?", Time.current - WAITING_AFTER)
         .to_a.select { |lead| first_reply_at(lead).nil? }
         .sort_by { |lead| inquired_at(lead) }
@@ -160,7 +158,7 @@ module WeeklyReport
         week_inquiries.each { |lead| by_trip[trip_label(lead)].inquiries += 1 }
         qualified_in(range).each { |lead| by_trip[trip_label(lead)].qualified += 1 }
         deposits_in(range).each { |booking| by_trip[booking.trip_name.presence || "No trip named"].booked += 1 }
-        by_trip.values.sort_by { |row| [ -row.booked, -row.qualified, -row.inquiries, row.trip ] }.first(TOP_TRIPS)
+        by_trip.values.sort_by { |row| [ -row.booked, -row.qualified, -row.inquiries, row.trip ] }
       end
     end
 
@@ -172,7 +170,7 @@ module WeeklyReport
     # Inquiries that said which trip, which month, and how many travel.
     def details_filled
       week_inquiries.count do |lead|
-        trip_label(lead) != "No trip named" && (lead.travel_month.present? || lead.timing_unknown?) &&
+        trip_label(lead) != "No trip named" && lead.travel_month.present? &&
           lead.party_size.present?
       end
     end
@@ -189,16 +187,61 @@ module WeeklyReport
       window = (range.last - AGREEMENT_WINDOW)..range.last
       judged = counted_leads.where.not(fit_band: [ nil, "" ])
         .where("COALESCE(received_at, leads.created_at) BETWEEN ? AND ?", window.first, window.last).to_a
-      worked = captain_moves_to(judged.map(&:id), QUALIFIED_STAGES)
-      dropped = captain_moves_to(judged.map(&:id), %w[lost])
-      verdicts = judged.map do |lead|
-        owner_yes = lead.converted? || worked.key?(lead.id)
-        owner_no = !owner_yes && dropped.key?(lead.id) && lead.status == "lost" && lead.lost_reason == "not_a_fit"
-        next unless owner_yes || owner_no
+      latest = ActivityEvent.where(subject_type: "Lead", kind: "stage_change", subject_id: judged.map(&:id))
+        .order(:occurred_at, :id).each_with_object({}) do |event, calls|
+          data = event.metadata
+          next if data["actor"] == "automation" || !%w[chatting quoted lost].include?(data["to"])
 
+          calls[event.subject_id] = event
+        end
+      verdicts = judged.map do |lead|
+        call = latest[lead.id]
+        owner_yes = if lead.converted_at && (call.nil? || lead.converted_at >= call.occurred_at)
+          true
+        elsif call
+          if call.metadata["to"] == "lost"
+            next unless lead.lost_reason == "not_a_fit"
+
+            false
+          else
+            true
+          end
+        else
+          next
+        end
         QUALIFIED_FITS.include?(lead.fit_band) == owner_yes
       end.compact
       { agreed: verdicts.count(true), total: verdicts.size }
+    end
+
+    def missing_spend_labels
+      rows.select { |row| missing_spend?(row) }.map(&:label)
+    end
+
+    def flags
+      result = rows.filter_map do |row|
+        "#{row.label} cost per qualified inquiry over $300" if row.cost_per_qualified.to_i > 30_000
+      end
+      result << "#{pluralize(waiting.size, 'inquiry', 'inquiries')} waiting over 24 h" if waiting.any?
+      result << "No spend entered for the week" unless AdSpend.for_week(week_start).exists?
+      result << "Missing spend: #{missing_spend_labels.join(', ')}" if missing_spend_labels.any?
+      result
+    end
+
+    def next_review
+      dates = [ Date.new(2026, 10, 10), Date.new(2026, 10, 24), Date.new(2026, 11, 7), Date.new(2027, 1, 31) ]
+      dates.find { |date| date >= today } || today.end_of_month
+    end
+
+    def milestone
+      return unless week_end.year == 2026
+
+      deadline, target = { Date.new(2026, 10, 31) => 2, Date.new(2026, 11, 30) => 6,
+        Date.new(2026, 12, 31) => 8 }.find { |date, _| date >= today }
+      return unless deadline
+
+      window = Time.zone.local(2026, 10, 1)..range.last
+      { deadline: deadline, target: target, travelers: deposits_in(window).sum { |booking| booking.party_size.to_i } }
     end
 
     def headline
@@ -211,16 +254,11 @@ module WeeklyReport
 
     private
 
-    # Paid leads split by campaign, matched to spend by name in any case.
-    # A channel whose spend was entered only as a channel total keeps its
-    # leads on that one row, so cost per inquiry stays honest.
     def build_rows(window, spends:)
       rows = {}
-      totals_only = spends.group_by(&:source).select { |_, list| list.all? { |spend| spend.campaign_name.blank? } }.keys
       row_for = lambda do |source, campaign|
-        split = PAID_SOURCES.include?(source) && !totals_only.include?(source)
-        name = split ? campaign.to_s.strip.presence : nil
-        rows[[ source, name&.downcase ]] ||= Row.new(source: source, campaign: name, spend_minor: nil,
+        name = campaign.to_s.strip.presence
+        rows[[ source, name ]] ||= Row.new(source: source, campaign: name, spend_minor: nil,
           inquiries: 0, qualified: 0, quoted: 0, booked: 0, booked_value_minor: 0)
       end
       PAID_SOURCES.each { |source| row_for.call(source, nil) }
@@ -247,6 +285,10 @@ module WeeklyReport
       kept.sort_by { |row| row_order(row) }
     end
 
+    def missing_spend?(row)
+      PAID_SOURCES.include?(row.source) && row.spend_minor.nil? && !idle?(row)
+    end
+
     def idle?(row)
       row.spend_minor.nil? && (row.inquiries + row.qualified + row.quoted + row.booked).zero?
     end
@@ -260,17 +302,16 @@ module WeeklyReport
 
     def sum_rows(list)
       spend = list.map(&:spend_minor).compact
-      Row.new(source: nil, campaign: nil, spend_minor: spend.empty? ? nil : spend.sum,
+      Row.new(source: nil, campaign: nil, spend_minor: spend.empty? || list.any? { |row| missing_spend?(row) } ? nil : spend.sum,
         inquiries: list.sum(&:inquiries), qualified: list.sum(&:qualified), quoted: list.sum(&:quoted),
         booked: list.sum(&:booked), booked_value_minor: list.sum(&:booked_value_minor))
     end
 
     def period(label, from)
       window = from.in_time_zone.beginning_of_day..range.last
-      spend = AdSpend.where(week_start: from..week_start).sum(:amount_minor)
       deposits = deposits_in(window)
       Period.new(label: label, inquiries: inquiries_in(window).size, qualified: qualified_in(window).size,
-        booked: deposits.size, travelers: deposits.sum { |booking| booking.party_size.to_i }, spend_minor: spend)
+        booked: deposits.size, travelers: deposits.sum { |booking| booking.party_size.to_i })
     end
 
     # Leads that count as inquiries: not archived (tests and junk are
@@ -294,8 +335,6 @@ module WeeklyReport
         .where("COALESCE(received_at, leads.created_at) BETWEEN ? AND ?", window.first, window.last).to_a
     end
 
-    # The R1 rule: AI fit strong or possible, and the captain moved the lead
-    # to Chatting or Quoted (or on to Nudged or Won). Dated by that move.
     def qualified_in(window)
       @qualified ||= {}
       @qualified[window] ||= qualification_times.select { |_, at| window.cover?(at) }.keys
@@ -305,12 +344,8 @@ module WeeklyReport
       @qualification_times ||= begin
         leads = counted_leads.where(fit_band: QUALIFIED_FITS).to_a
         moves = captain_moves_to(leads.map(&:id), QUALIFIED_STAGES)
-        # A lead the captain entered already in a later stage never moved.
-        moved = ActivityEvent.where(subject_type: "Lead", kind: "stage_change", subject_id: leads.map(&:id))
-          .distinct.pluck(:subject_id).to_set
         leads.each_with_object({}) do |lead, times|
-          at = [ moves[lead.id], lead.converted_at ].compact.min
-          at ||= inquired_at(lead) if QUALIFIED_STAGES.include?(lead.status) && !moved.include?(lead.id)
+          at = moves[lead.id]
           times[lead] = at if at
         end
       end
@@ -354,12 +389,10 @@ module WeeklyReport
         .where("status IS NULL OR status NOT IN (?)", TemplateContext::INACTIVE_BOOKING_STATUSES).to_a
     end
 
-    # The lead a booking came from: the client's latest converted lead, or
-    # an unconverted lead holding the same PerfectBook contact.
     def booking_origin(booking)
       client = Client.find_by(perfectbook_contact_id: booking.perfectbook_contact_id)
-      lead = client&.converted_leads&.order(:converted_at, :id)&.last
-      lead ||= Lead.where(perfectbook_contact_id: booking.perfectbook_contact_id).order(:created_at, :id).last
+      lead = client&.converted_leads&.where("converted_at <= ?", booking.deposit_seen_at)&.order(:converted_at, :id)&.last
+      lead ||= Lead.where(converted_client_id: nil, perfectbook_contact_id: booking.perfectbook_contact_id).order(:created_at, :id).last
       [ lead, client ]
     end
 
@@ -372,8 +405,6 @@ module WeeklyReport
         "No trip named"
     end
 
-    # First sign the captain answered: an outbound email, a logged note, or
-    # the captain moving the lead on. Mail keeps its thread after conversion.
     def first_reply_at(lead)
       @first_replies ||= {}
       return @first_replies[lead.id] if @first_replies.key?(lead.id)
@@ -384,13 +415,8 @@ module WeeklyReport
       conversation_ids = owners.flat_map do |type, id|
         Conversation.where(linkable_type: type, linkable_id: id).pluck(:id)
       end
-      candidates = []
-      candidates << Message.outbound.where(conversation_id: conversation_ids, status: %w[sent received])
+      @first_replies[lead.id] = Message.outbound.where(conversation_id: conversation_ids, status: %w[sent received])
         .where("sent_at >= ?", since).minimum(:sent_at)
-      candidates << Note.where(notable_type: "Lead", notable_id: lead.id).where("created_at >= ?", since).minimum(:created_at)
-      candidates << captain_moves_to([ lead.id ], Lead::STATUSES + [ "won" ])[lead.id]
-      candidates << lead.converted_at
-      @first_replies[lead.id] = candidates.compact.select { |at| at >= since }.min
     end
 
     def pluralize(count, singular, plural)

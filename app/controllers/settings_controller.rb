@@ -23,7 +23,7 @@ class SettingsController < ApplicationController
       raw = setting_params[:digest_enabled].nil? ? setting_params["digest_enabled"] : setting_params[:digest_enabled]
       @settings.update!(digest_enabled: ActiveModel::Type::Boolean.new.cast(raw))
       redirect_to edit_settings_path, notice: "Settings saved.", status: :see_other
-    elsif setting_params.key?(:weekly_report_enabled)
+    elsif setting_params.key?(:weekly_report_recipient)
       if @settings.update(weekly_report_params)
         redirect_to edit_settings_path(anchor: "weekly-report-heading"), notice: "Weekly report saved.", status: :see_other
       else
@@ -191,7 +191,7 @@ class SettingsController < ApplicationController
   end
 
   def weekly_report_params
-    params.require(:setting).permit(:weekly_report_enabled, :weekly_report_recipient, :travelers_goal)
+    params.require(:setting).permit(:weekly_report_recipient)
   end
 
   def sender_params

@@ -20,4 +20,11 @@ class AdSpendTest < ActiveSupport::TestCase
     end
     assert_includes error.record.errors.full_messages, "Enter the amount spent, like 126 or 126.50"
   end
+  test "requires a campaign name" do
+    error = assert_raises(ActiveRecord::RecordInvalid) do
+      AdSpend.record!(week_start: Date.new(2026, 9, 14), source: "meta_ads", campaign_name: " ", amount_dollars: "100")
+    end
+    assert_includes error.record.errors.full_messages, "Campaign name can't be blank"
+  end
+
 end

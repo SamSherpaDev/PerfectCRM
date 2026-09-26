@@ -791,13 +791,36 @@ Definitions, in `WeeklyReport::Summary`:
 - **Attribution**: the lead's own `source` and `campaign_name`. Ad
   platforms' own conversion counts are for tuning inside each platform.
 
-Settings → Monday ads report turns it on or off, sets the recipient (empty
-sends to the first allowlisted Google sign-in), and holds the travelers
-goal for the calendar year. Ad spend is typed in on the same card per week
-and channel, optionally per campaign; a campaign name matching the leads'
-campaign (any case) splits the row, and a channel entered only as a total
-keeps its campaigns on one row. Preview any past week at
-`/settings/weekly_report`, where "Send it now" mails it to the recipient.
+Reply speed uses only sent or received outbound email in the lead's or
+converted client's conversations. Notes, visitor details, stage changes, and
+conversion are not replies. Open unanswered inquiries stay listed after 24
+hours until answered or closed. Every trip is listed; unknown timing does not
+count as a filled month. AI agreement uses the latest owner move to Chatting,
+Quoted, or Lost (not a fit), or conversion, rather than any past positive call.
+
+Booking attribution uses the client's latest lead converted at or before the
+deposit event, then an unconverted lead with the same PerfectBook contact,
+then the client's source and campaign. Booked value and cost per booking are
+shown by campaign whenever bookings exist, independent of ROAS. Missing spend
+for any paid campaign with activity makes paid total spend, costs, and ROAS
+unknown, shown as "-", and names the campaigns needing spend.
+
+Settings → Monday ads report sets the recipient (empty sends to the first
+allowlisted Google sign-in). The Monday email always sends. Ad spend is typed
+in per week, channel, and required campaign name, matching the lead's campaign
+exactly, including capitalization. There is no channel-total entry. Preview
+any past week at `/settings/weekly_report`, where "Send it now" mails it to the
+recipient.
+
+Goals are year-specific: 10 total travelers booked in 2026 and 100 travelers
+who book during 2027. Other years show no goal. Month and year lines show
+inquiries, qualified leads, bookings, and travelers, without spend totals.
+The 2026 milestone line counts new travelers booked since Oct 1 against the
+next unpassed target: 2 by Oct 31, 6 by Nov 30, and 8 by Dec 31. Flags highlight
+cost per qualified inquiry over $300, inquiries waiting over 24 hours, and
+missing spend. Next review is the next date on or after the report date from
+Oct 10, Oct 24, Nov 7, 2026 and Jan 31, 2027, then each month end. Conversion
+upload reporting is deferred until the conversion export exists.
 
 ## AI assistance
 

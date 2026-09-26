@@ -18,7 +18,6 @@ class Setting < ApplicationRecord
   validates :meta_dataset_id, format: { with: /\A\d{5,20}\z/, message: "is the number shown in Meta Events Manager" }, allow_blank: true
   validates :ad_booking_value_percent, numericality: { only_integer: true, greater_than_or_equal_to: 1, less_than_or_equal_to: 100 }
   validates :weekly_report_recipient, format: { with: URI::MailTo::EMAIL_REGEXP, allow_blank: true }
-  validates :travelers_goal, numericality: { only_integer: true, greater_than: 0, allow_nil: true }
   validates :lead_webhook_url, format: { with: %r{\Ahttps?://[^\s/]+(?:/[^\s]*)?\z}, allow_blank: true }
   validates :google_review_url, format: { with: %r{\Ahttps://[^\s/]+(?:/[^\s]*)?\z}, allow_blank: true,
     message: "must be a full link starting with https://" }

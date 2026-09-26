@@ -10,34 +10,35 @@ class WeeklyReportSettingsTest < ActionDispatch::IntegrationTest
     travel_to Time.zone.local(2026, 9, 22, 9)
   end
 
-  test "settings save the switch, recipient, and travelers goal" do
+  test "settings save the recipient and require campaign spend" do
     get edit_settings_path
     assert_response :success
     assert_select "h2", text: "Monday ads report"
+    assert_select "input[name='setting[weekly_report_enabled]']", count: 0
+    assert_select "input[name='setting[travelers_goal]']", count: 0
+    assert_select "input[name='ad_spend[campaign_name]'][required]"
     assert_select "select[name='ad_spend[week_start]'] option[value='2026-09-14']", text: "Sep 14-20 (last week)"
 
-    patch settings_path, params: { setting: { weekly_report_enabled: "0", weekly_report_recipient: " Sam@Example.com ", travelers_goal: "100" } }
+    patch settings_path, params: { setting: { weekly_report_recipient: " Sam@Example.com " } }
     assert_redirected_to edit_settings_path(anchor: "weekly-report-heading")
     settings = Setting.current.reload
-    assert_not settings.weekly_report_enabled?
     assert_equal "sam@example.com", settings.weekly_report_to
-    assert_equal 100, settings.travelers_goal
   end
 
   test "a bad recipient is shown on the card" do
-    patch settings_path, params: { setting: { weekly_report_enabled: "1", weekly_report_recipient: "not an email", travelers_goal: "10" } }
+    patch settings_path, params: { setting: { weekly_report_recipient: "not an email" } }
     assert_response :unprocessable_entity
     assert_select "[role=alert]", text: /Weekly report recipient is invalid/
   end
 
   test "spend is entered, listed, and removed" do
-    post settings_ad_spends_path, params: { ad_spend: { week_start: "2026-09-14", source: "meta_ads", campaign_name: "", amount_dollars: "140" } }
+    post settings_ad_spends_path, params: { ad_spend: { week_start: "2026-09-14", source: "meta_ads", campaign_name: "social", amount_dollars: "140" } }
     assert_redirected_to edit_settings_path(anchor: "weekly-report-heading")
-    assert_equal "Saved $140 for Meta, week of Sep 14-20.", flash[:notice]
+    assert_equal "Saved $140 for Meta social, week of Sep 14-20.", flash[:notice]
     entry = AdSpend.sole
 
     get edit_settings_path
-    assert_select "li", text: /Meta · \$140/
+    assert_select "li", text: /Meta social · \$140/
 
     delete settings_ad_spend_path(entry)
     assert_not AdSpend.exists?
@@ -46,8 +47,14 @@ class WeeklyReportSettingsTest < ActionDispatch::IntegrationTest
   test "bad spend comes back as a message" do
     post settings_ad_spends_path, params: { ad_spend: { week_start: "", source: "meta_ads", amount_dollars: "140" } }
     assert_equal "Choose the week the money was spent.", flash[:alert]
-    post settings_ad_spends_path, params: { ad_spend: { week_start: "2026-09-14", source: "meta_ads", amount_dollars: "lots" } }
+    post settings_ad_spends_path, params: { ad_spend: { week_start: "2026-09-14", source: "meta_ads", campaign_name: "social", amount_dollars: "lots" } }
     assert_equal "Enter the amount spent, like 126 or 126.50", flash[:alert]
+    assert_not AdSpend.exists?
+  end
+
+  test "channel totals are rejected" do
+    post settings_ad_spends_path, params: { ad_spend: { week_start: "2026-09-14", source: "meta_ads", campaign_name: "", amount_dollars: "140" } }
+    assert_includes flash[:alert], "Campaign name can't be blank"
     assert_not AdSpend.exists?
   end
 

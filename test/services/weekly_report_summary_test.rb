@@ -28,24 +28,24 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
 
   test "counts inquiries and qualified leads by channel and campaign with cost per inquiry" do
     strong = inquiry("Strong", campaign: "ebc_search", fit_band: "strong")
-    inquiry("Weak", campaign: "EBC_search", fit_band: "weak")
+    inquiry("Weak", campaign: "ebc_search", fit_band: "weak")
     auto = inquiry("Auto chat", campaign: "ebc_search", fit_band: "possible")
-    inquiry("Meta ask", source: "meta_ads")
+    inquiry("Meta ask", source: "meta_ads", campaign: "social")
     inquiry("Form", source: "website_form")
     inquiry("Before the week", at: Time.zone.local(2026, 9, 13, 23))
     inquiry("Archived test").archive!
     inquiry("Spam", tag_list: Lead::SUSPECTED_SPAM_TAG)
     move(strong, "chatting", at: Time.zone.local(2026, 9, 16, 9))
     move(auto, "chatting", at: Time.zone.local(2026, 9, 16, 9), actor: :automation)
-    AdSpend.record!(week_start: WEEK, source: "google_ads", campaign_name: "EBC_Search", amount_dollars: "126")
-    AdSpend.record!(week_start: WEEK, source: "meta_ads", campaign_name: "", amount_dollars: "140")
+    AdSpend.record!(week_start: WEEK, source: "google_ads", campaign_name: "ebc_search", amount_dollars: "126")
+    AdSpend.record!(week_start: WEEK, source: "meta_ads", campaign_name: "social", amount_dollars: "140")
 
     summary = WeeklyReport::Summary.new(week_start: WEEK)
-    google = row(summary, "Google EBC_Search")
+    google = row(summary, "Google ebc_search")
     assert_equal [ 12_600, 3, 1 ], [ google.spend_minor, google.inquiries, google.qualified ]
     assert_equal 4_200, google.cost_per_inquiry
     assert_equal 12_600, google.cost_per_qualified
-    meta = row(summary, "Meta")
+    meta = row(summary, "Meta social")
     assert_equal [ 14_000, 1, 0 ], [ meta.spend_minor, meta.inquiries, meta.qualified ]
     assert_nil meta.cost_per_qualified
     assert_equal 1, row(summary, "Website form").inquiries
@@ -56,15 +56,25 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
     assert_equal 1, summary.suspected_spam_count
   end
 
-  test "a channel entered only as a total keeps its campaigns on one row" do
-    inquiry("One", campaign: "ebc_search")
-    inquiry("Two", campaign: "nepal_tours")
-    AdSpend.record!(week_start: WEEK, source: "google_ads", campaign_name: "", amount_dollars: "184")
+  test "campaign identity is exact and incomplete spend makes aggregate costs unknown" do
+    inquiry("One", campaign: "EBC")
+    inquiry("Two", campaign: "ebc")
+    inquiry("Meta", source: "meta_ads", campaign: "social")
+    AdSpend.record!(week_start: WEEK, source: "google_ads", campaign_name: "EBC", amount_dollars: "100")
+    AdSpend.record!(week_start: WEEK, source: "google_ads", campaign_name: "ebc", amount_dollars: "120")
 
-    rows = WeeklyReport::Summary.new(week_start: WEEK).rows
-    google = rows.select { |candidate| candidate.source == "google_ads" }
-    assert_equal 1, google.size
-    assert_equal [ 18_400, 2, 9_200 ], [ google.first.spend_minor, google.first.inquiries, google.first.cost_per_inquiry ]
+    summary = WeeklyReport::Summary.new(week_start: WEEK)
+    assert_equal 10_000, row(summary, "Google EBC").spend_minor
+    assert_equal 12_000, row(summary, "Google ebc").spend_minor
+    assert_equal 1, row(summary, "Google EBC").inquiries
+    assert_equal 1, row(summary, "Google ebc").inquiries
+    assert_nil summary.paid_total.spend_minor
+    assert_nil summary.paid_total.cost_per_inquiry
+    assert_nil summary.paid_total.cost_per_qualified
+    assert_nil summary.paid_total.cost_per_booking
+    assert_nil summary.roas
+    assert_not summary.spend_entered?
+    assert_equal [ "Meta social" ], summary.missing_spend_labels
   end
 
   test "a quiet week still lists both paid channels" do
@@ -74,8 +84,7 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
   end
 
   test "deposits count as bookings for the lead's channel with travelers toward the goal" do
-    Setting.current.update!(travelers_goal: 10)
-    lead = inquiry("Booker", source: "meta_ads", fit_band: "strong", at: Time.zone.local(2026, 9, 1, 9))
+    lead = inquiry("Booker", source: "meta_ads", campaign: "social", fit_band: "strong", at: Time.zone.local(2026, 9, 1, 9))
     client = travel_to(Time.zone.local(2026, 9, 2, 9)) { lead.convert_to_client! }
     client.update!(perfectbook_contact_id: 42)
     seen = Time.zone.local(2026, 9, 17, 12)
@@ -85,10 +94,10 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
       status: "cancelled", party_size: 3, paid_minor: 50_000, total_minor: 700_000, deposit_seen_at: seen, synced_at: seen)
     PerfectBook::Booking.create!(perfectbook_id: 3, perfectbook_contact_id: 99, trip_name: "Annapurna",
       status: "confirmed", party_size: 2, paid_minor: 50_000, deposit_seen_at: Time.zone.local(2026, 7, 10), synced_at: seen)
-    AdSpend.record!(week_start: WEEK, source: "meta_ads", campaign_name: "", amount_dollars: "350")
+    AdSpend.record!(week_start: WEEK, source: "meta_ads", campaign_name: "social", amount_dollars: "350")
 
     summary = WeeklyReport::Summary.new(week_start: WEEK)
-    meta = row(summary, "Meta")
+    meta = row(summary, "Meta social")
     assert_equal 1, meta.booked
     assert_equal 35_000, meta.cost_per_booking
     assert_equal 20.0, summary.roas
@@ -126,4 +135,97 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
     assert_equal [ waiting ], summary.waiting
     assert_equal 2, summary.unanswered_in_week
   end
+  test "notes and stage changes are not replies and old unanswered inquiries remain visible" do
+    lead = inquiry("Details submitted")
+    Note.create!(notable: lead, body: "Visitor filled in details")
+    move(lead, "chatting", at: Time.zone.local(2026, 9, 16, 9))
+    old = inquiry("Old unanswered", at: Time.zone.local(2026, 7, 1))
+    summary = WeeklyReport::Summary.new(week_start: WEEK)
+    assert_nil summary.median_first_reply_hours
+    assert_equal [ old, lead ], summary.waiting
+    assert_equal 1, summary.unanswered_in_week
+  end
+
+  test "only successful outbound email counts including conversations moved to the converted client" do
+    lead = inquiry("Converted")
+    client = lead.convert_to_client!
+    conversation = Conversation.create!(subject: "Trip", linkable: client, last_message_at: Time.current)
+    conversation.messages.create!(direction: "out", status: "failed", subject: "Failed", to_addrs: "a@example.com",
+      text_body: "Hello", sent_at: Time.zone.local(2026, 9, 15, 11))
+    assert_nil WeeklyReport::Summary.new(week_start: WEEK).median_first_reply_hours
+    conversation.messages.create!(direction: "out", status: "sent", subject: "Reply", to_addrs: "a@example.com",
+      text_body: "Hello", sent_at: Time.zone.local(2026, 9, 15, 13))
+    assert_equal 3.0, WeeklyReport::Summary.new(week_start: WEEK).median_first_reply_hours
+  end
+
+  test "qualification requires an owner move to chatting or quoted" do
+    inquiry("Initial chatting", fit_band: "strong", status: "chatting")
+    converted = inquiry("Converted directly", fit_band: "strong")
+    converted.convert_to_client!
+    nudged = inquiry("Nudged", fit_band: "strong")
+    move(nudged, "nudged", at: Time.zone.local(2026, 9, 16))
+    valid = inquiry("Qualified", fit_band: "possible")
+    move(valid, "chatting", at: Time.zone.local(2026, 9, 16))
+    move(valid, "quoted", at: Time.zone.local(2026, 9, 22))
+    assert_equal 1, WeeklyReport::Summary.new(week_start: WEEK).total.qualified
+    assert_equal 0, WeeklyReport::Summary.new(week_start: WEEK + 7).total.qualified
+  end
+
+  test "the latest owner rejection supersedes an earlier positive judgment" do
+    lead = inquiry("Rejected", fit_band: "strong")
+    move(lead, "chatting", at: Time.zone.local(2026, 9, 16))
+    travel_to(Time.zone.local(2026, 9, 17)) { Leads::Transition.call(lead, to: "lost", lost_reason: "not_a_fit") }
+    assert_equal({ agreed: 0, total: 1 }, WeeklyReport::Summary.new(week_start: WEEK).ai_agreement)
+  end
+
+  test "booking attribution uses the lead converted before the deposit" do
+    original = inquiry("Original", source: "google_ads", campaign: "first")
+    client = travel_to(Time.zone.local(2026, 9, 16)) { original.convert_to_client! }
+    client.update!(perfectbook_contact_id: 42)
+    returning = inquiry("Returning", source: "meta_ads", campaign: "return")
+    returning.update!(converted_client: client, converted_at: Time.zone.local(2026, 9, 20))
+    seen = Time.zone.local(2026, 9, 17)
+    PerfectBook::Booking.create!(perfectbook_id: 1, perfectbook_contact_id: 42, status: "confirmed",
+      party_size: 2, paid_minor: 50_000, total_minor: 700_000, deposit_seen_at: seen, synced_at: seen)
+    summary = WeeklyReport::Summary.new(week_start: WEEK)
+    assert_equal 1, row(summary, "Google first").booked
+    assert_equal 0, row(summary, "Meta return").booked
+  end
+
+  test "every trip is listed and unknown timing is incomplete" do
+    6.times do |i|
+      inquiry("Trip #{i}", trip_title: "Trip #{i}", party_size: 2, timing_unknown: true)
+    end
+    inquiry("Complete", trip_title: "Seventh", party_size: 2, travel_month: 1)
+    summary = WeeklyReport::Summary.new(week_start: WEEK)
+    assert_equal 7, summary.trips.size
+    assert_equal 1, summary.details_filled
+  end
+
+  test "goals milestones review dates and flags follow the approved schedule" do
+    assert_equal 10, WeeklyReport::Summary.new(week_start: WEEK).travelers_goal
+    assert_equal 100, WeeklyReport::Summary.new(week_start: Date.new(2027, 1, 4)).travelers_goal
+    assert_nil WeeklyReport::Summary.new(week_start: Date.new(2028, 1, 3)).travelers_goal
+    [ [ Date.new(2026, 10, 10), Date.new(2026, 10, 10) ],
+      [ Date.new(2026, 10, 11), Date.new(2026, 10, 24) ],
+      [ Date.new(2026, 10, 25), Date.new(2026, 11, 7) ],
+      [ Date.new(2026, 11, 8), Date.new(2027, 1, 31) ],
+      [ Date.new(2027, 2, 1), Date.new(2027, 2, 28) ],
+      [ Date.new(2027, 2, 28), Date.new(2027, 2, 28) ] ].each do |today, expected|
+      assert_equal expected, WeeklyReport::Summary.new(today: today).next_review
+    end
+    seen = Time.zone.local(2026, 10, 2)
+    PerfectBook::Booking.create!(perfectbook_id: 1, perfectbook_contact_id: 99, status: "confirmed", party_size: 2,
+      paid_minor: 50_000, deposit_seen_at: seen, synced_at: seen)
+    summary = WeeklyReport::Summary.new(week_start: Date.new(2026, 9, 28), today: Date.new(2026, 10, 5))
+    assert_equal({ deadline: Date.new(2026, 10, 31), target: 2, travelers: 2 }, summary.milestone)
+    assert_includes summary.flags, "No spend entered for the week"
+    lead = inquiry("Expensive", campaign: "EBC", fit_band: "strong")
+    move(lead, "chatting", at: Time.zone.local(2026, 9, 16))
+    AdSpend.record!(week_start: WEEK, source: "google_ads", campaign_name: "EBC", amount_dollars: "301")
+    flags = WeeklyReport::Summary.new(week_start: WEEK).flags
+    assert_includes flags, "Google EBC cost per qualified inquiry over $300"
+    assert_includes flags, "1 inquiry waiting over 24 h"
+  end
+
 end

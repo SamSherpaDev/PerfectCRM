@@ -13,7 +13,7 @@ class AdSpend < ApplicationRecord
   validates :source, inclusion: { in: SOURCES }
   validates :amount_minor, numericality: { only_integer: true, greater_than_or_equal_to: 0 }, allow_nil: true
   validate :amount_entered
-  validates :campaign_name, length: { maximum: 160 },
+  validates :campaign_name, presence: true, length: { maximum: 160 },
     uniqueness: { scope: %i[week_start source], message: "already has spend for that week" }
 
   scope :for_week, ->(week_start) { where(week_start: week_start) }

@@ -20,14 +20,14 @@ module WeeklyReportHelper
 
   # "Google EBC: $126 spend | 3 inq | 1 qual | 0 quoted | 0 booked | $42/inq | $126/qual"
   def report_row_line(row, label: row.label, costs: true)
-    costs &&= !row.spend_minor.nil?
     parts = []
     parts << "#{report_money(row.spend_minor)} spend" if costs
     parts << "#{row.inquiries} inq" << "#{row.qualified} qual" << "#{row.quoted} quoted" << "#{row.booked} booked"
+    parts << "#{report_money(row.booked_value_minor)} booked value" if row.booked.positive?
     if costs
-      parts << "#{report_money(row.cost_per_inquiry)}/inq" if row.cost_per_inquiry
-      parts << "#{report_money(row.cost_per_qualified)}/qual" if row.cost_per_qualified
-      parts << "#{report_money(row.cost_per_booking)}/booking" if row.cost_per_booking
+      parts << "#{report_money(row.cost_per_inquiry)}/inq"
+      parts << "#{report_money(row.cost_per_qualified)}/qual"
+      parts << "#{report_money(row.cost_per_booking)}/booking" if row.booked.positive?
     end
     "#{label}: #{parts.join(' | ')}"
   end
@@ -35,20 +35,36 @@ module WeeklyReportHelper
   def report_goal_line(summary)
     goal = summary.travelers_goal
     year = summary.week_end.year
-    return "No travelers goal set. Add one on Settings." if goal.nil?
+    return if goal.nil?
 
     head = "Goal: #{report_count(goal, 'traveler')} by Dec 31, #{year}. So far #{summary.year_travelers}."
     pace = summary.goal_pace
-    return "#{head} Goal reached." if pace.zero?
+    return "#{head} Goal reached." if summary.year_travelers >= goal
 
     "#{head} Need #{pace.to_s.delete_suffix('.0')} a week for #{report_count(summary.weeks_left_in_year, 'week')}."
   end
 
   def report_period_line(period)
-    line = "#{period.label} to date: #{report_count(period.inquiries, 'inquiry', 'inquiries')}, " \
+    "#{period.label} to date: #{report_count(period.inquiries, 'inquiry', 'inquiries')}, " \
       "#{period.qualified} qualified, #{report_count(period.booked, 'booking')}, " \
       "#{report_count(period.travelers, 'traveler')}"
-    period.spend_minor.to_i.positive? ? "#{line} (#{report_money(period.spend_minor)} spend)" : line
+  end
+
+  def report_milestone_line(summary)
+    milestone = summary.milestone
+    return unless milestone
+
+    "Since Oct 1: #{milestone[:travelers]} new travelers booked (target #{milestone[:target]} by #{milestone[:deadline].strftime('%b %-d')})."
+  end
+
+  def report_flags_line(summary)
+    "Flags: #{summary.flags.presence&.join(' | ') || 'None'}."
+  end
+
+  def report_missing_spend_line(summary)
+    return "Spend not entered for this week yet." if summary.missing_spend_labels.empty?
+
+    "Spend not entered for: #{summary.missing_spend_labels.join(', ')}."
   end
 
   def report_speed_line(summary)
