@@ -1,6 +1,5 @@
-# What the captain spent on one paid channel in one week, typed in on
-# Settings until the ad platforms report it. Feeds cost per inquiry in
-# the Monday report (WeeklyReport::Summary). Weeks run Monday to Sunday.
+# Manual campaign spend for the Monday report. Entry rules and usage:
+# README.md, "Weekly ads report".
 class AdSpend < ApplicationRecord
   SOURCES = %w[google_ads meta_ads].freeze
   AMOUNT_FORMAT = /\A\d+(\.\d{1,2})?\z/

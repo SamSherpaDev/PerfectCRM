@@ -542,9 +542,12 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
   click IDs when marketing consent is off. Archived, suspected-spam, and
   lost "not a fit" leads are never reported. Tests using the business mailbox
   or an owner address in `ALLOWED_GOOGLE_EMAILS` are also excluded.
-- Purchase time is the first observation of `paid_minor > 0` on the booking
-  mirror, retained across later syncs and refunds. Existing paid mirrors are
-  first observed when the payment-time migration runs. Qualification and quote
+- Purchase time is `first_paid_at`, stamped by the booking model on the first
+  observation of `paid_minor > 0` and retained across later syncs and refunds.
+  The repair migration replaces the original shared backfill timestamp with
+  each mirror's creation date for still-paid rows created before that timestamp;
+  see `test/models/first_paid_at_repair_migration_test.rb`.
+  Qualification and quote
   milestones use activity history; qualification also requires the current
   fit band to be strong/possible at sweep time, without requiring an AI verdict
   in history. Its timestamp is the first owner transition to Chatting or Quoted.
@@ -789,11 +792,11 @@ Definitions, in `WeeklyReport::Summary`:
   and suspected-spam leads across all sources; Paid total includes only Google
   Ads and Meta Ads.
 - **Booked**: a mirrored PerfectBook booking whose deposit was first seen
-  paid that week (`first_paid_at`, stamped by the booking model on first
-  observed payment), unless
+  paid that week (`first_paid_at`; payment timing and historical backfill are
+  defined in [Ad conversions](#ad-conversions)), unless
   since cancelled, voided, or refunded. It counts toward the channel and
   campaign selected by the attribution rules below; travelers are its party
-  size. Already-paid mirrors at rollout use their creation date. Booked value
+  size. Booked value
   sums the full booking total for USD bookings only, not the deposit amount;
   non-USD bookings still count as bookings and travelers.
 - **Attribution**: the lead's own `source` and `campaign_name`. Ad
@@ -805,9 +808,10 @@ conversion are not replies. Open unanswered inquiries stay listed after 24
 hours until answered or closed. Waiting is a live list even in past-week
 previews; historical reports are recomputed from current records, not saved
 snapshots. Every trip is listed; unknown timing does not count as a filled
-month. AI agreement uses the latest owner move to Chatting,
-Quoted, or Lost (not a fit), or conversion, within the 28 days ending on the
-report week's Sunday. The window uses judgment dates, not inquiry dates.
+month. AI agreement uses the latest owner move to Chatting, Quoted, or Lost,
+or conversion, within the 28 days ending on the report week's Sunday. A latest
+Lost judgment counts only when its reason is not a fit; other loss reasons
+exclude the lead from the comparison. The window uses judgment dates, not inquiry dates.
 Owner stage changes retain their loss reason even if automation later changes
 the lead; older events without that snapshot use the lead's current reason.
 
@@ -841,8 +845,8 @@ cost per qualified inquiry over $300, inquiries waiting over 24 hours, and
 missing spend. Next review is the next date on or after the report date from
 Oct 10, Oct 24, Nov 7, 2026 and Jan 31, 2027, then each month end. Review dates
 and milestone deadlines use the day the report is generated, even when
-previewing a past week. Conversion upload reporting is deferred until the
-conversion export exists.
+previewing a past week. Conversion upload counts are not included in this
+report; delivery and export status are covered in [Ad conversions](#ad-conversions).
 
 ## AI assistance
 
