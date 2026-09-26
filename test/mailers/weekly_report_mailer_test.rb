@@ -47,7 +47,7 @@ class WeeklyReportMailerTest < ActionMailer::TestCase
       perfectbook_contact_id: 42, received_at: Time.zone.local(2026, 9, 15))
     seen = Time.zone.local(2026, 9, 17)
     PerfectBook::Booking.create!(perfectbook_id: 1, perfectbook_contact_id: 42, status: "confirmed",
-      party_size: 2, paid_minor: 50_000, total_minor: 700_000, deposit_seen_at: seen, synced_at: seen)
+      party_size: 2, paid_minor: 50_000, total_minor: 700_000, first_paid_at: seen, synced_at: seen)
     mail = WeeklyReportMailer.weekly
     [ mail.text_part, mail.html_part ].each do |part|
       body = part.body.decoded
@@ -66,7 +66,7 @@ class WeeklyReportMailerTest < ActionMailer::TestCase
   test "a rounded zero pace does not claim the goal is reached and unknown years omit the goal" do
     seen = Time.zone.local(2026, 1, 6)
     PerfectBook::Booking.create!(perfectbook_id: 1, perfectbook_contact_id: 99, status: "confirmed", party_size: 9,
-      paid_minor: 50_000, deposit_seen_at: seen, synced_at: seen)
+      paid_minor: 50_000, first_paid_at: seen, synced_at: seen)
     mail = WeeklyReportMailer.weekly(week_start: Date.new(2026, 1, 5))
     [ mail.text_part, mail.html_part ].each do |part|
       assert_includes part.body.decoded, "So far 9."

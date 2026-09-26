@@ -789,7 +789,8 @@ Definitions, in `WeeklyReport::Summary`:
   and suspected-spam leads across all sources; Paid total includes only Google
   Ads and Meta Ads.
 - **Booked**: a mirrored PerfectBook booking whose deposit was first seen
-  paid that week (`deposit_seen_at`, stamped by the bookings sync), unless
+  paid that week (`first_paid_at`, stamped by the booking model on first
+  observed payment), unless
   since cancelled, voided, or refunded. It counts toward the channel and
   campaign selected by the attribution rules below; travelers are its party
   size. Already-paid mirrors at rollout use their creation date. Booked value

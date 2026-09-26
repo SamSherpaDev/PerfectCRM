@@ -384,13 +384,13 @@ module WeeklyReport
     def deposits_in(window)
       @deposits ||= {}
       @deposits[window] ||= PerfectBook::Booking.where("paid_minor > 0")
-        .where(deposit_seen_at: window)
+        .where(first_paid_at: window)
         .where("status IS NULL OR status NOT IN (?)", TemplateContext::INACTIVE_BOOKING_STATUSES).to_a
     end
 
     def booking_origin(booking)
       client = Client.find_by(perfectbook_contact_id: booking.perfectbook_contact_id)
-      lead = client&.converted_leads&.where("converted_at <= ?", booking.deposit_seen_at)&.order(:converted_at, :id)&.last
+      lead = client&.converted_leads&.where("converted_at <= ?", booking.first_paid_at)&.order(:converted_at, :id)&.last
       lead ||= Lead.where(converted_client_id: nil, perfectbook_contact_id: booking.perfectbook_contact_id).order(:created_at, :id).last
       [ lead, client ]
     end

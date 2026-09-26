@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_26_221059) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_26_225100) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -442,7 +442,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_26_221059) do
     t.string "deep_link"
     t.integer "departure_id"
     t.string "departure_place"
-    t.datetime "deposit_seen_at"
     t.text "documents_json", default: "{}", null: false
     t.date "end_date"
     t.datetime "first_paid_at"

@@ -229,10 +229,10 @@ class PerfectBookSyncJobsTest < ActiveSupport::TestCase
     client = FakePbCatalogClient.new(bookings_by_contact: { 7 => [ pb_booking ] })
     first = Time.zone.local(2026, 9, 16, 9)
     travel_to(first) { PerfectBook::SyncBookingsJob.perform_now(client: client) }
-    assert_equal first, PerfectBook::Booking.find_by(perfectbook_id: 11).deposit_seen_at
+    assert_equal first, PerfectBook::Booking.find_by(perfectbook_id: 11).first_paid_at
 
     travel_to(first + 1.day) { PerfectBook::SyncBookingsJob.perform_now(client: client) }
-    assert_equal first, PerfectBook::Booking.find_by(perfectbook_id: 11).deposit_seen_at
+    assert_equal first, PerfectBook::Booking.find_by(perfectbook_id: 11).first_paid_at
   end
 
   test "bookings sync drops rows the server no longer returns" do

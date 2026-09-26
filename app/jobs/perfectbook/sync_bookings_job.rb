@@ -54,8 +54,6 @@ module PerfectBook
             checklist_json: booking.checklist.presence || [],
             synced_at: now
           )
-          # First sync that saw money paid: the weekly report's deposit date.
-          booking_mirror.deposit_seen_at ||= now if booking_mirror.paid_minor.to_i.positive?
           booking_mirror.save!
           DemoRecord.where(record_type: Booking.name, record_id: booking_mirror.id).delete_all
         end

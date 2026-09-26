@@ -89,11 +89,11 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
     client.update!(perfectbook_contact_id: 42)
     seen = Time.zone.local(2026, 9, 17, 12)
     PerfectBook::Booking.create!(perfectbook_id: 1, perfectbook_contact_id: 42, trip_name: "Everest Base Camp",
-      status: "confirmed", party_size: 2, paid_minor: 50_000, total_minor: 700_000, deposit_seen_at: seen, synced_at: seen)
+      status: "confirmed", party_size: 2, paid_minor: 50_000, total_minor: 700_000, first_paid_at: seen, synced_at: seen)
     PerfectBook::Booking.create!(perfectbook_id: 2, perfectbook_contact_id: 42, trip_name: "Everest Base Camp",
-      status: "cancelled", party_size: 3, paid_minor: 50_000, total_minor: 700_000, deposit_seen_at: seen, synced_at: seen)
+      status: "cancelled", party_size: 3, paid_minor: 50_000, total_minor: 700_000, first_paid_at: seen, synced_at: seen)
     PerfectBook::Booking.create!(perfectbook_id: 3, perfectbook_contact_id: 99, trip_name: "Annapurna",
-      status: "confirmed", party_size: 2, paid_minor: 50_000, deposit_seen_at: Time.zone.local(2026, 7, 10), synced_at: seen)
+      status: "confirmed", party_size: 2, paid_minor: 50_000, first_paid_at: Time.zone.local(2026, 7, 10), synced_at: seen)
     AdSpend.record!(week_start: WEEK, source: "meta_ads", campaign_name: "social", amount_dollars: "350")
 
     summary = WeeklyReport::Summary.new(week_start: WEEK)
@@ -186,7 +186,7 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
     returning.update!(converted_client: client, converted_at: Time.zone.local(2026, 9, 20))
     seen = Time.zone.local(2026, 9, 17)
     PerfectBook::Booking.create!(perfectbook_id: 1, perfectbook_contact_id: 42, status: "confirmed",
-      party_size: 2, paid_minor: 50_000, total_minor: 700_000, deposit_seen_at: seen, synced_at: seen)
+      party_size: 2, paid_minor: 50_000, total_minor: 700_000, first_paid_at: seen, synced_at: seen)
     summary = WeeklyReport::Summary.new(week_start: WEEK)
     assert_equal 1, row(summary, "Google first").booked
     assert_equal 0, row(summary, "Meta return").booked
@@ -201,7 +201,7 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
     assert_equal "EBC", client.reload.campaign_name
     seen = Time.zone.local(2026, 9, 17)
     PerfectBook::Booking.create!(perfectbook_id: 1, perfectbook_contact_id: 42, status: "confirmed",
-      party_size: 2, paid_minor: 50_000, total_minor: 700_000, deposit_seen_at: seen, synced_at: seen)
+      party_size: 2, paid_minor: 50_000, total_minor: 700_000, first_paid_at: seen, synced_at: seen)
 
     summary = WeeklyReport::Summary.new(week_start: WEEK)
     assert_equal 1, row(summary, "Meta").booked
@@ -277,7 +277,7 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
     end
     seen = Time.zone.local(2026, 10, 2)
     PerfectBook::Booking.create!(perfectbook_id: 1, perfectbook_contact_id: 99, status: "confirmed", party_size: 2,
-      paid_minor: 50_000, deposit_seen_at: seen, synced_at: seen)
+      paid_minor: 50_000, first_paid_at: seen, synced_at: seen)
     summary = WeeklyReport::Summary.new(week_start: Date.new(2026, 9, 28), today: Date.new(2026, 10, 5))
     assert_equal({ deadline: Date.new(2026, 10, 31), target: 2, travelers: 2 }, summary.milestone)
     assert_includes summary.flags, "No spend entered for the week"
