@@ -3,7 +3,7 @@ Hi <%= @quote.owner_name %>,
 Here is your quote <%= @quote.reference %> for <%= @quote.subject_label %><% if @quote.departure_label.present? %> (<%= @quote.departure_label %>)<% end %>.
 
 <% @quote.lines.each do |line| %>
-- <%= line.description %> x <%= line.quantity %> — <%= money_in(line.total_minor, @quote.currency) %>
+- <%= line.description %> x <%= line.quantity %>: <%= money_in(line.total_minor, @quote.currency) %>
 <% end %>
 
 Total <%= money_in(@quote.subtotal_minor, @quote.currency) %><% if @quote.party_size %> for <%= pluralize(@quote.party_size, "guest") %><% end %><% if @quote.valid_until %> · valid until <%= date_short(@quote.valid_until) %><% end %>.
@@ -16,7 +16,7 @@ A note from Sam
 <%= @quote.notes %>
 <% end %>
 
-The full quote is attached as a PDF. To accept, tap this link — no account needed:
+The full quote is attached as a PDF. To accept, tap the link below. You do not need an account.
 <%= @accept_url %>
 
 Questions? Just reply to this email.

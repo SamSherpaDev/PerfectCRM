@@ -1,5 +1,6 @@
 <%# Preview contents: rendered subject + body with missing markers badged. %>
-<% context = ::TemplateRenderer::SAMPLE_CONTEXT %>
+<%# Settings-backed links use the real value so the preview shows what sends. %>
+<% context = ::TemplateRenderer::SAMPLE_CONTEXT.merge("google_review_link" => Setting.current.google_review_url.presence) %>
 <% subject_html = ::TemplateRenderer.render_html(template.subject.to_s, context) %>
 <% body_html = ::TemplateRenderer.render_html(template.body.to_s, context) %>
 <% missing = template.placeholders - ::TemplateRenderer::PLACEHOLDERS %>
@@ -8,10 +9,10 @@
     <p class="text-[11.5px] font-medium muted">Subject</p>
     <p class="mt-0.5 text-sm font-medium text-ink"><%= highlight_missing(subject_html).presence || content_tag(:span, "No subject", class: "muted") %></p>
   </div>
-  <div class="text-sm leading-relaxed text-ink-2">
+  <div class="space-y-3 text-sm leading-relaxed text-ink-2">
     <%= highlight_missing(simple_format(body_html)).presence || content_tag(:p, "Nothing to preview yet.", class: "muted") %>
   </div>
   <% if missing.any? %>
-    <p class="hint">Unknown placeholders: <%= missing.map { |name| "{{#{name}}}" }.join(", ") %>. They send as [missing: …] — fix the spelling or leave them out.</p>
+    <p class="hint">Unknown placeholders: <%= missing.map { |name| "{{#{name}}}" }.join(", ") %>. They send as [missing: …], so fix the spelling or leave them out.</p>
   <% end %>
 </div>

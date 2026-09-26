@@ -15,9 +15,12 @@ class Setting < ApplicationRecord
   validates :singleton_key, inclusion: { in: [ 1 ] }, uniqueness: true
   validates :appearance, inclusion: { in: APPEARANCES }
   validates :lead_webhook_url, format: { with: %r{\Ahttps?://[^\s/]+(?:/[^\s]*)?\z}, allow_blank: true }
+  validates :google_review_url, format: { with: %r{\Ahttps://[^\s/]+(?:/[^\s]*)?\z}, allow_blank: true,
+    message: "must be a full link starting with https://" }
   validate :signature_logo_requirements
 
   before_save :normalize_signature
+  before_validation { self.google_review_url = google_review_url.to_s.strip }
 
   def self.current
     find_by(singleton_key: 1) || create_or_find_by!(singleton_key: 1)

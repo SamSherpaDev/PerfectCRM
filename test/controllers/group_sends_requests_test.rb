@@ -44,6 +44,41 @@ class GroupSendsRequestsTest < ActionDispatch::IntegrationTest
     assert_equal 0, Message.count
   end
 
+  test "review ask warns about an empty Google link without blocking sends" do
+    Setting.current.update!(google_review_url: "")
+    @template.update!(purpose: :review_ask, subject: "How was your trip?",
+      body: "Please review us.\n\n{{google_review_link}}\n\nThank you")
+    sign_in
+    params = { template_id: @template.id, recipients: "Maya <maya@example.com>" }
+
+    post merge_templates_path, params: params
+    assert_response :success
+    assert_select ".badge-warning", text: "Missing: google review link", count: 1
+    assert_select "input[type=submit][value='Send 1 personal emails']:not([disabled])", count: 1
+    assert_select "section[aria-label='Merged messages'] li", text: /google review link/, count: 0
+
+    assert_enqueued_jobs 1, only: OutboundDeliveryJob do
+      post group_sends_path, params: params
+    end
+    assert_redirected_to group_send_path(GroupSend.last)
+    assert_includes GroupSend.last.messages.first.text_body, "Please review us.\n\nThank you"
+    assert_not_includes GroupSend.last.messages.first.text_body, "google_review_link"
+
+    Setting.current.update!(google_review_url: "https://g.page/r/example/review")
+    post merge_templates_path, params: params
+    assert_response :success
+    assert_select ".badge-warning", text: "Missing: google review link", count: 0
+    assert_select "section[aria-label='Merged messages'] li", text: %r{https://g.page/r/example/review}
+  end
+
+  test "other templates do not warn about an empty Google review link" do
+    Setting.current.update!(google_review_url: "")
+    sign_in
+    post merge_templates_path, params: { template_id: @template.id, recipients: "Maya <maya@example.com>" }
+    assert_response :success
+    assert_select ".badge-warning", text: "Missing: google review link", count: 0
+  end
+
   test "a clean batch sends one personal email each and opens the summary" do
     sign_in
     assert_difference("GroupSend.count", 1) do

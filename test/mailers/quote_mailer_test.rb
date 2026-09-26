@@ -22,7 +22,7 @@ class QuoteMailerTest < ActionMailer::TestCase
   test "quote email comes from info@ with PDF and accept link" do
     mail = QuoteMailer.quote_email(@quote)
     assert_equal [ "maya@example.com" ], mail.to
-    assert_equal "Sherpa Holidays <info@sherpaholidays.com>", mail[:from].value
+    assert_equal "SherpaHolidays <info@sherpaholidays.com>", mail[:from].value
     assert_includes mail.subject, @quote.reference
     assert_equal 1, mail.attachments.size
     assert_match(/quote-#{@quote.reference}\.pdf/, mail.attachments.first.filename)

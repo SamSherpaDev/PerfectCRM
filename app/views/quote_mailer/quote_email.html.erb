@@ -4,7 +4,7 @@
 
 <ul>
   <% @quote.lines.each do |line| %>
-    <li><%= line.description %> × <%= line.quantity %> — <%= money_in(line.total_minor, @quote.currency) %></li>
+    <li><%= line.description %> × <%= line.quantity %>: <%= money_in(line.total_minor, @quote.currency) %></li>
   <% end %>
 </ul>
 
@@ -17,7 +17,7 @@
   <p><strong>A note from Sam</strong><br><%= simple_format(@quote.notes) %></p>
 <% end %>
 
-<p>The full quote is attached as a PDF. To accept, tap this link — no account needed:</p>
+<p>The full quote is attached as a PDF. To accept, tap the link below. You do not need an account.</p>
 <p><%= link_to "Accept quote #{@quote.reference}", @accept_url %></p>
 
 <p>Questions? Just reply to this email.</p>

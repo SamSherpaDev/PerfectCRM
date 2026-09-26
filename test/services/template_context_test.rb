@@ -18,6 +18,12 @@ class TemplateContextTest < ActiveSupport::TestCase
     assert_equal "Sam Sherpa\nSherpa Holidays", context["signature"]
   end
 
+  test "fills the Google review link from settings only once it is set" do
+    assert_nil TemplateContext.for(@client)["google_review_link"]
+    Setting.current.update!(google_review_url: "https://g.page/r/sherpa/review")
+    assert_equal "https://g.page/r/sherpa/review", TemplateContext.for(@client)["google_review_link"]
+  end
+
   test "fills advisor name from the referring organization" do
     org = Organization.create!(name: "Adventure Co.", email: "a@example.com")
     @client.update!(referred_by_organization: org)

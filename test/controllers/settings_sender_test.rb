@@ -17,6 +17,24 @@ class SettingsSenderTest < ActionDispatch::IntegrationTest
     assert_select ".flash-notice", text: /saved/
   end
 
+  test "Google review link saves from Settings and rejects non-https links" do
+    sign_in
+    get edit_settings_path
+    assert_select "h2", "Google reviews"
+    patch settings_path, params: { setting: { google_review_url: " https://g.page/r/sherpa/review " } }
+    assert_redirected_to edit_settings_path
+    assert_equal "https://g.page/r/sherpa/review", Setting.current.reload.google_review_url
+
+    patch settings_path, params: { setting: { google_review_url: "g.page/r/sherpa/review" } }
+    assert_response :unprocessable_entity
+    assert_select "[role=alert]", text: /Write-review link must be a full link starting with https:\/\//
+    assert_equal "https://g.page/r/sherpa/review", Setting.current.reload.google_review_url
+
+    patch settings_path, params: { setting: { google_review_url: "" } }
+    assert_redirected_to edit_settings_path
+    assert_equal "", Setting.current.reload.google_review_url
+  end
+
   test "sender settings render on the edit page" do
     sign_in
     get edit_settings_path

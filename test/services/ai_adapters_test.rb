@@ -42,9 +42,9 @@ class AiAdaptersTest < ActiveSupport::TestCase
   end
 
   test "prompt version is pinned and logged" do
-    assert_equal "v1", Ai::Prompts.version
+    assert_equal "v2", Ai::Prompts.version
     system, user = Ai::Prompts.render(:summarize_thread, thread: "hello")
-    assert system.include?("Sherpa Holidays")
+    assert system.include?("SherpaHolidays")
     assert user.include?("hello")
   end
 

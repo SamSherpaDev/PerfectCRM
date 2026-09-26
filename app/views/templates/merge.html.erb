@@ -69,6 +69,9 @@
         <% end %>
       </div>
       <%= card_caption "Each traveler gets their own rendered copy of “#{@selected.name}”. Review the messages and fix any recipient errors before sending." %>
+      <% if @selected.review_ask? && Setting.current.google_review_url.blank? %>
+        <p><%= badge "Missing: google review link", :warning %></p>
+      <% end %>
       <% if @batch.messages.any? %>
         <ul class="space-y-4">
           <% @batch.messages.each do |message| %>

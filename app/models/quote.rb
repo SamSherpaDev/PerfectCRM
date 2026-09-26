@@ -91,7 +91,7 @@ class Quote < ApplicationRecord
   end
 
   def subject_label
-    trip_name.presence || "Tailored Sherpa Holidays journey"
+    trip_name.presence || "Custom SherpaHolidays trip"
   end
 
   # Money is integer minor units; lines own their totals (see QuoteLine).

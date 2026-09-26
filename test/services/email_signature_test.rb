@@ -85,7 +85,7 @@ class EmailSignatureTest < ActiveSupport::TestCase
     assert_equal "cid:#{EmailSignature::CID}", img["src"]
     assert_equal "120", img["width"]
     assert_equal "40", img["height"]
-    assert_equal "Sherpa Holidays", img["alt"]
+    assert_equal "SherpaHolidays", img["alt"]
   end
 
   test "block fits a square mark and never upscales a small one" do
