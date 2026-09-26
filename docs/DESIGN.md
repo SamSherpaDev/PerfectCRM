@@ -3,7 +3,7 @@
 > Category: Travel & Hospitality, internal client-communication app
 > Sibling of PerfectBook. Same paper, ink, ochre seal and soft relief; its own mark, mountain, drawings and phone layout.
 
-This file is the brand contract for PerfectCRM, the client relationship and communication hub of Sherpa Holidays, planned at perfectcrm.sherpaholidays.com. It is written in the Open Design format so that an implementation crew can build the app from it without the concept's author.
+This file is the brand contract for PerfectCRM, the client relationship and communication hub of SherpaHolidays, planned at perfectcrm.sherpaholidays.com. It is written in the Open Design format so that an implementation crew can build the app from it without the concept's author.
 
 PerfectCRM is a **sibling of PerfectBook, not a twin**. The parent contract is PerfectBook's `docs/DESIGN.md` (sections 1 to 8 measure the public website, section 9 is the Washi token set). This file does not restate the website measurements. It restates the tokens the CRM commits to (so the file stands alone), then records what the CRM shares verbatim with PerfectBook, what it adds, and what it must never do. [DESIGN-SYNC.md](DESIGN-SYNC.md) describes the current source locations and the proposed shared-package workflow.
 

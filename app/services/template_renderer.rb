@@ -90,8 +90,7 @@ class TemplateRenderer
   end
   private_class_method :drop_empty_optional_lines
 
-  # Unknown AND empty values render [missing: name]: a half-filled message
-  # is never sent silently (correction A from the templates review).
+  # Treat blank values as absent so substitution applies its missing-value policy.
   def self.normalize(context)
     normalized = {}
     context.each { |key, value| normalized[key.to_s] = value unless value.blank? }
