@@ -115,9 +115,9 @@ module AdConversions
     clamp = ->(time) { [ [ time || now, floor ].max, now ].min }
     events = { "lead" => { occurred_at: clamp.(lead.received_at || lead.created_at), value_minor: VALUES_MINOR["lead"] } }
 
-    history = lead.activity_events.where(kind: %w[stage_change automation]).order(:occurred_at, :id).to_a
+    history = lead.activity_events.where(kind: "stage_change").order(:occurred_at, :id).to_a
     if QUALIFIED_BANDS.include?(lead.fit_band) && (at = qualified_at(history))
-      events["qualified"] = { occurred_at: clamp.(at), value_minor: VALUES_MINOR["qualified"] }
+      events["qualified"] = { occurred_at: at, value_minor: VALUES_MINOR["qualified"] }
     end
 
     quote_times = history.filter_map do |event|
@@ -136,19 +136,11 @@ module AdConversions
   end
 
   def qualified_at(history)
-    owner_at = nil
-    band = nil
-    history.each do |event|
+    history.find do |event|
       data = event.metadata
-      if event.kind == "stage_change" && QUALIFIED_STATUSES.include?(data["to"]) &&
-          data["actor"].present? && data["actor"] != "automation"
-        owner_at ||= event.occurred_at
-      elsif event.kind == "automation"
-        band = data["fit_band"]
-      end
-      return event.occurred_at if owner_at && QUALIFIED_BANDS.include?(band)
-    end
-    nil
+      QUALIFIED_STATUSES.include?(data["to"]) &&
+        data["actor"].present? && data["actor"] != "automation"
+    end&.occurred_at
   end
 
   # The first payment observed on an active booking after the inquiry.

@@ -89,7 +89,7 @@ class AdConversionsTest < ActiveSupport::TestCase
     assert_equal 300_00, row.value_minor
   end
 
-  test "qualified needs a strong or possible verdict and the owner's chatting or quoted" do
+  test "qualified needs a current strong or possible band and the owner's chatting or quoted" do
     lead = ad_lead(fit_band: "weak", status: "chatting")
     assert_equal %w[lead], AdConversions.record!(lead, now: @now).map(&:event)
 
@@ -120,6 +120,17 @@ class AdConversionsTest < ActiveSupport::TestCase
     other = ad_lead(fit_band: "strong", status: "chatting")
     other.update!(fit_band: "weak")
     assert_equal %w[lead], AdConversions.record!(other).map(&:event)
+  end
+
+  test "qualification does not require any automation verdict history" do
+    lead = ad_lead
+    lead.update!(fit_band: "strong")
+    travel_to(@now - 1.hour) { Leads::Transition.call(lead, to: "chatting") }
+    Leads::Transition.call(lead, to: "quoted")
+    with_meta { AdConversions::ExportJob.perform_now(now: @now) }
+    row = lead.ad_conversions.find_by!(event: "qualified")
+    assert_equal @now - 1.hour, row.occurred_at
+    assert_equal "sent", row.meta_status
   end
 
   test "each outcome is recorded once even when the status moves back and forth" do
@@ -367,13 +378,13 @@ class AdConversionsTest < ActiveSupport::TestCase
     assert_equal @now - 1.day, row.occurred_at
   end
 
-  test "qualification uses the later verdict or owner action and respects intervening weak verdicts" do
+  test "qualification uses the owner transition time and checks the current band" do
     lead = ad_lead(received_at: @now - 12.days)
     travel_to(@now - 10.days) { Leads::Transition.call(lead, to: "chatting") }
     verdict(lead, "possible")
     row = AdConversions.record!(lead).find { |item| item.event == "qualified" }
-    assert_equal @now, row.occurred_at
-    with_meta { assert_equal :sent, AdConversions.deliver_meta!(row) }
+    assert_equal @now - 10.days, row.occurred_at
+    with_meta { assert_equal :skipped, AdConversions.deliver_meta!(row) }
 
     other = ad_lead(received_at: @now - 12.days)
     verdict(other, "strong", at: @now - 10.days)
