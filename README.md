@@ -796,11 +796,15 @@ converted client's conversations. Notes, visitor details, stage changes, and
 conversion are not replies. Open unanswered inquiries stay listed after 24
 hours until answered or closed. Every trip is listed; unknown timing does not
 count as a filled month. AI agreement uses the latest owner move to Chatting,
-Quoted, or Lost (not a fit), or conversion, rather than any past positive call.
+Quoted, or Lost (not a fit), or conversion, within the 28 days ending on the
+report week's Sunday. The window uses judgment dates, not inquiry dates.
+Owner stage changes retain their loss reason even if automation later changes
+the lead; older events without that snapshot use the lead's current reason.
 
 Booking attribution uses the client's latest lead converted at or before the
 deposit event, then an unconverted lead with the same PerfectBook contact,
-then the client's source and campaign. Booked value and cost per booking are
+then the client's source and campaign. Source and campaign always come from
+the same selected record, even when its campaign is empty. Booked value and cost per booking are
 shown by campaign whenever bookings exist, independent of ROAS. Missing spend
 for any paid campaign with activity makes paid total spend, costs, and ROAS
 unknown, shown as "-", and names the campaigns needing spend.

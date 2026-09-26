@@ -12,7 +12,7 @@ class LeadsTransitionTest < ActiveSupport::TestCase
     assert_equal "chatting", @lead.reload.status
     event = @lead.activity_events.find_by(kind: "stage_change")
     assert event.present?
-    assert_equal({ "from" => "new", "to" => "chatting", "actor" => "captain" }, event.metadata)
+    assert_equal({ "from" => "new", "to" => "chatting", "actor" => "captain", "lost_reason" => nil }, event.metadata)
   end
 
   test "automation may set new, chatting, and lost only" do

@@ -185,10 +185,9 @@ module WeeklyReport
     # Only the captain's moves count, never an automation's.
     def ai_agreement
       window = (range.last - AGREEMENT_WINDOW)..range.last
-      judged = counted_leads.where.not(fit_band: [ nil, "" ])
-        .where("COALESCE(received_at, leads.created_at) BETWEEN ? AND ?", window.first, window.last).to_a
+      judged = counted_leads.where.not(fit_band: [ nil, "" ]).to_a
       latest = ActivityEvent.where(subject_type: "Lead", kind: "stage_change", subject_id: judged.map(&:id))
-        .order(:occurred_at, :id).each_with_object({}) do |event, calls|
+        .where(occurred_at: window).order(:occurred_at, :id).each_with_object({}) do |event, calls|
           data = event.metadata
           next if data["actor"] == "automation" || !%w[chatting quoted lost].include?(data["to"])
 
@@ -196,11 +195,11 @@ module WeeklyReport
         end
       verdicts = judged.map do |lead|
         call = latest[lead.id]
-        owner_yes = if lead.converted_at && (call.nil? || lead.converted_at >= call.occurred_at)
+        owner_yes = if lead.converted_at && window.cover?(lead.converted_at) && (call.nil? || lead.converted_at >= call.occurred_at)
           true
         elsif call
           if call.metadata["to"] == "lost"
-            next unless lead.lost_reason == "not_a_fit"
+            next unless call.metadata.fetch("lost_reason", lead.lost_reason) == "not_a_fit"
 
             false
           else
@@ -271,8 +270,8 @@ module WeeklyReport
       quoted_in(window).each { |lead| row_for.call(lead.source, lead.campaign_name).quoted += 1 }
       deposits_in(window).each do |booking|
         lead, client = booking_origin(booking)
-        source = lead&.source || client&.source.presence
-        row = row_for.call(source, lead&.campaign_name || client&.campaign_name)
+        origin = lead || client
+        row = row_for.call(origin&.source.presence, origin&.campaign_name)
         row.booked += 1
         row.booked_value_minor += booking.total_minor.to_i if booking.currency.to_s.upcase == "USD"
       end

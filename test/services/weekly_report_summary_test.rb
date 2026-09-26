@@ -192,6 +192,67 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
     assert_equal 0, row(summary, "Meta return").booked
   end
 
+  test "returning leads without a campaign do not inherit the client's campaign" do
+    original = inquiry("Original", source: "google_ads", campaign: "EBC", perfectbook_contact_id: 42)
+    client = travel_to(Time.zone.local(2026, 9, 15)) { original.convert_to_client! }
+    returning = inquiry("Returning", source: "meta_ads", perfectbook_contact_id: 42)
+    travel_to(Time.zone.local(2026, 9, 16)) { returning.convert_to_client! }
+    assert_equal client, returning.reload.converted_client
+    assert_equal "EBC", client.reload.campaign_name
+    seen = Time.zone.local(2026, 9, 17)
+    PerfectBook::Booking.create!(perfectbook_id: 1, perfectbook_contact_id: 42, status: "confirmed",
+      party_size: 2, paid_minor: 50_000, total_minor: 700_000, deposit_seen_at: seen, synced_at: seen)
+
+    summary = WeeklyReport::Summary.new(week_start: WEEK)
+    assert_equal 1, row(summary, "Meta").booked
+    assert_equal 700_000, row(summary, "Meta").booked_value_minor
+    assert_nil row(summary, "Meta EBC")
+    assert_equal 0, row(summary, "Google EBC").booked
+  end
+
+  test "owner rejection survives automated reason changes and reopening" do
+    lead = inquiry("Rejected", fit_band: "strong")
+    travel_to(Time.zone.local(2026, 9, 16)) { Leads::Transition.call(lead, to: "lost", lost_reason: "not_a_fit") }
+    event = lead.activity_events.find_by!(kind: "stage_change")
+    assert_equal "not_a_fit", event.metadata["lost_reason"]
+    travel_to(Time.zone.local(2026, 9, 17)) do
+      Leads::Transition.call(lead, to: "lost", lost_reason: "dates", actor: :automation)
+    end
+    assert_equal({ agreed: 0, total: 1 }, WeeklyReport::Summary.new(week_start: WEEK).ai_agreement)
+    move(lead, "chatting", at: Time.zone.local(2026, 9, 18), actor: :automation)
+    assert_nil lead.reload.lost_reason
+    assert_equal({ agreed: 0, total: 1 }, WeeklyReport::Summary.new(week_start: WEEK).ai_agreement)
+  end
+
+  test "legacy owner judgments use the current reason when no snapshot exists" do
+    lead = inquiry("Legacy rejection", fit_band: "strong", status: "lost", lost_reason: "not_a_fit")
+    lead.activity_events.create!(kind: "stage_change", summary: "Moved to Lost",
+      occurred_at: Time.zone.local(2026, 9, 16), metadata: { "to" => "lost", "actor" => "captain" })
+    assert_equal({ agreed: 0, total: 1 }, WeeklyReport::Summary.new(week_start: WEEK).ai_agreement)
+  end
+
+  test "AI agreement windows owner judgments instead of inquiry dates" do
+    older = inquiry("Old inquiry recent call", at: Time.zone.local(2026, 7, 1), fit_band: "strong")
+    expired = inquiry("Old call", at: Time.zone.local(2026, 7, 1), fit_band: "weak")
+    future = inquiry("Future call", fit_band: "weak")
+    move(older, "chatting", at: Time.zone.local(2026, 9, 16))
+    move(expired, "chatting", at: Time.zone.local(2026, 8, 1))
+    move(future, "chatting", at: Time.zone.local(2026, 9, 22))
+    assert_equal({ agreed: 1, total: 1 }, WeeklyReport::Summary.new(week_start: WEEK).ai_agreement)
+    travel_to(Time.zone.local(2026, 9, 22)) { Leads::Transition.call(older, to: "lost", lost_reason: "not_a_fit") }
+    assert_equal({ agreed: 1, total: 1 }, WeeklyReport::Summary.new(week_start: WEEK).ai_agreement)
+  end
+
+  test "conversion judgments also use the report's four week window" do
+    recent = inquiry("Recent conversion", at: Time.zone.local(2026, 7, 1), fit_band: "strong")
+    expired = inquiry("Old conversion", at: Time.zone.local(2026, 7, 1), fit_band: "weak")
+    future = inquiry("Future conversion", fit_band: "weak")
+    travel_to(Time.zone.local(2026, 9, 16)) { recent.convert_to_client! }
+    travel_to(Time.zone.local(2026, 8, 1)) { expired.convert_to_client! }
+    travel_to(Time.zone.local(2026, 9, 22)) { future.convert_to_client! }
+    assert_equal({ agreed: 1, total: 1 }, WeeklyReport::Summary.new(week_start: WEEK).ai_agreement)
+  end
+
   test "every trip is listed and unknown timing is incomplete" do
     6.times do |i|
       inquiry("Trip #{i}", trip_title: "Trip #{i}", party_size: 2, timing_unknown: true)
