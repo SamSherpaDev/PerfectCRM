@@ -1,0 +1,24 @@
+SherpaHolidays ads, week of <%= @summary.week_label %>
+<%= report_goal_line(@summary) %>
+
+<% @summary.rows.each do |row| %><%= report_row_line(row) %>
+<% end %><%= report_row_line(@summary.paid_total, label: "Paid total") %>
+<%= report_row_line(@summary.total, label: "All sources", costs: false) %>
+<% if @summary.roas %>Paid booked value <%= report_money(@summary.paid_total.booked_value_minor) %>, ROAS <%= @summary.roas %>x
+<% end %><% unless @summary.spend_entered? %>Spend not entered for this week yet. Add it on Settings: <%= edit_settings_url(anchor: "weekly-report-heading") %>
+<% end %>
+<% @summary.periods.each do |period| %><%= report_period_line(period) %>
+<% end %>
+<%= report_speed_line(@summary) %>
+<% @summary.waiting.first(5).each do |lead| %>- <%= report_lead_name(lead) %>: <%= lead_url(lead) %>
+<% end %><% if @summary.trips.any? %>
+Trips this week:
+<% @summary.trips.each do |trip| %>- <%= trip.trip %>: <%= trip.inquiries %> inq, <%= trip.qualified %> qual, <%= trip.booked %> booked
+<% end %><% end %><% if @summary.total.inquiries.positive? %>
+Came in from: <%= report_placements(@summary) %>
+Trip, month and party size filled: <%= @summary.details_filled %> of <%= @summary.total.inquiries %>
+<% end %><% if @summary.suspected_spam_count.positive? %>Held back as suspected spam: <%= @summary.suspected_spam_count %>
+<% end %><%= report_agreement_line(@summary) %>
+
+Qualified = AI fit strong or possible and you moved the lead to Chatting or Quoted. Booked = deposit paid.
+Open the report: <%= settings_weekly_report_url(week: @summary.week_start.iso8601) %>

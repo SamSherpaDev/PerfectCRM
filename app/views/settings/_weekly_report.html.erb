@@ -1,0 +1,72 @@
+<%# locals: (settings:, spend_weeks:, ad_spends:) %>
+<section class="card card-pad mt-6" aria-labelledby="weekly-report-heading">
+  <h2 class="section-title" id="weekly-report-heading">Monday ads report</h2>
+  <%= card_caption "Every Monday at 7am: last week's inquiries, qualified leads, and bookings by channel, campaign, and trip, with reply speed and cost per inquiry." %>
+  <%= form_with model: settings, url: settings_path, method: :patch, class: "mt-4 space-y-4" do |form| %>
+    <div class="flex flex-wrap items-center gap-3">
+      <%= form.check_box :weekly_report_enabled, class: "checkbox" %>
+      <%= form.label :weekly_report_enabled, "Send the Monday ads report", class: "text-sm text-ink-2" %>
+    </div>
+    <div class="grid gap-3 sm:grid-cols-2">
+      <div>
+        <%= form.label :weekly_report_recipient, "Send to", class: "label" %>
+        <%= form.email_field :weekly_report_recipient, class: "input", placeholder: Setting.captain_email, autocomplete: "off" %>
+        <p class="hint">Empty sends to <%= Setting.captain_email %>.</p>
+      </div>
+      <div>
+        <%= form.label :travelers_goal, "Travelers goal this year", class: "label" %>
+        <%= form.number_field :travelers_goal, class: "input", min: 1, step: 1, placeholder: "10" %>
+        <p class="hint">Travelers booked by Dec 31. Raise it each January.</p>
+      </div>
+    </div>
+    <% if settings.errors.include?(:weekly_report_recipient) || settings.errors.include?(:travelers_goal) %>
+      <p class="text-sm text-bad" role="alert"><%= (settings.errors.full_messages_for(:weekly_report_recipient) + settings.errors.full_messages_for(:travelers_goal)).to_sentence %></p>
+    <% end %>
+    <div class="flex flex-wrap items-center gap-3">
+      <%= form.submit "Save weekly report", class: "btn-secondary btn btn-sm" %>
+      <%= link_to "Preview last week", settings_weekly_report_path, class: "btn-ghost btn btn-sm" %>
+    </div>
+  <% end %>
+
+  <div class="mt-6">
+    <h3 class="card-title">Ad spend</h3>
+    <%= card_caption "Type each week's spend from Google Ads and Meta. A campaign name matching the ad link's campaign splits the row; leave it empty for the channel total." %>
+    <%= form_with model: AdSpend.new, url: settings_ad_spends_path, class: "mt-3 grid gap-3 sm:grid-cols-2" do |form| %>
+      <div>
+        <%= form.label :week_start, "Week", class: "label" %>
+        <%= form.select :week_start, spend_weeks.map { |week| [ "#{WeeklyReport::Summary.week_label(week)}#{' (last week)' if week == spend_weeks.first}", week.iso8601 ] }, {}, class: "select" %>
+      </div>
+      <div>
+        <%= form.label :source, "Channel", class: "label" %>
+        <%= form.select :source, AdSpend::SOURCES.map { |source| [ WeeklyReport::Summary::SOURCE_LABELS.fetch(source), source ] }, {}, class: "select" %>
+      </div>
+      <div>
+        <%= form.label :campaign_name, "Campaign (optional)", class: "label" %>
+        <%= form.text_field :campaign_name, class: "input", autocomplete: "off", placeholder: "Channel total" %>
+      </div>
+      <div>
+        <%= form.label :amount_dollars, "Amount (USD)", class: "label" %>
+        <%= form.text_field :amount_dollars, class: "input", inputmode: "decimal", autocomplete: "off", placeholder: "126.50", required: true %>
+      </div>
+      <div class="sm:col-span-2">
+        <%= form.submit "Save spend", class: "btn-primary btn btn-sm" %>
+      </div>
+    <% end %>
+
+    <% if ad_spends.any? %>
+      <ul class="mt-4 space-y-2">
+        <% ad_spends.each do |spend| %>
+          <li class="flex items-center gap-3">
+            <div class="min-w-0 flex-1">
+              <p class="text-sm text-ink"><%= WeeklyReport::Summary::Row.new(source: spend.source, campaign: spend.campaign_name.presence).label %> · <%= report_money(spend.amount_minor) %></p>
+              <p class="text-xs muted">Week of <%= WeeklyReport::Summary.week_label(spend.week_start) %></p>
+            </div>
+            <%= button_to "Remove", settings_ad_spend_path(spend), method: :delete, class: "btn-ghost btn btn-sm", form: { data: { turbo_confirm: "Remove this spend entry?" } } %>
+          </li>
+        <% end %>
+      </ul>
+    <% else %>
+      <p class="hint mt-3">No spend entered in the last <%= spend_weeks.size %> weeks.</p>
+    <% end %>
+  </div>
+</section>

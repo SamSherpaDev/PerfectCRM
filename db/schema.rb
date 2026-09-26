@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_26_213519) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_26_221059) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -74,6 +74,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_26_213519) do
     t.index ["lead_id"], name: "index_ad_conversions_on_lead_id"
     t.index ["meta_status"], name: "index_ad_conversions_on_meta_status"
     t.index ["occurred_at"], name: "index_ad_conversions_on_occurred_at"
+  end
+
+  create_table "ad_spends", force: :cascade do |t|
+    t.integer "amount_minor", null: false
+    t.string "campaign_name", default: "", null: false
+    t.datetime "created_at", null: false
+    t.string "source", null: false
+    t.datetime "updated_at", null: false
+    t.date "week_start", null: false
+    t.index ["week_start", "source", "campaign_name"], name: "index_ad_spends_on_week_start_and_source_and_campaign_name", unique: true
   end
 
   create_table "ai_calls", force: :cascade do |t|
@@ -432,6 +442,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_26_213519) do
     t.string "deep_link"
     t.integer "departure_id"
     t.string "departure_place"
+    t.datetime "deposit_seen_at"
     t.text "documents_json", default: "{}", null: false
     t.date "end_date"
     t.datetime "first_paid_at"
@@ -644,7 +655,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_26_213519) do
     t.integer "singleton_key", default: 1, null: false
     t.string "site_key"
     t.datetime "site_key_last_used_at"
+    t.integer "travelers_goal"
     t.datetime "updated_at", null: false
+    t.boolean "weekly_report_enabled", default: true, null: false
+    t.string "weekly_report_recipient", default: "", null: false
     t.index ["singleton_key"], name: "index_settings_on_singleton_key", unique: true
     t.index ["site_key"], name: "index_settings_on_site_key", unique: true, where: "site_key IS NOT NULL AND site_key != ''"
     t.check_constraint "singleton_key = 1", name: "settings_singleton"

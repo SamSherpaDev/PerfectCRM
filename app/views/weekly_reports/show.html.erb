@@ -1,0 +1,28 @@
+<% content_for :title, "Monday ads report · PerfectCRM" %>
+<div class="page-narrow">
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Settings", title: "Monday ads report", subtitle: "The email as it arrives, for any past week.", back: [ "Settings", edit_settings_path(anchor: "weekly-report-heading") ] } do %>
+    <%= button_to "Send it now", deliver_settings_weekly_report_path(week: @summary.week_start.iso8601), method: :post, class: "btn-primary btn btn-sm", form: { data: { turbo_confirm: "Send the report for #{@summary.week_label} to #{@recipient}?" } } %>
+  <% end %>
+  <%= render "shared/flash" %>
+
+  <nav class="flex items-center justify-between gap-2 sm:justify-start sm:gap-3" aria-label="Report week">
+    <%= link_to "Previous", settings_weekly_report_path(week: (@summary.week_start - 7).iso8601), class: "btn-ghost btn btn-sm" %>
+    <span class="text-center text-sm text-ink">Week of <%= @summary.week_label %><%= " (in progress)" if @summary.week_start == @current_week %></span>
+    <% if @summary.week_start < @current_week %>
+      <%= link_to "Next", settings_weekly_report_path(week: (@summary.week_start + 7).iso8601), class: "btn-ghost btn btn-sm" %>
+    <% else %>
+      <span class="btn-ghost btn btn-sm invisible" aria-hidden="true">Next</span>
+    <% end %>
+  </nav>
+
+  <section class="card card-pad mt-4" aria-labelledby="report-email-heading">
+    <h2 class="sr-only" id="report-email-heading">Email preview</h2>
+    <dl class="text-sm">
+      <div class="flex gap-2"><dt class="muted">To</dt><dd class="min-w-0 break-words"><%= @recipient %></dd></div>
+      <div class="flex gap-2"><dt class="muted">Subject</dt><dd class="min-w-0 break-words"><%= @subject %></dd></div>
+    </dl>
+    <div class="report-paper mt-4">
+      <%= render "weekly_report_mailer/report", summary: @summary %>
+    </div>
+  </section>
+</div>

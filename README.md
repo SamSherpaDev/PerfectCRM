@@ -766,6 +766,39 @@ Settings → Monday pipeline note controls delivery to info@sherpaholidays.com;
 it is enabled by default. It is separate from the morning digest described
 in [Today and follow-ups](#today-and-follow-ups); combining them is pending.
 
+## Weekly ads report
+
+Every Monday at 7am Pacific (schedule in
+[`config/recurring.yml`](config/recurring.yml)) the captain gets last
+week's numbers that decide the ads: inquiries, qualified leads, quotes, and
+bookings by channel and campaign, with spend, cost per inquiry, and cost per
+qualified inquiry. Month and year to date, the travelers goal pace, median
+first reply and leads waiting over 24 hours, trips, landing placement,
+inquiries with trip, month, and party size filled, suspected spam held
+back, and how often the AI fit matched the captain's own calls follow.
+Weeks run Monday to Sunday, Pacific time.
+
+Definitions, in `WeeklyReport::Summary`:
+
+- **Inquiry**: a lead received in the week, not archived (tests and junk
+  are archived) and not tagged suspected spam.
+- **Qualified**: AI fit strong or possible, and the captain (never an
+  automation) moved the lead to Chatting or Quoted, dated by that move.
+- **Booked**: a mirrored PerfectBook booking whose deposit was first seen
+  paid that week (`deposit_seen_at`, stamped by the bookings sync), unless
+  since cancelled, voided, or refunded. It counts toward the channel and
+  campaign of the lead it came from; travelers are its party size.
+- **Attribution**: the lead's own `source` and `campaign_name`. Ad
+  platforms' own conversion counts are for tuning inside each platform.
+
+Settings → Monday ads report turns it on or off, sets the recipient (empty
+sends to the first allowlisted Google sign-in), and holds the travelers
+goal for the calendar year. Ad spend is typed in on the same card per week
+and channel, optionally per campaign; a campaign name matching the leads'
+campaign (any case) splits the row, and a channel entered only as a total
+keeps its campaigns on one row. Preview any past week at
+`/settings/weekly_report`, where "Send it now" mails it to the recipient.
+
 ## AI assistance
 
 Approval-only help on every thread: reply drafts, three-bullet summaries,
