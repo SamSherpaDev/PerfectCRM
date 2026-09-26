@@ -29,7 +29,6 @@ module AdConversions
 
     def body(row)
       payload = { data: [ event(row) ], access_token: @settings.meta_access_token }
-      payload[:test_event_code] = @settings.meta_test_event_code if @settings.meta_test_event_code.present?
       payload
     end
 

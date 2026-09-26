@@ -139,7 +139,7 @@ class SettingsController < ApplicationController
   # value share. Clearing the dataset ID turns Meta off.
   def ad_conversions
     @settings = Setting.current
-    attrs = params.require(:setting).permit(:meta_dataset_id, :meta_test_event_code, :ad_booking_value_percent)
+    attrs = params.require(:setting).permit(:meta_dataset_id, :ad_booking_value_percent)
     @settings.assign_attributes(attrs.transform_values { |value| value.to_s.strip.presence })
     token = params.dig(:setting, :meta_access_token).to_s.strip
     @settings.meta_access_token = token if token.present?

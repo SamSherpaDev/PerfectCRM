@@ -14,6 +14,10 @@ module PerfectBook
     validates :perfectbook_id, presence: true, uniqueness: true
     validates :perfectbook_contact_id, presence: true
 
+    before_save do
+      self.first_paid_at ||= Time.current if paid_minor.to_i.positive?
+    end
+
     # Per-traveler document rows from the mirrored summary:
     # [{ "id", "first_name", "documents" => [{ "type", "status", "received_at" }] }].
     def travelers

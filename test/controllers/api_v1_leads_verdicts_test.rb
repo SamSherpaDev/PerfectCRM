@@ -48,6 +48,23 @@ class ApiV1LeadsVerdictsTest < ActionDispatch::IntegrationTest
     assert_equal "chatting", event.metadata["to_status"]
   end
 
+  test "automated qualification waits for an owner transition and uses the later verdict time" do
+    @lead.update!(received_at: 12.days.ago, metadata: { "attribution" => { "gclid" => "review-click" } })
+    post_verdict @lead.id, { "fit_band" => "strong", "status" => "chatting" }
+    assert_response :ok
+    assert_equal %w[lead], AdConversions.record!(@lead.reload).map(&:event)
+    post_verdict @lead.id, { "fit_band" => "weak" }
+    Leads::Transition.call(@lead.reload, to: "quoted")
+    Leads::Transition.call(@lead, to: "chatting")
+    travel 8.days
+    post_verdict @lead.id, { "fit_band" => "possible" }
+    assert_response :ok
+    rows = AdConversions.record!(@lead.reload)
+    assert_equal %w[qualified quote], rows.map(&:event)
+    assert_in_delta Time.current.to_f, rows.first.occurred_at.to_f, 1
+    assert rows.last.occurred_at < 7.days.ago
+  end
+
   test "a score-only verdict keeps the stage" do
     @lead.update!(stage_changed_at: 10.days.ago)
     stage_changed_at = @lead.reload.stage_changed_at

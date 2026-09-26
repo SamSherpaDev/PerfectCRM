@@ -1,5 +1,5 @@
 # Sends the Meta Lead event right after a website inquiry lands, because
-# Meta weighs events that arrive within the hour. The hourly
+# Meta weighs events that arrive within the hour. The nightly
 # AdConversions::ExportJob retries anything this misses.
 class AdConversions::LeadJob < ApplicationJob
   queue_as :default

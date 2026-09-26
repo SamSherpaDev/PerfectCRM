@@ -33,11 +33,11 @@ class AdConversionsTest < ActiveSupport::TestCase
     @now = Time.zone.parse("2026-10-12 10:00")
     travel_to @now
     @settings = Setting.current
-    @settings.update!(meta_dataset_id: "123456789012345", meta_access_token: "EAAB-secret-token", meta_test_event_code: nil)
+    @settings.update!(meta_dataset_id: "123456789012345", meta_access_token: "EAAB-secret-token")
   end
 
   def ad_lead(attribution: { "gclid" => "Cj0K-click" }, **attrs)
-    Lead.create!({
+    lead = Lead.create!({
       name: "Anna Lindqvist", email: "Anna.Lind@Gmail.com", phone: "+14155550134",
       source: "google_ads", external_ref: "website_form:sub-#{SecureRandom.hex(4)}",
       received_at: @now - 2.days,
@@ -47,6 +47,16 @@ class AdConversionsTest < ActiveSupport::TestCase
         "user_agent" => "Mozilla/5.0 Test"
       }
     }.merge(attrs))
+    at = attrs[:stage_changed_at] || @now
+    verdict(lead, lead.fit_band, at: at) if lead.fit_band.present?
+    travel_to(at) { Leads::Transition.call(lead, to: lead.status) } if attrs[:status].in?(%w[chatting quoted nudged])
+    lead
+  end
+
+  def verdict(lead, band, at: @now)
+    lead.update!(fit_band: band)
+    lead.activity_events.create!(kind: "automation", summary: "AI verdict", occurred_at: at,
+      metadata: { "fit_band" => band })
   end
 
   def with_meta(code: "200", body: { "events_received" => 1 }.to_json)
@@ -83,7 +93,7 @@ class AdConversionsTest < ActiveSupport::TestCase
     lead = ad_lead(fit_band: "weak", status: "chatting")
     assert_equal %w[lead], AdConversions.record!(lead, now: @now).map(&:event)
 
-    lead.update!(fit_band: "possible")
+    verdict(lead, "possible")
     rows = AdConversions.record!(lead, now: @now)
     assert_equal %w[qualified], rows.map(&:event)
     assert rows.first.google
@@ -219,7 +229,7 @@ class AdConversionsTest < ActiveSupport::TestCase
     assert_nil AdConversions::GoogleFeed.line(row).first
   end
 
-  test "the hourly export records, sends, and writes a one-line result" do
+  test "the nightly export records, sends, and writes a one-line result" do
     @settings.update!(meta_dataset_id: "123456789012345")
     @settings.rotate_google_feed_password!
     ad_lead(fit_band: "strong", status: "chatting", created_at: @now - 1.day)
@@ -239,6 +249,61 @@ class AdConversionsTest < ActiveSupport::TestCase
     AdConversions::LeadJob.perform_now(lead.id)
     assert_equal 0, AdConversion.count
     assert_nil @settings.reload.ad_export_last_run_at
+  end
+
+  test "automation, nudging, and conversion alone do not qualify a lead" do
+    lead = ad_lead
+    verdict(lead, "strong")
+    Leads::Transition.call(lead, to: "chatting", actor: :automation)
+    assert_equal %w[lead], AdConversions.record!(lead).map(&:event)
+    Leads::Transition.call(lead, to: "nudged")
+    assert_empty AdConversions.record!(lead)
+    lead.convert_to_client!
+    assert_empty AdConversions.record!(lead)
+  end
+
+  test "quote history survives a return to chatting before the sweep" do
+    lead = ad_lead
+    travel_to(@now - 1.day) { Leads::Transition.call(lead, to: "quoted") }
+    Leads::Transition.call(lead, to: "chatting")
+    row = AdConversions.record!(lead).find { |item| item.event == "quote" }
+    assert_equal @now - 1.day, row.occurred_at
+  end
+
+  test "qualification uses the later verdict or owner action and respects intervening weak verdicts" do
+    lead = ad_lead(received_at: @now - 12.days)
+    travel_to(@now - 10.days) { Leads::Transition.call(lead, to: "chatting") }
+    verdict(lead, "possible")
+    row = AdConversions.record!(lead).find { |item| item.event == "qualified" }
+    assert_equal @now, row.occurred_at
+    with_meta { assert_equal :sent, AdConversions.deliver_meta!(row) }
+
+    other = ad_lead(received_at: @now - 12.days)
+    verdict(other, "strong", at: @now - 10.days)
+    verdict(other, "weak", at: @now - 9.days)
+    Leads::Transition.call(other, to: "chatting")
+    assert_not_includes AdConversions.record!(other).map(&:event), "qualified"
+    verdict(other, "possible")
+    assert_equal @now, AdConversions.record!(other).sole.occurred_at
+  end
+
+  test "business and owner tests are excluded from recording and delivery" do
+    old_emails = ENV["ALLOWED_GOOGLE_EMAILS"]
+    ENV["ALLOWED_GOOGLE_EMAILS"] = " Captain@example.com , owner@example.com "
+    [ "INFO@sherpaholidays.com", Mail.mailbox_address, "CAPTAIN@example.com", "owner@example.com" ].uniq.each do |email|
+      lead = ad_lead(email: email)
+      assert_empty AdConversions.record!(lead)
+    end
+    lead = ad_lead(fit_band: "strong", status: "chatting")
+    rows = AdConversions.record!(lead)
+    lead.update!(email: "captain@example.com")
+    with_meta do |fake|
+      rows.each { |row| assert_equal :skipped, AdConversions.deliver_meta!(row) }
+      assert_empty fake.requests
+    end
+    assert_empty AdConversions::GoogleFeed.rows
+  ensure
+    ENV["ALLOWED_GOOGLE_EMAILS"] = old_emails
   end
 
   test "the intake job sends the Lead event right away" do

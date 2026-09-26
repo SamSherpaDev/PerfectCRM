@@ -1,4 +1,4 @@
-# Hourly sweep (config/recurring.yml): records every lead outcome reached
+# Nightly sweep (config/recurring.yml): records every lead outcome reached
 # since the last run, sends due Meta events (new ones and backed-off
 # retries), and writes a one-line result for the Settings card. Google
 # reads the recorded rows itself through the scheduled feed.

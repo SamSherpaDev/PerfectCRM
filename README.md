@@ -528,26 +528,32 @@ and the allowed automation actions.
 PerfectCRM tells Google Ads and Meta which ad clicks became real inquiries
 and bookings, so the platforms bid for travelers rather than form-fills.
 Code: `AdConversions` (rules), `AdConversions::MetaClient`,
-`AdConversions::GoogleFeed`, and the `AdConversions::ExportJob` hourly sweep.
+`AdConversions::GoogleFeed`, and the `AdConversions::ExportJob` nightly sweep.
 
 | Outcome | When | Google conversion action | Meta event | Value |
 |---|---|---|---|---|
 | Inquiry | Lead created | Existing web tag, not in the feed | `Lead`, sent at intake | $300 |
-| Qualified | AI fit strong or possible, and you moved it to Chatting or Quoted (or converted it) | `Qualified inquiry` | `QualifiedLead` | $1,000 |
-| Quote | Status Quoted or Nudged, or a CRM quote sent | `Quote sent` | `Quote` | $2,000 |
-| Booked | A linked PerfectBook booking with money paid, made after the inquiry | `Booking (deposit paid)` | `Purchase` | Booking total times the booking value percent (default 35) |
+| Qualified | AI fit strong or possible, and you moved it to Chatting or Quoted | `Qualified inquiry` | `QualifiedLead` | $1,000 |
+| Quote | Status Quoted, or a CRM quote sent | `Quote sent` | `Quote` | $2,000 |
+| Booked | A linked PerfectBook booking with money first observed paid after the inquiry | `Booking (deposit paid)` | `Purchase` | Booking total times the booking value percent (default 35) |
 
 - Only leads that arrived with a click ID (`gclid`, `gbraid`, `wbraid`, or
   `fbclid`, including one in the landing URL) are reported: the form drops
   click IDs when marketing consent is off. Archived, suspected-spam, and
-  lost "not a fit" leads are never reported.
+  lost "not a fit" leads are never reported. Tests using the business mailbox
+  or an owner address in `ALLOWED_GOOGLE_EMAILS` are also excluded.
+- Purchase time is the first observation of `paid_minor > 0` on the booking
+  mirror, retained across later syncs and refunds. Existing paid mirrors are
+  first observed when the payment-time migration runs. Qualification and quote
+  milestones use activity history; qualification waits for both the owner
+  transition and a strong/possible AI verdict.
 - Each outcome is one `AdConversion` row per lead, recorded once, so a status
   moving back and forth never reports twice. The Lead event ID is the form's
   `submission_id`, so a browser pixel Lead with the same event ID deduplicates.
 - Meta: Settings → Ad conversions takes the dataset ID and access token
-  (stored encrypted) and an optional test event code. Email and phone are
-  SHA-256 hashed; `fbc` comes from the click. Failures retry after 1, 4, 9,
-  and 16 hours (five attempts); events older than Meta's 7-day limit are
+  (stored encrypted). Email and phone are
+  SHA-256 hashed; `fbc` comes from the click. Failures become eligible for retry after 1, 4, 9,
+  and 16 hours (five attempts), checked by the nightly sweep; events older than Meta's 7-day limit are
   skipped.
 - Google: create a feed password in the same card, then in Google Ads add a
   daily schedule under Goals → Conversions → Uploads → Schedules with source
@@ -556,7 +562,9 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
   and phone (enhanced conversions for leads), and Pacific-time conversion
   times. A row stays in the feed for three days after Google first pulls it;
   Google ignores the repeats by Order ID. Google accepts gclid rows up to 90
-  days after the click and email-only rows up to 63 days.
+  days after the click and email-only rows up to 63 days. Braid-only clicks
+  use email/phone matching; this scheduled feed does not send gbraid/wbraid.
+  Accept/reject counts are in Google Ads > Goals > Conversions > Uploads.
 - Both are off until configured. The card shows the last run, Meta sent,
   waiting, failed, and skipped counts, Google's last pull, and the latest
   outcomes with any error.

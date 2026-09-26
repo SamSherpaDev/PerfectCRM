@@ -77,6 +77,35 @@ class PerfectBookSyncJobsTest < ActiveSupport::TestCase
     PerfectBook::Circuit.reset!
   end
 
+  test "payment first observed after an unpaid sync remains the purchase time" do
+    now = Time.current.change(usec: 0)
+    travel_to now
+    PerfectBook::Contact.create!(perfectbook_id: 7, kind: "customer", name: "Ama", synced_at: now)
+    lead = Lead.create!(name: "Anna", email: "anna@example.com", source: "google_ads",
+      perfectbook_contact_id: 7, received_at: now - 1.day,
+      metadata: { "attribution" => { "gclid" => "paid-click" } })
+    booking = pb_booking
+    booking.paid_minor = 0
+    client = FakePbCatalogClient.new(bookings_by_contact: { 7 => [ booking ] })
+    PerfectBook::SyncBookingsJob.perform_now(client: client)
+    mirror = PerfectBook::Booking.find_by!(perfectbook_id: booking.id)
+    assert_nil mirror.first_paid_at
+    travel 10.days
+    paid_at = Time.current
+    booking.paid_minor = 5000
+    PerfectBook::SyncBookingsJob.perform_now(client: client)
+    assert_equal paid_at, mirror.reload.first_paid_at
+    row = AdConversions.record!(lead).find { |item| item.event == "booked" }
+    assert_equal paid_at, row.occurred_at
+    assert_equal now, mirror.created_at
+    travel 1.day
+    booking.paid_minor = 0
+    PerfectBook::SyncBookingsJob.perform_now(client: client)
+    booking.paid_minor = 10000
+    PerfectBook::SyncBookingsJob.perform_now(client: client)
+    assert_equal paid_at, mirror.reload.first_paid_at
+  end
+
   test "successful empty bookings delete mirrors while 304 preserves them" do
     PerfectBook::Contact.create!(perfectbook_id: 7, kind: "customer", name: "Ama", synced_at: Time.current)
     PerfectBook::Booking.create!(perfectbook_id: 11, perfectbook_contact_id: 7, synced_at: Time.current)

@@ -160,6 +160,16 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "business test inquiries never queue ad conversions" do
+    body = intake_body("attribution" => { "gclid" => "Cj0K" })
+    body["contact"]["email"] = Mail.mailbox_address
+    assert_no_enqueued_jobs only: AdConversions::LeadJob do
+      post_intake body
+    end
+    assert_response :accepted
+    assert_empty AdConversions.record!(Lead.last)
+  end
+
   test "a new lead queues its ad conversion job" do
     assert_enqueued_with(job: AdConversions::LeadJob) do
       post_intake intake_body("attribution" => { "gclid" => "Cj0K" })

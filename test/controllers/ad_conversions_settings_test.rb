@@ -33,6 +33,9 @@ class AdConversionsSettingsTest < ActionDispatch::IntegrationTest
     lead = Lead.create!(name: "Anna Lindqvist", email: "anna@example.com", source: "google_ads",
       status: "chatting", fit_band: "strong", received_at: 1.day.ago,
       metadata: { "attribution" => { "gclid" => "Cj0K-click" } })
+    Leads::Transition.call(lead, to: "chatting")
+    lead.activity_events.create!(kind: "automation", summary: "AI verdict", occurred_at: Time.current,
+      metadata: { "fit_band" => "strong" })
     AdConversions.record!(lead)
 
     get google_conversions_feed_path, headers: basic("sherpaholidays", password)

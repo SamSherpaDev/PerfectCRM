@@ -3,12 +3,12 @@
 <% stamp = ->(time) { time ? "#{date_short(time)}, #{time_24_12(time)}" : "Never" } %>
 <section class="card card-pad mt-6" aria-labelledby="ad-conversions-heading">
   <h2 class="section-title" id="ad-conversions-heading">Ad conversions</h2>
-  <%= card_caption "Tells Google Ads and Meta which ad clicks became qualified inquiries, quotes, and paid bookings, so they bid for travelers rather than form-fills. Only leads that arrived from an ad click with marketing consent are reported; archived, spam, and not-a-fit leads never are." %>
+  <%= card_caption "Tells Google Ads and Meta which ad clicks became qualified inquiries, quotes, and paid bookings, so they bid for travelers rather than form-fills. Only leads that arrived from an ad click with marketing consent are reported; archived, spam, business-test, and not-a-fit leads never are." %>
 
   <div class="mt-4 flex flex-wrap items-center gap-2">
     <%= settings.meta_configured? ? status_badge("connected", label: "Meta on") : status_badge("disconnected", label: "Meta off") %>
     <%= settings.google_feed_configured? ? status_badge("connected", label: "Google on") : status_badge("disconnected", label: "Google off") %>
-    <span class="hint">Checked every hour. Off until set up below.</span>
+    <span class="hint">Checked nightly. Off until set up below.</span>
   </div>
   <dl class="mt-4 space-y-1 text-sm">
     <div class="flex flex-wrap gap-x-2">
@@ -30,20 +30,14 @@
 
   <h3 class="card-title mt-6">Meta Conversions API</h3>
   <%= form_with model: settings, url: ad_conversions_settings_path, method: :patch, class: "mt-2 space-y-3" do |form| %>
-    <div class="grid gap-3 sm:grid-cols-2">
-      <div>
-        <%= form.label :meta_dataset_id, "Dataset ID", class: "label" %>
-        <%= form.text_field :meta_dataset_id, class: "input mono text-xs", inputmode: "numeric", autocomplete: "off", placeholder: "Events Manager > Datasets" %>
-      </div>
-      <div>
-        <%= form.label :meta_test_event_code, "Test event code (optional)", class: "label" %>
-        <%= form.text_field :meta_test_event_code, class: "input mono text-xs", autocomplete: "off", placeholder: "TEST12345" %>
-      </div>
+    <div>
+      <%= form.label :meta_dataset_id, "Dataset ID", class: "label" %>
+      <%= form.text_field :meta_dataset_id, class: "input mono text-xs", inputmode: "numeric", autocomplete: "off", placeholder: "Events Manager > Datasets" %>
     </div>
     <div>
       <%= form.label :meta_access_token, "Access token", class: "label" %>
       <%= form.password_field :meta_access_token, value: nil, class: "input mono text-xs", autocomplete: "new-password", placeholder: settings.meta_access_token.present? ? "Saved. Enter a new one to replace it" : "Events Manager > Settings > Generate access token" %>
-      <p class="hint">Stored encrypted. Leaving it blank keeps the saved token. Clear the dataset ID to turn Meta off. Remove the test code once events show in Test events.</p>
+      <p class="hint">Stored encrypted. Leaving it blank keeps the saved token. Clear the dataset ID to turn Meta off.</p>
     </div>
     <div class="sm:w-1/2">
       <%= form.label :ad_booking_value_percent, "Booking value (% of the booking total)", class: "label" %>
@@ -58,6 +52,8 @@
 
   <h3 class="card-title mt-6">Google Ads scheduled upload</h3>
   <p class="hint mt-1">In Google Ads, open Goals > Conversions > Uploads > Schedules, choose HTTPS, paste the URL, username, and password below, and pick a daily schedule. First create the conversion actions <span class="text-ink">Qualified inquiry</span>, <span class="text-ink">Quote sent</span>, and <span class="text-ink">Booking (deposit paid)</span> as imports from clicks.</p>
+  <p class="hint mt-1">Braid-only clicks (gbraid/wbraid) use email/phone matching; this scheduled feed does not send braid identifiers.</p>
+  <p class="hint mt-1">Google's accept/reject counts are in Google Ads > Goals > Conversions > Uploads.</p>
   <div class="mt-3 space-y-4">
     <div class="setting">
       <div class="k">

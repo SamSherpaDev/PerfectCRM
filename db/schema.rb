@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_26_205355) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_26_213519) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -434,6 +434,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_26_205355) do
     t.string "departure_place"
     t.text "documents_json", default: "{}", null: false
     t.date "end_date"
+    t.datetime "first_paid_at"
     t.string "invoice_badge"
     t.string "invoice_number"
     t.integer "missing_count", default: 0, null: false
@@ -635,7 +636,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_26_205355) do
     t.datetime "mailbox_watched_since"
     t.text "meta_access_token"
     t.string "meta_dataset_id"
-    t.string "meta_test_event_code"
     t.text "ms_graph_refresh_token"
     t.boolean "pipeline_digest", default: true, null: false
     t.datetime "relay_last_used_at"

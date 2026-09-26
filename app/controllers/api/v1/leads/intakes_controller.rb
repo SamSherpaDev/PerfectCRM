@@ -76,9 +76,9 @@ module Api
         private
 
         # The Meta Lead event rides a job; a queue hiccup never fails intake,
-        # and the hourly AdConversions::ExportJob picks the lead up anyway.
+        # and the nightly AdConversions::ExportJob picks the lead up anyway.
         def enqueue_ad_conversion(lead)
-          AdConversions::LeadJob.perform_later(lead.id)
+          AdConversions::LeadJob.perform_later(lead.id) if AdConversions.reportable?(lead)
         rescue StandardError => error
           Rails.logger.error("[intake] ad conversion enqueue failed: #{error.class}")
         end

@@ -30,8 +30,7 @@ module AdConversions
   # (Setting#ad_booking_value_percent of the booking total).
   VALUES_MINOR = { "lead" => 300_00, "qualified" => 1_000_00, "quote" => 2_000_00 }.freeze
   QUALIFIED_BANDS = %w[strong possible].freeze
-  QUALIFIED_STATUSES = %w[chatting quoted nudged].freeze
-  QUOTED_STATUSES = %w[quoted nudged].freeze
+  QUALIFIED_STATUSES = %w[chatting quoted].freeze
   # Leads older than this are no longer scanned: Google rejects gclid
   # imports more than 90 days after the click.
   LOOKBACK = 90.days
@@ -80,7 +79,9 @@ module AdConversions
   end
 
   def excluded?(lead)
-    lead.archived? || lead.suspected_spam? || (lead.status == "lost" && lead.lost_reason == "not_a_fit")
+    lead.archived? || lead.suspected_spam? || (lead.status == "lost" && lead.lost_reason == "not_a_fit") ||
+      [ "info@sherpaholidays.com", Mail.mailbox_address ].include?(contact_email(lead)) ||
+      User.allowed_email?(contact_email(lead))
   end
 
   def reportable?(lead)
@@ -113,25 +114,43 @@ module AdConversions
     clamp = ->(time) { [ [ time || now, floor ].max, now ].min }
     events = { "lead" => { occurred_at: clamp.(lead.received_at || lead.created_at), value_minor: VALUES_MINOR["lead"] } }
 
-    if QUALIFIED_BANDS.include?(lead.fit_band) && (QUALIFIED_STATUSES.include?(lead.status) || lead.converted?)
-      at = QUALIFIED_STATUSES.include?(lead.status) ? lead.stage_changed_at : lead.converted_at
+    history = lead.activity_events.where(kind: %w[stage_change automation]).order(:occurred_at, :id).to_a
+    if (at = qualified_at(history))
       events["qualified"] = { occurred_at: clamp.(at), value_minor: VALUES_MINOR["qualified"] }
     end
 
-    quote_times = []
-    quote_times << lead.stage_changed_at if QUOTED_STATUSES.include?(lead.status)
+    quote_times = history.filter_map do |event|
+      event.occurred_at if event.kind == "stage_change" && event.metadata["to"] == "quoted"
+    end
+    quote_times << lead.stage_changed_at if lead.status == "quoted"
     quote_times << Quote.where(lead_id: lead.id).where.not(sent_at: nil).minimum(:sent_at)
     if quote_times.compact.any?
       events["quote"] = { occurred_at: clamp.(quote_times.compact.min), value_minor: VALUES_MINOR["quote"] }
     end
 
     if (booking = paid_booking(lead))
-      events["booked"] = { occurred_at: clamp.(booking.created_at), value_minor: booking_value_minor(booking) }
+      events["booked"] = { occurred_at: clamp.(booking.first_paid_at), value_minor: booking_value_minor(booking) }
     end
     events
   end
 
-  # The first paid, active PerfectBook booking made after the inquiry.
+  def qualified_at(history)
+    owner_at = nil
+    band = nil
+    history.each do |event|
+      data = event.metadata
+      if event.kind == "stage_change" && QUALIFIED_STATUSES.include?(data["to"]) &&
+          data["actor"].present? && data["actor"] != "automation"
+        owner_at ||= event.occurred_at
+      elsif event.kind == "automation"
+        band = data["fit_band"]
+      end
+      return event.occurred_at if owner_at && QUALIFIED_BANDS.include?(band)
+    end
+    nil
+  end
+
+  # The first payment observed on an active booking after the inquiry.
   def paid_booking(lead)
     contact_ids = [ lead.perfectbook_contact_id, lead.converted_client&.perfectbook_contact_id ].compact.uniq
     return nil if contact_ids.empty?
@@ -139,8 +158,8 @@ module AdConversions
     PerfectBook::Booking.where(perfectbook_contact_id: contact_ids)
       .where("paid_minor > 0")
       .where("status IS NULL OR status NOT IN (?)", TemplateContext::INACTIVE_BOOKING_STATUSES)
-      .where("created_at >= ?", lead.received_at || lead.created_at)
-      .order(:created_at, :id).first
+      .where("first_paid_at >= ?", lead.received_at || lead.created_at)
+      .order(:first_paid_at, :id).first
   end
 
   def booking_value_minor(booking, settings: Setting.current)
@@ -193,14 +212,14 @@ module AdConversions
   end
 
   # Sends one row to Meta when it is due. Claims the row first, so the
-  # intake job and the hourly sweep never send the same row twice.
+  # intake job and the nightly sweep never send the same row twice.
   # Returns :sent, :failed, :skipped, or nil when nothing happened.
   def deliver_meta!(row, settings: Setting.current, now: Time.current)
     return nil unless meta_due?(row, now)
 
     lead = row.lead
     if excluded?(lead)
-      row.update!(meta_status: "skipped", meta_error: "Archived, spam, or not a fit")
+      row.update!(meta_status: "skipped", meta_error: "Archived, spam, not a fit, or business test")
       return :skipped
     end
     if row.occurred_at < now - META_WINDOW
