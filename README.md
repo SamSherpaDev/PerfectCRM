@@ -56,7 +56,7 @@ out. On mobile, use Open menu to show the drawer. The rail holds **Today**
 (root), **Inbox**, **Leads**, **Clients**, **Pipeline**, **Quotes**, **Templates**, and
 **Settings**. See [Today and follow-ups](#today-and-follow-ups), [Mail](#mail),
 [Replying](#replying), [Templates](#templates), [Pipeline](#pipeline), and [Quotes](#quotes) for the live features. Settings provides appearance,
-morning and pipeline digests, connections, history import, automation settings, email sender settings, and export controls.
+morning and pipeline digests, the [weekly ads report](#weekly-ads-report), connections, history import, automation settings, email sender settings, and export controls.
 
 On phones (under 750px) a bottom tab bar holds **Today**, **Inbox**,
 **Leads**, **Clients**, and **More** (Pipeline, Quotes, Templates,
@@ -782,20 +782,29 @@ Definitions, in `WeeklyReport::Summary`:
 
 - **Inquiry**: a lead received in the week, not archived (tests and junk
   are archived) and not tagged suspected spam.
-- **Qualified**: AI fit strong or possible, and the captain (never an
-  automation) moved the lead to Chatting or Quoted, dated by that move.
+- **Qualified**: current AI fit strong or possible, and the captain (never an
+  automation) moved the lead to Chatting or Quoted, dated by the first such move.
+- **Quote**: a lead's first captain move to Quoted or first sent quote,
+  whichever came first. Inquiry, qualified, and quote counts exclude archived
+  and suspected-spam leads across all sources; Paid total includes only Google
+  Ads and Meta Ads.
 - **Booked**: a mirrored PerfectBook booking whose deposit was first seen
   paid that week (`deposit_seen_at`, stamped by the bookings sync), unless
   since cancelled, voided, or refunded. It counts toward the channel and
-  campaign of the lead it came from; travelers are its party size.
+  campaign selected by the attribution rules below; travelers are its party
+  size. Already-paid mirrors at rollout use their creation date. Booked value
+  sums the full booking total for USD bookings only, not the deposit amount;
+  non-USD bookings still count as bookings and travelers.
 - **Attribution**: the lead's own `source` and `campaign_name`. Ad
   platforms' own conversion counts are for tuning inside each platform.
 
 Reply speed uses only sent or received outbound email in the lead's or
 converted client's conversations. Notes, visitor details, stage changes, and
 conversion are not replies. Open unanswered inquiries stay listed after 24
-hours until answered or closed. Every trip is listed; unknown timing does not
-count as a filled month. AI agreement uses the latest owner move to Chatting,
+hours until answered or closed. Waiting is a live list even in past-week
+previews; historical reports are recomputed from current records, not saved
+snapshots. Every trip is listed; unknown timing does not count as a filled
+month. AI agreement uses the latest owner move to Chatting,
 Quoted, or Lost (not a fit), or conversion, within the 28 days ending on the
 report week's Sunday. The window uses judgment dates, not inquiry dates.
 Owner stage changes retain their loss reason even if automation later changes
@@ -804,17 +813,23 @@ the lead; older events without that snapshot use the lead's current reason.
 Booking attribution uses the client's latest lead converted at or before the
 deposit event, then an unconverted lead with the same PerfectBook contact,
 then the client's source and campaign. Source and campaign always come from
-the same selected record, even when its campaign is empty. Booked value and cost per booking are
-shown by campaign whenever bookings exist, independent of ROAS. Missing spend
-for any paid campaign with activity makes paid total spend, costs, and ROAS
+the same selected record, even when its campaign is empty. Bookings with no
+CRM origin appear as "Booked outside the CRM". Booked value and cost per
+booking are shown by campaign whenever bookings exist, independent of ROAS;
+cost per booking requires spend. ROAS is paid booked value divided by paid
+spend. Missing spend for any paid campaign with activity makes paid total
+spend, costs, and ROAS
 unknown, shown as "-", and names the campaigns needing spend.
 
 Settings → Monday ads report sets the recipient (empty sends to the first
-allowlisted Google sign-in). The Monday email always sends. Ad spend is typed
-in per week, channel, and required campaign name, matching the lead's campaign
-exactly, including capitalization. There is no channel-total entry. Preview
-any past week at `/settings/weekly_report`, where "Send it now" mails it to the
-recipient.
+allowlisted Google sign-in, or info@sherpaholidays.com if none is configured).
+The Monday email always sends. Enter USD spend from Google Ads and Meta for
+one of the last eight complete weeks, per channel and required campaign name,
+matching the lead's campaign exactly, including capitalization (surrounding
+whitespace is ignored). Saving the same week, channel, and campaign replaces
+its amount; Remove deletes that entry. There is no channel-total entry. Preview
+past weeks or the current week in progress at `/settings/weekly_report`, where
+"Send it now" queues the displayed week's report to the recipient.
 
 Goals are year-specific: 10 total travelers booked in 2026 and 100 travelers
 who book during 2027. Other years show no goal. Month and year lines show
@@ -823,8 +838,10 @@ The 2026 milestone line counts new travelers booked since Oct 1 against the
 next unpassed target: 2 by Oct 31, 6 by Nov 30, and 8 by Dec 31. Flags highlight
 cost per qualified inquiry over $300, inquiries waiting over 24 hours, and
 missing spend. Next review is the next date on or after the report date from
-Oct 10, Oct 24, Nov 7, 2026 and Jan 31, 2027, then each month end. Conversion
-upload reporting is deferred until the conversion export exists.
+Oct 10, Oct 24, Nov 7, 2026 and Jan 31, 2027, then each month end. Review dates
+and milestone deadlines use the day the report is generated, even when
+previewing a past week. Conversion upload reporting is deferred until the
+conversion export exists.
 
 ## AI assistance
 
