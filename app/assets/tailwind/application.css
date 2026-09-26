@@ -264,7 +264,6 @@
   .hint {
     @apply mt-1.5 text-xs leading-relaxed text-ink-3;
   }
-  /* Settings rows: name and hint on the left, one control on the right. */
   .muted {
     @apply text-ink-3;
   }

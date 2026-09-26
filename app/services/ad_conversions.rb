@@ -4,15 +4,7 @@ require "digest"
 
 # Lead outcomes reported back to Google Ads and Meta so the ad platforms
 # learn which clicks become real inquiries and bookings (README.md,
-# "Ad conversions"). Rules:
-#
-# - Consent-safe: only leads that arrived with a click ID (gclid, gbraid,
-#   wbraid, or fbclid) are reported. The storefront form strips click IDs
-#   when marketing consent is off, so a click ID means consent was on.
-# - Never reported: archived leads, suspected spam, and leads lost as
-#   "not a fit" (the negative signal by omission).
-# - One AdConversion row per lead per event; rows are never re-created, so
-#   a status moving back and forth never reports twice.
+# "Ad conversions" owns eligibility, values, and delivery behavior).
 module AdConversions
   GOOGLE_CLICK_KEYS = %w[gclid gbraid wbraid].freeze
   GOOGLE_CONVERSION_NAMES = {
@@ -26,8 +18,7 @@ module AdConversions
     "quote" => "Quote",
     "booked" => "Purchase"
   }.freeze
-  # Fixed signal values in cents; a booking reports its margin instead
-  # (Setting#ad_booking_value_percent of the booking total).
+  # Fixed signal values in cents; booking valuation lives in booking_value_minor.
   VALUES_MINOR = { "lead" => 300_00, "qualified" => 1_000_00, "quote" => 2_000_00 }.freeze
   QUALIFIED_BANDS = %w[strong possible].freeze
   QUALIFIED_STATUSES = %w[chatting quoted].freeze
@@ -207,7 +198,7 @@ module AdConversions
   end
 
   # Sends one row to Meta when it is due. Claims the row first, so the
-  # intake job and the nightly sweep never send the same row twice.
+  # intake job and the nightly sweep cannot share an active delivery claim.
   # Returns :sent, :failed, :skipped, or nil when nothing happened.
   def deliver_meta!(row, settings: Setting.current, now: Time.current)
     return nil unless meta_due?(row, now)

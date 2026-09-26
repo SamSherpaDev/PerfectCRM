@@ -175,12 +175,12 @@ The captain's words: "in the future I want to implement google ads/meta ads to P
 
 What the design prepares, so that the ecosystem plugs in without a redesign:
 
-- **Every lead has a source and a campaign.** Source is an enumeration the Settings page shows (Google Ads, Meta Ads, Website form, Email, Referral, Manual) and can grow; campaign is free text supplied by the ad platform. Both render through `.src`.
+- **Every lead has a source and a campaign.** Source choices are documented in [Leads in the README](../README.md#leads); campaign is free text supplied by the ad platform. Both render through `.src`.
 - **Fit is a first-class field**, not a note: a 0 to 100 score, a word band, and a one-line reason, all from Panda AI through n8n, shown in the table, the tiles and the stream. While unanswered the field shows "Scoring". Panda AI has no logo in the CRM until it exists; it is named in text with the robot icon.
 - **Automation events are a timeline kind.** Anything n8n or Panda AI does lands on the stream as an `automation` event with the machine's name in the meta line, a bolt or robot icon, and the dashed edge. The captain can always tell what a machine did.
 - **Automations have limits the UI states.** Settings lists what automations may do (create leads, score them, move between New, Chatting and Lost) and what stays manual (Quoted, Nudged, Won, Convert). These are the permissions the inbound API enforces.
 - **The inbound API is visible.** Settings shows the public site key, masked relay secret, last use, and separate rotation controls. Credential behavior is defined in the [website intake contract](leads-intake.md). Automations live only in Settings: the credentials with their last use, the n8n webhook, and the recent automation activity (machine events with the Automated badge, webhook deliveries with their status). No lead page carries an Automations card.
-- **Outbound is symmetric (design goal).** Notifications for captain stage changes, quote sends, and conversions remain a design goal so Panda AI and the ad platforms can learn from outcomes. Currently supported events and delivery behavior are defined in the [website intake contract](leads-intake.md#what-happens-after-intake).
+- **Outbound is symmetric (design goal).** Notifications for captain stage changes, quote sends, and conversions to Panda AI remain a design goal. Supported webhook events and delivery behavior are defined in the [website intake contract](leads-intake.md#what-happens-after-intake). Direct outcome reporting to ad platforms is documented in [Ad conversions in the README](../README.md#ad-conversions).
 
 ### 4.13 Thinking orbs
 

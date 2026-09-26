@@ -534,11 +534,11 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
 |---|---|---|---|---|
 | Inquiry | Lead created | Existing web tag, not in the feed | `Lead`, sent at intake | $300 |
 | Qualified | Current fit band strong or possible, and you moved it to Chatting or Quoted | `Qualified inquiry` | `QualifiedLead` | $1,000 |
-| Quote | Status Quoted, or a CRM quote sent | `Quote sent` | `Quote` | $2,000 |
-| Booked | A linked PerfectBook booking with money first observed paid after the inquiry | `Booking (deposit paid)` | `Purchase` | USD booking total times the booking value percent (default 35); other currencies report a fixed 2,000 USD |
+| Quote | Current or recorded past status Quoted, or a CRM quote sent | `Quote sent` | `Quote` | $2,000 |
+| Booked | A linked active PerfectBook booking with money still paid, first observed at or after the inquiry | `Booking (deposit paid)` | `Purchase` | USD booking total times the booking value percent (default 35); other currencies report a fixed 2,000 USD |
 
 - Only leads that arrived with a click ID (`gclid`, `gbraid`, `wbraid`, or
-  `fbclid`, including one in the landing URL) are reported: the form drops
+  `fbclid`, with `fbclid` also read from the landing URL) are reported: the form drops
   click IDs when marketing consent is off. Archived, suspected-spam, and
   lost "not a fit" leads are never reported. Tests using the business mailbox
   or an owner address in `ALLOWED_GOOGLE_EMAILS` are also excluded.
@@ -548,8 +548,8 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
   milestones use activity history; qualification also requires the current
   fit band to be strong/possible at sweep time, without requiring an AI verdict
   in history. Its timestamp is the first owner transition to Chatting or Quoted.
-  Lowering the band before
-  the sweep prevents qualification; already recorded outcomes are retained.
+  Lowering the band before the sweep prevents qualification; already recorded
+  outcomes are retained.
 - Each outcome is one `AdConversion` row per lead, recorded once, so a status
   moving back and forth never reports twice. The Lead event ID is the form's
   `submission_id`, so a browser pixel Lead with the same event ID deduplicates.
@@ -565,8 +565,8 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
   `sherpaholidays`, and the password. The CSV carries the gclid, hashed email
   and phone (enhanced conversions for leads), and Pacific-time conversion
   times. A row stays in the feed for three days after Google first pulls it;
-  Google ignores the repeats by Order ID. Google accepts gclid rows up to 90
-  days after the click and email-only rows up to 63 days. Braid-only clicks
+  Google ignores the repeats by Order ID. The feed includes gclid rows up to 90
+  days after the click and rows matched by email/phone up to 63 days. Braid-only clicks
   use email/phone matching; this scheduled feed does not send gbraid/wbraid.
   Accept/reject counts are in Google Ads > Goals > Conversions > Uploads.
 - Both are off until configured. The card shows the last run, Meta sent,
