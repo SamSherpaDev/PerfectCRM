@@ -37,7 +37,7 @@ class TemplateWordingSystemTest < ApplicationSystemTestCase
     select "Review ask", from: "Template"
     fill_in "Recipients", with: "Maya Gurung <maya@example.test>"
     click_button "Preview merge"
-    assert_text "Missing: google review link"
+    assert_selector "[aria-label='Merged messages']", text: "Missing: google review link"
     within("[aria-label='Merged messages']") do
       assert_text "How was Everest Base Camp trek?"
       assert_text "Hi Maya,"
@@ -70,7 +70,8 @@ class TemplateWordingSystemTest < ApplicationSystemTestCase
     select "Review ask", from: "Template"
     fill_in "Recipients", with: "Maya Gurung <maya@example.test>"
     click_button "Preview merge"
-    assert_text "https://g.page/r/example/review"
+    # Wait for the POST response's section instead of reading the outgoing body.
+    assert_selector "[aria-label='Merged messages']", text: "https://g.page/r/example/review"
     assert_no_text "Missing: google review link"
     capture("review-configured-preview")
     send_review("review-configured", link: "https://g.page/r/example/review")
