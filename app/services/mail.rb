@@ -26,8 +26,25 @@ module Mail
 
     def keeps?(headers)
       headers = headers.transform_keys { |key| key.to_s.downcase }
+      return false if self_mail?(headers)
+
       RECIPIENT_HEADERS.any? do |key|
         Array(headers[key]).any? { |value| extract_addresses(value).include?(mailbox_address) }
+      end
+    end
+
+    # App-generated mail (PerfectBook reminders, this CRM's own digests)
+    # goes from the mailbox to the mailbox alone: there is no counterparty,
+    # so it is not correspondence. Any other address in From, To, Cc or
+    # Bcc, or a value that does not parse, keeps the message.
+    def self_mail?(headers)
+      senders = Array(headers["from"])
+      recipients = %w[to cc bcc].flat_map { |key| Array(headers[key]) }
+      return false if senders.empty? || recipients.empty?
+
+      (senders + recipients).all? do |value|
+        addresses = extract_addresses(value)
+        addresses.any? && addresses.all?(mailbox_address)
       end
     end
 

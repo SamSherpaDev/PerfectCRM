@@ -584,7 +584,9 @@ reads the Microsoft 365 mailbox through Microsoft Graph with delegated
 OAuth (the captain's own mailbox only; no tenant-wide grant). It keeps
 only messages with an exact parsed mailbox address
 in From, To, Cc, Bcc, Delivered-To, or X-Original-To; a message
-naming the mailbox anywhere else (Reply-To, a list header) is not kept. Personal
+naming the mailbox anywhere else (Reply-To, a list header) is not kept. App mail
+whose From, To, Cc, and Bcc all name only the mailbox (PerfectBook reminders, the
+CRM's own digests) is not kept either; naming anyone else keeps it. Personal
 mail is skipped without storing it, before any attachment bytes are fetched. This release reads
 received and sent history; see [Replying](#replying) for composing and
 sending from CRM. [AI assistance](#ai-assistance) can prepare a draft for review.
