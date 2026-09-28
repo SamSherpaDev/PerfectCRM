@@ -35,8 +35,8 @@ module Mail
 
     # App-generated mail (PerfectBook reminders, this CRM's own digests)
     # goes from the mailbox to the mailbox alone: there is no counterparty,
-    # so it is not correspondence. Any other address in From, To, Cc or
-    # Bcc, or a value that does not parse, keeps the message.
+    # so it is not correspondence. Uncertain headers must not trigger this
+    # exclusion; keeps? still enforces the mailbox-address requirement.
     def self_mail?(headers)
       senders = Array(headers["from"])
       recipients = %w[to cc bcc].flat_map { |key| Array(headers[key]) }
