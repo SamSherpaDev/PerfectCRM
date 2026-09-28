@@ -584,7 +584,14 @@ reads the Microsoft 365 mailbox through Microsoft Graph with delegated
 OAuth (the captain's own mailbox only; no tenant-wide grant). It keeps
 only messages with an exact parsed mailbox address
 in From, To, Cc, Bcc, Delivered-To, or X-Original-To; a message
-naming the mailbox anywhere else (Reply-To, a list header) is not kept. Personal
+naming the mailbox anywhere else (Reply-To, a list header) is not kept. Both sync
+and Import history also skip mail sent only from the mailbox to itself, such as
+PerfectBook reminders and the CRM's own digests. This exclusion requires a From
+value and at least one To, Cc, or Bcc value, with every supplied value in those
+four fields parsing to only the mailbox address. An outside address, an
+unparseable value, or missing sender or recipients prevents this exclusion;
+the mailbox-address requirement still applies. This filters incoming CRM
+imports; it does not stop notification delivery or remove existing conversations. Personal
 mail is skipped without storing it, before any attachment bytes are fetched. This release reads
 received and sent history; see [Replying](#replying) for composing and
 sending from CRM. [AI assistance](#ai-assistance) can prepare a draft for review.

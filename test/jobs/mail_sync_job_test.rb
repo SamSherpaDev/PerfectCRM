@@ -56,6 +56,23 @@ class MailSyncJobTest < ActiveSupport::TestCase
     @mailbox.requests.each { |request| assert_includes [ :get, :get_bytes, :post ], request.method }
   end
 
+  test "app mail from the mailbox to itself is skipped while client mail still syncs" do
+    Mail::SyncJob.new.perform(fetcher: fetcher) # prime
+    @mailbox.add("inbox", { **graph_message(id: "self", from: "INFO@sherpaholidays.com",
+      to: "info@sherpaholidays.com", subject: "PerfectBook: reminder"), "conversationId" => "self-conv" })
+    @mailbox.add("inbox", { **graph_message(id: "in", from: "client@example.com"), "conversationId" => "in-conv" })
+    @mailbox.add("sentitems", { **graph_message(id: "out", from: "info@sherpaholidays.com",
+      to: "client@example.com"), "conversationId" => "out-conv" })
+    @mailbox.add("sentitems", { **graph_message(id: "cc", from: "info@sherpaholidays.com",
+      to: "info@sherpaholidays.com", cc: "client@example.com"), "conversationId" => "cc-conv" })
+
+    assert_difference([ "Conversation.count", "Message.count" ], 3) do
+      assert_equal 3, Mail::SyncJob.new.perform(fetcher: fetcher)
+    end
+    assert_not Message.exists?(provider_message_id: "self")
+    assert_equal %w[cc in out], Message.where(provider_message_id: %w[self in out cc]).pluck(:provider_message_id).sort
+  end
+
   test "mid-folder failure replays and dedupes on resume" do
     Mail::SyncJob.new.perform(fetcher: fetcher) # prime
     @mailbox.add("inbox", sync_message(id: "one", from: "one@example.com"))
