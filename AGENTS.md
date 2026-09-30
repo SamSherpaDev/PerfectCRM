@@ -25,7 +25,7 @@ When updating this file, preserve this bar for all agents and keep entries conci
 - CRM-only kit lives in `app/assets/tailwind/application.css` (CRM layer) +
   shared partials; preview every component at `/design` (signed-in only).
   Rail order: Today, Inbox, Leads, Clients, Pipeline, Quotes, Templates,
-  Settings; phone tab bar: Today, Inbox, Leads, Clients, More.
+  Channels, Settings; phone tab bar: Today, Inbox, Leads, Clients, More.
 - Today's counts strip carries six `.stat` tiles, two rows of three on
   desktop. `docs/DESIGN.md` section 5 still reads "four equal tiles" from
   the four-tile era.

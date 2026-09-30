@@ -3,10 +3,11 @@ Rails.application.routes.draw do
   # Can be used by load balancers and uptime monitors to verify that the app is live.
   get "up" => "rails/health#show", as: :rails_health_check
 
-  # Website-form intake API (public; per-request auth, no sign-in).
-  # Contract: docs/leads-intake.md.
+  # Stateless APIs with per-request auth, no sign-in.
+  # Contracts: docs/leads-intake.md and docs/channel-checks.md.
   namespace :api do
     namespace :v1 do
+      post "channels/snapshots", to: "channel_snapshots#create"
       scope module: :leads do
         match "leads/intake", to: "intakes#preflight", via: :options
         post "leads/intake", to: "intakes#create"
@@ -87,6 +88,7 @@ Rails.application.routes.draw do
     end
   end
   resources :group_sends, only: %i[create show]
+  get "channels", to: "channels#index"
   get "pipeline", to: "pipeline#show"
   patch "pipeline/move", to: "pipeline#move", as: :pipeline_move
   get "document-nudge/:booking_id", to: "templates#document_nudge", as: :document_nudge

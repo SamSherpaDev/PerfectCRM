@@ -77,6 +77,34 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
     assert_equal [ "Meta social" ], summary.missing_spend_labels
   end
 
+  test "channel totals share campaign aggregation and cost rules" do
+    inquiry("First", campaign: "search")
+    inquiry("Second", campaign: "tour")
+    inquiry("Other channel", source: "meta_ads")
+    AdSpend.record!(week_start: WEEK, source: "google_ads", campaign_name: "search", amount_dollars: "100")
+    AdSpend.record!(week_start: WEEK, source: "google_ads", campaign_name: "tour", amount_dollars: "50")
+
+    summary = WeeklyReport::Summary.new(week_start: WEEK)
+    google = summary.channel_total("google_ads")
+    assert_equal [ 15_000, 2, 7_500 ], [ google.spend_minor, google.inquiries, google.cost_per_inquiry ]
+    assert_nil summary.channel_total("meta_ads").spend_minor
+    assert_nil summary.channel_total("youtube")
+    assert_nil summary.channel_total("google_business_profile")
+
+    inquiry("Missing spend", campaign: "unfunded")
+    google = WeeklyReport::Summary.new(week_start: WEEK).channel_total("google_ads")
+    assert_equal 3, google.inquiries
+    assert_nil google.spend_minor
+    assert_nil google.cost_per_inquiry
+  end
+
+  test "a quiet channel shows zero inquiries but unknown spend and cost" do
+    google = WeeklyReport::Summary.new(week_start: WEEK).channel_total("google_ads")
+    assert_equal 0, google.inquiries
+    assert_nil google.spend_minor
+    assert_nil google.cost_per_inquiry
+  end
+
   test "a quiet week still lists both paid channels" do
     labels = WeeklyReport::Summary.new(week_start: WEEK).rows.map(&:label)
     assert_equal [ "Google", "Meta" ], labels

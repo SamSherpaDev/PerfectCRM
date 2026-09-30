@@ -53,14 +53,14 @@ configuration lives in `config/environments/development.rb`.
 
 On desktop, hover or focus the icon rail to reveal navigation labels and Sign
 out. On mobile, use Open menu to show the drawer. The rail holds **Today**
-(root), **Inbox**, **Leads**, **Clients**, **Pipeline**, **Quotes**, **Templates**, and
-**Settings**. See [Today and follow-ups](#today-and-follow-ups), [Mail](#mail),
+(root), **Inbox**, **Leads**, **Clients**, **Pipeline**, **Quotes**, **Templates**,
+**Channels** (in the Settings group), and **Settings**. See [Today and follow-ups](#today-and-follow-ups), [Mail](#mail),
 [Replying](#replying), [Templates](#templates), [Pipeline](#pipeline), and [Quotes](#quotes) for the live features. Settings provides appearance,
 morning and pipeline digests, the [weekly ads report](#weekly-ads-report), connections, history import, automation settings, email sender settings, and export controls.
 
 On phones (under 750px) a bottom tab bar holds **Today**, **Inbox**,
 **Leads**, **Clients**, and **More** (Pipeline, Quotes, Templates,
-Settings) while the rail hides. Signed-in builders can preview every
+Channels, Settings) while the rail hides. Signed-in builders can preview every
 component of the kit at `/design` (listed nowhere in the rail) in Paper
 and Night.
 
@@ -71,6 +71,22 @@ separate Save step. The status beneath the choice confirms when it is saved.
 The choice is shared across the app and persists across navigation and later
 sign-ins; signed-out pages use Paper. Device reduced-motion preferences
 disable the ridge and enso animations and show thinking orbs as static frames.
+
+## Channels
+
+Channels (`/channels`) keeps the latest regular check for YouTube, TripAdvisor,
+Google Business Profile, Instagram, Facebook, Google Ads and Meta ads in one
+list. Open the open-item count to see the short actions. Last check, review
+count/rating and followers come from aggregate snapshots; earlier checks stay
+stored. There are no manual check forms or trend charts.
+
+Spend, inquiries and cost per inquiry use the last complete Pacific week and
+the [Monday report's rules](#weekly-ads-report). Missing spend or no inquiries
+makes cost unavailable. Organic channel inquiries say Not attributed until the
+CRM supports those separate sources; they are not guessed from website leads.
+Check ingestion and the fixed privacy-safe action text are in
+[the API contract](docs/channel-checks.md); bearer setup is in
+[operations](docs/operations.md#channel-checks).
 
 ## Templates
 
