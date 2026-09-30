@@ -1,10 +1,8 @@
 module Api
   module V1
-    # Server-to-server only: independent of storefront credentials and sessions.
-    class ChannelSnapshotsController < ActionController::API
+    class ChannelSnapshotsController < ChannelChecksController
       MAX_BODY_BYTES = 4 * 1024
       FIELDS = %w[channel checked_at open_items review_count review_rating follower_count inquiries].freeze
-      before_action :authenticate_channel_checks!
 
       def create
         return render_error("json_required", :unsupported_media_type) unless request.media_type == "application/json"
@@ -33,15 +31,6 @@ module Api
 
       private
 
-      def authenticate_channel_checks!
-        expected = ENV["CHANNEL_CHECKS_TOKEN"].to_s
-        supplied = request.headers["Authorization"].to_s.delete_prefix("Bearer ")
-        unless expected.present? && request.headers["Authorization"].to_s.start_with?("Bearer ") &&
-            ActiveSupport::SecurityUtils.secure_compare(expected, supplied)
-          render_error("unauthorized", :unauthorized)
-        end
-      end
-
       def valid_shape?(data)
         return false unless data.is_a?(Hash) && (data.keys - FIELDS).empty?
         return false unless %w[channel checked_at open_items].all? { |key| data.key?(key) }
@@ -54,10 +43,6 @@ module Api
         }
 
         data["review_rating"].nil? || data["review_rating"].is_a?(Numeric)
-      end
-
-      def render_error(error, status)
-        render json: { error: error }, status: status
       end
     end
   end

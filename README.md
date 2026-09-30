@@ -82,8 +82,10 @@ stored. There are no manual check forms or trend charts.
 
 Google Ads and Meta ads spend, inquiries and cost per inquiry use the last
 complete Pacific week and the [Monday report's rules](#weekly-ads-report).
-Missing spend or no inquiries makes cost unavailable. Checks cannot supply
-paid inquiries or spend for any channel. For the five organic channels,
+Missing spend or no inquiries makes cost unavailable. The Monday check posts
+Google Ads and Meta campaign spend before the 7am Pacific email; Settings stays
+available for corrections. Paid inquiries still come from CRM leads, not checks.
+For the five organic channels,
 inquiries come from the latest check: an optional aggregate count of contacts
 on that channel itself, such as direct messages, never guessed from website
 leads. Omitted or null counts mean Not checked; zero means none. Organic rows
@@ -855,11 +857,15 @@ unknown, shown as "-", and names the campaigns needing spend.
 
 Settings → Monday ads report sets the recipient (empty sends to the first
 allowlisted Google sign-in, or info@sherpaholidays.com if none is configured).
-The Monday email always sends. Enter USD spend from Google Ads and Meta for
-one of the last eight complete weeks, per channel and required campaign name,
-matching the lead's campaign exactly, including capitalization (surrounding
-whitespace is ignored). Saving the same week, channel, and campaign replaces
-its amount; Remove deletes that entry. There is no channel-total entry. Preview
+The Monday email always sends. The Monday check posts last week's USD campaign
+spend from Google Ads and Meta before the 7am Pacific email through
+[the channel spend API](docs/channel-checks.md#weekly-spend-request).
+Settings remains available for corrections to one of the last eight complete
+weeks, per channel and required campaign name, matching the lead's campaign
+exactly, including capitalization (surrounding whitespace is ignored).
+Saving the same week, channel, and campaign replaces its amount; unmentioned
+entries stay unchanged. Remove in Settings deletes that entry. There is no
+channel-total entry. Preview
 past weeks or the current week in progress at `/settings/weekly_report`, where
 "Send it now" queues the displayed week's report to the recipient.
 

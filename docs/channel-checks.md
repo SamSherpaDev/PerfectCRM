@@ -42,7 +42,8 @@ URLs, source control or reports.
   zero means none. The latest check value is shown, without carrying forward
   an older known value or summing historical checks.
 - `inquiries` is refused for `google_ads` and `meta_ads`, even if null.
-  Check-supplied spend and cost per inquiry are refused for every channel.
+  Snapshot-supplied spend and cost per inquiry are refused for every channel;
+  paid spend uses the separate weekly request below.
 - Rating: optional number from 1 to 5, stored to two decimal places, or null.
   A rating requires a positive review count.
 - Open items: a unique array with at most eight short action lines, each at
@@ -79,6 +80,70 @@ has no links to customers, messages, reviewers or individual accounts.
 - `422`: `{ "error": "invalid_snapshot" }`, optionally with a `fields` array
   of invalid field names. Submitted values are never echoed.
 
+## Weekly spend request
+
+The Monday check reads last week's per-campaign USD spend from Google Ads and
+Meta and posts it before the Monday 7am Pacific email. Post one channel and one
+complete week per request, including every campaign for that channel and week.
+Paid inquiries still come from CRM leads; checks cannot supply them.
+
+`POST /api/v1/channels/spend`, `Content-Type: application/json`.
+Use the same bearer authentication and `CHANNEL_CHECKS_TOKEN` as snapshots.
+Missing or blank configuration refuses every request. No new credential is needed.
+
+```json
+{
+  "spend": {
+    "channel": "google_ads",
+    "week_start": "2026-09-21",
+    "campaigns": [
+      { "campaign_name": "Nepal Search", "amount_dollars": "126.50" },
+      { "campaign_name": "Nepal Groups", "amount_dollars": "0.00" }
+    ]
+  }
+}
+```
+
+- The sole top-level field is `spend`. All fields shown are required; unknown
+  fields at any level are rejected. Maximum JSON body: 16 KiB.
+- Channel: `google_ads` or `meta_ads` only.
+- Week: `YYYY-MM-DD`, a Monday in the last eight complete Pacific weeks.
+  The current week in progress, future weeks and older weeks are refused.
+- Campaigns: at least one. Use the ad platform's campaign name, matching the
+  CRM lead's campaign exactly, including capitalization. Surrounding whitespace
+  is stripped. Names are required and at most 160 characters after stripping.
+- Amount: USD, zero or more, with at most two decimal places. A decimal string
+  is recommended; JSON numbers are also accepted. No currency signs or commas.
+- Aggregate campaign spend only. Never send customer names, emails, phones,
+  addresses, lead records or other personal data. Request payloads are filtered
+  from application parameter logs; errors never echo submitted values.
+
+The whole request saves in one transaction through `AdSpend.record!`. An invalid
+campaign saves nothing, including no replacements of existing amounts. Posting
+again replaces the amount for the same week, channel and campaign without
+adding another row. If a campaign appears more than once in a request, its last
+amount wins and the response lists it once. Entries not mentioned stay unchanged;
+the API never deletes. Settings manual entry and Remove remain available for
+corrections.
+
+### Weekly spend response
+
+`201` returns the saved entries, including the normalized campaign name and USD
+amount as a two-decimal string:
+
+```json
+{
+  "entries": [
+    { "channel": "google_ads", "week_start": "2026-09-21", "campaign_name": "Nepal Search", "amount_dollars": "126.50" },
+    { "channel": "google_ads", "week_start": "2026-09-21", "campaign_name": "Nepal Groups", "amount_dollars": "0.00" }
+  ]
+}
+```
+
+`401`, `415`, `413` and `400` use the same error codes as snapshots.
+`422` returns `{ "error": "invalid_spend" }`, optionally with a `fields` array
+of invalid field names, never values.
+
 ## Weekly metrics
 
 For Google Ads and Meta ads, spend, inquiries and cost per inquiry are read from `WeeklyReport::Summary`,
@@ -88,8 +153,11 @@ rules; one active paid campaign without spend leaves channel spend and cost
 unknown. Costs are also unknown with no inquiries. The page labels this period
 separately from the last check time.
 
-Google Ads and Meta ads have existing CRM source attribution and Settings ad
-spend. Checks cannot supply or overwrite their weekly metrics. The five organic
+Google Ads and Meta ads use existing CRM source attribution for paid inquiries
+and `AdSpend` entries from Monday checks or Settings corrections for spend.
+The email, Settings preview and Channels page all keep using the same
+`WeeklyReport::Summary` calculation. Snapshots cannot supply paid inquiries,
+spend or costs. The five organic
 channels have no separate CRM lead sources: their inquiries come only from the
 latest snapshot, labeled separately from the paid report period. Website form
 inquiries are not guessed into an organic channel. Organic rows show inquiries,

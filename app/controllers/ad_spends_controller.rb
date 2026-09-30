@@ -1,4 +1,4 @@
-# Weekly ad spend typed in on Settings, feeding cost per inquiry in the
+# Settings corrections to weekly ad spend, feeding cost per inquiry in the
 # Monday ads report. Saving the same week, channel, and campaign again
 # replaces the amount.
 class AdSpendsController < ApplicationController
