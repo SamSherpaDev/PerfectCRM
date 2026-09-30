@@ -1,9 +1,9 @@
 # Channel checks
 
 The channels manager posts aggregate checks to PerfectCRM. The signed-in
-`/channels` page shows the latest check for each channel, ordered by check time
-(and record ID for ties). Earlier checks stay stored; there are no trend charts
-or manual check forms.
+`/channels` page selects each channel's latest snapshot by greatest check time,
+then greatest record ID for ties. Earlier checks stay stored; there are no
+trend charts or manual check forms.
 
 ## Request
 
