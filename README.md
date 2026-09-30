@@ -82,9 +82,12 @@ stored. There are no manual check forms or trend charts.
 
 Google Ads and Meta ads spend, inquiries and cost per inquiry use the last
 complete Pacific week and the [Monday report's rules](#weekly-ads-report).
-Missing spend or no inquiries makes cost unavailable. The Monday check posts
-Google Ads and Meta campaign spend before the 7am Pacific email; Settings stays
-available for corrections. Paid inquiries still come from CRM leads, not checks.
+Missing spend or no inquiries makes cost unavailable. The
+[channel spend endpoint](docs/channel-checks.md#weekly-spend-request) is for the
+channels manager's Monday check, an external agent run outside PerfectCRM,
+configured separately with the same `CHANNEL_CHECKS_TOKEN`. Nothing in
+PerfectCRM calls it. Until that check posts spend, enter it in Settings as before.
+Paid inquiries still come from CRM leads, not checks.
 For the five organic channels,
 inquiries come from the latest check: an optional aggregate count of contacts
 on that channel itself, such as direct messages, never guessed from website
@@ -857,10 +860,15 @@ unknown, shown as "-", and names the campaigns needing spend.
 
 Settings → Monday ads report sets the recipient (empty sends to the first
 allowlisted Google sign-in, or info@sherpaholidays.com if none is configured).
-The Monday email always sends. The Monday check posts last week's USD campaign
-spend from Google Ads and Meta before the 7am Pacific email through
-[the channel spend API](docs/channel-checks.md#weekly-spend-request).
-Settings remains available for corrections to one of the last eight complete
+The Monday email always sends using the spend already stored.
+[The channel spend API](docs/channel-checks.md#weekly-spend-request) is for the
+channels manager's Monday check, an external agent run that is not part of
+PerfectCRM and is configured separately with the same `CHANNEL_CHECKS_TOKEN`.
+Nothing in PerfectCRM calls this endpoint. The external check should read last
+week's per-campaign USD spend from Google Ads and Meta and post both channels
+before the Monday 7am Pacific email. Until that check posts, spend is entered
+in Settings as before.
+Settings supports entry and corrections for one of the last eight complete
 weeks, per channel and required campaign name, matching the lead's campaign
 exactly, including capitalization (surrounding whitespace is ignored).
 Saving the same week, channel, and campaign replaces its amount; unmentioned
