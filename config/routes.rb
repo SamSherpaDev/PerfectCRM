@@ -8,6 +8,7 @@ Rails.application.routes.draw do
   namespace :api do
     namespace :v1 do
       post "channels/snapshots", to: "channel_snapshots#create"
+      post "channels/spend", to: "channel_spends#create"
       scope module: :leads do
         match "leads/intake", to: "intakes#preflight", via: :options
         post "leads/intake", to: "intakes#create"

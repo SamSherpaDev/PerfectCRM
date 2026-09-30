@@ -1,4 +1,4 @@
-# Manual campaign spend for the Monday report. Entry rules and usage:
+# Campaign spend from Monday checks or Settings corrections. Entry rules and usage:
 # README.md, "Weekly ads report".
 class AdSpend < ApplicationRecord
   SOURCES = %w[google_ads meta_ads].freeze

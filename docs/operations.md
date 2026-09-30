@@ -88,13 +88,13 @@ secret. For relay credential setup and rotation, see the
 
 The owner sets `CHANNEL_CHECKS_TOKEN` in the app environment and supplies the
 same credential privately to the channels manager. Never commit, print or
-include it in a URL. Unset, empty or whitespace-only disables all snapshot
-requests, including otherwise valid callers. This credential is independent of
+include it in a URL. Unset, empty or whitespace-only disables all snapshot and
+weekly spend requests, including otherwise valid callers. This credential is independent of
 website intake and mailbox credentials. To rotate, the owner replaces it in
 both environments and applies the app environment change through the normal
 release process; there is no UI token generator or manual check entry.
 
-The aggregate-only endpoint and its fixed action vocabulary are documented in
+The aggregate-only snapshot and weekly spend endpoints are documented in
 [channel checks](channel-checks.md). The page is under Channels in the Settings
 navigation group and under More on phones. Checks are retained for later trends.
 
