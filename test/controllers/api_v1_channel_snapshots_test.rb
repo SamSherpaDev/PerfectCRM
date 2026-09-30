@@ -82,12 +82,42 @@ class ApiV1ChannelSnapshotsTest < ActionDispatch::IntegrationTest
       { follower_count: -1 }, { follower_count: 1_000_000_001 }, { follower_count: true },
       { review_rating: 5.1 }, { review_rating: 0 }, { review_rating: "4.5" },
       { review_count: 0, review_rating: 4.5 }, { email: "someone@example.com" },
-      { spend_minor: 2000 }, { inquiries: 10 }
+      { spend_minor: 2000 }, { inquiries: -1 }, { inquiries: 1.2 },
+      { inquiries: "12" }, { inquiries: true }, { inquiries: 1_000_000_001 }
     ]
     invalid.each do |values|
       assert_no_difference "ChannelSnapshot.count" do
         submit payload(**values)
         assert_response :unprocessable_entity, values.inspect
+      end
+    end
+  end
+
+  test "organic inquiries persist as optional aggregate counts for every organic channel" do
+    (ChannelSnapshot::CHANNELS.keys - AdSpend::SOURCES).each do |channel|
+      [ nil, 0, 12, ChannelSnapshot::MAX_COUNT ].each do |count|
+        assert_difference "ChannelSnapshot.count", 1 do
+          submit payload(channel: channel, inquiries: count)
+          assert_response :created
+        end
+        stored = ChannelSnapshot.find(response.parsed_body.fetch("id")).inquiries
+        count.nil? ? assert_nil(stored) : assert_equal(count, stored)
+      end
+      submit payload(channel: channel)
+      assert_response :created
+      assert_nil ChannelSnapshot.latest_by_channel.fetch(channel).inquiries
+    end
+  end
+
+  test "paid checks refuse inquiries including null and every channel refuses spend and costs" do
+    ChannelSnapshot::CHANNELS.each_key do |channel|
+      fields = [ { spend_minor: 0 }, { cost_per_inquiry: 0 } ]
+      fields += [ { inquiries: 0 }, { inquiries: nil } ] if AdSpend::SOURCES.include?(channel)
+      fields.each do |values|
+        assert_no_difference "ChannelSnapshot.count" do
+          submit payload(channel: channel, **values)
+          assert_response :unprocessable_entity
+        end
       end
     end
   end

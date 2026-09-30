@@ -3,7 +3,7 @@ module Api
     # Server-to-server only: independent of storefront credentials and sessions.
     class ChannelSnapshotsController < ActionController::API
       MAX_BODY_BYTES = 4 * 1024
-      FIELDS = %w[channel checked_at open_items review_count review_rating follower_count].freeze
+      FIELDS = %w[channel checked_at open_items review_count review_rating follower_count inquiries].freeze
       before_action :authenticate_channel_checks!
 
       def create
@@ -48,7 +48,8 @@ module Api
         return false unless data["channel"].is_a?(String) && data["checked_at"].is_a?(String)
         # An explicit offset avoids treating an agent's local clock as Pacific.
         return false unless data["checked_at"].match?(/(?:Z|[+-]\d{2}:\d{2})\z/)
-        return false unless %w[review_count follower_count].all? { |key|
+        return false if AdSpend::SOURCES.include?(data["channel"]) && data.key?("inquiries")
+        return false unless %w[review_count follower_count inquiries].all? { |key|
           data[key].nil? || data[key].is_a?(Integer)
         }
 

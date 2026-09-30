@@ -26,8 +26,9 @@ class ChannelsTest < ActionDispatch::IntegrationTest
     ChannelSnapshot::CHANNELS.each_value { |label| assert_select ".channel-name", text: label }
     assert_select ".channel-check-time", text: "No check yet", count: 7
     assert_select ".channel-items", count: 0
-    assert_select ".channel-metrics dd", text: "Not attributed", count: 5
-    assert_select ".channel-metrics dd", text: "Not checked", count: 14
+    assert_select ".channel-metrics dt", text: "Spend", count: 2
+    assert_select ".channel-metrics dt", text: "Cost per inquiry", count: 2
+    assert_select ".channel-metrics dd", text: "Not checked", count: 19
     assert_select "a.nav-link-active[href=?]", channels_path, text: "Channels"
     assert_select ".tabbar button.on", text: "More"
     assert_includes response.body, "Sep 21-27, Pacific time"
@@ -55,6 +56,40 @@ class ChannelsTest < ActionDispatch::IntegrationTest
       assert_select "dd", text: "0", count: 1
     end
     assert_equal 4, ChannelSnapshot.count
+  end
+
+  test "organic rows use the latest check inquiries including zero and unknown" do
+    previous_token = ENV["CHANNEL_CHECKS_TOKEN"]
+    ENV["CHANNEL_CHECKS_TOKEN"] = "channel-page-test"
+    channels = ChannelSnapshot::CHANNELS.keys - AdSpend::SOURCES
+    channels.each do |channel|
+      [ [ 1.hour.ago, 1234 ], [ 2.hours.ago, 9 ] ].each do |time, count|
+        post "/api/v1/channels/snapshots", params: {
+          snapshot: { channel: channel, checked_at: time.iso8601, open_items: [], inquiries: count }
+        }.to_json, headers: { "CONTENT_TYPE" => "application/json", "Authorization" => "Bearer channel-page-test" }
+        assert_response :created
+      end
+    end
+    get channels_path
+    channels.each do |channel|
+      assert_select ".channel-row[aria-labelledby=channel-#{channel}]" do
+        assert_select ".channel-metrics dt", text: "Inquiries"
+        assert_select ".channel-metrics dd", text: "1,234"
+        assert_select ".channel-metrics dt", text: "Spend", count: 0
+        assert_select ".channel-metrics dt", text: "Cost per inquiry", count: 0
+      end
+    end
+    channels.each_with_index do |channel, index|
+      ChannelSnapshot.create!(channel: channel, checked_at: Time.current, inquiries: index.zero? ? 0 : nil)
+    end
+    get channels_path
+    channels.each_with_index do |channel, index|
+      assert_select ".channel-row[aria-labelledby=channel-#{channel}] .channel-metrics div:first-child dd",
+        text: index.zero? ? "0" : "Not checked"
+    end
+    assert_equal 15, ChannelSnapshot.count
+  ensure
+    ENV["CHANNEL_CHECKS_TOKEN"] = previous_token
   end
 
   test "ad metrics aggregate campaigns using the report week and missing spend rules" do

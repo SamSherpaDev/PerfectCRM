@@ -21,10 +21,11 @@ class ChannelSnapshot < ApplicationRecord
 
   validates :channel, inclusion: { in: CHANNELS.keys }
   validates :checked_at, presence: true
-  validates :review_count, :follower_count, numericality: {
+  validates :review_count, :follower_count, :inquiries, numericality: {
     only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: MAX_COUNT,
     allow_nil: true
   }
+  validates :inquiries, absence: true, if: -> { AdSpend::SOURCES.include?(channel) }
   validates :review_rating, numericality: {
     greater_than_or_equal_to: 1, less_than_or_equal_to: 5, allow_nil: true
   }

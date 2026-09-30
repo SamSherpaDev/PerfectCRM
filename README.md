@@ -80,10 +80,14 @@ list. Open the open-item count to see the short actions. Last check, review
 count/rating and followers come from aggregate snapshots; earlier checks stay
 stored. There are no manual check forms or trend charts.
 
-Spend, inquiries and cost per inquiry use the last complete Pacific week and
-the [Monday report's rules](#weekly-ads-report). Missing spend or no inquiries
-makes cost unavailable. Organic channel inquiries say Not attributed until the
-CRM supports those separate sources; they are not guessed from website leads.
+Google Ads and Meta ads spend, inquiries and cost per inquiry use the last
+complete Pacific week and the [Monday report's rules](#weekly-ads-report).
+Missing spend or no inquiries makes cost unavailable. Checks cannot supply
+paid inquiries or spend for any channel. For the five organic channels,
+inquiries come from the latest check: an optional aggregate count of contacts
+on that channel itself, such as direct messages, never guessed from website
+leads. Omitted or null counts mean Not checked; zero means none. Organic rows
+show inquiries, reviews and followers, with no ad spend or cost per inquiry.
 Check ingestion and the fixed privacy-safe action text are in
 [the API contract](docs/channel-checks.md); bearer setup is in
 [operations](docs/operations.md#channel-checks).

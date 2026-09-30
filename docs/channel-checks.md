@@ -22,7 +22,8 @@ URLs, source control or reports.
     "open_items": ["Review new comments", "Review video details"],
     "review_count": null,
     "review_rating": null,
-    "follower_count": 230
+    "follower_count": 230,
+    "inquiries": 3
   }
 }
 ```
@@ -35,6 +36,13 @@ URLs, source control or reports.
   minutes in the future. It is displayed in Pacific time.
 - Review and follower counts: optional integer, 0 to 1,000,000,000, or null.
   Null or omission means unknown, not zero. Subscribers use `follower_count`.
+- Organic inquiries: optional integer, 0 to 1,000,000,000, or null, for the
+  five organic channels only. Count inquiries received on the channel itself
+  (for example direct messages), aggregate only. Null or omission means unknown;
+  zero means none. The latest check value is shown, without carrying forward
+  an older known value or summing historical checks.
+- `inquiries` is refused for `google_ads` and `meta_ads`, even if null.
+  Check-supplied spend and cost per inquiry are refused for every channel.
 - Rating: optional number from 1 to 5, stored to two decimal places, or null.
   A rating requires a positive review count.
 - Open items: a unique array with at most eight short action lines, each at
@@ -73,7 +81,7 @@ has no links to customers, messages, reviewers or individual accounts.
 
 ## Weekly metrics
 
-Spend, inquiries and cost per inquiry are read from `WeeklyReport::Summary`,
+For Google Ads and Meta ads, spend, inquiries and cost per inquiry are read from `WeeklyReport::Summary`,
 using the last complete Monday-to-Sunday Pacific week, exactly as the Monday
 email report. Campaign rows aggregate using the report's existing missing-spend
 rules; one active paid campaign without spend leaves channel spend and cost
@@ -81,8 +89,10 @@ unknown. Costs are also unknown with no inquiries. The page labels this period
 separately from the last check time.
 
 Google Ads and Meta ads have existing CRM source attribution and Settings ad
-spend. The five organic channels do not have separate CRM lead sources yet, so
-their inquiries say "Not attributed" and spend/cost say "Not available". Website
-form inquiries are not guessed into an organic channel. The checks cannot
-supply or overwrite these metrics. Intake tracking, conversion exports and the
-weekly report email behavior are unchanged.
+spend. Checks cannot supply or overwrite their weekly metrics. The five organic
+channels have no separate CRM lead sources: their inquiries come only from the
+latest snapshot, labeled separately from the paid report period. Website form
+inquiries are not guessed into an organic channel. Organic rows show inquiries,
+reviews and followers; spend and cost per inquiry are omitted because these
+channels carry no ad spend. Intake tracking, conversion exports and the weekly
+report email behavior are unchanged.
