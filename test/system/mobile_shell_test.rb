@@ -22,7 +22,7 @@ class MobileShellTest < ApplicationSystemTestCase
     assert_selector "nav[aria-label=Primary] a", text: "Settings"
     click_button "Close menu"
     within "nav.tabbar" do
-      click_button "More: pipeline, quotes, templates, settings"
+      click_button "More"
     end
     within "aside" do
       click_link "Pipeline"

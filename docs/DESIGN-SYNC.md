@@ -37,7 +37,7 @@ The first cut of this package is a refactor inside PerfectBook: split `applicati
 | `app/assets/tailwind/crm.css` | the CRM-only classes from `DESIGN.md` Appendix C: `.unread`, `.mark-inline`, timeline (`.timeline`, `.ev` incl. `.ev.auto`, `.msg`, `.stream`), reply box and chips, `.draft`, board, `.board-groups` and `.kcard`, `.tabbar`, docked reply, `.sheet`, `.stage-row`, `.sticky-send`, `.rowlist`, `.setting`, `.toggle`, `.dep`, `.src`, `.fit` |
 | `app/views/shared/_sketches_crm.html.erb` | `sk-everest`, `sk-bridge`, `sk-pass`, `sk-cairn`, `sk-stream`, `sk-mark-a` (the chosen mark) |
 | `app/helpers/crm_sketches.rb` | extends `SKETCH_VIEWBOXES` with the CRM names; `sketch(:everest)` uses `xMaxYMax meet`, `:stream` uses `none` |
-| `app/views/shared/_nav.html.erb`, `_tabbar.html.erb` | the eight rail items and the five bottom-bar items |
+| `app/views/shared/_nav.html.erb`, `_tabbar.html.erb` | the nine rail items and the five bottom-bar items |
 | `app/views/layouts/application.html.erb` | the shell: rail on desktop, top bar plus bottom bar on the phone, docked areas |
 | `public/icon.svg`, `icon.png`, `apple-touch-icon.png`, `favicon.ico` | the CRM mark on the ink tile |
 | `docs/DESIGN.md` | the approved CRM contract, sections 2.2, 4, 7, 10, 12 are CRM-specific |

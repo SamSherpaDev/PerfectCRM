@@ -69,6 +69,14 @@ module WeeklyReport
       @rows ||= build_rows(range, spends: AdSpend.for_week(week_start))
     end
 
+    # Channel totals use the same missing-spend rules as the email report.
+    # nil means the CRM does not attribute inquiries to this channel yet.
+    def channel_total(source)
+      return nil unless Lead::SOURCES.include?(source)
+
+      sum_rows(rows.select { |row| row.source == source })
+    end
+
     # Every source: the week's volume.
     def total
       @total ||= sum_rows(rows)

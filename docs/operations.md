@@ -73,6 +73,7 @@ are not repeated here. This file covers only what differs for the CRM.
 | `LITESTREAM_*`, backup-bucket `SPACES_ENDPOINT`/`SPACES_REGION` | Step 2 | `.env.litestream`, password manager |
 | `SMTP_USERNAME`, `SMTP_PASSWORD` | Microsoft 365 SMTP credentials | `.env.app`, password manager |
 | `MS_GRAPH_CLIENT_ID`, `MS_GRAPH_CLIENT_SECRET`, `MS_GRAPH_TENANT_ID` | [Microsoft 365 mailbox](#microsoft-365-mailbox) | `.env.app`, password manager |
+| `CHANNEL_CHECKS_TOKEN` | Owner-created bearer credential for the channels manager | `.env.app`, password manager |
 | AI provider key | [AI setup](../README.md#ai-assistance) | Settings; encrypted in the primary database, password manager |
 | Mailbox grant (delegated) | [Mail setup](../README.md#mail) | Refresh token encrypted in the primary database (Settings → Mailbox → Connect mailbox), password manager |
 | `PERFECTBOOK_BASE_URL`, `PERFECTBOOK_API_TOKEN` | [PerfectBook connection setup](../README.md#perfectbook-connection) | CRM `.env.app`; token also in PerfectBook's `.env.app` and password manager |
@@ -82,6 +83,20 @@ same keys when restoring. Losing or replacing them makes encrypted values
 unreadable, including the mailbox grant, AI provider key, lead phone fields, and relay
 secret. For relay credential setup and rotation, see the
 [website intake contract](leads-intake.md#relay-mode-n8n-panda-ai-any-server).
+
+## Channel checks
+
+The owner sets `CHANNEL_CHECKS_TOKEN` in the app environment and supplies the
+same credential privately to the channels manager. Never commit, print or
+include it in a URL. Unset, empty or whitespace-only disables all snapshot
+requests, including otherwise valid callers. This credential is independent of
+website intake and mailbox credentials. To rotate, the owner replaces it in
+both environments and applies the app environment change through the normal
+release process; there is no UI token generator or manual check entry.
+
+The aggregate-only endpoint and its fixed action vocabulary are documented in
+[channel checks](channel-checks.md). The page is under Channels in the Settings
+navigation group and under More on phones. Checks are retained for later trends.
 
 ## Microsoft 365 mailbox
 

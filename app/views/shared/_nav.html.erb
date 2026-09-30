@@ -7,4 +7,5 @@
 <%= nav_link "Templates", templates_path, icon: :sparkle, active: controller_name == "templates" %>
 
 <p class="nav-group"><span class="rail-label">Settings</span></p>
+<%= nav_link "Channels", channels_path, icon: :globe, active: controller_name == "channels" %>
 <%= nav_link "Settings", edit_settings_path, icon: :settings, active: %w[settings weekly_reports].include?(controller_name) %>

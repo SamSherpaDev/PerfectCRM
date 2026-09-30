@@ -1,0 +1,54 @@
+<% content_for :title, "Channels · PerfectCRM" %>
+<div class="page channels-page">
+  <%= render "shared/page_header", eyebrow: "SherpaHolidays", title: "Channels", subtitle: "Your regular channel checks, with open items first." %>
+
+  <section class="card" aria-labelledby="channel-checks-heading">
+    <div class="card-header">
+      <h2 class="card-title" id="channel-checks-heading">Channel checks</h2>
+    </div>
+    <%= card_caption "Google Ads and Meta ads: #{@summary.week_label}, Pacific time. Same period and rules as the Monday report. Organic inquiries come from the latest check." %>
+    <ul class="channel-list">
+      <% ChannelSnapshot::CHANNELS.each do |key, label| %>
+        <% snapshot = @snapshots[key]; metrics = AdSpend::SOURCES.include?(key) ? @summary.channel_total(key) : nil %>
+        <li class="channel-row" aria-labelledby="channel-<%= key %>">
+          <div class="channel-heading">
+            <div>
+              <h3 id="channel-<%= key %>" class="channel-name"><%= label %></h3>
+              <p class="channel-check-time">
+                <% if snapshot %>
+                  Last check <time datetime="<%= snapshot.checked_at.iso8601 %>"><%= snapshot.checked_at.in_time_zone.strftime("%b %-d, %Y at %H:%M") %> PT</time>
+                <% else %>
+                  No check yet
+                <% end %>
+              </p>
+            </div>
+            <% if snapshot&.open_items&.any? %>
+              <details class="channel-items">
+                <summary><%= badge pluralize(snapshot.open_item_count, "open item"), :warning %><%= render "shared/icon", name: :chevron_right, class: "h-4 w-4" %></summary>
+                <ul><% snapshot.open_items.each do |text| %><li><%= text %></li><% end %></ul>
+              </details>
+            <% elsif snapshot %>
+              <span class="channel-clear"><%= sketch :enso, class: "sk channel-enso" %>No open items</span>
+            <% else %>
+              <span class="channel-check-time">Open items not checked</span>
+            <% end %>
+          </div>
+          <dl class="channel-metrics<%= " channel-metrics-organic" unless metrics %>">
+            <% if metrics %>
+              <div><dt>Spend</dt><dd><%= channel_money(metrics.spend_minor) %></dd></div>
+              <div><dt>Inquiries</dt><dd><%= number_with_delimiter(metrics.inquiries) %></dd></div>
+              <div><dt>Cost per inquiry</dt><dd><%= channel_money(metrics.cost_per_inquiry) %></dd></div>
+            <% else %>
+              <div><dt>Inquiries</dt><dd><%= snapshot&.inquiries.nil? ? "Not checked" : number_with_delimiter(snapshot.inquiries) %></dd></div>
+            <% end %>
+            <div><dt>Reviews</dt><dd><%= channel_reviews(snapshot) %></dd></div>
+            <div><dt>Followers</dt><dd><%= snapshot&.follower_count.nil? ? "Not checked" : number_with_delimiter(snapshot.follower_count) %></dd></div>
+          </dl>
+        </li>
+      <% end %>
+    </ul>
+    <div class="card-foot channel-note">
+      <p>Checks arrive automatically from the channels manager. Organic inquiries count direct channel contacts, such as messages; these channels carry no ad spend. For ads, missing spend or no inquiries leaves cost per inquiry unavailable.</p>
+    </div>
+  </section>
+</div>

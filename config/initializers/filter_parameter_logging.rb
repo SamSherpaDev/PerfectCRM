@@ -9,5 +9,7 @@ Rails.application.config.filter_parameters += [
   /\A(?:to|cc|bcc)\z/, :perfectbook_api_token,
   # OAuth authorization codes arrive as query parameters on the Google and
   # Microsoft callbacks, and an unredeemed one must not sit in the logs.
-  /\Acode\z/
+  /\Acode\z/,
+  # Channel checks have no free-text fields; also hide the whole inbound payload.
+  :snapshot
 ]
