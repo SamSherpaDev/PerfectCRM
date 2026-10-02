@@ -43,7 +43,7 @@ module ReplyBox
 
     context = @reply_context
     @reply_draft.assign_attributes(
-      subject: TemplateRenderer.render(template.subject, context),
+      subject: TemplateRenderer.render_subject(template.subject, context),
       body: TemplateRenderer.render(template.body, context),
       template: template
     )

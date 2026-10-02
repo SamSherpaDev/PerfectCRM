@@ -3,7 +3,7 @@ require_relative "../support/google_sign_in_test_helper"
 
 # Correction A: sample data appears only in the labeled editor preview.
 # The picker, the one-tap use endpoint, and the merge preview render live
-# values only — everything else is a visible [missing: …] marker.
+# values only, with a friendly subject fallback and visible body markers.
 class TemplateOperationalRenderingTest < ActionDispatch::IntegrationTest
   include GoogleSignInTestHelper
 

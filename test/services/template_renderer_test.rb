@@ -30,6 +30,33 @@ class TemplateRendererTest < ActiveSupport::TestCase
     assert_equal "A & B <3", TemplateRenderer.render("{{note}}", note: "A & B <3")
   end
 
+  test "subjects fall back for absent, nil, empty, whitespace, and unknown placeholder values" do
+    [ {}, { trip: nil }, { "trip" => "" }, { trip: " \t" } ].each do |context|
+      assert_equal "Planning your trip", TemplateRenderer.render_subject("Documents for {{ trip }}", context)
+    end
+    assert_equal "Planning your trip", TemplateRenderer.render_subject("Hello {{nickname}}", first_name: "Tashi")
+    assert_equal "Planning your trip",
+      TemplateRenderer.render_subject("Hi {{first_name}}, your {{trip}}", first_name: "Tashi")
+    assert_equal "Planning your trip", TemplateRenderer.render_subject("Review {{google_review_link}}", {})
+  end
+
+  test "subjects with real values and subjects without placeholders stay unchanged" do
+    assert_equal "Your Annapurna trip", TemplateRenderer.render_subject("Your {{trip}} trip", trip: "Annapurna")
+    assert_equal "Hi Tashi, your Annapurna trip",
+      TemplateRenderer.render_subject("Hi {{first_name}}, your {{trip}} trip", "first_name" => "Tashi", "trip" => "Annapurna")
+    assert_equal "Balance: 0", TemplateRenderer.render_subject("Balance: {{balance_due}}", balance_due: 0)
+    assert_equal "A & B <3", TemplateRenderer.render_subject("{{trip}}", trip: "A & B <3")
+    assert_equal "Hello from SherpaHolidays", TemplateRenderer.render_subject("Hello from SherpaHolidays", {})
+    assert_equal "", TemplateRenderer.render_subject(nil, {})
+  end
+
+  test "subject fallback does not change body or editor preview missing markers" do
+    text = "Your {{trip}}"
+    assert_equal "Planning your trip", TemplateRenderer.render_subject(text, {})
+    assert_equal "Your [missing: trip]", TemplateRenderer.render(text, {})
+    assert_equal "Your [missing: trip]", TemplateRenderer.render_html(text, {})
+  end
+
   test "render_html escapes values for the preview pane" do
     html = TemplateRenderer.render_html("Hi {{first_name}}", first_name: "<script>alert(1)</script>")
     assert_includes html, "&lt;script&gt;"

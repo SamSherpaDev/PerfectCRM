@@ -212,13 +212,15 @@ let you choose another; a group departure uses a booking for that departure.
 When the booking supplies no trip, the resolved lead owner's trip interest
 fills `trip` only if its nonblank email matches the actual recipient after
 trimming and ignoring case, including with a same-email mirrored contact.
-Unknown or empty placeholder values render `[missing: name]`, never blanks
-or an email substituted for an unknown name. The one exception is
+If any subject placeholder is unknown or empty, the whole subject defaults
+to "Planning your trip". Subjects with all placeholder values stay personalized.
+In email bodies, unknown or empty placeholder values render `[missing: name]`,
+never blanks or an email substituted for an unknown name. The one exception is
 `google_review_link` (`TemplateRenderer::OPTIONAL_PLACEHOLDERS`): it comes
 from Settings → Google reviews. Copy the write-review link from your Google
 Business Profile's "Ask for reviews", paste the full HTTPS URL, and press
 Save review link. Until that link is saved, its whole line is left out of
-the email. Sample values appear only in the labeled
+the email body. Sample values appear only in the labeled
 template-editor preview, which uses the real review link. Set Your name,
 Logo, and Signature in Settings → Signature and press Save email settings;
 these values also fill templates for recipients without CRM records.

@@ -186,7 +186,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     assert_current_path %r{/group_sends/\d+}
     assert_selector "h1", text: "Send summary"
     assert_equal 3, Message.count
-    assert_equal [ "Hi Maya", "Hi Pemba", "Hi [missing: first_name]" ], Message.order(:id).pluck(:subject)
+    assert_equal [ "Hi Maya", "Hi Pemba", "Planning your trip" ], Message.order(:id).pluck(:subject)
     capture_outbound_evidence("group-summary-mobile")
     message = Message.last
     message.mark_failed!("SMTP unavailable")

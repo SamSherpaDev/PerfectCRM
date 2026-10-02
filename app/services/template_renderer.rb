@@ -6,9 +6,10 @@
 # TemplateContext resolves live values. Keys may be symbols or strings.
 # The chooser's supported keys are defined in PLACEHOLDERS below.
 #
-# Unknown placeholders render as a visible "[missing: name]" marker so a
-# half-filled message is never sent silently. OPTIONAL_PLACEHOLDERS are the
-# exception: when one has no value, its whole line is left out instead.
+# Missing subject values fall back to a friendly default. In bodies, unknown
+# placeholders render as a visible "[missing: name]" marker so a half-filled
+# message is never sent silently. OPTIONAL_PLACEHOLDERS are the exception:
+# when one has no value, its whole line is left out instead.
 # Values are substituted raw by .render (for plain-text mail); .render_html
 # escapes values so the Turbo preview pane stays safe to embed.
 class TemplateRenderer
@@ -23,6 +24,7 @@ class TemplateRenderer
   OPTIONAL_PLACEHOLDERS = %w[google_review_link].freeze
 
   PATTERN = /{{\s*([A-Za-z0-9_]+)\s*}}/.freeze
+  DEFAULT_SUBJECT = "Planning your trip".freeze
 
   # Only for the labeled template-editor preview, never operational rendering.
   SAMPLE_CONTEXT = {
@@ -46,6 +48,15 @@ class TemplateRenderer
 
   def self.render(text, context = {})
     substitute(text.to_s, normalize(context)) { |value| value.to_s }
+  end
+
+  # Fall back for the whole subject rather than leaving an awkward fragment
+  # when any placeholder is absent. Body and editor-preview policies stay separate.
+  def self.render_subject(text, context = {})
+    values = normalize(context)
+    return DEFAULT_SUBJECT if placeholders_in(text).any? { |name| !values.key?(name) }
+
+    render(text, values)
   end
 
   def self.render_html(text, context = {})

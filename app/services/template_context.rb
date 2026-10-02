@@ -4,8 +4,8 @@
 # Resolution policy: see README.md, "Replying".
 #
 # Values that are unknown or empty are left OUT on purpose: the renderer
-# turns them into the visible [missing: name] marker instead of a silent
-# blank.
+# uses a friendly subject fallback and visible [missing: name] markers
+# in bodies instead of silent blanks.
 class TemplateContext
   INACTIVE_BOOKING_STATUSES = %w[cancelled voided refunded].freeze
 
@@ -38,7 +38,7 @@ class TemplateContext
     context = self.for(record, booking: booking)
     context["missing_documents"] ||= booking.try(:missing_lines)&.join("; ") ||
       "[Check missing documents in PerfectBook]"
-    subject = TemplateRenderer.render(template&.subject.presence || "Documents for {{trip}}", context)
+    subject = TemplateRenderer.render_subject(template&.subject.presence || "Documents for {{trip}}", context)
     body_template = template&.body.presence ||
       "Hi {{first_name}},\n\nPlease send these missing documents through PerfectBook: {{missing_documents}}.\n\n{{signature}}"
     body = TemplateRenderer.render(body_template, context)

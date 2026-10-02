@@ -52,7 +52,7 @@ class TemplateTest < ActiveSupport::TestCase
   end
 
   # Correction A: operational rendering never falls back to sample data.
-  # Unknown or empty values stay visible as [missing: name] markers; the
+  # Unknown or empty body values stay visible as [missing: name] markers; the
   # sample context lives only in the labeled editor preview.
   test "rendered uses only caller values and marks the rest missing" do
     template = Template.new(subject: "Hi {{first_name}}", body: "{{trip}} owes {{balance_due}}")

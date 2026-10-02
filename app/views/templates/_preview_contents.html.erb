@@ -13,6 +13,6 @@
     <%= highlight_missing(simple_format(body_html)).presence || content_tag(:p, "Nothing to preview yet.", class: "muted") %>
   </div>
   <% if missing.any? %>
-    <p class="hint">Unknown placeholders: <%= missing.map { |name| "{{#{name}}}" }.join(", ") %>. They send as [missing: …], so fix the spelling or leave them out.</p>
+    <p class="hint">Unknown placeholders: <%= missing.map { |name| "{{#{name}}}" }.join(", ") %>. Unknown placeholders in the body are sent as [missing: …] markers. A missing value in the subject makes the whole subject fall back to "Planning your trip". Fix the spelling or leave these placeholders out.</p>
   <% end %>
 </div>
