@@ -52,10 +52,10 @@ class OutboundFollowupReviewTest < ActionDispatch::IntegrationTest
     assert_select ".hint", text: /Booking reference:/, count: 0
   end
 
-  test "unknown names stay missing while known sender settings render" do
+  test "unknown names trigger a friendly subject and stay missing in bodies while sender settings render" do
     post group_sends_path, params: { template_id: @template.id, recipients: "stranger@example.com" }
     message = Message.last
-    assert_equal "Hi [missing: first_name]", message.subject
+    assert_equal "Planning your trip", message.subject
     assert_includes message.text_body, "[missing: full_name]"
     assert_includes message.text_body, "Captain Best wishes"
     assert_not_includes message.text_body, "stranger@example.com"

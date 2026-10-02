@@ -129,12 +129,12 @@ class TemplatesRequestsTest < ActionDispatch::IntegrationTest
     assert_match(/Hi Maya/, payload["body"])
   end
 
-  test "use marks unknown values instead of sampling them" do
+  test "use falls back for missing subject values and marks missing body values without sampling" do
     sign_in
     post use_template_path(@template, format: :json)
     assert_response :success
     payload = JSON.parse(response.body)
-    assert_match(/\[missing: trip\]/, payload["subject"])
+    assert_equal "Planning your trip", payload["subject"]
     assert_match(/\[missing: first_name\]/, payload["body"])
   end
 

@@ -8,7 +8,7 @@ module TasksHelper
 
     context = { first_name: subject.name.split.first, full_name: subject.name }
     {
-      subject: TemplateRenderer.render(template.subject, context),
+      subject: TemplateRenderer.render_subject(template.subject, context),
       body: TemplateRenderer.render(template.body, context),
       email: subject.is_a?(Organization) ? subject.email : subject.display_email
     }

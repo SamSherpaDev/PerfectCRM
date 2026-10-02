@@ -25,9 +25,9 @@ class MergeBatchTest < ActiveSupport::TestCase
     assert_not batch.complete?
   end
 
-  test "bare addresses have missing names in operational rendering" do
+  test "bare addresses use a friendly subject and retain missing names in bodies" do
     batch = MergeBatch.build(template: @template, recipient_lines: "stranger@example.com")
-    assert_equal "Hi [missing: first_name]", batch.messages.first.subject
+    assert_equal "Planning your trip", batch.messages.first.subject
     assert_includes batch.messages.first.body, "[missing: full_name]"
     assert_equal "stranger@example.com", batch.messages.first.email
   end
