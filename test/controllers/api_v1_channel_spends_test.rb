@@ -140,7 +140,7 @@ class ApiV1ChannelSpendsTest < ActionDispatch::IntegrationTest
   test "invalid fields shapes channels and amounts save nothing" do
     invalid = [ [], {}, { spend: [] }, { spend: payload[:spend], extra: 1 },
       { spend: payload[:spend].except(:channel) }, { spend: payload[:spend].except(:week_start) },
-      { spend: payload[:spend].except(:campaigns) }, payload(channel: "youtube"), payload(channel: nil),
+      { spend: payload[:spend].except(:campaigns) }, payload(channel: "youtube"), payload(channel: "tiktok"), payload(channel: nil),
       payload(channel: 1), payload(extra: 1), payload(campaigns: []), payload(campaigns: nil),
       payload(campaigns: {}), payload(campaigns: [ nil ]),
       payload(campaigns: [ campaign.except(:campaign_name) ]),

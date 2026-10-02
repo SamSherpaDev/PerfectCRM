@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_30_044501) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_02_054000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -116,7 +116,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_30_044501) do
     t.decimal "review_rating", precision: 3, scale: 2
     t.datetime "updated_at", null: false
     t.index ["channel", "checked_at", "id"], name: "index_channel_snapshots_on_channel_and_checked_at_and_id"
-    t.check_constraint "channel IN ('youtube', 'tripadvisor', 'google_business_profile', 'instagram', 'facebook', 'google_ads', 'meta_ads')", name: "channel_snapshots_known_channel"
+    t.check_constraint "channel IN ('youtube', 'tiktok', 'tripadvisor', 'google_business_profile', 'instagram', 'facebook', 'google_ads', 'meta_ads')", name: "channel_snapshots_known_channel"
   end
 
   create_table "clients", force: :cascade do |t|
