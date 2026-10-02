@@ -48,7 +48,7 @@ export default class extends Controller {
   }
 
   // Live placeholder values ride along so the insert arrives filled.
-  // Without them unknown values render [missing: …] by design.
+  // Missing-value policy: see README.md, "Replying".
   urlWithContext(url) {
     if (!url) return url
     const composer = this.element.closest('[data-controller~="reply-box"]')

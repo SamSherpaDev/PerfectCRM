@@ -1,6 +1,6 @@
 <%# Reusable one-tap picker embedded in the reply box.
     Locals: templates, query (String), context (Hash, optional live values so
-    inserts arrive filled; without it unknown values show [missing: …]). %>
+    inserts arrive filled). Missing-value policy: see README.md, "Replying". %>
 <%= turbo_frame_tag "template_picker" do %>
   <div data-controller="template-picker"<% if local_assigns[:context] %> data-template-picker-context-value="<%= h local_assigns[:context].to_json %>"<% end %>>
     <%= form_with url: picker_templates_path, method: :get, data: { turbo_frame: "template_picker", action: "input->template-picker#search" } do |form| %>

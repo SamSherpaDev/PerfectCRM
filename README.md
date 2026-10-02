@@ -220,7 +220,7 @@ never blanks or an email substituted for an unknown name. The one exception is
 from Settings → Google reviews. Copy the write-review link from your Google
 Business Profile's "Ask for reviews", paste the full HTTPS URL, and press
 Save review link. Until that link is saved, its whole line is left out of
-the email. Sample values appear only in the labeled
+the email body. Sample values appear only in the labeled
 template-editor preview, which uses the real review link. Set Your name,
 Logo, and Signature in Settings → Signature and press Save email settings;
 these values also fill templates for recipients without CRM records.
