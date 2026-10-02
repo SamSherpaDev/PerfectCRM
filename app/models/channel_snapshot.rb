@@ -3,6 +3,7 @@
 class ChannelSnapshot < ApplicationRecord
   CHANNELS = {
     "youtube" => "YouTube",
+    "tiktok" => "TikTok",
     "tripadvisor" => "TripAdvisor",
     "google_business_profile" => "Google Business Profile",
     "instagram" => "Instagram",
@@ -35,7 +36,7 @@ class ChannelSnapshot < ApplicationRecord
 
   def self.latest_by_channel
     # The check time, not arrival time, wins when a worker submits a late check.
-    # Seven indexed lookups, each with id as the tie-breaker.
+    # One indexed lookup per channel, each with id as the tie-breaker.
     CHANNELS.keys.index_with { |channel| where(channel: channel).order(checked_at: :desc, id: :desc).first }
   end
 

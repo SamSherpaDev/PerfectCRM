@@ -59,19 +59,34 @@ class ApiV1ChannelSnapshotsTest < ActionDispatch::IntegrationTest
     assert_equal 230, ChannelSnapshot.latest_by_channel.fetch("youtube").follower_count
   end
 
+  test "accepts TikTok checks with organic inquiries and followers" do
+    assert_difference "ChannelSnapshot.count", 1 do
+      submit payload(channel: "tiktok", inquiries: 3, follower_count: 42,
+        review_count: nil, review_rating: nil, open_items: [ "Check profile details" ])
+      assert_response :created
+      assert_equal "tiktok", response.parsed_body.fetch("channel")
+      snapshot = ChannelSnapshot.find(response.parsed_body.fetch("id"))
+      assert_equal "tiktok", snapshot.channel
+      assert_equal Time.current, snapshot.checked_at
+      assert_equal 3, snapshot.inquiries
+      assert_equal 42, snapshot.follower_count
+      assert_equal [ "Check profile details" ], snapshot.open_items
+    end
+  end
+
   test "accepts every fixed channel and unknown metrics without turning them into zeros" do
     ChannelSnapshot::CHANNELS.each_key do |channel|
       submit payload(channel: channel, open_items: [], review_count: nil, review_rating: nil, follower_count: nil)
       assert_response :created
     end
-    assert_equal 7, ChannelSnapshot.count
+    assert_equal 8, ChannelSnapshot.count
     assert_nil ChannelSnapshot.last.follower_count
     assert_equal 0, ChannelSnapshot.last.open_item_count
   end
 
   test "rejects invalid values personal text and extra fields without persisting" do
     invalid = [
-      { channel: "tiktok" }, { channel: 12 }, { checked_at: "not a time" },
+      { channel: "unknown_channel" }, { channel: 12 }, { checked_at: "not a time" },
       { checked_at: "2026-09-30T10:00:00" }, { checked_at: 10.minutes.from_now.iso8601 },
       { open_items: nil }, { open_items: "Review new comments" },
       { open_items: [ "x" * 81 ] }, { open_items: [ "Review new comments" ] * 9 },

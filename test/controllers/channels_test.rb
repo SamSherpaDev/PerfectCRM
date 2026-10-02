@@ -18,17 +18,21 @@ class ChannelsTest < ActionDispatch::IntegrationTest
     assert_redirected_to sign_in_path
   end
 
-  test "empty page lists all seven channels with honest unknown states and navigation" do
+  test "empty page lists all eight channels with honest unknown states and navigation" do
     get channels_path
     assert_response :success
     assert_select "h1", text: "Channels"
-    assert_select ".channel-row", count: 7
+    assert_select ".channel-row", count: 8
     ChannelSnapshot::CHANNELS.each_value { |label| assert_select ".channel-name", text: label }
-    assert_select ".channel-check-time", text: "No check yet", count: 7
+    assert_select ".channel-row[aria-labelledby=channel-tiktok]" do
+      assert_select ".channel-name", text: "TikTok"
+      assert_select ".channel-check-time", text: "No check yet"
+    end
+    assert_select ".channel-check-time", text: "No check yet", count: 8
     assert_select ".channel-items", count: 0
     assert_select ".channel-metrics dt", text: "Spend", count: 2
     assert_select ".channel-metrics dt", text: "Cost per inquiry", count: 2
-    assert_select ".channel-metrics dd", text: "Not checked", count: 19
+    assert_select ".channel-metrics dd", text: "Not checked", count: 22
     assert_select "a.nav-link-active[href=?]", channels_path, text: "Channels"
     assert_select ".tabbar button.on", text: "More"
     assert_includes response.body, "Sep 21-27, Pacific time"
@@ -56,6 +60,35 @@ class ChannelsTest < ActionDispatch::IntegrationTest
       assert_select "dd", text: "0", count: 1
     end
     assert_equal 4, ChannelSnapshot.count
+  end
+
+  test "TikTok row shows its latest check with organic metrics and no ad spend" do
+    newest = ChannelSnapshot.create!(channel: "tiktok", checked_at: 1.hour.ago,
+      open_items: [ "Check profile details", "Review new comments" ],
+      follower_count: 42, inquiries: 3)
+    ChannelSnapshot.create!(channel: "tiktok", checked_at: 1.day.ago,
+      open_items: [], follower_count: 10, inquiries: 1)
+
+    get channels_path
+    assert_response :success
+    assert_select ".channel-row[aria-labelledby=channel-tiktok]" do
+      assert_select ".channel-name", text: "TikTok"
+      assert_select "time[datetime=?]", newest.checked_at.iso8601, text: "Sep 30, 2026 at 09:00 PT"
+      assert_select "details summary", text: /2 open items/
+      assert_select "details li", text: "Check profile details"
+      assert_select "details li", text: "Review new comments"
+      assert_select ".channel-metrics div:first-child" do
+        assert_select "dt", text: "Inquiries"
+        assert_select "dd", text: "3"
+      end
+      assert_select ".channel-metrics div:last-child" do
+        assert_select "dt", text: "Followers"
+        assert_select "dd", text: "42"
+      end
+      assert_select ".channel-metrics dt", text: "Spend", count: 0
+      assert_select ".channel-metrics dt", text: "Cost per inquiry", count: 0
+    end
+    assert_equal 2, ChannelSnapshot.where(channel: "tiktok").count
   end
 
   test "organic rows use the latest check inquiries including zero and unknown" do
@@ -87,7 +120,7 @@ class ChannelsTest < ActionDispatch::IntegrationTest
       assert_select ".channel-row[aria-labelledby=channel-#{channel}] .channel-metrics div:first-child dd",
         text: index.zero? ? "0" : "Not checked"
     end
-    assert_equal 15, ChannelSnapshot.count
+    assert_equal channels.size * 3, ChannelSnapshot.count
   ensure
     ENV["CHANNEL_CHECKS_TOKEN"] = previous_token
   end

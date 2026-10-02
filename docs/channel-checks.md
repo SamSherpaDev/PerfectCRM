@@ -30,14 +30,14 @@ URLs, source control or reports.
 
 - Required: `channel`, `checked_at`, `open_items`, inside the sole `snapshot`
   object. Unknown fields are rejected. Maximum JSON body: 4 KiB.
-- Channel: `youtube`, `tripadvisor`, `google_business_profile`, `instagram`,
-  `facebook`, `google_ads`, `meta_ads`.
+- Channel: `youtube`, `tiktok`, `tripadvisor`, `google_business_profile`,
+  `instagram`, `facebook`, `google_ads`, `meta_ads`.
 - Check time: ISO 8601 with an explicit `Z` or numeric offset, at most five
   minutes in the future. It is displayed in Pacific time.
 - Review and follower counts: optional integer, 0 to 1,000,000,000, or null.
   Null or omission means unknown, not zero. Subscribers use `follower_count`.
 - Organic inquiries: optional integer, 0 to 1,000,000,000, or null, for the
-  five organic channels only. Count inquiries received on the channel itself
+  six organic channels only. Count inquiries received on the channel itself
   (for example direct messages), aggregate only. Null or omission means unknown;
   zero means none. The latest check value is shown, without carrying forward
   an older known value or summing historical checks.
@@ -165,7 +165,7 @@ and stored `AdSpend` entries for spend, entered in Settings or received through
 the weekly spend endpoint when the separately configured external check posts.
 The email, Settings preview and Channels page all keep using the same
 `WeeklyReport::Summary` calculation. Snapshots cannot supply paid inquiries,
-spend or costs. The five organic
+spend or costs. The six organic
 channels have no separate CRM lead sources: their inquiries come only from the
 latest snapshot, labeled separately from the paid report period. Website form
 inquiries are not guessed into an organic channel. Organic rows show inquiries,

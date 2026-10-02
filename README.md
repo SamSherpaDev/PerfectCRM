@@ -74,9 +74,9 @@ disable the ridge and enso animations and show thinking orbs as static frames.
 
 ## Channels
 
-Channels (`/channels`) keeps the latest regular check for YouTube, TripAdvisor,
-Google Business Profile, Instagram, Facebook, Google Ads and Meta ads in one
-list. Open the open-item count to see the short actions. Last check, review
+Channels (`/channels`) keeps the latest regular check for YouTube, TikTok,
+TripAdvisor, Google Business Profile, Instagram, Facebook, Google Ads and Meta ads
+in one list. Open the open-item count to see the short actions. Last check, review
 count/rating and followers come from aggregate snapshots; earlier checks stay
 stored. There are no manual check forms or trend charts.
 
@@ -88,7 +88,7 @@ channels manager's Monday check, an external agent run outside PerfectCRM,
 configured separately with the same `CHANNEL_CHECKS_TOKEN`. Nothing in
 PerfectCRM calls it. Until that check posts spend, enter it in Settings as before.
 Paid inquiries still come from CRM leads, not checks.
-For the five organic channels,
+For the six organic channels,
 inquiries come from the latest check: an optional aggregate count of contacts
 on that channel itself, such as direct messages, never guessed from website
 leads. Omitted or null counts mean Not checked; zero means none. Organic rows
