@@ -9,7 +9,7 @@ class LeadsController < ApplicationController
   TABS = %w[new chatting quoted nudged lost converted archived missing_source].freeze
 
   def index
-    @tab = params[:source_missing] == "1" ? "missing_source" : (TABS.include?(params[:tab]) ? params[:tab] : "new")
+    @tab = TABS.include?(params[:tab]) ? params[:tab] : "new"
     @query = params[:q].to_s.strip
     @sort = %w[activity name newest fit].include?(params[:sort]) ? params[:sort] : "activity"
 

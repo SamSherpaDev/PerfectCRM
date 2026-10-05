@@ -7,8 +7,8 @@
     <div class="min-w-0"><%= form.label :view, "Source view", class: "label" %><%= form.select :view, WeeklyReport::Monthly::VIEWS.map { |key, label| [label, key] }, { selected: report.view }, class: "select" %></div>
     <%= form.submit "View", class: "btn-secondary btn btn-sm justify-self-start" %>
   <% end %>
-  <p class="hint mt-3">As of <%= report.as_of.strftime('%b %-d, %Y %H:%M %Z') %>. Recomputed from current facts. These source views are alternatives, not additive.</p>
-  <%= link_to "Review missing sources", leads_path(source_missing: "1"), class: "link-quiet inline-block mt-3 text-sm" %>
+  <p class="hint mt-3">As of <%= report.as_of.strftime('%b %-d, %Y %H:%M %Z') %>. Recomputed from current facts. These source views are alternatives, not additive. <% if report.view == "paid" %>Activity and spend through <%= report.end_date.strftime("%b %-d, %Y") %>, the last completed day.<% end %></p>
+  <%= link_to "Review missing sources", leads_path(tab: "missing_source"), class: "link-quiet inline-block mt-3 text-sm" %>
   <div class="table-wrap mt-4" tabindex="0" role="region" aria-label="Monthly source results">
     <table class="table table-compact">
       <thead><tr><th>Source</th><th>Inquiries</th><th>Connected calls</th><th>Bookings</th><th>Travelers</th><th>Net received</th><% if report.view == "paid" %><th>Ad cost / booking</th><% end %></tr></thead>
@@ -41,5 +41,22 @@
     <p class="text-sm mt-2">Calls without inquiry links: <%= quality[:unlinked_calls] %>. Unlinked bookings: <%= quality[:unlinked_bookings] %>. Inferred links: <%= quality[:inferred_bookings] %>. Missing cash facts: <%= quality[:missing_financial_facts] %>. Unavailable mirrors: <%= quality[:unavailable_bookings] %>. Tests held back: <%= quality[:tests_held] %>.<% if quality[:missing_spend] %> Missing spend rows: <%= quality[:missing_spend] %>.<% end %></p>
     <p class="hint mt-2">Across mirror history: <%= quality[:undated_paid_bookings] %> paid bookings have no authoritative first receipt date. Their month is unknown, not guessed from sync time.</p>
     <p class="hint mt-2">Capture: <%= quality[:missing_capture].map { |reason, count| "#{reason.humanize}: #{count}" }.join('; ') %>. <%= quality[:linked_clients] %> distinct linked clients; <%= quality[:unresolved_identities] %> inquiry identities unresolved. Unique people/returning travelers are unavailable without stable identity links, never guessed from email or names.</p>
+  </details>
+  <details class="mt-4">
+    <summary class="text-sm cursor-pointer">Lifetime bookers, original sources and direct referrals</summary>
+    <p class="hint mt-2">Reported discovery, through the as-of time. Original source is the earliest inquiry with an exact contact/client link for each PerfectBook contact; earlier acquisition is unknown. Unique linked bookings only. Referral values are a separate view and must not be added to original-source totals.</p>
+    <h3 class="text-sm font-medium mt-3">Lifetime by booker</h3>
+    <ul class="text-sm space-y-2 mt-2">
+      <% report.lifetime_bookers.each do |booker| %>
+        <li><%= link_to booker[:inquiry].name, lead_path(booker[:inquiry]), class: "link-quiet" %> (PerfectBook contact <%= booker[:contact_id] %>): <%= booker[:source] %>.
+          <% booker[:currencies].each do |currency, facts| %><%= currency %>: <%= facts[:bookings] %> bookings, <%= facts[:repeat_bookings] %> repeat; booked value <%= source_report_money({ currency => facts[:booked_value] }) %>. <% end %>
+          Net receipts: <%= source_report_money(booker[:net_received]) %>.
+        </li>
+      <% end %>
+    </ul>
+    <h3 class="text-sm font-medium mt-3">Original-source lifetime value</h3>
+    <ul class="text-sm space-y-2 mt-2"><% report.original_source_lifetime.each do |source| %><li><%= source[:source] %>: <%= source[:bookers] %> bookers; booked value <%= source_report_money(source[:booked_value]) %>; net receipts <%= source_report_money(source[:net_received]) %>.</li><% end %></ul>
+    <h3 class="text-sm font-medium mt-3">Direct downstream referrals</h3>
+    <ul class="text-sm space-y-2 mt-2"><% report.downstream_referrals.each do |referral| %><li><%= referral[:referrer].name %> referred <%= link_to referral[:inquiry].name, lead_path(referral[:inquiry]), class: "link-quiet" %>; bookings: <%= referral[:bookings].map(&:ref).join(", ").presence || "None" %>; booked value <%= source_report_money(referral[:booked_value]) %>; net receipts <%= source_report_money(referral[:net_received]) %>.</li><% end %></ul>
   </details>
 </section>

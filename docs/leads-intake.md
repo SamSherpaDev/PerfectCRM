@@ -280,7 +280,10 @@ Link edits need actor/date/evidence/reason. CRM stores a unique booking binding;
 sync checks the returned reference and exact contact/trip/date evidence. Unknown,
 mismatched or changed references require review in the Trip panel. PerfectBook
 currently checks reference format only; CRM does not treat that as proof of
-existence. See [reporting handoff](source-reporting.md).
+existence. CRM exposes `GET /api/v1/inquiries/:reference` with Bearer
+`PERFECTBOOK_INQUIRY_TOKEN`, returning only reference, exact contact IDs and
+trip/departure matching fields. PerfectBook pre-storage use is a separate follow-up;
+unvalidated references require captain review. See [reporting handoff](source-reporting.md).
 
 PerfectBook's additive booking API contract: `crm_inquiry_ref`,
 `first_received_at`, `first_received_on`, `first_received_precision`

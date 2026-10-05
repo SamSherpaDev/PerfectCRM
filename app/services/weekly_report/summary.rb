@@ -285,8 +285,7 @@ module WeeklyReport
       qualified_in(window).each { |lead| row_for.call(lead.source, lead.campaign_name).qualified += 1 }
       quoted_in(window).each { |lead| row_for.call(lead.source, lead.campaign_name).quoted += 1 }
       deposits_in(window).each do |booking|
-        lead, client = booking_origin(booking)
-        origin = lead || client
+        origin = booking.primary_inquiry
         row = row_for.call(origin&.source.presence, origin&.campaign_name)
         row.booked += 1
         row.booked_value_minor += booking.total_minor.to_i if booking.currency.to_s.upcase == "USD"
@@ -404,19 +403,8 @@ module WeeklyReport
         .where("first_received_at BETWEEN :from AND :to OR (first_received_at IS NULL AND first_paid_at BETWEEN :from AND :to)", from: window.first, to: window.last)
         .where("status IS NULL OR status NOT IN (?)", TemplateContext::INACTIVE_BOOKING_STATUSES).to_a
         .reject do |booking|
-          booking_origin(booking).compact.any? { |origin| origin.is_test? || (origin.is_a?(Lead) && (origin.converted_client&.is_test? || origin.existing_client&.is_test?)) }
+          Client.where(perfectbook_contact_id: booking.perfectbook_contact_id, is_test: true).exists? || [ booking.inquiry_binding&.lead ].compact.any? { |lead| lead.is_test? || lead.converted_client&.is_test? || lead.existing_client&.is_test? }
         end
-    end
-
-    def booking_origin(booking)
-      return [ booking.primary_inquiry, nil ] if booking.inquiry_binding || booking.crm_inquiry_ref.present?
-      client = Client.find_by(perfectbook_contact_id: booking.perfectbook_contact_id)
-      cutoff = booking.first_received_at || booking.first_paid_at
-      return [ nil, nil ] if cutoff.nil?
-      lead = client&.converted_leads&.where("converted_at <= ?", cutoff)&.order(:converted_at, :id)&.last
-      lead ||= Lead.where(converted_client_id: nil, perfectbook_contact_id: booking.perfectbook_contact_id)
-        .where("COALESCE(received_at, leads.created_at) <= ?", cutoff).order(:received_at, :id).last
-      [ lead, client ]
     end
 
     def inquired_at(lead)

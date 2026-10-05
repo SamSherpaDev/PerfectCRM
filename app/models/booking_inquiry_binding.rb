@@ -9,36 +9,35 @@ class BookingInquiryBinding < ApplicationRecord
     transaction do
       binding = find_or_initialize_by(perfectbook_id: booking.perfectbook_id)
       prior = binding.persisted? ? binding.attributes.slice("lead_id", "state", "evidence") : nil
-      return binding if binding.persisted? && binding.lead_id == lead.id && binding.state == state
+      return binding if binding.persisted? && binding.lead_id == lead.id && binding.state == state && state != "reviewed"
       raise ArgumentError, "A reason is required to change a booking link" if prior && reason.blank?
       binding.update!(lead: lead, actor: actor, evidence: evidence, state: state, linked_at: Time.current)
       lead.activity_events.create!(kind: "booking_link", summary: "Booking #{booking.ref} linked (#{state})",
         occurred_at: Time.current, metadata: { "perfectbook_id" => booking.perfectbook_id,
-          "prior" => prior, "state" => state, "actor" => actor, "evidence" => evidence, "reason" => reason })
+          "upstream" => upstream_evidence(booking), "prior" => prior, "state" => state, "actor" => actor, "evidence" => evidence, "reason" => reason })
       binding
     end
   end
 
+  def self.upstream_evidence(booking)
+    booking.attributes.slice("crm_inquiry_ref", "perfectbook_contact_id", "trip_name", "start_date").as_json
+  end
+
   def self.sync!(booking)
-    return if booking.crm_inquiry_ref.blank?
-    lead = Lead.find_by(reference: booking.crm_inquiry_ref)
     binding = find_by(perfectbook_id: booking.perfectbook_id)
-    issue = if lead.nil?
-      "Inquiry reference not found"
-    elsif binding && binding.lead_id != lead.id
-      "Inquiry reference changed; review required"
-    else
-      ids = [ lead.perfectbook_contact_id, lead.converted_client&.perfectbook_contact_id, lead.existing_client&.perfectbook_contact_id ].compact
-      if !ids.include?(booking.perfectbook_contact_id)
-        "Contact mismatch; review required"
-      elsif [ lead.trip_title, lead.trip_interest ].compact_blank.any? && ![ lead.trip_title, lead.trip_interest ].include?(booking.trip_name)
-        "Trip mismatch; review required"
-      elsif booking.start_date && ((lead.travel_month && lead.travel_month != booking.start_date.month) || (lead.travel_year && lead.travel_year != booking.start_date.year))
-        "Departure month mismatch; review required"
+    if binding&.state == "reviewed"
+      review = binding.lead.activity_events.where(kind: "booking_link")
+        .where("json_extract(metadata, '$.perfectbook_id') = ?", booking.perfectbook_id).order(:id).last
+      issue = review&.metadata&.dig("upstream") == upstream_evidence(booking) ? nil : "Booking evidence changed; review required"
+    elsif booking.crm_inquiry_ref.present?
+      lead = Lead.find_by(reference: booking.crm_inquiry_ref)
+      issue = if lead.nil?
+        "Inquiry reference not found"
+      elsif binding && binding.lead_id != lead.id
+        "Inquiry reference changed; review required"
+      else
+        "Unvalidated inquiry reference; review required"
       end
-    end
-    if issue.nil?
-      link!(booking, lead: lead, actor: "PerfectBook sync", evidence: "crm_inquiry_ref:#{booking.crm_inquiry_ref}", state: "explicit", reason: "PerfectBook explicit reference")
     end
     booking.update!(binding_issue: issue)
   end

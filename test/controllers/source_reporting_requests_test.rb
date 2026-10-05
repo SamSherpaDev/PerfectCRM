@@ -32,6 +32,24 @@ class SourceReportingRequestsTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
   end
 
+  test "inquiry lookup authenticates and returns only safe matching fields" do
+    lead = Lead.create!(name: "Synthetic private", email: "private@example.test", source: "manual",
+      perfectbook_contact_id: 55, trip_interest: "Test trip", travel_month: 10, travel_year: 2026)
+    old = ENV["PERFECTBOOK_INQUIRY_TOKEN"]
+    ENV["PERFECTBOOK_INQUIRY_TOKEN"] = "synthetic-sibling-token"
+    get "/api/v1/inquiries/#{lead.reference}"
+    assert_response :unauthorized
+    headers = { "Authorization" => "Bearer synthetic-sibling-token" }
+    get "/api/v1/inquiries/#{lead.reference}", headers: headers
+    assert_response :success
+    assert_equal({ "crm_inquiry_ref" => lead.reference, "perfectbook_contact_ids" => [55],
+      "trip_title" => nil, "trip_interest" => "Test trip", "travel_month" => 10, "travel_year" => 2026 }, response.parsed_body)
+    get "/api/v1/inquiries/SH-NONE", headers: headers
+    assert_response :not_found
+  ensure
+    ENV["PERFECTBOOK_INQUIRY_TOKEN"] = old
+  end
+
   test "signed in month selector and missing source link render" do
     sign_in
     get settings_weekly_report_path(month: "2026-10", view: "paid")

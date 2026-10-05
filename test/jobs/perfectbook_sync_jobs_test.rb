@@ -101,6 +101,10 @@ class PerfectBookSyncJobsTest < ActiveSupport::TestCase
     booking.paid_minor = 5000
     PerfectBook::SyncBookingsJob.perform_now(client: client)
     assert_equal paid_at, mirror.reload.first_received_at
+    assert_nil mirror.primary_inquiry
+    assert_match(/Unvalidated/, mirror.binding_issue)
+    BookingInquiryBinding.link!(mirror, lead: lead, actor: "test", evidence: "Reviewed upstream reference")
+    mirror.update!(binding_issue: nil)
     row = AdConversions.record!(lead).find { |item| item.event == "booked" }
     assert_equal paid_at, row.occurred_at
     assert_equal now, mirror.created_at

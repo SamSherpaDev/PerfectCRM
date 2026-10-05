@@ -19,7 +19,7 @@ class SourceReportingTest < ActiveSupport::TestCase
       crm_inquiry_ref: @lead.reference, first_received_at: receipt, first_received_on: receipt.to_date,
       first_received_precision: "timestamp", traveler_count: 3, total_minor: 900_000, receipts_minor: 50_000,
       refunds_minor: 0, net_received_minor: 50_000, paid_minor: 50_000, currency: "USD", status: "confirmed",
-      cash_events_json: cash, synced_at: @now, trip_name: "Test trip" }.merge(attrs)).tap { |item| BookingInquiryBinding.sync!(item) }
+      cash_events_json: cash, synced_at: @now, trip_name: "Test trip" }.merge(attrs)).tap { |item| BookingInquiryBinding.link!(item, lead: @lead, actor: "test", evidence: "Reviewed trip") if item.crm_inquiry_ref.present? }
   end
 
   test "binding is unique and a later inquiry cannot take historical credit" do
@@ -181,10 +181,82 @@ class SourceReportingTest < ActiveSupport::TestCase
     PerfectBook::Booking.create!(perfectbook_id: 99, perfectbook_contact_id: 99, paid_minor: 50000, synced_at: @now)
     @lead.archive!
     report = WeeklyReport::Monthly.new(month: Date.new(2026, 10, 1))
-    assert_equal 0, report.totals[:inquiries]
+    assert_equal 1, report.totals[:inquiries]
+    assert_equal 1, report.cohorts[:bookings]
     assert_equal 1, report.totals[:bookings]
     assert_equal({ "USD" => 50000 }, report.totals[:net_received])
     assert_equal 1, report.completeness[:undated_paid_bookings]
+  end
+
+  test "review preserves mismatches and reopens only for changed upstream evidence" do
+    item = booking(trip_name: "Reviewed different trip", start_date: Date.new(2026, 12, 1))
+    prior = item.inquiry_binding.attributes
+    item.update!(paid_minor: 100_000)
+    BookingInquiryBinding.sync!(item)
+    assert_nil item.binding_issue
+    assert_equal @lead, item.reload.primary_inquiry
+    assert_equal prior, item.inquiry_binding.attributes
+    item.update!(start_date: Date.new(2027, 1, 1))
+    BookingInquiryBinding.sync!(item)
+    assert_nil item.reload.primary_inquiry
+    BookingInquiryBinding.link!(item, lead: @lead, actor: "captain", evidence: "Reviewed new date", reason: "Date changed")
+    BookingInquiryBinding.sync!(item)
+    assert_equal @lead, item.reload.primary_inquiry
+  end
+
+  test "unvalidated references remain unlinked and cannot export purchases" do
+    item = booking(crm_inquiry_ref: nil)
+    item.update!(crm_inquiry_ref: @lead.reference)
+    BookingInquiryBinding.sync!(item)
+    assert_nil item.reload.primary_inquiry
+    assert_nil item.inquiry_binding
+    assert_match(/Unvalidated/, item.binding_issue)
+    assert_nil AdConversions.paid_booking(@lead)
+  end
+
+  test "unlinked test clients are excluded from monthly and weekly totals" do
+    Client.create!(name: "Synthetic test client", perfectbook_contact_id: 44, is_test: true)
+    booking(crm_inquiry_ref: nil)
+    booking(id: 52, crm_inquiry_ref: "SH-NONE")
+    report = WeeklyReport::Monthly.new(month: Date.new(2026, 10, 1))
+    assert_equal 0, report.totals[:bookings]
+    assert_empty report.totals[:net_received]
+    assert_equal 0, WeeklyReport::Summary.new(week_start: Date.new(2026, 10, 12)).rows.sum(&:booked)
+    assert_empty report.lifetime_bookers
+  end
+
+  test "current paid month uses common completed-day activity and spend cutoff" do
+    travel_to Time.zone.local(2026, 10, 3, 10)
+    booking(receipt: Time.zone.local(2026, 10, 2, 9))
+    booking(id: 52, receipt: Time.zone.local(2026, 10, 3, 9))
+    (Date.new(2026, 10, 1)..Date.new(2026, 10, 2)).each do |date|
+      DailyAdSpend.record!(spent_on: date, source: "google_ads", campaign_id: "123", campaign_name: "Test", currency: "USD", amount_minor: 100)
+    end
+    report = WeeklyReport::Monthly.new(view: "paid")
+    assert_equal Date.new(2026, 10, 2), report.end_date
+    row = report.rows.find { |entry| entry.booked.positive? }
+    assert_equal 1, row.booked
+    assert_equal({ "USD" => 200 }, row.cost_per_booking)
+    assert_equal 2, WeeklyReport::Monthly.new.totals[:bookings]
+  end
+
+  test "lifetime currency repeats and original source remain separate from direct referrals" do
+    referrer = Client.create!(name: "Synthetic referrer")
+    @lead.update!(referred_by_client: referrer)
+    booking
+    client = @lead.convert_to_client!
+    second = Lead.create!(name: "Repeat", source: "manual", existing_client: client,
+      perfectbook_contact_id: 44, received_at: Time.zone.local(2026, 10, 20), source_choice: "search")
+    item = booking(id: 52, receipt: Time.zone.local(2026, 10, 25), currency: "EUR")
+    BookingInquiryBinding.link!(item, lead: second, actor: "test", evidence: "Repeat", reason: "Different inquiry")
+    report = WeeklyReport::Monthly.new(month: Date.new(2026, 10, 1))
+    booker = report.lifetime_bookers.sole
+    assert_equal @lead, booker[:inquiry]
+    assert_equal 0, booker[:currencies]["USD"][:repeat_bookings]
+    assert_equal 1, booker[:currencies]["EUR"][:repeat_bookings]
+    assert_equal({ "USD" => 900_000, "EUR" => 900_000 }, report.original_source_lifetime.sole[:booked_value])
+    assert_equal [ 51 ], report.downstream_referrals.sole[:bookings].map(&:perfectbook_id)
+    assert_equal({ "USD" => 50_000 }, report.downstream_referrals.sole[:net_received])
   end
 
   test "credentials without owner terms confirmation stay off" do

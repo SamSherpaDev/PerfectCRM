@@ -12,7 +12,7 @@ entry is introduced.
 PerfectBook currently validates the *format* of `crm_inquiry_ref`, not existence.
 Its authenticated booking response therefore supplies evidence, not an automatic
 identity claim. CRM sync checks the SH reference, exact PerfectBook contact link,
-known trip and departure month/year. Conflict/mismatch stays unknown until
+known trip and departure month/year. Every unvalidated returned reference stays a candidate until
 reviewed. A unique binding survives an unavailable mirror. Trip review requires
 an existing contact-linked inquiry and a reason; changes log the old link and
 actor/time/evidence. Fix the PerfectBook reference too when replacing it.
@@ -24,6 +24,14 @@ create another Purchase. Browser Lead submission IDs stay unchanged. Previously
 attempted/pulled legacy Purchases without booking IDs hold potentially already
 reported receipts, rather than replaying them under a new ID. Genuinely later
 first receipts remain eligible; old ad outcomes are not remapped or rewritten.
+
+CRM provides `GET /api/v1/inquiries/:reference`, protected by a Bearer
+`PERFECTBOOK_INQUIRY_TOKEN` configured separately from browser credentials.
+It returns only the reference, exact PerfectBook contact IDs, trip title/interest,
+and departure month/year; unknown references return 404 and failed auth 401.
+PerfectBook must call this before storage in a separate sibling follow-up.
+Until then, matching returned references still require captain review. Reviewed
+links survive refreshes with unchanged reference/contact/trip/departure evidence.
 
 ## Operator checks before enabling exports
 
@@ -41,8 +49,7 @@ first receipts remain eligible; old ad outcomes are not remapped or rewritten.
 The default is reported discovery, with form testimony marked provisional.
 Paid-performance costs use last non-direct observed source and stable campaign
 ID, never a switch to testimony. First-observed is a third alternative. Missing
-links stay in totals; tests/spam are held. Archived inquiries leave inquiry
-counts, but archiving never erases received money or bookings. Group traveler
+links stay in totals; tests/spam are held. Archived accepted inquiries remain in activity and cohort counts. Group traveler
 counts are the booker's source. Legacy connected calls without an inquiry stay
 unknown; copied client calls do not count twice. Undated paid mirrors are
 disclosed across history, never assigned a month using refresh time.
@@ -77,3 +84,10 @@ or financial facts.
 See README, **Monthly source reports and reviewed backfill**, for dry-run/review
 commands. Production backfill/deployment and real platform verification belong
 to the operator after review, not the implementation worker.
+
+Paid monthly activity and spend use the same completed-day cutoff. Lifetime bookers
+retain invoice currency and cash-event currency separately. Original-source lifetime
+and direct referral values are separate alternatives under one disclosure. Original
+source uses the earliest inquiry with an exact contact/client link; pre-inquiry acquisition is unknown.
+Inventory includes metadata-key counts, Person/PerfectBook email duplicate groups,
+and zero/one/multiple candidate counts for all bookings, including linked ones.

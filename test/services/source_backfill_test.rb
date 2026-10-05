@@ -35,6 +35,24 @@ class SourceBackfillTest < ActiveSupport::TestCase
     end
   end
 
+  test "inventory includes metadata duplicate and candidate aggregates without customer details" do
+    lead = Lead.create!(name: "Synthetic inquiry", email: "shared@example.test", source: "manual",
+      perfectbook_contact_id: 44, trip_interest: "Test trip", received_at: 2.months.ago, metadata: { "custom_key" => "private value" })
+    client = Client.create!(name: "Synthetic client", email: "shared@example.test")
+    Person.create!(name: "Synthetic person", email: "shared@example.test", client: client)
+    PerfectBook::Contact.create!(perfectbook_id: 44, name: "Synthetic contact", email: "shared@example.test", synced_at: Time.current)
+    item = PerfectBook::Booking.create!(perfectbook_id: 55, perfectbook_contact_id: 44, trip_name: "Test trip",
+      first_received_at: 1.month.ago, synced_at: Time.current)
+    BookingInquiryBinding.link!(item, lead: lead, actor: "test", evidence: "Reviewed")
+    PerfectBook::Booking.create!(perfectbook_id: 56, perfectbook_contact_id: 99, synced_at: Time.current)
+    inventory = SourceBackfill.inventory
+    assert_equal 1, inventory["metadata_keys"]["custom_key"]
+    assert_equal 1, inventory["cross_record_email_groups_for_review"]
+    assert_equal({ "zero" => 1, "one" => 1, "multiple" => 0 }, inventory["booking_candidate_counts"])
+    assert_not_includes JSON.generate(inventory), "shared@example.test"
+    assert_not_includes JSON.generate(inventory), "private value"
+  end
+
   test "stale evidence and wrong approvals rollback whole batches" do
     first = Lead.create!(name: "Synthetic first", source: "manual")
     second = Lead.create!(name: "Synthetic second", source: "manual")

@@ -10,6 +10,21 @@ module SourceBackfill
 
   def inventory
     { "leads" => Lead.count, "clients" => Client.count, "people" => Person.count,
+      "cross_record_email_groups_for_review" => ActiveRecord::Base.connection.select_value(<<~SQL).to_i,
+        SELECT COUNT(*) FROM (
+          SELECT email_key FROM (
+            SELECT LOWER(TRIM(email)) AS email_key FROM leads
+            UNION ALL SELECT LOWER(TRIM(email)) FROM clients
+            UNION ALL SELECT LOWER(TRIM(email)) FROM people
+            UNION ALL SELECT LOWER(TRIM(email)) FROM perfectbook_contacts
+          ) WHERE email_key IS NOT NULL AND email_key != '' GROUP BY email_key HAVING COUNT(*) > 1
+        )
+      SQL
+      "metadata_keys" => Lead.where("json_valid(metadata)").joins("JOIN json_each(leads.metadata) AS metadata_entry").group("metadata_entry.key").count,
+      "shared_person_email_groups_for_review" => Person.where.not(email: [ nil, "" ]).group(:email).having("COUNT(*) > 1").count.size,
+      "shared_perfectbook_email_groups_for_review" => PerfectBook::Contact.where.not(email: [ nil, "" ]).group(:email).having("COUNT(*) > 1").count.size,
+      "booking_candidate_counts" => PerfectBook::Booking.find_each.each_with_object({ "zero" => 0, "one" => 0, "multiple" => 0 }) { |booking, counts| count = candidates_for(booking).size; counts[count.zero? ? "zero" : (count == 1 ? "one" : "multiple")] += 1 },
+      "open" => Lead.where(converted_client_id: nil).count,
       "lead_sources" => Lead.group(:source).count, "answer_states" => Lead.group(:source_answer_state).count,
       "placements" => Lead.group(:placement).count.transform_keys { |key| key || "(missing)" },
       "channels" => Lead.group(:capture_channel).count.transform_keys { |key| key || "(missing)" },

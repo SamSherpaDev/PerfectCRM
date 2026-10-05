@@ -27,21 +27,21 @@ module WeeklyReport
       @month = month.to_date.beginning_of_month
       @view = VIEWS.key?(view) ? view : "reported"
       @as_of = as_of.in_time_zone("America/Los_Angeles")
-      @end_date = [ @month.end_of_month, @as_of.to_date ].min
+      @end_date = [ @month.end_of_month, (@view == "paid" ? @as_of.to_date - 1 : @as_of.to_date) ].min
     end
 
     def range
-      month.in_time_zone("America/Los_Angeles").beginning_of_day..[ month.end_of_month.in_time_zone("America/Los_Angeles").end_of_day, as_of ].min
+      month.in_time_zone("America/Los_Angeles").beginning_of_day..[ end_date.in_time_zone("America/Los_Angeles").end_of_day, as_of ].min
     end
 
     def leads
       @leads ||= eligible_leads.where("COALESCE(received_at, leads.created_at) BETWEEN ? AND ?", range.first, range.last).to_a
     end
 
-    def eligible_leads(include_archived: false)
+    def eligible_leads
       tests = Client.where(is_test: true).select(:id)
       test_inquiries = Lead.where(converted_client_id: tests).or(Lead.where(existing_client_id: tests)).select(:id)
-      (include_archived ? Lead.all : Lead.active).where(is_test: false).where.not(id: test_inquiries)
+      Lead.all.where(is_test: false).where.not(id: test_inquiries)
         .where.not(id: Tagging.joins(:tag).where(taggable_type: "Lead", tags: { name: Lead::SUSPECTED_SPAM_TAG }).select(:taggable_id))
     end
 
@@ -85,7 +85,7 @@ module WeeklyReport
 
     def cohorts
       ids = leads.map(&:id)
-      bookings = PerfectBook::Booking.joins(:inquiry_binding).where(booking_inquiry_bindings: { lead_id: ids })
+      bookings = countable_bookings.joins(:inquiry_binding).where(booking_inquiry_bindings: { lead_id: ids })
         .where("first_received_at <= ?", as_of).includes(inquiry_binding: :lead).to_a.reject { |booking| booking.binding_issue.present? }
       first_receipts = bookings.group_by { |booking| booking.inquiry_binding.lead_id }.transform_values { |list| list.min_by(&:first_received_at) }
       horizons = HORIZONS.to_h do |days|
@@ -106,7 +106,76 @@ module WeeklyReport
         net_received: sum_money(bookings.map { |booking| booking.cash_events.select { |event| event_date(event) && event_date(event) <= as_of.to_date && (event["time_precision"] != "timestamp" || Time.iso8601(event["occurred_at"]) <= as_of) }.each_with_object(Hash.new(0)) { |event, sum| sum[event["currency"]] += event["amount_minor"].to_i * (event["kind"] == "refund" ? -1 : 1) } }) }
     end
 
+    def lifetime_bookers
+      @lifetime_bookers ||= lifetime_bookings.group_by(&:perfectbook_contact_id).map do |contact, bookings|
+        original = original_inquiries[contact] || bookings.map(&:primary_inquiry).min_by { |lead| [ inquiry_time(lead), lead.id ] }
+        ordered = bookings.sort_by { |booking| [ booking.first_received_at, booking.perfectbook_id ] }
+        { contact_id: contact, inquiry: original, source: reported_identity(original),
+          currencies: bookings.group_by(&:currency).transform_values do |list|
+            { bookings: list.size, repeat_bookings: list.count { |booking| booking != ordered.first },
+              booked_value: list.sum { |booking| booking.total_minor.to_i } }
+          end, net_received: lifetime_cash(bookings) }
+      end
+    end
+
+    def original_source_lifetime
+      lifetime_bookers.group_by { |booker| booker[:source] }.map do |source, bookers|
+        value = Hash.new(0)
+        bookers.each { |booker| booker[:currencies].each { |currency, facts| value[currency] += facts[:booked_value] } }
+        { source: source, bookers: bookers.size, booked_value: value,
+          net_received: sum_money(bookers.map { |booker| booker[:net_received] }) }
+      end
+    end
+
+    def downstream_referrals
+      eligible_leads.where("referred_by_client_id IS NOT NULL OR referred_by_person_id IS NOT NULL")
+        .where("COALESCE(received_at, leads.created_at) <= ?", as_of).map do |lead|
+        bookings = lifetime_bookings_by_inquiry.fetch(lead.id, [])
+        { inquiry: lead, referrer: lead.referred_by_client || lead.referred_by_person,
+          bookings: bookings, booked_value: sum_money(bookings.map { |booking| { booking.currency => booking.total_minor.to_i } }),
+          net_received: lifetime_cash(bookings) }
+      end
+    end
+
     private
+
+    def original_inquiries
+      @original_inquiries ||= begin
+        contacts = lifetime_bookings.map(&:perfectbook_contact_id).uniq
+        clients = Client.where(perfectbook_contact_id: contacts).pluck(:id, :perfectbook_contact_id).to_h
+        candidates = eligible_leads.where(perfectbook_contact_id: contacts)
+          .or(eligible_leads.where(converted_client_id: clients.keys)).or(eligible_leads.where(existing_client_id: clients.keys))
+        candidates.order(Arel.sql("COALESCE(received_at, leads.created_at), leads.id")).each_with_object({}) do |lead, first|
+          contact = clients[lead.converted_client_id] || clients[lead.existing_client_id] || lead.perfectbook_contact_id
+          first[contact] ||= lead if inquiry_time(lead) <= as_of
+        end
+      end
+    end
+
+    def lifetime_bookings_by_inquiry
+      @lifetime_bookings_by_inquiry ||= lifetime_bookings.group_by { |booking| booking.inquiry_binding.lead_id }
+    end
+
+    def lifetime_bookings
+      @lifetime_bookings ||= countable_bookings.joins(:inquiry_binding).where(binding_issue: [ nil, "" ])
+        .where("first_received_at <= ?", as_of).includes(inquiry_binding: :lead).to_a
+    end
+
+    def reported_identity(lead)
+      source = lead.source_label || "Not asked yet"
+      source += " (provisional)" if lead.source_answer_state == "answered" && lead.source_confirmed_at.nil?
+      source
+    end
+
+    def lifetime_cash(bookings)
+      sum_money(bookings.map do |booking|
+        booking.cash_events.each_with_object(Hash.new(0)) do |event, money|
+          next unless event_date(event) && event_date(event) <= as_of.to_date
+          next if event["time_precision"] == "timestamp" && Time.iso8601(event["occurred_at"]) > as_of
+          money[event["currency"]] += event["amount_minor"].to_i * (event["kind"] == "refund" ? -1 : 1)
+        end
+      end)
+    end
 
     def new_row(source, id, name)
       Row.new(source: source, campaign_id: id, campaign: name, inquiries: 0, q_fit: 0, platform_qualified: 0,
@@ -118,8 +187,7 @@ module WeeklyReport
     def identity(lead)
       return [ "Unlinked booking", nil, nil ] unless lead
       if view == "reported"
-        source = lead.source_label || "Not asked yet"
-        source += " (provisional)" if lead.source_answer_state == "answered" && lead.source_confirmed_at.nil?
+        source = reported_identity(lead)
         [ source, nil, nil ]
       else
         touch = lead.metadata&.dig("acquisition", view == "first" ? "first_touch" : "last_non_direct_touch")
@@ -236,8 +304,9 @@ module WeeklyReport
     end
 
     def countable_bookings
-      excluded_ids = BookingInquiryBinding.where.not(lead_id: eligible_leads(include_archived: true).select(:id)).select(:perfectbook_id)
+      excluded_ids = BookingInquiryBinding.where.not(lead_id: eligible_leads.select(:id)).select(:perfectbook_id)
       PerfectBook::Booking.where.not(perfectbook_id: excluded_ids)
+        .where.not(perfectbook_contact_id: Client.where(is_test: true).where.not(perfectbook_contact_id: nil).select(:perfectbook_contact_id))
     end
 
     def relevant_bookings

@@ -718,7 +718,7 @@ substituted for your review count. Unreviewed fit is shown in completeness.
 Cohorts use inquiry dates and mature 30/60/90/180-day denominators; immature
 inquiries show as pending. Eventual value/net cash are separated by currency.
 
-Monthly ad costs use exact daily spend through the month/as-of date, keyed by
+Monthly ad costs use exact daily spend through the last completed day for the selected month, keyed by
 stable campaign ID and currency. Every day, including explicitly zero days,
 must be present for a ratio. Missing days or zero bookings means unavailable.
 Weekly spend is never prorated or added on top. See the additive
@@ -726,8 +726,9 @@ Weekly spend is never prorated or added on top. See the additive
 The existing Monday email adds the monthly summary/link, not a second digest.
 
 `BookingInquiryBinding` holds one primary inquiry per PerfectBook booking ID.
-Sync validates returned references against CRM contact, trip and date evidence;
-unknown/mismatched/changed references require review. The Trip panel's quiet
+Sync holds unvalidated returned references for review. CRM provides a token-protected
+inquiry lookup for the separate PerfectBook pre-storage validation follow-up;
+see docs/source-reporting.md. Reviewed bindings retain unchanged upstream evidence. The Trip panel's quiet
 review disclosure accepts a contact-linked inquiry and evidence/reason, with
 actor/date/prior-link audit. Correct changed upstream references in PerfectBook
 as well. Binding edits never edit either application's creation/source fields.
@@ -1002,13 +1003,9 @@ exclude the lead from the comparison. The window uses judgment dates, not inquir
 Owner stage changes retain their loss reason even if automation later changes
 the lead; older events without that snapshot use the lead's current reason.
 
-Booking attribution uses the unique booking inquiry binding first. An explicit
-reference that is unresolved/conflicting stays unknown, never falls back to a
-later inquiry. Only legacy unbound weekly rows use the client's latest converted
-lead before the deposit, then an unconverted contact-matched lead also received
-before the deposit, then the client's source/campaign. This compatibility path
-is inferred, not reviewed discovery. Source and campaign always come from
-the same selected record, even when its campaign is empty. Bookings with no
+Booking attribution uses only the unique booking inquiry binding. Unresolved
+references and unbound bookings stay unknown, with no newest-lead or client-source
+fallback. Source and campaign come from the bound inquiry. Bookings with no
 CRM origin appear as "Booked outside the CRM". Booked value and cost per
 booking are shown by campaign whenever bookings exist, independent of ROAS;
 cost per booking requires spend. ROAS is paid booked value divided by paid
