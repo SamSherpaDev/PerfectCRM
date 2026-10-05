@@ -63,10 +63,16 @@ module Api
 
             lead.assign_attributes(updates)
             if answer
-              return render json: { error: "validation", fields: { "source_answer" => "confirmed" } }, status: :unprocessable_entity if lead.source_confirmed_at.present?
-              lead.source_collection_method = "website_form"
-              lead.source_choice = answer["code"]
-              lead.reported_source_detail = answer["detail"].to_s.strip.presence
+              detail = answer["detail"].to_s.strip.presence
+              if lead.source_confirmed_at.present?
+                unless lead.reported_source_code == answer["code"] && lead.reported_source_detail == detail
+                  return render json: { error: "validation", fields: { "source_answer" => "confirmed" } }, status: :unprocessable_entity
+                end
+              else
+                lead.source_collection_method = "website_form"
+                lead.source_choice = answer["code"]
+                lead.reported_source_detail = detail
+              end
             end
             if acquisition
               previous = (lead.metadata || {})["acquisition"] || {}

@@ -121,9 +121,8 @@ module Leads::Acquisition
       result["landing_url"] = safe_url(input["landing_url"], campaign: true)
     end
     if acquisition
-      touch = acquisition["last_non_direct_touch"] || acquisition["last_touch"] || {}
+      touch = %w[last_non_direct_touch last_touch].map { |key| acquisition[key] }.find { |snapshot| eligible?(snapshot) } || {}
       result = touch.slice(*(CAMPAIGN_KEYS + CLICK_KEYS)).merge("first_seen_at" => touch["observed_at"], "referral_code" => result["referral_code"])
-      result.except!(*CLICK_KEYS) if touch["observed_at"].blank?
       unless permitted?(acquisition)
         result.except!(*(CAMPAIGN_KEYS + CLICK_KEYS))
       end

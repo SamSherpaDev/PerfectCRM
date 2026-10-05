@@ -152,6 +152,51 @@ class ApiV1LeadsDetailsTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "renewed permission projects last touch despite withdrawn non-direct placeholder" do
+    post_details details_body("acquisition" => { "permission" => { "state" => "withdrawn" } })
+    assert_response :ok
+    observed = Time.current.iso8601
+    post_details details_body("acquisition" => {
+      "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true },
+      "last_touch" => { "observed_at" => observed, "gclid" => "fresh-click", "utm_campaign" => "fresh-campaign" }
+    })
+    assert_response :ok
+    assert_equal "fresh-click", @lead.reload.metadata.dig("attribution", "gclid")
+    assert_equal "fresh-campaign", @lead.metadata.dig("attribution", "utm_campaign")
+    assert_equal Time.iso8601(observed).utc.iso8601, @lead.metadata.dig("attribution", "first_seen_at")
+  end
+
+  test "identical confirmed answer permits withdrawal without changing testimony" do
+    answer = { "code" => "personal_referral", "detail" => "Alex" }
+    post_details details_body("source_answer" => answer)
+    assert_response :ok
+    SourceAnswers.record!(@lead, choice: "personal_referral", detail: "Alex", method: "call")
+    confirmed_at = @lead.reload.source_confirmed_at
+    answer_ids = @lead.activity_events.where(kind: "source_answer").pluck(:id)
+    @lead.update!(source: "google_ads", campaign_name: "paid", metadata: {
+      "acquisition" => { "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true } },
+      "attribution" => { "gclid" => "old-click", "utm_campaign" => "paid" }, "page" => { "url" => "https://example.com" }
+    })
+    body = details_body("source_answer" => answer.merge("detail" => " Alex "),
+      "acquisition" => { "permission" => { "state" => "withdrawn" } })
+    post_details body
+    assert_response :ok
+    assert_equal "withdrawn", @lead.reload.metadata.dig("acquisition", "permission", "state")
+    assert_nil @lead.metadata.dig("attribution", "gclid")
+    assert_nil @lead.metadata["page"]
+    assert_nil @lead.campaign_name
+    assert_equal "website_form", @lead.source
+    assert_equal "personal_referral", @lead.reported_source_code
+    assert_equal "Alex", @lead.reported_source_detail
+    assert_equal confirmed_at, @lead.source_confirmed_at
+    assert_equal answer_ids, @lead.activity_events.where(kind: "source_answer").pluck(:id)
+    assert_no_difference([ "Note.count", "ActivityEvent.count", "LeadNotification.count" ]) { post_details body }
+    assert_response :ok
+    post_details body.deep_merge("source_answer" => { "detail" => "Someone else" })
+    assert_response :unprocessable_entity
+    assert_equal "Alex", @lead.reload.reported_source_detail
+  end
+
   test "a missing first touch can capture a later genuine permission-allowed observation" do
     post_details details_body("acquisition" => { "permission" => { "state" => "allowed" }, "first_touch" => { "observed_at" => Time.current.iso8601, "unknown_reason" => "unavailable" } })
     assert_response :ok

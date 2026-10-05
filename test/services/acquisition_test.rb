@@ -62,4 +62,19 @@ class AcquisitionTest < ActiveSupport::TestCase
     assert_nil acquisition["submission_page"]
   end
 
+  test "projection selects a complete eligible snapshot without mixing visits" do
+    Leads::Acquisition::CLICK_KEYS.each do |key|
+      acquisition = { "permission" => { "state" => "allowed" },
+        "last_non_direct_touch" => { "unknown_reason" => "declined_permission" },
+        "last_touch" => { "observed_at" => Time.current.iso8601, key => "latest", "utm_campaign" => "latest-campaign" } }
+      result = Leads::Acquisition.legacy_attribution({}, acquisition: acquisition)
+      assert_equal "latest", result[key]
+      assert_equal "latest-campaign", result["utm_campaign"]
+      acquisition["last_non_direct_touch"] = { "observed_at" => 1.hour.ago.iso8601, "utm_campaign" => "earlier" }
+      result = Leads::Acquisition.legacy_attribution({}, acquisition: acquisition)
+      assert_equal "earlier", result["utm_campaign"]
+      assert_nil result[key]
+    end
+  end
+
 end
