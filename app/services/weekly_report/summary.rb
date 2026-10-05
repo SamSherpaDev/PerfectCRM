@@ -1,8 +1,8 @@
 # The numbers behind the Monday ads report (README.md, "Weekly ads
 # report"). Weeks run Monday to Sunday, Pacific time. Each weekly count is
 # an event inside that week: an inquiry received, a lead qualified or
-# quoted, a deposit first seen. Attribution is the lead's own source and
-# campaign, the CRM's system of record.
+# quoted, or a first receipt (with legacy estimated dates retained for weekly
+# compatibility). README.md owns timing and booking-binding attribution rules.
 module WeeklyReport
   class Summary
     PAID_SOURCES = AdSpend::SOURCES

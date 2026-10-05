@@ -11,9 +11,9 @@ entry is introduced.
 
 PerfectBook currently validates the *format* of `crm_inquiry_ref`, not existence.
 Its authenticated booking response therefore supplies evidence, not an automatic
-identity claim. CRM sync checks the SH reference, exact PerfectBook contact link,
-known trip and departure month/year. Every unvalidated returned reference stays a candidate until
-reviewed. A unique binding survives an unavailable mirror. Trip review requires
+identity claim. Every unvalidated returned reference stays a candidate until
+reviewed; unknown references are flagged as not found. A unique binding survives
+an unavailable mirror. Trip review requires
 an existing contact-linked inquiry and a reason; changes log the old link and
 actor/time/evidence. Fix the PerfectBook reference too when replacing it.
 
@@ -29,6 +29,8 @@ CRM provides `GET /api/v1/inquiries/:reference`, protected by a Bearer
 `PERFECTBOOK_INQUIRY_TOKEN` configured separately from browser credentials.
 It returns only the reference, exact PerfectBook contact IDs, trip title/interest,
 and departure month/year; unknown references return 404 and failed auth 401.
+The response keys are `crm_inquiry_ref`, `perfectbook_contact_ids`, `trip_title`,
+`trip_interest`, `travel_month` and `travel_year`.
 PerfectBook must call this before storage in a separate sibling follow-up.
 This is approved temporary containment until that separately filed PerfectBook
 follow-up lands: returned references remain candidates needing one captain review.
@@ -102,8 +104,7 @@ and zero/one/multiple candidate counts for all bookings, including linked ones.
 Unavailable booking mirrors remain in reconciliation reports, but do not supply
 composer placeholders, document handoffs, nudges, group recipients, departures,
 automatic proposals, AI booking context or current pipeline booking value.
-All binding kinds retain their upstream evidence digest independently of audits;
-changes require review. Backfill fingerprints exclude activity clocks changed by
+Backfill fingerprints exclude activity clocks changed by
 its own audits while retaining substantive evidence checks. Monthly repeat bookings
 are counted separately from distinct returning paying bookers (first receipt
 before the selected month); bookers first paying this month are new even if they

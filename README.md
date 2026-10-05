@@ -610,17 +610,10 @@ no test/spam exclusions; an old click ID alone is insufficient. Test records
 are excluded from inquiry reporting and exports. No sensitive traveler documents
 or DOB enter this database; source details/referrer identities are not ad data.
 
-Shared future booking key: `crm_inquiry_ref` is the existing unique `SH-XXXX`
-lead reference. PerfectBook validates and owns that binding; one primary inquiry
-per booking, multiple bookings per inquiry. The future wire contract is in
+For booking review, monthly reports and historical imports, see
+[Monthly source reports and reviewed backfill](#monthly-source-reports-and-reviewed-backfill).
+The booking and money wire contract lives in
 [the intake reference](docs/leads-intake.md#calls-booking-references-time-and-money).
-Binding/sync, monthly reporting and backfill are separate work. Existing manual/shopify booking source
-and financial fields retain their meaning. Months use America/Los_Angeles;
-wire timestamps have ISO 8601 offsets, date-only evidence is not made into exact
-times. Money is integer minor units with explicit currency (the agreed sibling
-contract is USD); PerfectBook alone owns receipts, refunds and recognized revenue.
-Group travelers inherit the booker's source for reporting, not individual
-acquisition testimony. Repeat trips remain distinct bookings, not new people.
 
 Source retention is bounded: 90-day browser cookies (storefront implementation),
 180-day detailed clicks/URLs, 24 months after last substantive contact for

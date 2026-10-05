@@ -22,8 +22,8 @@ module AdConversions
   VALUES_MINOR = { "lead" => 300_00, "qualified" => 1_000_00, "quote" => 2_000_00 }.freeze
   QUALIFIED_BANDS = %w[strong possible].freeze
   QUALIFIED_STATUSES = %w[chatting quoted].freeze
-  # Leads older than this are no longer scanned: Google rejects gclid
-  # imports more than 90 days after the click.
+  # Scan recent inquiries and older inquiries with recent bound receipts;
+  # delivery applies each platform's click/event window independently.
   LOOKBACK = 90.days
   GCLID_WINDOW = 90.days
   # Enhanced conversions for leads (hashed email or phone, no gclid).

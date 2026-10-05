@@ -276,14 +276,9 @@ existing unique `SH-` plus four characters from `Lead.build_reference`, not the
 submission UUID or PerfectBook contact ID. One primary inquiry per booking;
 multiple bookings per inquiry. PerfectBook must validate the reference through
 the trusted authenticated sibling integration, not trust a browser query alone.
-Link edits need actor/date/evidence/reason. CRM stores a unique booking binding;
-sync checks the returned reference and exact contact/trip/date evidence. Unknown,
-mismatched or changed references require review in the Trip panel. PerfectBook
-currently checks reference format only; CRM does not treat that as proof of
-existence. CRM exposes `GET /api/v1/inquiries/:reference` with Bearer
-`PERFECTBOOK_INQUIRY_TOKEN`, returning only reference, exact contact IDs and
-trip/departure matching fields. PerfectBook pre-storage use is a separate follow-up;
-unvalidated references require captain review. See [reporting handoff](source-reporting.md).
+For CRM binding review, the authenticated inquiry lookup, and the approved
+temporary PerfectBook validation handoff, see
+[Link review](source-reporting.md#link-review).
 
 PerfectBook's additive booking API contract: `crm_inquiry_ref`,
 `first_received_at`, `first_received_on`, `first_received_precision`
@@ -299,11 +294,9 @@ with offset/UTC. Money uses integer minor units and explicit currency; no FX
 mixing or inferred recognized revenue. PerfectBook remains the money/traveler
 system of record. Bookings/travelers are distinct IDs; group attribution is
 labeled booker's source, not each companion's discovery. Repeat bookings do
-not reacquire a person. Weekly compatibility inference is limited to unbound
-legacy records and inquiries received before the receipt. Explicit links always
-win (conflicts stay unknown). Monthly views use bindings only and show unlinked
-bookings. Q-fit (owner's inquiry judgment, no reply required) and
-platform-qualified (fit plus owner stage move) are separately labeled.
+not reacquire a person. Attribution and qualification definitions live in
+[Monthly source reports and reviewed backfill](../README.md#monthly-source-reports-and-reviewed-backfill)
+and [Weekly ads report](../README.md#weekly-ads-report).
 
 ### Retention and access
 
