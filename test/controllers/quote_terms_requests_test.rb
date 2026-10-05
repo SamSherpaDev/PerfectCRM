@@ -110,5 +110,4 @@ class QuoteTermsRequestsTest < ActionDispatch::IntegrationTest
     client.people.create!(name: "Other", email: "other@example.com")
     assert_nil TemplateContext.for_reply(to: "other@example.com", owner: client)[:context]["terms_version"]
   end
-
 end
