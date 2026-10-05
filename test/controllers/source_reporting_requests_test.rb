@@ -81,4 +81,49 @@ class SourceReportingRequestsTest < ActionDispatch::IntegrationTest
     assert_equal "Checked contact trip and dates", event.metadata["evidence"]
     assert_equal "reviewed", booking.inquiry_binding.state
   end
+
+  test "review rejects a contact changed by sync after the request loaded the booking" do
+    sign_in
+    lead = Lead.create!(name: "Synthetic", source: "manual", perfectbook_contact_id: 55)
+    booking = PerfectBook::Booking.create!(perfectbook_id: 8, perfectbook_contact_id: 55,
+      crm_inquiry_ref: lead.reference, synced_at: Time.current)
+    original = BookingInquiryBinding.method(:link!)
+    interleaved = lambda do |loaded, **attributes|
+      current = PerfectBook::Booking.find(loaded.id)
+      current.update!(perfectbook_contact_id: 99)
+      BookingInquiryBinding.sync!(current)
+      original.call(loaded, **attributes)
+    end
+    BookingInquiryBinding.stub(:link!, interleaved) do
+      post booking_inquiry_bindings_path(booking_id: booking.id), params: { binding: { lead_id: lead.id, reason: "Checked trip" } }
+    end
+    assert_redirected_to settings_weekly_report_path
+    assert_nil booking.reload.primary_inquiry
+    assert_nil booking.inquiry_binding
+    assert booking.binding_issue.present?
+    assert_empty lead.activity_events.where(kind: "booking_link")
+  end
+
+  test "sync after a committed review preserves its new warning" do
+    sign_in
+    lead = Lead.create!(name: "Synthetic", source: "manual", perfectbook_contact_id: 55)
+    booking = PerfectBook::Booking.create!(perfectbook_id: 8, perfectbook_contact_id: 55, synced_at: Time.current)
+    original = BookingInquiryBinding.method(:link!)
+    interleaved = lambda do |loaded, **attributes|
+      binding = original.call(loaded, **attributes)
+      current = PerfectBook::Booking.find(loaded.id)
+      current.update!(trip_name: "Changed trip")
+      BookingInquiryBinding.sync!(current)
+      binding
+    end
+    BookingInquiryBinding.stub(:link!, interleaved) do
+      post booking_inquiry_bindings_path(booking_id: booking.id), params: { binding: { lead_id: lead.id, reason: "Checked trip" } }
+    end
+    assert_redirected_to lead_path(lead)
+    assert_nil booking.reload.primary_inquiry
+    assert_equal "Booking evidence changed; review required", booking.binding_issue
+    assert_equal "reviewed", booking.inquiry_binding.state
+    assert_equal 1, lead.activity_events.where(kind: "booking_link").count
+  end
+
 end

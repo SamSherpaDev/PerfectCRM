@@ -39,7 +39,7 @@ module PerfectBook
       result[:data].each do |booking|
         seen_ids << booking.id
         Booking.transaction(requires_new: true) do
-          booking_mirror = Booking.find_or_initialize_by(perfectbook_id: booking.id)
+          booking_mirror = Booking.lock.find_or_initialize_by(perfectbook_id: booking.id)
           booking_mirror.assign_attributes(
             perfectbook_contact_id: mirror.perfectbook_id, ref: booking.ref, status: booking.status,
             trip_id: booking.trip_id, trip_name: booking.trip_name,

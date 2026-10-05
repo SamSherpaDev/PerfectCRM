@@ -104,7 +104,6 @@ class PerfectBookSyncJobsTest < ActiveSupport::TestCase
     assert_nil mirror.primary_inquiry
     assert_match(/Unvalidated/, mirror.binding_issue)
     BookingInquiryBinding.link!(mirror, lead: lead, actor: "test", evidence: "Reviewed upstream reference")
-    mirror.update!(binding_issue: nil)
     row = AdConversions.record!(lead).find { |item| item.event == "booked" }
     assert_equal paid_at, row.occurred_at
     assert_equal now, mirror.created_at

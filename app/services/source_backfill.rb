@@ -132,11 +132,13 @@ module SourceBackfill
               "added_key" => "legacy_observed", "prior_value" => nil, "new_value" => snapshot })
         when "infer_binding"
           booking = PerfectBook::Booking.find(row["record_id"])
-          lead = Lead.find(row["inquiry_id"])
-          raise ArgumentError, "Stale booking/inquiry; regenerate dry run" unless fingerprint(booking) == row["fingerprint"] && fingerprint(lead) == row["evidence"]
-          raise ArgumentError, "Candidate evidence changed" unless candidates_for(booking).map(&:id) == [ lead.id ]
-          raise ArgumentError, "Booking already linked" if booking.inquiry_binding || booking.crm_inquiry_ref.present?
-          BookingInquiryBinding.link!(booking, lead: lead, actor: reviewer, evidence: "Reviewed batch #{digest}: contact/trip/time", state: "inferred")
+          booking.with_lock do
+            lead = Lead.find(row["inquiry_id"])
+            raise ArgumentError, "Stale booking/inquiry; regenerate dry run" unless fingerprint(booking) == row["fingerprint"] && fingerprint(lead) == row["evidence"]
+            raise ArgumentError, "Candidate evidence changed" unless candidates_for(booking).map(&:id) == [ lead.id ]
+            raise ArgumentError, "Booking already linked" if booking.inquiry_binding || booking.crm_inquiry_ref.present?
+            BookingInquiryBinding.link!(booking, lead: lead, actor: reviewer, evidence: "Reviewed batch #{digest}: contact/trip/time", state: "inferred")
+          end
         when "unresolved"
           # Review-only. Unknown stays unknown.
         else
