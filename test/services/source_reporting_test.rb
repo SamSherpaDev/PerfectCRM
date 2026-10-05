@@ -453,5 +453,4 @@ class SourceReportingTest < ActiveSupport::TestCase
       assert_equal "Unknown original acquisition", report.original_source_lifetime.sole[:source]
     end
   end
-
 end

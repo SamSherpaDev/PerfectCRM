@@ -702,5 +702,4 @@ class AdConversionsTest < ActiveSupport::TestCase
       assert_match(/review platform history/, row.meta_error)
     end
   end
-
 end

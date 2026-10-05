@@ -186,5 +186,4 @@ class SourceHistoryRetentionJobTest < ActiveJob::TestCase
     assert lead.reload.source_missing?
     assert_nil booking.reload.first_received_at
   end
-
 end

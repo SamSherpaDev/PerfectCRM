@@ -336,5 +336,4 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
     assert_equal 9, summary.year_travelers
     assert_nil PerfectBook::Booking.find_by!(perfectbook_id: 811).first_received_at
   end
-
 end

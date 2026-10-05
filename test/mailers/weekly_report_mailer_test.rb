@@ -90,5 +90,4 @@ class WeeklyReportMailerTest < ActionMailer::TestCase
     assert_nil booking.reload.first_received_at
     assert_nil booking.first_paid_at
   end
-
 end
