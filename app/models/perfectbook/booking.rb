@@ -14,6 +14,11 @@ module PerfectBook
       first_received_on || first_received_at&.in_time_zone("America/Los_Angeles")&.to_date
     end
 
+    def receipt_order
+      exact = first_received_precision != "date" && first_received_at.present?
+      [ receipt_date, exact ? 1 : 0, exact ? first_received_at.to_r : 0, perfectbook_id ]
+    end
+
     scope :available, -> { where(unavailable_at: nil) }
 
     def available?

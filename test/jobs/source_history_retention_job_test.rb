@@ -147,6 +147,31 @@ class SourceHistoryRetentionJobTest < ActiveJob::TestCase
     assert_equal "Converted to client", returning.activity_events.where(kind: "conversion").last.summary
   end
 
+  test "recent receipts outweigh old departures for linked leads and clients" do
+    now = Time.zone.local(2026, 10, 5, 10)
+    %w[lead client].each_with_index do |kind, index|
+      contact = 100 + index
+      lead = Lead.create!(name: "Recent receipt #{kind}", perfectbook_contact_id: contact,
+        received_at: now - 8.years, source_choice: "search")
+      record = kind == "client" ? lead.convert_to_client! : lead
+      record.update_columns(created_at: now - 8.years)
+      lead.update_columns(last_touch_at: now - 8.years)
+      SourceAnswers.record!(record, choice: "search", method: "website_form")
+      old = PerfectBook::Booking.create!(perfectbook_id: 100 + index * 2, perfectbook_contact_id: contact,
+        first_received_at: now - 8.years, end_date: (now - 8.years).to_date, synced_at: now)
+      recent = PerfectBook::Booking.create!(perfectbook_id: 101 + index * 2, perfectbook_contact_id: contact,
+        first_received_precision: "date", first_received_on: now.to_date - 1, synced_at: now)
+      [ old, recent ].each { |item| BookingInquiryBinding.link!(item, lead: lead, actor: "test", evidence: "Reviewed receipt") }
+      SourceHistoryRetentionJob.perform_now(now: now)
+      assert_equal "search", record.reload.reported_source_code
+      assert_equal 1, record.activity_events.where(kind: "source_answer").count
+      assert_equal "Reviewed receipt", recent.reload.inquiry_binding.evidence
+      SourceHistoryRetentionJob.perform_now(now: now + 8.years)
+      assert record.reload.source_missing?
+      assert_empty record.activity_events.where(kind: "source_answer")
+    end
+  end
+
   test "date-only paid bindings use the seven-year receipt horizon" do
     now = Time.zone.local(2026, 10, 5, 10)
     lead = Lead.create!(name: "Date-only booked", source: "manual", perfectbook_contact_id: 90,

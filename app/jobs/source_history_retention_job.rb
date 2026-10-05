@@ -55,7 +55,7 @@ class SourceHistoryRetentionJob < ApplicationJob
       # Until a complete mirror exists, creation uses the conservative booked
       # horizon, explicitly not an asserted financial receipt date.
       last_receipt = [ bookings&.maximum(:first_received_on), bookings&.maximum(:first_received_at)&.in_time_zone&.to_date ].compact.max
-      baseline = last_booking || last_receipt || (client&.created_at || record.created_at).to_date
+      baseline = [ last_booking, last_receipt ].compact.max || (client&.created_at || record.created_at).to_date
       baseline <= (now - 7.years).to_date
     else
       # A returning inquiry is still a separate unbooked ask until conversion.

@@ -392,6 +392,23 @@ class SourceReportingTest < ActiveSupport::TestCase
     assert_equal Date.new(2026, 10, 15), first.receipt_date
   end
 
+  test "same-day receipts preserve timestamp ordering in cohorts and lifetime repeats" do
+    later = booking(id: 100, receipt: Time.zone.local(2026, 10, 31, 18))
+    booking(id: 101, receipt: Time.zone.local(2026, 10, 31, 9), currency: "EUR")
+    report = WeeklyReport::Monthly.new(month: Date.new(2026, 10, 1))
+    assert_equal 1, report.cohorts[:horizons][30][:booked_inquiries]
+    currencies = report.lifetime_bookers.sole[:currencies]
+    assert_equal 1, currencies["USD"][:repeat_bookings]
+    assert_equal 0, currencies["EUR"][:repeat_bookings]
+    client = @lead.convert_to_client!
+    other = Lead.create!(name: "Later same-day booker", existing_client: client,
+      source_choice: "search", received_at: @lead.received_at, trip_interest: "Test trip")
+    BookingInquiryBinding.link!(later, lead: other, actor: "test", evidence: "Reviewed owner", reason: "Correct purchasing inquiry")
+    rows = WeeklyReport::Monthly.new(month: Date.new(2026, 10, 1)).source_rows
+    assert_equal 1, rows.find { |row| row.source.include?("search engine") }.returning
+    assert_equal 0, rows.find { |row| row.source.include?("friend or family") }.returning
+  end
+
   test "source-free inferred inquiries remain missing in every report view" do
     @lead.update!(source: "manual", metadata: {}, source_choice: "not_asked", source_correction_reason: "No verified source")
     item = booking(crm_inquiry_ref: nil)

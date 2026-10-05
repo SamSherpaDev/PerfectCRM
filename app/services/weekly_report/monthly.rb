@@ -89,7 +89,7 @@ module WeeklyReport
       ids = leads.map(&:id)
       bookings = countable_bookings.joins(:inquiry_binding).where(booking_inquiry_bindings: { lead_id: ids })
         .received_by(as_of).includes(inquiry_binding: :lead).to_a.reject { |booking| booking.binding_issue.present? }
-      first_receipts = bookings.group_by { |booking| booking.inquiry_binding.lead_id }.transform_values { |list| list.min_by { |booking| [ booking.receipt_date, booking.perfectbook_id ] } }
+      first_receipts = bookings.group_by { |booking| booking.inquiry_binding.lead_id }.transform_values { |list| list.min_by(&:receipt_order) }
       horizons = HORIZONS.to_h do |days|
         mature = leads.select { |lead| inquiry_time(lead) + days.days <= as_of }
         converted = mature.count do |lead|
@@ -111,7 +111,7 @@ module WeeklyReport
     def lifetime_bookers
       @lifetime_bookers ||= lifetime_bookings.group_by(&:perfectbook_contact_id).map do |contact, bookings|
         original = bookings.map(&:primary_inquiry).min_by { |lead| [ inquiry_time(lead), lead.id ] }
-        ordered = bookings.sort_by { |booking| [ booking.receipt_date, booking.perfectbook_id ] }
+        ordered = bookings.sort_by(&:receipt_order)
         { contact_id: contact, inquiry: original, source: original_source(contact),
           currencies: bookings.group_by(&:currency).transform_values do |list|
             { bookings: list.size, repeat_bookings: list.count { |booking| booking != ordered.first },
@@ -362,9 +362,8 @@ module WeeklyReport
     def first_bookings
       @first_bookings ||= countable_bookings.where(perfectbook_contact_id: relevant_bookings.map(&:perfectbook_contact_id).uniq)
         .where("first_received_at IS NOT NULL OR first_received_on IS NOT NULL")
-        .pluck(:perfectbook_contact_id, :perfectbook_id, :first_received_at, :first_received_on)
-        .map { |contact, id, at, on| [ contact, id, on || at.in_time_zone("America/Los_Angeles").to_date ] }
-        .sort_by { |_, id, at| [ at, id ] }.each_with_object({}) { |(contact, id, at), first| first[contact] ||= [ id, at ] }
+        .select(:perfectbook_contact_id, :perfectbook_id, :first_received_at, :first_received_on, :first_received_precision)
+        .sort_by(&:receipt_order).each_with_object({}) { |booking, first| first[booking.perfectbook_contact_id] ||= [ booking.perfectbook_id, booking.receipt_date ] }
     end
 
     def returning?(booking)
