@@ -118,7 +118,7 @@ class ApiV1LeadsDetailsTest < ActionDispatch::IntegrationTest
   end
 
   test "a missing first touch can capture a later genuine permission-allowed observation" do
-    post_details details_body("acquisition" => { "permission" => { "state" => "denied" }, "first_touch" => { "fbclid" => "not-retained" } })
+    post_details details_body("acquisition" => { "permission" => { "state" => "allowed" }, "first_touch" => { "observed_at" => Time.current.iso8601, "unknown_reason" => "unavailable" } })
     assert_response :ok
     observed = Time.current.iso8601
     post_details details_body("acquisition" => { "permission" => { "state" => "allowed" },

@@ -71,12 +71,13 @@ module Api
             if acquisition
               previous = (lead.metadata || {})["acquisition"] || {}
               acquisition = previous.merge(acquisition)
-              acquisition["first_touch"] = previous["first_touch"] if previous.dig("first_touch", "observed_at").present?
+              acquisition["first_touch"] = previous["first_touch"] if ::Leads::Acquisition.eligible?(previous["first_touch"])
               acquisition["permission"]["recorded_at"] = previous.dig("permission", "recorded_at") if
                 acquisition["permission"].except("recorded_at") == (previous["permission"] || {}).except("recorded_at")
               if acquisition.dig("permission", "state") != "allowed" || acquisition.dig("permission", "opted_out") == true
                 ::Leads::Acquisition::TOUCHES.each { |key| acquisition[key] = { "unknown_reason" => "declined_permission" } }
                 acquisition.delete("submission_page")
+                lead.metadata = (lead.metadata || {}).except("page")
               end
               lead.metadata = (lead.metadata || {}).merge("acquisition" => acquisition,
                 "attribution" => ::Leads::Acquisition.legacy_attribution((lead.metadata || {})["attribution"] || {}, acquisition: acquisition))

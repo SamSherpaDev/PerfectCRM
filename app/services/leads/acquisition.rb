@@ -28,10 +28,10 @@ module Leads::Acquisition
       next unless input.key?(key)
       result[key] = touch(input[key], allowed: allowed)
     end
-    if input.key?("submission_page")
+    if allowed && input.key?("submission_page")
       page = input["submission_page"]
       raise ArgumentError, "acquisition.submission_page" unless page.is_a?(Hash)
-      result["submission_page"] = { "landing_url" => safe_url(page["url"] || page["landing_url"], campaign: allowed), "referrer_host" => host(page["referrer"]) }
+      result["submission_page"] = { "landing_url" => safe_url(page["url"], campaign: allowed), "referrer_host" => host(page["referrer"]) }
     end
     result
   end
@@ -48,13 +48,22 @@ module Leads::Acquisition
       raise ArgumentError, "acquisition.#{key}" unless input[key].is_a?(String) && input[key].length <= 200
       result[key] = input[key].strip
     end
-    result["landing_url"] = safe_url(input["landing_url"] || input["landing_page"], campaign: true)
-    result["referrer_host"] = host(input["referrer"] || input["referrer_host"])
+    result["landing_url"] = safe_url(input["landing_url"], campaign: true)
+    result["referrer_host"] = host(input["referrer"])
     result["unknown_reason"] = reason if reason.present?
     result["source"] = classify(result)
     result["unknown_reason"] ||= "unavailable" if result["observed_at"].nil?
     result["source"] = "unknown" if result["unknown_reason"].present? && result["unknown_reason"] != "consent_granted_late"
     result
+  end
+
+  def eligible?(touch)
+    touch.is_a?(Hash) && touch["observed_at"].present? &&
+      (touch["unknown_reason"].blank? || touch["unknown_reason"] == "consent_granted_late")
+  end
+
+  def permitted?(acquisition)
+    acquisition.dig("permission", "state") == "allowed" && acquisition.dig("permission", "opted_out") != true
   end
 
   def classify(touch)
@@ -114,7 +123,8 @@ module Leads::Acquisition
     if acquisition
       touch = acquisition["last_non_direct_touch"] || acquisition["last_touch"] || {}
       result = touch.slice(*(CAMPAIGN_KEYS + CLICK_KEYS)).merge("first_seen_at" => touch["observed_at"], "referral_code" => result["referral_code"])
-      unless acquisition.dig("permission", "state") == "allowed" && acquisition.dig("permission", "opted_out") != true
+      result.except!(*CLICK_KEYS) if touch["observed_at"].blank?
+      unless permitted?(acquisition)
         result.except!(*(CAMPAIGN_KEYS + CLICK_KEYS))
       end
     end

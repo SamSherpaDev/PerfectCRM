@@ -68,6 +68,11 @@ class SourceHistoryRetentionJob < ApplicationJob
     end
     record.update_columns(expired_fields)
     # Deliberate retention exception to ordinary append-only sales history.
+    events = ActivityEvent.where(kind: %w[source_answer source_referral call])
+    provenance = record.is_a?(Person) ? "from_person_id" : "from_lead_id"
+    if record.is_a?(Lead) || record.is_a?(Person)
+      events.where("json_extract(metadata, '$.#{provenance}') = ?", record.id).delete_all
+    end
     record.activity_events.where(kind: %w[source_answer source_referral call]).delete_all
   end
 end

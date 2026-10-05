@@ -169,6 +169,7 @@ module Api
           attribution = ::Leads::Acquisition.legacy_attribution(payload["attribution"].is_a?(Hash) ? payload["attribution"] : {}, acquisition: acquisition)
           raw_page = payload["page"].is_a?(Hash) ? payload["page"] : {}
           page = { "url" => ::Leads::Acquisition.safe_url(raw_page["url"]), "referrer" => ::Leads::Acquisition.host(raw_page["referrer"]), "locale" => raw_page["locale"].to_s.first(20) }
+          page.except!("url", "referrer") if acquisition && !::Leads::Acquisition.permitted?(acquisition)
           timing = payload["timing"].is_a?(Hash) ? payload["timing"] : {}
           client_info = payload["client"].is_a?(Hash) ? payload["client"] : {}
           consent = payload["consent"]

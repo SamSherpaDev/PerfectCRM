@@ -214,8 +214,7 @@ inquiries stay protected. The authenticated CRM confirmation has no public
 Each touch is a complete snapshot, never merged click-by-click. Allowed keys:
 `observed_at`, `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`,
 `utm_term`, `campaign_id`, `ad_id`, `adset_id`, `gclid`, `gbraid`, `wbraid`,
-`fbclid`, `landing_url` (also accepts `landing_page`), `referrer` (or
-`referrer_host`), `unknown_reason`. IDs/campaign strings max 200 chars;
+`fbclid`, `landing_url`, `referrer`, `unknown_reason`. IDs/campaign strings max 200 chars;
 URLs store host/path (path max 512), only allowlisted campaign queries,
 no fragments, credentials, arbitrary queries or referrer paths. Click IDs are
 separate columns of the snapshot, never retained inside URLs. Timestamps must

@@ -198,7 +198,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     }, "page" => { "url" => "https://www.sherpaholidays.com/?fbclid=secret-click&email=private%40example.com" },
       "attribution" => { "fbclid" => "secret-click", "landing_url" => "https://www.sherpaholidays.com/?fbclid=secret-click" })
     assert_response :accepted
-    assert_equal "https://www.sherpaholidays.com/", Lead.last.metadata.dig("page", "url")
+    assert_nil Lead.last.metadata.dig("page", "url")
     assert_equal({ "unknown_reason" => "declined_permission" }, Lead.last.metadata.dig("acquisition", "first_touch"))
     assert_nil Lead.last.metadata.dig("attribution", "fbclid")
     assert_no_difference("Lead.count") do

@@ -47,4 +47,19 @@ class AcquisitionTest < ActiveSupport::TestCase
     assert_raises(ArgumentError) { Leads::Acquisition.touch({ "gclid" => "x" * 201 }, allowed: true) }
     assert_equal "legacy-meta", Leads::Acquisition.legacy_attribution({ "landing_url" => "https://www.sherpaholidays.com/?fbclid=legacy-meta" })["fbclid"]
   end
+  test "untimed click evidence stays stored but is withheld from attribution" do
+    Leads::Acquisition::CLICK_KEYS.each do |key|
+      acquisition = Leads::Acquisition.parse({ "acquisition" => {
+        "permission" => { "state" => "allowed" }, "last_touch" => { key => "untimed" } } })
+      assert_equal "untimed", acquisition.dig("last_touch", key)
+      assert_nil Leads::Acquisition.legacy_attribution({}, acquisition: acquisition)[key]
+    end
+  end
+
+  test "denied submission pages do not retain advertising evidence" do
+    acquisition = Leads::Acquisition.parse(snapshot(permission: "denied",
+      submission_page: { "url" => "https://example.com", "referrer" => "https://google.com" }))
+    assert_nil acquisition["submission_page"]
+  end
+
 end

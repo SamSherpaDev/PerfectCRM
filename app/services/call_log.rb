@@ -18,7 +18,8 @@ module CallLog
           summary: "Call: #{outcome.humanize}", occurred_at: occurred_at,
           metadata: { "inquiry_id" => record.id, "direction" => direction, "outcome" => outcome,
             "duration_seconds" => seconds, "owner" => Current.user_email,
-            "source_answer_event_id" => (record.converted_client || record.existing_client || record).activity_events.where(kind: "source_answer").order(:id).last&.id })
+            "source_answer_event_id" => (record.activity_events.where(kind: "source_answer").order(:id).last ||
+              (record.converted_client || record.existing_client)&.activity_events&.where(kind: "source_answer")&.order(:id)&.last)&.id })
       record.record_touch!(at: event.occurred_at) if event.metadata["outcome"] == "connected"
       if (client = record.converted_client || record.existing_client)
         client.activity_events.where(kind: "call").find_by("json_extract(metadata, '$.from_lead_event_id') = ?", event.id) ||

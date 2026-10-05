@@ -54,4 +54,17 @@ class SourceHistoryRetentionJobTest < ActiveJob::TestCase
     assert client.reload.source_missing?
     assert_equal "Booked", client.name
   end
+  test "expired returning inquiry removes copied calls while retaining client discovery" do
+    now = Time.current
+    client = Client.create!(name: "Returning")
+    SourceAnswers.record!(client, choice: "search", method: "website_form")
+    lead = Lead.create!(name: "Old inquiry", existing_client: client, received_at: now - 25.months)
+    CallLog.record!(lead, key: SecureRandom.uuid, occurred_at: now - 25.months, direction: "outbound", outcome: "connected")
+    lead.update_columns(last_touch_at: now - 25.months)
+    assert_equal 1, client.activity_events.where(kind: "call").count
+    SourceHistoryRetentionJob.perform_now(now: now)
+    assert_empty client.activity_events.where(kind: "call")
+    assert_equal "search", client.reload.reported_source_code
+  end
+
 end

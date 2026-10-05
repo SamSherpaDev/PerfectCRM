@@ -73,6 +73,9 @@ class SourceHistoryTest < ActiveSupport::TestCase
   test "returning-call timeline copies do not duplicate at conversion or after retry" do
     client = Client.create!(name: "Returning Booker")
     inquiry = Lead.create!(name: "New Ask", existing_client: client)
+    SourceAnswers.record!(client, choice: "personal_referral", method: "website_form")
+    SourceAnswers.record!(inquiry, choice: "search", method: "website_form")
+    answer_id = inquiry.activity_events.where(kind: "source_answer").last.id
     key = SecureRandom.uuid
     call = CallLog.record!(inquiry, key: key, occurred_at: Time.current, direction: "outbound", outcome: "connected")
     assert_equal 1, client.activity_events.where(kind: "call").count
@@ -82,6 +85,8 @@ class SourceHistoryTest < ActiveSupport::TestCase
       CallLog.record!(inquiry, key: key, occurred_at: Time.current, direction: "outbound", outcome: "connected")
     end
     assert_equal call.id, client.activity_events.where(kind: "call").last.metadata["from_lead_event_id"]
+    assert_equal answer_id, call.metadata["source_answer_event_id"]
+    assert_equal answer_id, client.activity_events.where(kind: "call").last.metadata["source_answer_event_id"]
   end
 
   test "personal referrals prohibit self links cycles and multiple referrers" do
