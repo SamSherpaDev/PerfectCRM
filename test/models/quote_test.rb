@@ -1,6 +1,8 @@
 require "test_helper"
+require_relative "../support/quote_terms_test_helper"
 
 class QuoteTest < ActiveSupport::TestCase
+  include QuoteTermsTestHelper
   setup do
     @client = Client.create!(name: "Maya Gurung", email: "maya@example.com")
   end
@@ -50,6 +52,7 @@ class QuoteTest < ActiveSupport::TestCase
     lead = Lead.create!(name: "Pasang", email: "pasang@example.com", status: "chatting")
     quote = Quote.create!(party_size: 2, valid_until: Date.current + 14, lead: lead)
     quote.lines.create!(kind: "trip", description: "Everest trek", quantity: 1, unit_dollars: "10.00")
+    complete_quote_terms(quote)
     quote.deliver!
     assert_equal "sent", quote.status
     assert_not_nil quote.sent_at
@@ -61,6 +64,7 @@ class QuoteTest < ActiveSupport::TestCase
     lead = Lead.create!(name: "Dawa", email: "dawa@example.com", status: "nudged")
     quote = Quote.create!(party_size: 2, valid_until: Date.current + 14, lead: lead)
     quote.lines.create!(kind: "trip", description: "Everest trek", quantity: 1, unit_dollars: "10.00")
+    complete_quote_terms(quote)
     quote.deliver!
     assert_equal "nudged", lead.reload.status
   end
@@ -197,6 +201,7 @@ class QuoteTest < ActiveSupport::TestCase
   test "delivery reloads line totals before sending a stale draft" do
     quote = Quote.create!(party_size: 2, valid_until: Date.current + 14, client: @client)
     line = quote.lines.create!(kind: "custom", description: "Trek", quantity: 1, unit_minor: 150000)
+    complete_quote_terms(quote, days: 180)
     stale = Quote.includes(:lines).find(quote.id)
     line.update!(unit_minor: 160000)
     assert stale.deliver!

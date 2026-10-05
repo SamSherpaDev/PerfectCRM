@@ -1,2 +1,4 @@
 <p><%= @quote.owner_name %> just accepted quote <strong><%= @quote.reference %></strong> (<%= @quote.subject_label %>, <%= money_in(@quote.subtotal_minor, @quote.currency) %>).</p>
 <p><%= link_to "Open the quote", quote_url(@quote) %> · then create the booking in PerfectBook.</p>
+<p>Accepted terms: <%= @quote.accepted_terms_version.presence || "Historical terms unchanged" %><br>Bundle SHA-256: <%= @quote.accepted_bundle_sha256 %></p>
+<p>The attached manual-intake JSON includes the accepted document bytes and payment schedule. No automatic booking was created.</p>

@@ -24,6 +24,11 @@
           <p class="font-medium">A newer quote is on its way</p>
         <% end %>
       </div>
+    <% elsif !@quote.payment_schedule_current? %>
+      <div class="callout-warning callout mt-4" role="status">
+        <p class="font-medium">This quote's payment schedule needs a refresh.</p>
+        <p class="text-sm">Full payment is due for bookings made 90 days or fewer before departure. Ask Sam for a new quote before accepting. These delivered documents stay unchanged.</p>
+      </div>
     <% elsif @quote.expired? %>
       <div class="callout-warning callout mt-4" role="status">
         <p class="font-medium">This quote expired on <%= date_short(@quote.valid_until) %>.</p>
@@ -57,7 +62,7 @@
       <p class="text-xs muted"><%= @quote.party_size ? "Total for #{pluralize(@quote.party_size, 'guest')}" : "Total" %></p>
       <p class="font-display text-3xl tabular-nums text-ink"><%= money_in(@quote.subtotal_minor, @quote.currency) %></p>
       <% if @quote.deposit_minor.to_i.positive? %>
-        <p class="mt-1 text-sm muted">Deposit <%= money_in(@quote.deposit_minor, @quote.currency) %> to hold your seats · balance <%= money_in(@quote.balance_due_minor, @quote.currency) %><% if @quote.balance_due_on %> due <%= date_short(@quote.balance_due_on) %><% end %></p>
+        <p class="mt-1 text-sm muted">Deposit <%= money_in(@quote.deposit_minor, @quote.currency) %> · balance <%= money_in(@quote.balance_due_minor, @quote.currency) %><% if @quote.balance_due_on %> due <%= date_short(@quote.balance_due_on) %><% end %></p>
       <% end %>
       <% if @quote.valid_until && !@quote.expired? %>
         <p class="mt-1 text-xs muted">Valid until <%= date_short(@quote.valid_until) %></p>
@@ -77,12 +82,40 @@
       </div>
     <% end %>
 
+    <% if @quote.terms_bundle.present? %>
+      <section class="mt-6 border-t border-rule-2 pt-4" aria-labelledby="booking-terms-heading">
+        <h2 id="booking-terms-heading" class="font-display text-xl text-ink">Your booking terms</h2>
+        <p class="mt-2 text-sm">Version <%= @quote.terms_bundle.fetch("terms_version") %></p>
+        <p class="mt-2 text-sm font-medium">You cancel 45 days or fewer before departure: Cancellation charge: 100% of the total trip price. No refund.</p>
+        <p class="mt-2 text-sm">The traveler-cancellation table does not remove our conditions promise, rights under an already accepted booking, or refunds and other rights required by law.</p>
+        <% %w[master_terms pre_payment_disclosure trip_differences itinerary].each do |name| %>
+          <details class="mt-3">
+            <summary class="text-sm font-medium cursor-pointer"><%= { "master_terms" => "Master terms", "pre_payment_disclosure" => "Pre-payment disclosure", "trip_differences" => "Trip-specific differences", "itinerary" => "Itinerary" }.fetch(name) %></summary>
+            <div class="mt-2 text-sm text-ink-2 break-words"><%= booking_document_html(@quote.terms_bundle.fetch(name)) %></div>
+          </details>
+        <% end %>
+        <%= link_to "Download booking documents", public_quote_documents_path(@quote.accept_token), class: "link mt-3 inline-block text-sm" %>
+        <% if @quote.accepted_terms_version.present? %>
+          <p class="mt-2 text-sm">Accepted <%= @quote.accepted_terms_version %> on <%= date_short(@quote.accepted_at) %>.</p>
+        <% end %>
+      </section>
+    <% end %>
+
     <% if @quote.acceptable? %>
       <div class="mt-6 flex flex-col gap-2">
-        <%= button_to "Accept this quote", accept_public_quote_path(@quote.accept_token), method: :post, class: "btn btn-primary min-h-11 w-full" %>
+        <%= form_with url: accept_public_quote_path(@quote.accept_token), method: :post do |form| %>
+          <% if @quote.terms_bundle.present? %>
+            <%= hidden_field_tag :bundle_sha256, @quote.terms_bundle_sha256 %>
+            <label class="mb-3 flex items-start gap-2 text-sm">
+              <%= check_box_tag :terms_accepted, "1", false, required: true, class: "checkbox mt-1" %>
+              I received and accept the master terms <%= @quote.terms_bundle.fetch("terms_version") %>, pre-payment disclosure, itinerary and listed trip-specific differences. This does not sign a participant release or authorize a payment charge.
+            </label>
+          <% end %>
+          <%= form.submit "Accept this quote", class: "btn btn-primary min-h-11 w-full" %>
+        <% end %>
         <%= link_to "Ask a question", "mailto:info@sherpaholidays.com?subject=#{CGI.escape("Question about quote #{@quote.reference}")}", class: "btn btn-secondary w-full" %>
       </div>
-      <p class="mt-2 text-center text-xs muted">Accepting tells Sam to hold your seats. The booking is confirmed together.</p>
+      <p class="mt-2 text-center text-xs muted">A booking is confirmed when the required payment and booking acceptance are received and we issue written confirmation. Private journeys also require a signed booking agreement.</p>
     <% end %>
   </div>
 </div>

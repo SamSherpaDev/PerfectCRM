@@ -1,8 +1,10 @@
 require "test_helper"
 require_relative "../support/google_sign_in_test_helper"
+require_relative "../support/quote_terms_test_helper"
 
 class QuotesRequestsTest < ActionDispatch::IntegrationTest
   include GoogleSignInTestHelper
+  include QuoteTermsTestHelper
 
   setup do
     sign_in
@@ -109,6 +111,7 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
   test "send delivers email with PDF and accept link" do
     quote = Quote.create!(party_size: 2, valid_until: Date.current + 14, client: @client, trip_name: "Everest trek")
     quote.lines.create!(kind: "trip", description: "Everest trek", quantity: 1, unit_dollars: "10.00")
+    complete_quote_terms(quote)
     assert_enqueued_emails 1 do
       post send_quote_quote_path(quote)
     end
@@ -231,6 +234,7 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
     quote.lines.create!(kind: "custom", description: "Trek", quantity: 1, unit_minor: 150000)
     client = lead.convert_to_client!
     client.update!(email: "current@example.com")
+    complete_quote_terms(quote)
 
     get client_path(client)
     assert_select "a[href=?]", quote_path(quote)
@@ -241,7 +245,7 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
     assert_equal 1, client.activity_events.where(kind: "quote").count
     assert_equal 0, lead.activity_events.where(kind: "quote").count
 
-    post accept_public_quote_path(quote.accept_token)
+    post accept_public_quote_path(quote.accept_token), params: { terms_accepted: "1", bundle_sha256: quote.reload.terms_bundle_sha256 }
     assert_equal "accepted", quote.reload.status
     assert_equal 2, client.activity_events.where(kind: "quote").count
     assert_equal 0, lead.activity_events.where(kind: "quote").count
@@ -255,8 +259,8 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
 
     get quote_path(quote)
     assert_response :success
-    assert_select "textarea#intake-details", text: /client: Maya Gurung/
-    assert_select "textarea#intake-details", text: /email: maya@example.com/
+    assert_select "textarea#intake-details", text: /"client": "Maya Gurung"/
+    assert_select "textarea#intake-details", text: /"email": "maya@example.com"/
     intake_link = css_select("a").find { |link| link.text == "Open PerfectBook booking page" }
     params = Rack::Utils.parse_query(URI.parse(intake_link["href"]).query)
     assert_equal "Maya Gurung", params["name"]
@@ -328,6 +332,7 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
   test "a draft loaded before another send cannot update the published quote" do
     quote = Quote.create!(party_size: 2, valid_until: Date.current + 14, client: @client, notes: "Original")
     quote.lines.create!(kind: "custom", description: "Trek", quantity: 1, unit_minor: 150000)
+    complete_quote_terms(quote)
     relation = Quote.includes(:lines, :client, :lead)
     load_then_send = ->(id) do
       loaded = Quote.find(id)
@@ -347,6 +352,7 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
   test "a stale send request does not enqueue a second email" do
     quote = Quote.create!(party_size: 2, valid_until: Date.current + 14, client: @client)
     quote.lines.create!(kind: "custom", description: "Trek", quantity: 1, unit_minor: 150000)
+    complete_quote_terms(quote)
     stale = Quote.find(quote.id)
     post send_quote_quote_path(quote)
     relation = Quote.includes(:lines, :client, :lead)
@@ -404,6 +410,7 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
     previous_stage_changed_at = lead.reload.stage_changed_at
     quote = Quote.create!(party_size: 2, valid_until: Date.current + 14, lead: lead)
     quote.lines.create!(kind: "custom", description: "Trek", quantity: 1, unit_minor: 150000)
+    complete_quote_terms(quote)
     reject = ->(_job) { raise ActiveJob::EnqueueError, "Queue unavailable" }
     assert_no_enqueued_emails do
       QuoteMailer.delivery_job.queue_adapter.stub(:enqueue, reject) do
@@ -433,6 +440,7 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
   test "queue rejection during edit and send preserves the saved edits as a draft" do
     quote = Quote.create!(party_size: 2, valid_until: Date.current + 14, client: @client, notes: "Original")
     quote.lines.create!(kind: "custom", description: "Trek", quantity: 1, unit_minor: 150000)
+    complete_quote_terms(quote)
     reject = ->(_job) { raise SolidQueue::Job::EnqueueError, "Queue database unavailable" }
     QuoteMailer.delivery_job.queue_adapter.stub(:enqueue, reject) do
       patch quote_path(quote), params: { send_now: "1", quote: { notes: "Updated note" } }
@@ -452,7 +460,12 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
     reject = ->(_job) { raise ActiveJob::EnqueueError, "Queue unavailable" }
     QuoteMailer.delivery_job.queue_adapter.stub(:enqueue, reject) do
       post quotes_path, params: { client_id: @client.id, send_now: "1", quote: {
-        party_size: 2, valid_until: Date.current + 14, notes: "New journey", lines_attributes: {
+        party_size: 2, valid_until: Date.current + 14, notes: "New journey",
+        journey_kind: "scheduled", local_operator: "Synthetic Operator LLC", trip_differences: "None",
+        included: "Synthetic services", departure_start_on: Date.current + 30, departure_end_on: Date.current + 40,
+        deposit_dollars: "1500", balance_due_on: Date.current - 60,
+        disclosure_details: QuoteTerms::FIELDS.keys.index_with { |key| "Synthetic #{key} evidence" }.merge("fund_notice" => "covered"),
+        lines_attributes: {
           "0" => { kind: "custom", description: "Trek", quantity: "1", unit_dollars: "1500" }
         }
       } }
@@ -476,6 +489,7 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
     assert_select "dd", text: /Valid until can't be blank/
     assert_equal "draft", quote.reload.status
     assert_nil quote.sent_at
+    complete_quote_terms(quote)
     assert_enqueued_emails 1 do
       patch quote_path(quote), params: { send_now: "1", quote: { party_size: 3, valid_until: Date.current + 14 } }
     end
@@ -499,6 +513,7 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
       end
 
       [ original, original.duplicate! ].zip([ Date.current, Date.tomorrow ]).each do |quote, date|
+        complete_quote_terms(quote)
         assert_enqueued_emails 1 do
           patch quote_path(quote), params: { send_now: "1", quote: { valid_until: date } }
         end

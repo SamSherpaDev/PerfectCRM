@@ -1,0 +1,32 @@
+<%# locals: (form:, quote:) %>
+<section class="card card-pad" aria-labelledby="terms-heading">
+  <div class="card-header"><h2 class="card-title" id="terms-heading">Booking documents</h2></div>
+  <%= card_caption "#{QuoteTerms::VERSION}. Complete and verify the disclosure before sending. Drafts can stay incomplete." %>
+  <% if quote.perfectbook_trip_id.blank? %>
+    <%= form.label :trip_name, "Custom journey name", class: "label mt-3" %>
+    <%= form.text_field :trip_name, class: "input" %>
+    <%= form.label :departure_start_on, "Trip start date", class: "label mt-3" %>
+    <%= form.date_field :departure_start_on, class: "input" %>
+    <%= form.label :departure_end_on, "Trip end date", class: "label mt-3" %>
+    <%= form.date_field :departure_end_on, class: "input" %>
+  <% end %>
+  <%= form.label :journey_kind, "Journey type", class: "label mt-3" %>
+  <%= form.select :journey_kind, [["Scheduled", "scheduled"], ["Private", "private"]], { include_blank: "Choose journey type" }, class: "select" %>
+  <p class="hint mt-2"><%= QuoteTerms.excerpt("PAYMENT").split("\n\n")[1] %></p>
+  <%= form.label :local_operator, "Verified local operator legal name", class: "label mt-3" %>
+  <%= form.text_field :local_operator, class: "input" %>
+  <%= form.label :trip_differences, "Trip-specific differences", class: "label mt-3" %>
+  <%= form.text_area :trip_differences, rows: 3, class: "textarea", placeholder: "None, or identify the affected provision, supplier, exact amount and effect" %>
+  <details class="mt-4">
+    <summary class="text-sm font-medium cursor-pointer">Complete pre-payment disclosure</summary>
+    <p class="hint mt-2">Do not guess operator, fund eligibility or bond coverage. Verify the LLC rider, filed signature and current security before sending. Use None only where it actually applies. Quote acceptance does not sign a participant release or authorize a charge.</p>
+    <%= form.fields_for :disclosure_details, quote.disclosure_details || {}, skip_default_ids: true do |fields| %>
+      <% QuoteTerms::FIELDS.each do |key, label| %>
+        <%= fields.label key, label, for: "quote-disclosure-#{key}", class: "label mt-3" %>
+        <%= fields.text_area key, value: quote.disclosure_details&.dig(key), id: "quote-disclosure-#{key}", rows: 2, class: "textarea" %>
+      <% end %>
+      <%= fields.label :fund_notice, "Verified fund notice for this transaction", for: "quote-disclosure-fund-notice", class: "label mt-3" %>
+      <%= fields.select :fund_notice, [["Covered", "covered"], ["Not covered", "not_covered"]], { include_blank: "Select verified notice", selected: quote.disclosure_details&.dig("fund_notice") }, id: "quote-disclosure-fund-notice", class: "select" %>
+    <% end %>
+  </details>
+</section>

@@ -53,6 +53,7 @@ class OutboundFollowupReviewTest < ActionDispatch::IntegrationTest
   end
 
   test "unknown names trigger a friendly subject and stay missing in bodies while sender settings render" do
+    @template.update!(body: "{{full_name}}: {{trip}} {{my_name}} {{signature}}")
     post group_sends_path, params: { template_id: @template.id, recipients: "stranger@example.com" }
     message = Message.last
     assert_equal "Planning your trip", message.subject
@@ -121,15 +122,13 @@ class OutboundFollowupReviewTest < ActionDispatch::IntegrationTest
     assert_not_includes rendered["body"], "MAYA"
     assert_not_includes rendered["body"], "UNRELATED"
     assert_not_includes rendered["body"], "Maya trek"
-    assert_difference "Message.count", 1 do
+    assert_no_difference "Message.count" do
       post lead_messages_path(lead), params: { message: {
         to: "maya@example.com", subject: rendered["subject"], body: rendered["body"], template_id: @template.id
       } }
     end
-    message = Message.order(:id).last
-    assert_equal [ "maya@example.com" ], ClientMailer.outbound(message).to
-    assert_not_includes message.text_body, "MAYA"
-    assert_not_includes message.text_body, "UNRELATED"
+    # Missing financial context now refuses a payment instruction instead
+    # of sending a marker that could be mistaken for an amount.
 
     get reply_context_templates_path, params: { owner_type: "Client", owner_id: @client.id, to: "maya@example.com" }
     assert_equal "MAYA", response.parsed_body["context"]["invoice_number"]

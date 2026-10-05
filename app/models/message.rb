@@ -14,6 +14,7 @@ class Message < ApplicationRecord
   validates :subject, presence: true, if: -> { outbound? && status != "received" }
   validates :text_body, presence: true, if: -> { outbound? && status != "received" }
   validate :needs_a_home
+  validate :complete_payment_instructions, if: -> { outbound? && status == "queued" }
 
   scope :for_owner, ->(owner) {
     joins(:conversation)
@@ -165,6 +166,12 @@ class Message < ApplicationRecord
   end
 
   private
+
+  def complete_payment_instructions
+    if text_body.to_s.match?(/\[missing:\s*(?:deposit_due|balance_due|payment_due_on|balance_due_on|terms_version|invoice_number|payment_reference)\]/)
+      errors.add(:text_body, "needs the accepted payment amount, dates and terms before sending")
+    end
+  end
 
   def needs_a_home
     if conversation.nil? && group_send.nil?

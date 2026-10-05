@@ -47,6 +47,14 @@ class QuotePdf
     accept_block(pdf)
     pdf.move_down 18
     footer(pdf)
+    if @quote.terms_bundle.present?
+      %w[master_terms pre_payment_disclosure trip_differences itinerary].each do |name|
+        pdf.start_new_page
+        pdf.text name.humanize, size: 16
+        pdf.move_down 8
+        pdf.text @quote.terms_bundle.fetch(name), size: 9, leading: 3
+      end
+    end
   end
 
   def header(pdf)
@@ -118,6 +126,12 @@ class QuotePdf
   end
 
   def accept_block(pdf)
+    if @quote.terms_bundle.present?
+      pdf.text "Booking terms #{@quote.terms_bundle.fetch('terms_version')}", size: 10
+      pdf.text "You cancel 45 days or fewer before departure: Cancellation charge: 100% of the total trip price. No refund.", size: 10
+      pdf.text "Read the attached master terms, pre-payment disclosure and trip-specific differences before acceptance or payment.", size: 9
+      pdf.move_down 8
+    end
     pdf.fill_color OCHRE
     pdf.text "Accept this quote", size: 12, style: :bold
     pdf.fill_color MUTED

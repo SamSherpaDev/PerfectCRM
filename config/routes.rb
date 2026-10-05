@@ -100,6 +100,7 @@ Rails.application.routes.draw do
   resources :quotes, except: %i[destroy] do
     post :preview, on: :collection, action: :new
     member do
+      get :terms_intake
       post :send_quote
       post :duplicate
       post :revise
@@ -108,6 +109,7 @@ Rails.application.routes.draw do
   # Public tap-to-accept quote page: unguessable token, no sign-in.
   get "q/:token", to: "public_quotes#show", as: :public_quote
   post "q/:token/accept", to: "public_quotes#accept", as: :accept_public_quote
+  get "q/:token/documents", to: "public_quotes#documents", as: :public_quote_documents
   resources :templates, except: :show do
     collection do
       post :preview, action: :collection_preview

@@ -1,9 +1,11 @@
 require "application_system_test_case"
+require_relative "../support/quote_terms_test_helper"
 require_relative "../support/google_sign_in_test_helper"
 require_relative "../../db/migrate/20260926205306_refresh_default_template_wording"
 require "pdf/reader"
 
 class TemplateWordingSystemTest < ApplicationSystemTestCase
+  include QuoteTermsTestHelper
   include GoogleSignInTestHelper
   include ActiveJob::TestHelper
 
@@ -117,6 +119,7 @@ class TemplateWordingSystemTest < ApplicationSystemTestCase
     quote = Quote.create!(client: Client.find_by!(email: "maya@example.test"),
       party_size: 2, valid_until: Date.current + 14)
     quote.lines.create!(kind: "custom", description: "Nepal trek", quantity: 2, unit_minor: 150000)
+    complete_quote_terms(quote, days: 180)
     visit quote_path(quote)
     perform_enqueued_jobs(only: ActionMailer::MailDeliveryJob) do
       click_button "Send quote"

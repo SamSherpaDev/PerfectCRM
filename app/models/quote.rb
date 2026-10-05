@@ -31,6 +31,13 @@ class Quote < ApplicationRecord
   has_secure_token :accept_token
 
   before_validation :assign_reference, on: :create
+  validate :complete_terms_for_delivery, on: :send
+  validate :preserve_delivered_bundle
+
+  BUNDLE_FIELDS = %w[terms_bundle terms_bundle_sha256 journey_kind local_operator disclosure_details trip_differences
+    trip_name departure_label departure_start_on departure_end_on party_size deposit_minor balance_due_on
+    currency included notes client_id lead_id reference version valid_until accept_token
+    perfectbook_trip_id perfectbook_departure_id sent_at sent_by_email].freeze
 
   validates :reference, presence: true, uniqueness: true
   validates :accept_token, uniqueness: true
@@ -83,11 +90,11 @@ class Quote < ApplicationRecord
   end
 
   def owner_name
-    owner&.name.to_s
+    terms_bundle.present? ? terms_bundle.fetch("client") : owner&.name.to_s
   end
 
   def owner_email
-    owner&.display_email
+    terms_bundle.present? ? terms_bundle.fetch("email") : owner&.display_email
   end
 
   def subject_label
@@ -126,6 +133,8 @@ class Quote < ApplicationRecord
     with_lock do
       return false unless sendable?
 
+      self.terms_bundle = QuoteTerms.bundle(self)
+      self.terms_bundle_sha256 = Digest::SHA256.hexdigest(JSON.generate(terms_bundle))
       update!(status: "sent", sent_at: Time.current, sent_by_email: Current.user_email)
       if lead && !lead.converted? && %w[new chatting].include?(lead.status)
         Leads::Transition.call(lead, to: "quoted", actor: :captain)
@@ -148,16 +157,23 @@ class Quote < ApplicationRecord
     end
   end
 
-  def acceptable?
-    %w[sent viewed].include?(status) && !expired?
+  def payment_schedule_current?
+    terms_bundle.blank? || QuoteTerms.deposit_minor(self) == deposit_minor
   end
 
-  def accept!
+  def acceptable?
+    %w[sent viewed].include?(status) && !expired? && payment_schedule_current?
+  end
+
+  def accept!(bundle_sha256: nil)
     with_lock do
       return false unless acceptable?
+      return false if terms_bundle.present? && bundle_sha256 != terms_bundle_sha256
 
-      update!(status: "accepted", accepted_at: Time.current,
-        intake_payload: JSON.generate(intake_details))
+      self.accepted_at = Time.current
+      self.accepted_terms_version = terms_bundle&.fetch("terms_version")
+      self.accepted_bundle_sha256 = terms_bundle_sha256
+      update!(status: "accepted", intake_payload: JSON.generate(intake_details))
       ActivityEvent.create!(
         subject: owner, kind: "quote",
         summary: "Quote #{reference} accepted - create the booking in PerfectBook",
@@ -178,6 +194,8 @@ class Quote < ApplicationRecord
     copy.sent_by_email = nil
     copy.view_count = 0
     copy.intake_payload = nil
+    copy.terms_bundle = copy.terms_bundle_sha256 = nil
+    copy.accepted_terms_version = copy.accepted_bundle_sha256 = nil
     copy.accept_token = self.class.generate_unique_secure_token
     lines.each do |line|
       copy.lines.build(line.attributes.except("id", "quote_id", "created_at", "updated_at"))
@@ -209,7 +227,13 @@ class Quote < ApplicationRecord
       "departure_end" => departure_end_on&.iso8601,
       "party_size" => party_size, "total_minor" => subtotal_minor,
       "currency" => currency, "client" => owner_name, "email" => owner_email,
-      "quote_reference" => reference
+      "quote_reference" => reference,
+      "deposit_minor" => deposit_minor, "balance_due_minor" => balance_due_minor,
+      "balance_due_on" => balance_due_on&.iso8601,
+      "accepted_at" => accepted_at&.iso8601,
+      "accepted_terms_version" => accepted_terms_version,
+      "accepted_bundle_sha256" => accepted_bundle_sha256,
+      "terms_bundle" => terms_bundle
     }
   end
 
@@ -223,12 +247,52 @@ class Quote < ApplicationRecord
       trip: details["trip"], departure: details["departure"],
       start_date: details["departure_start"], end_date: details["departure_end"],
       party_size: details["party_size"], name: details["client"], email: details["email"],
-      quote: details["quote_reference"]
+      quote: details["quote_reference"],
+      terms_version: details["accepted_terms_version"],
+      terms_sha256: details["accepted_bundle_sha256"]
     }.compact_blank
     "#{PerfectBook.base_url}/bookings/new?#{params.to_query}"
   end
 
   private
+
+  def complete_terms_for_delivery
+    validates_presence_of :journey_kind, :local_operator, :trip_differences, :departure_start_on, :departure_end_on, :included, :trip_name
+    errors.add(:journey_kind, "must be scheduled or private") unless %w[scheduled private].include?(journey_kind)
+    details = disclosure_details || {}
+    QuoteTerms::FIELDS.each do |key, label|
+      value = details[key].to_s
+      errors.add(:base, "Complete #{label.downcase} before sending") if value.blank? || value.match?(/_{3,}|\[.*?\]|\b(?:TBD|TODO|unknown)\b/i)
+    end
+    unless %w[covered not_covered].include?(details["fund_notice"])
+      errors.add(:base, "Select the verified transaction-specific fund notice before sending")
+    end
+    if local_operator.to_s.match?(/\[|_{3,}|\b(?:TBD|TODO|unknown)\b/i)
+      errors.add(:local_operator, "must be the verified legal name")
+    end
+    expected = QuoteTerms.deposit_minor(self)
+    errors.add(:deposit_minor, "must match the master payment schedule (#{QuoteTerms.money(expected)})") if expected && deposit_minor != expected
+    if departure_start_on && balance_due_on != departure_start_on - 90
+      errors.add(:balance_due_on, "must be 90 days before departure")
+    end
+    if departure_end_on && departure_start_on && departure_end_on < departure_start_on
+      errors.add(:departure_end_on, "must not precede the trip start")
+    end
+    if departure_start_on && departure_start_on < Date.current
+      errors.add(:departure_start_on, "must not be in the past")
+    end
+  end
+
+  def preserve_delivered_bundle
+    return unless persisted? && terms_bundle_in_database.present?
+
+    if BUNDLE_FIELDS.any? { |field| will_save_change_to_attribute?(field) }
+      errors.add(:base, "Delivered quote documents cannot change. Make a new revision instead.")
+    end
+    if accepted_at_in_database && %w[accepted_at accepted_terms_version accepted_bundle_sha256 intake_payload].any? { |field| will_save_change_to_attribute?(field) }
+      errors.add(:base, "Accepted terms evidence cannot change")
+    end
+  end
 
   def assign_reference
     self.reference ||= "Q-#{Date.current.year}-#{SecureRandom.alphanumeric(6).upcase}"

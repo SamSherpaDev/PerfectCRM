@@ -17,6 +17,11 @@ A note from Sam
 <% end %>
 
 The full quote is attached as a PDF. To accept, tap the link below. You do not need an account.
+<% if @quote.terms_bundle.present? %>
+Read the attached master terms <%= @quote.terms_bundle.fetch("terms_version") %>, pre-payment disclosure, itinerary and trip-specific differences before accepting or paying.
+You cancel 45 days or fewer before departure: Cancellation charge: 100% of the total trip price. No refund.
+The traveler-cancellation table does not remove our conditions promise, rights under an already accepted booking, or refunds and other rights required by law.
+<% end %>
 <%= @accept_url %>
 
 Questions? Just reply to this email.

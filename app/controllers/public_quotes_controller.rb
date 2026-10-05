@@ -16,13 +16,24 @@ class PublicQuotesController < ApplicationController
     @quote.mark_viewed!
   end
 
+  def documents
+    raise ActiveRecord::RecordNotFound if @quote.terms_bundle.blank?
+
+    send_data JSON.pretty_generate(@quote.terms_bundle), type: "application/json",
+      filename: "#{@quote.reference}-terms-bundle.json", disposition: "attachment"
+  end
+
   def accept
     @quote.with_lock(requires_new: true) do
       if @quote.expired?
         return redirect_to public_quote_path(@quote.accept_token), alert: "This quote has expired. Reply to info@sherpaholidays.com and Sam will refresh it."
       end
 
-      unless @quote.accept!
+      if @quote.terms_bundle.present? && params[:terms_accepted] != "1"
+        return redirect_to public_quote_path(@quote.accept_token), alert: "Read the booking documents and confirm acceptance before continuing."
+      end
+
+      unless @quote.accept!(bundle_sha256: params[:bundle_sha256])
         return redirect_to public_quote_path(@quote.accept_token), alert: "This quote can no longer be accepted."
       end
 

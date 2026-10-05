@@ -25,9 +25,9 @@ TEMPLATES = [
     body: <<~BODY.strip
       Hi {{first_name}},
 
-      Your {{trip}} itinerary for {{departure_dates}} is ready. I planned the days with enough time to acclimatize and stops at the best viewpoints.
+      Your {{trip}} itinerary for {{departure_dates}} is ready. #{TemplatePolicyRefresh::ALTITUDE}
 
-      Take a look and let me know what you would like to change. We can adjust anything until it works for you.
+      #{TemplatePolicyRefresh::PRECEDENCE}
 
       Best,
       {{my_name}}
@@ -36,13 +36,13 @@ TEMPLATES = [
   {
     name: "Deposit nudge",
     purpose: "deposit_nudge",
-    subject: "Your {{trip}} seats are on hold",
+    subject: "Payment for your {{trip}}",
     body: <<~BODY.strip
       Hi {{first_name}},
 
-      A quick reminder that your {{trip}} seats for {{departure_dates}} are on hold until we receive your deposit of {{deposit_due}}.
+      #{TemplatePolicyRefresh::PAYMENT_REQUEST}
 
-      Invoice {{invoice_number}} has the details, and your payment reference is {{payment_reference}}. Once the deposit arrives, your seats are confirmed.
+      #{TemplatePolicyRefresh::CONFIRMATION}
 
       Best,
       {{my_name}}
@@ -57,7 +57,7 @@ TEMPLATES = [
 
       Before we finalize your {{trip}} booking, please send us what is still missing: {{missing_documents}}.
 
-      A clear phone photo of each is fine. We store them securely in our booking system, not in email threads.
+      #{TemplatePolicyRefresh::DOCUMENTS}
 
       Best,
       {{my_name}}
@@ -72,7 +72,7 @@ TEMPLATES = [
 
       Your {{trip}} is coming up soon, departing {{departure_dates}}. Pack warm layers and boots you have already broken in.
 
-      Your remaining balance of {{balance_due}} is due before we meet in Kathmandu. I will email you again the week you fly with the meeting point and your guide's name.
+      #{TemplatePolicyRefresh::BALANCE} I will email you again the week you fly with the meeting point and your guide's name.
 
       Best,
       {{my_name}}
@@ -87,7 +87,7 @@ TEMPLATES = [
 
       I wanted to check in while you are on {{trip}}. I hope everything is going well.
 
-      If anything needs to change, like the pace, your room, or an extra rest day, tell your guide or reply to this email and I will take care of it.
+      Tell your guide or reply to discuss any change in pace, room or rest days. We explain availability and any quoted cost before you decide.
 
       Best,
       {{my_name}}

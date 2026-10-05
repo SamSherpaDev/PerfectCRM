@@ -50,6 +50,7 @@ module PerfectBook
             balance_due_minor: booking.balance_due_minor, currency: booking.currency,
             invoice_badge: booking.invoice_badge, invoice_number: booking.invoice_number,
             payment_reference: booking.payment_reference, deep_link: booking.deep_link,
+            payment_terms: booking.payment_terms,
             documents_json: booking.documents.presence || {}, missing_count: booking.missing_count.to_i,
             checklist_json: booking.checklist.presence || [],
             synced_at: now

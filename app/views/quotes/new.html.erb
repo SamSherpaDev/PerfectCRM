@@ -68,7 +68,7 @@
     <%= hidden_field_tag :lead_id, params[:lead_id] %>
     <%= form.hidden_field :perfectbook_trip_id %>
     <%= form.hidden_field :perfectbook_departure_id %>
-    <%= form.hidden_field :trip_name %>
+    <%= form.hidden_field :trip_name if @quote.perfectbook_trip_id.present? %>
     <%= form.hidden_field :departure_label %>
     <%= hidden_field_tag :included_edited, params[:included_edited] == "1" ? "1" : "0", data: { quote_builder_target: "inclusionsEdited" } %>
 
@@ -93,6 +93,7 @@
         </template>
       </section>
 
+      <%= render "terms_fields", form: form, quote: @quote %>
       <section class="card card-pad" aria-labelledby="note-heading">
         <div class="card-header">
           <h2 class="card-title" id="note-heading">Note to the client</h2>

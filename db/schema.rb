@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_05_015657) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_05_031551) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -513,6 +513,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_05_015657) do
     t.integer "paid_minor"
     t.integer "party_size"
     t.string "payment_reference"
+    t.json "payment_terms"
     t.integer "perfectbook_contact_id", null: false
     t.integer "perfectbook_id", null: false
     t.integer "price_per_person_minor"
@@ -647,6 +648,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_05_015657) do
   create_table "quotes", force: :cascade do |t|
     t.string "accept_token", null: false
     t.datetime "accepted_at"
+    t.string "accepted_bundle_sha256"
+    t.string "accepted_terms_version"
     t.date "balance_due_on"
     t.integer "client_id"
     t.datetime "created_at", null: false
@@ -655,9 +658,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_05_015657) do
     t.string "departure_label"
     t.date "departure_start_on"
     t.integer "deposit_minor", default: 0, null: false
+    t.json "disclosure_details"
     t.text "included"
     t.text "intake_payload"
+    t.string "journey_kind"
     t.integer "lead_id"
+    t.text "local_operator"
     t.text "notes"
     t.integer "parent_id"
     t.integer "party_size"
@@ -667,6 +673,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_05_015657) do
     t.datetime "sent_at"
     t.string "sent_by_email"
     t.string "status", default: "draft", null: false
+    t.json "terms_bundle"
+    t.string "terms_bundle_sha256"
+    t.text "trip_differences"
     t.string "trip_name"
     t.datetime "updated_at", null: false
     t.date "valid_until"

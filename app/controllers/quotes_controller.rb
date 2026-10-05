@@ -2,7 +2,7 @@
 # PerfectBook catalog (never the API directly), sent as email plus PDF, and
 # accepted through the public tap-to-accept page.
 class QuotesController < ApplicationController
-  before_action :set_quote, only: %i[show edit update send_quote duplicate revise]
+  before_action :set_quote, only: %i[show edit update send_quote duplicate revise terms_intake]
 
   TAB_ICONS = { "draft" => :pencil, "sent" => :mail, "accepted" => :check,
                 "expired" => :history }.freeze
@@ -28,6 +28,13 @@ class QuotesController < ApplicationController
           disposition: "attachment"
       end
     end
+  end
+
+  def terms_intake
+    raise ActiveRecord::RecordNotFound unless @quote.status == "accepted"
+
+    send_data JSON.pretty_generate(@quote.intake_details), type: "application/json",
+      filename: "#{@quote.reference}-perfectbook-intake.json", disposition: "attachment"
   end
 
   def new
@@ -171,10 +178,12 @@ class QuotesController < ApplicationController
     end
 
     previous_catalog_description = [ @quote.trip_name, @quote.departure_label ].compact_blank.join(" - ")
-    @quote.trip_name = trip&.name if trip || replace_description
-    @quote.departure_label = departure && departure_label(departure)
-    @quote.departure_start_on = departure&.start_date
-    @quote.departure_end_on = departure&.end_date
+    if trip
+      @quote.trip_name = trip.name
+      @quote.departure_label = departure && departure_label(departure)
+      @quote.departure_start_on = departure&.start_date
+      @quote.departure_end_on = departure&.end_date
+    end
     @quote.lines.each do |line|
       next if line.marked_for_destruction? || !%w[trip departure].include?(line.kind)
 
@@ -236,6 +245,8 @@ class QuotesController < ApplicationController
       :party_size, :trip_name, :departure_label, :departure_start_on, :departure_end_on,
       :perfectbook_trip_id, :perfectbook_departure_id, :notes, :included,
       :deposit_dollars, :balance_due_on, :valid_until,
+      :journey_kind, :local_operator, :trip_differences,
+      disclosure_details: [ *QuoteTerms::FIELDS.keys, :fund_notice ],
       lines_attributes: %i[id kind description quantity unit_dollars price_edited _destroy]
     )
   end
