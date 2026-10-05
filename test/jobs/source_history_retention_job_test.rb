@@ -67,4 +67,26 @@ class SourceHistoryRetentionJobTest < ActiveJob::TestCase
     assert_equal "search", client.reload.reported_source_code
   end
 
+  test "expired conversion keeps relationship events without source or campaign evidence" do
+    now = Time.current
+    first = Lead.create!(name: "Paid booker", source: "google_ads", campaign_name: "first-paid")
+    client = first.convert_to_client!(expected_client_id: "new")
+    returning = Lead.create!(name: "Repeat ask", existing_client: client, source: "meta_ads", campaign_name: "repeat-paid")
+    returning.convert_to_client!(expected_client_id: client.id)
+    events = client.activity_events.where(kind: "conversion").order(:id).to_a
+    assert_equal "Returned as a lead from Meta ads", events.last.summary
+    client.update_columns(created_at: now - 8.years)
+    SourceHistoryRetentionJob.perform_now(now: now)
+    assert_equal events.map(&:id), client.activity_events.where(kind: "conversion").order(:id).pluck(:id)
+    events.each do |event|
+      event.reload
+      assert_not event.metadata.key?("source")
+      assert_not event.metadata.key?("campaign")
+      assert event.metadata["lead_id"].present?
+    end
+    assert_equal "Started as a lead", events.first.summary
+    assert_equal "Returned as a lead", events.last.summary
+    assert_equal "Converted to client", returning.activity_events.where(kind: "conversion").last.summary
+  end
+
 end

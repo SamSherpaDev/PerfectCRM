@@ -89,6 +89,25 @@ class SourceHistoryTest < ActiveSupport::TestCase
     assert_equal answer_id, client.activity_events.where(kind: "call").last.metadata["source_answer_event_id"]
   end
 
+  test "calls without inquiry testimony never borrow another inquiry answer" do
+    client = Client.create!(name: "Returning")
+    SourceAnswers.record!(client, choice: "personal_referral", method: "website_form")
+    first = Lead.create!(name: "First ask", existing_client: client)
+    SourceAnswers.record!(first, choice: "search", method: "website_form")
+    first.convert_to_client!(expected_client_id: client.id)
+    inquiry = Lead.create!(name: "Second ask", existing_client: client)
+    key = SecureRandom.uuid
+    call = CallLog.record!(inquiry, key: key, occurred_at: Time.current, direction: "outbound", outcome: "connected")
+    assert_nil call.metadata["source_answer_event_id"]
+    inquiry.convert_to_client!(expected_client_id: client.id)
+    copied = client.activity_events.where(kind: "call").last
+    assert_nil copied.metadata["source_answer_event_id"]
+    assert_equal call.id, copied.metadata["from_lead_event_id"]
+    assert_no_difference("ActivityEvent.count") do
+      CallLog.record!(inquiry, key: key, occurred_at: Time.current, direction: "outbound", outcome: "connected")
+    end
+  end
+
   test "personal referrals prohibit self links cycles and multiple referrers" do
     first = Client.create!(name: "First")
     second = Client.create!(name: "Second", referred_by_client: first)

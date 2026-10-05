@@ -74,5 +74,17 @@ class SourceHistoryRetentionJob < ApplicationJob
       events.where("json_extract(metadata, '$.#{provenance}') = ?", record.id).delete_all
     end
     record.activity_events.where(kind: %w[source_answer source_referral call]).delete_all
+    conversions = record.activity_events.where(kind: "conversion")
+    if record.is_a?(Lead)
+      conversions = conversions.or(ActivityEvent.where(kind: "conversion").where(
+        "json_extract(metadata, '$.lead_id') = ? OR json_extract(metadata, '$.from_lead_id') = ?", record.id, record.id))
+    elsif record.is_a?(Person)
+      conversions = conversions.or(ActivityEvent.where(kind: "conversion").where(
+        "json_extract(metadata, '$.from_person_id') = ?", record.id))
+    end
+    conversions.find_each do |event|
+      summary = event.summary.start_with?("Returned as a lead from ") ? "Returned as a lead" : event.summary
+      conversions.where(id: event.id).update_all(metadata: (event.metadata || {}).except("source", "campaign"), summary: summary)
+    end
   end
 end
