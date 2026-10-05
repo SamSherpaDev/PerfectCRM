@@ -117,6 +117,41 @@ class ApiV1LeadsDetailsTest < ActionDispatch::IntegrationTest
     assert_equal({ "unknown_reason" => "declined_permission" }, @lead.metadata.dig("acquisition", "first_touch"))
   end
 
+  test "permission withdrawal clears compatibility advertising fields before conversion" do
+    SourceAnswers.record!(@lead, choice: "personal_referral", detail: "Alex", method: "website_form")
+    @lead.update!(source: "google_ads", campaign_name: "nepal-paid", metadata: {
+      "acquisition" => { "permission" => { "state" => "allowed" },
+        "last_touch" => { "observed_at" => Time.current.iso8601, "gclid" => "paid-click", "utm_campaign" => "nepal-paid" } },
+      "attribution" => { "gclid" => "paid-click", "utm_campaign" => "nepal-paid" }
+    })
+    post_details details_body("acquisition" => { "permission" => { "state" => "withdrawn" } })
+    assert_response :ok
+    assert_nil @lead.reload.campaign_name
+    assert_equal "website_form", @lead.source
+    assert_equal "personal_referral", @lead.reported_source_code
+    assert_equal "Alex", @lead.reported_source_detail
+    client = @lead.convert_to_client!(expected_client_id: "new")
+    assert_nil client.campaign_name
+    assert_equal "website_form", client.source
+    assert_equal "personal_referral", client.reported_source_code
+    event = client.activity_events.where(kind: "conversion").last
+    assert_nil event.metadata["campaign"]
+    assert_equal "website_form", event.metadata["source"]
+  end
+
+  test "all denied permission states clear both paid classifications" do
+    [ { "state" => "denied" }, { "state" => "unavailable" },
+      { "state" => "withdrawn" }, { "state" => "allowed", "opted_out" => true } ].each do |permission|
+      %w[google_ads meta_ads].each do |source|
+        @lead.update!(source: source, campaign_name: "paid-campaign")
+        post_details details_body("acquisition" => { "permission" => permission })
+        assert_response :ok
+        assert_nil @lead.reload.campaign_name
+        assert_equal "website_form", @lead.source
+      end
+    end
+  end
+
   test "a missing first touch can capture a later genuine permission-allowed observation" do
     post_details details_body("acquisition" => { "permission" => { "state" => "allowed" }, "first_touch" => { "observed_at" => Time.current.iso8601, "unknown_reason" => "unavailable" } })
     assert_response :ok

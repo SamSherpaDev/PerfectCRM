@@ -78,6 +78,8 @@ module Api
                 ::Leads::Acquisition::TOUCHES.each { |key| acquisition[key] = { "unknown_reason" => "declined_permission" } }
                 acquisition.delete("submission_page")
                 lead.metadata = (lead.metadata || {}).except("page")
+                lead.campaign_name = nil
+                lead.source = "website_form" if %w[google_ads meta_ads].include?(lead.source)
               end
               lead.metadata = (lead.metadata || {}).merge("acquisition" => acquisition,
                 "attribution" => ::Leads::Acquisition.legacy_attribution((lead.metadata || {})["attribution"] || {}, acquisition: acquisition))
