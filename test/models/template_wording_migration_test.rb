@@ -29,9 +29,10 @@ class TemplateWordingMigrationTest < ActiveSupport::TestCase
     load Rails.root.join("db/seeds/templates.rb")
     RefreshDefaultTemplateWording::CHANGES.each do |name, _, _, new_subject, new_body|
       template = Template.find_by!(name: name)
-      assert_equal [ new_subject, new_body ], [ template.subject, template.body ]
-      assert_no_match(/—/, "#{new_subject}\n#{new_body}")
-      assert_no_match(/Sherpa Holidays/, new_body)
+      expected_subject = name == "Deposit nudge" ? "Payment for your {{trip}}" : new_subject
+      assert_equal [ expected_subject, TemplatePolicyRefresh.body(new_body) ], [ template.subject, template.body ]
+      assert_no_match(/—/, "#{template.subject}\n#{template.body}")
+      assert_no_match(/Sherpa Holidays/, template.body)
     end
   end
 

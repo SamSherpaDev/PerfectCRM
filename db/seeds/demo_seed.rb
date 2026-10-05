@@ -403,7 +403,8 @@ module DemoSeed
       quote.lines.build(description: "Everest Base Camp trek, 14 days", quantity: 2, unit_minor: 185_000, total_minor: 370_000)
       quote.lines.build(description: "Extra night in Namche", quantity: 2, unit_minor: 9_500, total_minor: 19_000)
       quote.save!
-      quote.deliver!
+      # Historical synthetic sample, not a new compliant payment request.
+      quote.update!(status: "sent", sent_at: Time.current)
     end
 
     if Quote.where(client_id: jonas.id).none?
@@ -415,7 +416,9 @@ module DemoSeed
       )
       quote.lines.build(description: "Annapurna Circuit trek, 16 days", quantity: 2, unit_minor: 179_000, total_minor: 358_000)
       quote.save!
-      quote.deliver!
+      # Preserve the sample's old payment schedule; do not invent acceptance
+      # of newly released terms or fund-security evidence for demo data.
+      quote.update!(status: "sent", sent_at: Time.current)
       quote.accept!
       quote.update_columns(sent_at: 75.days.ago, accepted_at: 70.days.ago, view_count: 3, viewed_at: 71.days.ago)
     end
@@ -429,7 +432,8 @@ module DemoSeed
       )
       quote.lines.build(description: "Everest Base Camp trek, 14 days", quantity: 2, unit_minor: 189_000, total_minor: 378_000)
       quote.save!
-      quote.deliver!
+      quote.update!(status: "sent", sent_at: Time.current)
+      Leads::Transition.call(hannah, to: "quoted", actor: :captain) if hannah.is_a?(Lead) && !hannah.converted?
     end
   end
 

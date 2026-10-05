@@ -70,7 +70,7 @@
       <% if @quote.accepted_at %>
         <div>
           <dt>Accepted</dt>
-          <dd><%= date_short(@quote.accepted_at) %></dd>
+          <dd><%= date_short(@quote.accepted_at) %><% if @quote.accepted_terms_version %> · <%= @quote.accepted_terms_version %><% else %> · Historical terms unchanged<% end %></dd>
         </div>
       <% end %>
     </dl>
@@ -78,7 +78,7 @@
       <p class="text-xs muted"><%= @quote.party_size ? "Total for #{pluralize(@quote.party_size, 'guest')}" : "Total" %></p>
       <p class="font-display text-3xl tabular-nums text-ink"><%= money_in(@quote.subtotal_minor, @quote.currency) %></p>
       <% if @quote.deposit_minor.to_i.positive? %>
-        <p class="mt-1 text-sm muted">Deposit <%= money_in(@quote.deposit_minor, @quote.currency) %> · balance <%= money_in(@quote.balance_due_minor, @quote.currency) %><% if @quote.balance_due_on %> due <%= date_short(@quote.balance_due_on) %><% end %></p>
+        <p class="mt-1 text-sm muted"><%= @quote.terms_bundle.present? ? "Payment requested now" : "Deposit" %> <%= money_in(@quote.payment_requested_minor, @quote.currency) %> · balance <%= money_in(@quote.remaining_balance_minor, @quote.currency) %><% if @quote.balance_due_on %> due <%= date_short(@quote.balance_due_on) %><% end %></p>
       <% end %>
     </div>
   </section>
@@ -118,6 +118,15 @@
     </section>
   <% end %>
 
+  <% if @quote.terms_bundle.present? %>
+    <section class="card card-pad">
+      <h2 class="card-title">Delivered booking documents</h2>
+      <p class="text-sm mt-2"><%= @quote.terms_bundle.fetch("terms_version") %></p>
+      <p class="hint break-all mt-2">SHA-256: <%= @quote.terms_bundle_sha256 %></p>
+      <%= link_to "Download booking documents", public_quote_documents_path(@quote.accept_token), class: "link mt-3 inline-block text-sm" %>
+    </section>
+  <% end %>
+
   <% if @quote.status == "accepted" %>
     <section class="card card-pad" aria-labelledby="intake-heading">
       <div class="card-header">
@@ -127,9 +136,11 @@
       <div class="mt-2 flex flex-wrap gap-2">
         <%= link_to "Open PerfectBook booking page", quote_intake_url(@quote), class: "btn btn-primary btn-sm", target: "_blank", rel: "noopener" %>
       </div>
+      <%= link_to "Download accepted documents and intake", terms_intake_quote_path(@quote), class: "link mt-3 inline-block text-sm" %>
+      <p class="hint mt-2">Manual handoff only. Import the accepted version, document bytes, hash and payment schedule into PerfectBook. The booking-page link carries only the reference and version, not the documents.</p>
       <label class="label mt-4" for="intake-details">Details to copy into PerfectBook</label>
       <textarea id="intake-details" rows="7" readonly class="textarea mono text-xs"><%=
-        @quote.intake_details.map { |key, value| "#{key}: #{value}" }.join("\n")
+        JSON.pretty_generate(@quote.intake_details)
       %></textarea>
       <p class="hint mt-1">Copy these into the new booking. A direct post will replace this step once PerfectBook's enquiry endpoint ships.</p>
     </section>

@@ -111,9 +111,10 @@ Placeholders render through `TemplateRenderer` against live values; see
 [Replying](#replying) for context resolution and missing-value behavior.
 The placeholder chooser uses `TemplateRenderer::PLACEHOLDERS` as its source.
 Templates are seeded from `db/seeds/templates.rb` (idempotent; reruns never
-overwrite captain edits). A wording change to the defaults reaches existing
-installs through a data migration that only rewrites templates still
-matching the old default name, subject, and body word for word.
+overwrite captain edits). For existing-template wording migrations and the
+pre-rollout inventory, see [quote terms](docs/quote-terms.md#operational-templates-and-rollout).
+Unknown financial amounts, accepted dates or terms versions must be completed
+before an outbound payment instruction can queue.
 
 The default Review ask requests a Google review; ask every traveler,
 regardless of how the trip went, and never offer gifts or discounts for reviews.
@@ -330,25 +331,32 @@ inclusions for this trip” saves CRM-owned preferences separately from the
 trip mirror. Remembered inclusions load on the initial trip selection when
 the field is untouched. New quotes default to two guests and a valid-until
 date 14 days from today. Drafts may omit these fields; sending requires a
-positive party size, at least one line, a recipient email, and a valid-until
-date of today or later. Drafts can retain past dates, but these must be
+positive party size, at least one line, a recipient email, a valid-until
+date of today or later, and completed booking documents and payment schedule
+as described in [quote terms](docs/quote-terms.md). Drafts can retain past dates, but these must be
 updated before sending. Validation errors appear in the builder. Sending a quote
 moves a lead from New or Chatting to Quoted (`Quote#deliver!`). If the
 email cannot be queued, the quote remains a draft and shows a retry message;
 saved edits are retained. Edits commit before email enqueueing. After a lead
-converts, its quotes use the client's current contact details and record new
-quote activity on the client timeline.
+converts, draft quotes use the client's current contact details. New delivered
+bundles keep the name and email they were sent to; activity still records on
+the converted client's timeline.
 
 Each quote carries an unguessable tap-to-accept link (`/q/:token`, no
 sign-in). Public views are rate-limited and logged through `QuoteView`.
 After `valid_until`, the page remains readable but acceptance is disabled.
-Accepting records `accepted_at`, queues an email to the captain at
+Clients read the delivered booking documents and confirm acceptance on the
+public page. Document preservation, payment-schedule expiry, historical quote
+compatibility and acceptance evidence are defined in [quote terms](docs/quote-terms.md).
+Accepting queues an email to the captain at
 `info@`, writes the timeline, and stages an intake payload on the quote
 page in the "Create booking in PerfectBook" panel. Its "Open PerfectBook
 booking page" button opens
 PerfectBook's new-booking page with the intake details in query parameters
-and a copyable version alongside for manual entry. Both use the intake details
-saved at acceptance, so later client edits do not change the staged intake.
+and a copyable JSON payload alongside for manual entry. Use the intake download
+and follow the [PerfectBook handoff](docs/quote-terms.md#manual-perfectbook-handoff)
+to preserve the accepted documents and evidence. All use the intake
+details saved at acceptance, so later client edits do not change the staged intake.
 The captain reviews
 and creates the actual booking in PerfectBook. If the acceptance notice
 cannot be queued, acceptance is rolled back and the client is asked to retry.

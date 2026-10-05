@@ -1,8 +1,10 @@
 require "test_helper"
 require "minitest/mock"
+require_relative "../support/quote_terms_test_helper"
 
 # The tap-to-accept page is public: the unguessable token is the only key.
 class PublicQuotesRequestsTest < ActionDispatch::IntegrationTest
+  include QuoteTermsTestHelper
   setup do
     @client = Client.create!(name: "Maya Gurung", email: "maya@example.com")
     @quote = Quote.create!(client: @client, status: "sent", sent_at: 1.hour.ago,
@@ -66,6 +68,7 @@ class PublicQuotesRequestsTest < ActionDispatch::IntegrationTest
     get public_quote_path(revision.accept_token)
     assert_response :not_found
     assert_equal 0, revision.views.count
+    complete_quote_terms(revision)
     revision.deliver!
     get public_quote_path(@quote.accept_token)
     assert_select "a[href=?]", public_quote_path(revision.accept_token), text: "View the newer quote"

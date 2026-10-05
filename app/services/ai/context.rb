@@ -38,6 +38,16 @@ module Ai
         lines << "Source: #{record.source}" if record.source.present?
       end
       lines << "Tags: #{record.tags.map(&:name).join(', ')}" if record.respond_to?(:tags) && record.tags.any?
+      if record.is_a?(::Client) || record.is_a?(::Lead)
+        quotes = ::Quote.for_owner(record)
+        quote = quotes.where(status: %w[sent viewed accepted]).where.not(terms_bundle: nil).ordered.first
+        if quote
+          lines << "Quote #{quote.reference}: #{quote.status}, terms #{quote.terms_bundle.fetch('terms_version')}, SHA-256 #{quote.terms_bundle_sha256}. These terms belong only to this quote, not another or historical booking."
+          lines << "Quoted payment: #{quote.currency} deposit #{format('%.2f', quote.deposit_minor / 100.0)}, balance due #{quote.balance_due_on}."
+          lines << "Delivered master terms:\n#{quote.terms_bundle.fetch('master_terms')}"
+          lines << "Delivered trip-specific differences:\n#{quote.terms_bundle.fetch('trip_differences')}"
+        end
+      end
       Scrub.scrub(lines.reject(&:blank?).join("\n"))
     end
 

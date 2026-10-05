@@ -1,9 +1,11 @@
 require "application_system_test_case"
+require_relative "../support/quote_terms_test_helper"
 require "tmpdir"
 require "pdf/reader"
 require_relative "../support/google_sign_in_test_helper"
 
 class SignatureSystemTest < ApplicationSystemTestCase
+  include QuoteTermsTestHelper
   include GoogleSignInTestHelper
   include ActiveJob::TestHelper
 
@@ -37,6 +39,7 @@ class SignatureSystemTest < ApplicationSystemTestCase
     client = Client.create!(name: "Signature recipient", email: "signature@example.test")
     quote = Quote.create!(client: client, trip_name: "Everest trek", party_size: 2, valid_until: Date.current + 14)
     quote.lines.create!(kind: "custom", description: "Trek", quantity: 2, unit_minor: 150000)
+    complete_quote_terms(quote, days: 180)
     visit quote_path(quote)
     perform_enqueued_jobs(only: ActionMailer::MailDeliveryJob) do
       click_button "Send quote"

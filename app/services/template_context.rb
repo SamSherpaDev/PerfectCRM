@@ -22,7 +22,7 @@ class TemplateContext
 
   def self.resolved_context(resolved, booking)
     identity = resolved[:identity]
-    context = self.for(identity, booking: booking)
+    context = self.for(identity, booking: booking, quote_owner: resolved[:owner], recipient_email: resolved[:recipient_email])
     owner = resolved[:owner]
     if owner.is_a?(Lead) && resolved[:recipient_email].present? &&
         owner.email.to_s.strip.downcase == resolved[:recipient_email] && owner.trip_interest.present?
@@ -73,7 +73,7 @@ class TemplateContext
     { context: {}, selected_booking_id: nil, bookings: [], booking_contexts: {} }
   end
 
-  def self.for(record, booking: default_booking_for(record))
+  def self.for(record, booking: default_booking_for(record), quote_owner: record, recipient_email: record.try(:display_email) || record.try(:email))
     settings = Setting.current
     context = {
       "first_name" => first_name_for(record),
@@ -83,7 +83,17 @@ class TemplateContext
       "signature" => EmailSignature.text_for(settings).presence,
       "google_review_link" => settings.google_review_url.presence
     }
-    context.merge!(booking_context(booking)) if booking
+    if booking
+      context.merge!(booking_context(booking))
+    else
+      quote = Quote.for_owner(quote_owner).where(status: %w[sent viewed accepted]).where.not(terms_bundle: nil).ordered.detect do |candidate|
+        delivered_email = candidate.owner_email.to_s.strip.downcase
+        delivered_email = quote_owner.effective_recipient_email(delivered_email) if quote_owner.respond_to?(:effective_recipient_email)
+        delivered_email == recipient_email.to_s.strip.downcase && !candidate.expired? &&
+          (candidate.status == "accepted" || candidate.payment_schedule_current?)
+      end
+      context.merge!(quote_context(quote)) if quote
+    end
     context.compact_blank
   end
 
@@ -122,16 +132,31 @@ class TemplateContext
       "trip" => booking.trip_name.presence,
       "departure_dates" => departure_dates_for(booking),
       "balance_due" => money_for(booking.balance_due_minor, booking.currency),
-      "deposit_due" => nil,
+      # Only PerfectBook's accepted schedule supplies historical booking money.
+      # Never infer a new-version $500/30% amount for an existing booking.
+      "deposit_due" => money_for(booking.payment_terms&.dig("payment_now_minor"), booking.currency),
+      "payment_due_on" => booking.payment_terms&.dig("payment_due_on"),
+      "balance_due_on" => booking.payment_terms&.dig("balance_due_on"),
+      "terms_version" => booking.payment_terms&.dig("terms_version"),
       "invoice_number" => booking.invoice_number.presence,
       "payment_reference" => booking.payment_reference.presence,
       "missing_documents" => booking.respond_to?(:missing_lines) ? booking.missing_lines&.join("; ") : nil
     }
   end
 
+  def self.quote_context(quote)
+    {
+      "trip" => quote.trip_name, "departure_dates" => departure_dates_for(quote),
+      "deposit_due" => money_for(quote.payment_requested_minor, quote.currency),
+      "payment_due_on" => "at booking", "balance_due" => money_for(quote.remaining_balance_minor, quote.currency),
+      "balance_due_on" => quote.balance_due_on&.iso8601,
+      "terms_version" => quote.terms_bundle.fetch("terms_version")
+    }
+  end
+
   def self.departure_dates_for(booking)
-    start_date = booking.start_date
-    end_date = booking.end_date
+    start_date = booking.is_a?(Quote) ? booking.departure_start_on : booking.start_date
+    end_date = booking.is_a?(Quote) ? booking.departure_end_on : booking.end_date
     return nil if start_date.blank? && end_date.blank?
     return end_date.strftime("%b %-d, %Y") if start_date.blank?
     return start_date.strftime("%b %-d, %Y") if end_date.blank?
@@ -151,5 +176,5 @@ class TemplateContext
     currency.blank? || currency == "USD" ? "$#{amount}" : "#{currency} #{amount}"
   end
   private_class_method :first_name_for, :advisor_name_for, :booking_context,
-    :departure_dates_for, :money_for
+    :quote_context, :departure_dates_for, :money_for
 end

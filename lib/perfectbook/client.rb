@@ -34,7 +34,7 @@ module PerfectBook
       :departure_id, :departure_place, :start_date, :end_date, :party_size,
       :price_per_person_minor, :total_minor, :paid_minor, :balance_due_minor,
       :currency, :invoice_badge, :invoice_number, :payment_reference,
-      :deep_link, :documents, :checklist, :missing_count, keyword_init: true)
+      :deep_link, :documents, :checklist, :missing_count, :payment_terms, keyword_init: true)
 
     # Upload handoff result: traveler + document outcome, booking
     # missing_count, and whether PerfectBook replayed an earlier upload_id.
@@ -310,6 +310,7 @@ module PerfectBook
         balance_due_minor: row["balance_due_minor"], currency: row["currency"] || "USD",
         invoice_badge: invoice["badge"], invoice_number: invoice["number"],
         payment_reference: invoice["payment_reference"], deep_link: row["deep_link"],
+        payment_terms: row["payment_terms"],
         documents: documents, checklist: Array(row["checklist"]),
         missing_count: documents["missing_count"].to_i
       )

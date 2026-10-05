@@ -1,8 +1,10 @@
 require "test_helper"
 require_relative "../support/google_sign_in_test_helper"
+require_relative "../support/quote_terms_test_helper"
 
 class QuoteDeliveryCommitTest < ActionDispatch::IntegrationTest
   include GoogleSignInTestHelper
+  include QuoteTermsTestHelper
   self.use_transactional_tests = false
 
   test "edit and send exposes committed terms to the queue worker" do
@@ -11,6 +13,7 @@ class QuoteDeliveryCommitTest < ActionDispatch::IntegrationTest
     client = Client.create!(name: "Delivery client", email: "delivery@example.com")
     quote = Quote.create!(client: client, party_size: 2, valid_until: Date.current + 14, notes: "Original")
     line = quote.lines.create!(kind: "custom", description: "Trek", quantity: 1, unit_minor: 150000)
+    complete_quote_terms(quote, days: 180)
     database = SQLite3::Database.new(ActiveRecord::Base.connection_db_config.database)
     observed = nil
     enqueue = ->(job) do

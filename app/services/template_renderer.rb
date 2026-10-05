@@ -16,6 +16,7 @@ class TemplateRenderer
   PLACEHOLDERS = %w[
     first_name full_name trip departure_dates balance_due deposit_due
     invoice_number payment_reference missing_documents advisor_name
+    payment_due_on balance_due_on terms_version
     my_name signature google_review_link
   ].freeze
 
@@ -34,6 +35,9 @@ class TemplateRenderer
     "departure_dates" => "May 4 – May 18, 2027",
     "balance_due" => "$1,850.00",
     "deposit_due" => "$500.00",
+    "payment_due_on" => "at booking",
+    "balance_due_on" => "February 3, 2027",
+    "terms_version" => "SH-TC-2026-10-04",
     "invoice_number" => "SH-2027-0142",
     "payment_reference" => "SH-0142-MAYA",
     "missing_documents" => "passport copy, insurance certificate",

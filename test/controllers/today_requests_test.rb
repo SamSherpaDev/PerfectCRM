@@ -1,7 +1,9 @@
 require "test_helper"
+require_relative "../support/quote_terms_test_helper"
 require_relative "../support/google_sign_in_test_helper"
 
 class TodayRequestsTest < ActionDispatch::IntegrationTest
+  include QuoteTermsTestHelper
   include GoogleSignInTestHelper
 
   setup do
@@ -75,6 +77,7 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     quote.lines.build(description: "Everest Base Camp trek, 14 days",
       quantity: 1, unit_minor: 100_000, total_minor: 100_000)
     quote.save!
+    complete_quote_terms(quote)
     quote.deliver!
 
     get root_path
