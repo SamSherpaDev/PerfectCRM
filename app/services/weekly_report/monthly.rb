@@ -35,7 +35,7 @@ module WeeklyReport
     end
 
     def leads
-      @leads ||= eligible_leads.where("COALESCE(received_at, leads.created_at) BETWEEN ? AND ?", range.first, range.last).to_a
+      @leads ||= eligible_leads.where("COALESCE(received_at, leads.created_at) BETWEEN ? AND ?", range.first, range.last).includes(:converted_client, :existing_client).to_a
     end
 
     def eligible_leads
@@ -59,11 +59,32 @@ module WeeklyReport
     end
 
     def totals
-      { inquiries: rows.sum(&:inquiries), connected_calls: rows.sum(&:connected_calls),
+      { inquiries: rows.sum(&:inquiries), unique_people: inquiry_identities.compact.uniq.size,
+        unresolved_identities: inquiry_identities.count(nil), connected_calls: rows.sum(&:connected_calls),
         bookings: rows.sum(&:booked), travelers: rows.sum(&:travelers),
         new_bookers: rows.flat_map(&:new_booker_ids).uniq.size, returning_bookers: rows.flat_map(&:returning_booker_ids).uniq.size,
         repeat_bookings: rows.sum(&:returning),
         net_received: sum_money(rows.map(&:net_received)), booked_value: sum_money(rows.map(&:booked_value)) }
+    end
+
+    def inquiry_identities
+      @inquiry_identities ||= begin
+        contacts = leads.map(&:perfectbook_contact_id).compact
+        clients = Client.where(perfectbook_contact_id: contacts).pluck(:perfectbook_contact_id, :id).to_h
+        leads.each do |lead|
+          client = lead.converted_client || lead.existing_client
+          clients[lead.perfectbook_contact_id] ||= client.id if client && lead.perfectbook_contact_id
+        end
+        leads.map do |lead|
+          client = lead.converted_client || lead.existing_client
+          client_id = client&.id || clients[lead.perfectbook_contact_id]
+          if client_id
+            [ "client", client_id ]
+          elsif lead.perfectbook_contact_id
+            [ "perfectbook", lead.perfectbook_contact_id ]
+          end
+        end
+      end
     end
 
     def completeness
@@ -73,7 +94,7 @@ module WeeklyReport
         answer_states: leads.group_by(&:source_answer_state).transform_values(&:size),
         unlinked_calls: unlinked_calls.size,
         linked_clients: leads.map { |lead| lead.converted_client_id || lead.existing_client_id }.compact.uniq.size,
-        unresolved_identities: leads.count { |lead| lead.converted_client_id.nil? && lead.existing_client_id.nil? },
+        unresolved_identities: inquiry_identities.count(nil),
         fit_unreviewed: leads.count { |lead| lead.owner_fit_at_inquiry.blank? },
         missing_capture: leads.group_by { |lead| lead.metadata&.dig("acquisition", "first_touch", "unknown_reason").presence || (lead.metadata&.dig("acquisition", "first_touch").present? ? "captured" : "legacy_missing") }.transform_values(&:size),
         unlinked_bookings: relevant_bookings.count { |booking| booking.primary_inquiry.nil? },
@@ -88,7 +109,11 @@ module WeeklyReport
     def cohorts
       ids = leads.map(&:id)
       bookings = countable_bookings.joins(:inquiry_binding).where(booking_inquiry_bindings: { lead_id: ids })
-        .received_by(as_of).includes(inquiry_binding: :lead).to_a.reject { |booking| booking.binding_issue.present? }
+        .received_by(as_of).includes(inquiry_binding: :lead).to_a.select do |booking|
+          next false if booking.binding_issue.present?
+          received = inquiry_time(booking.inquiry_binding.lead)
+          booking.first_received_precision == "date" ? booking.receipt_date >= received.to_date : booking.first_received_at >= received
+        end
       first_receipts = bookings.group_by { |booking| booking.inquiry_binding.lead_id }.transform_values { |list| list.min_by(&:receipt_order) }
       horizons = HORIZONS.to_h do |days|
         mature = leads.select { |lead| inquiry_time(lead) + days.days <= as_of }

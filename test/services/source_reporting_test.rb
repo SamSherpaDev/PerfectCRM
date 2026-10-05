@@ -358,6 +358,9 @@ class SourceReportingTest < ActiveSupport::TestCase
     BookingInquiryBinding.link!(item, lead: other, actor: "test", evidence: "Second inquiry", reason: "Repeat booking")
     %w[reported paid first].each do |view|
       report = WeeklyReport::Monthly.new(month: Date.new(2026, 10, 1), view: view)
+      assert_equal 2, report.cohorts[:bookings]
+      assert_equal({ "USD" => 1_800_000 }, report.cohorts[:booked_value])
+      assert_equal({ "USD" => 100_000 }, report.cohorts[:net_received])
       assert_equal 2, report.source_rows.sum(&:returning)
       assert_equal [ 44 ], report.source_rows.flat_map(&:returning_booker_ids).uniq
       assert_equal [ 2, 1, 0 ], report.totals.values_at(:repeat_bookings, :returning_bookers, :new_bookers)
@@ -407,6 +410,34 @@ class SourceReportingTest < ActiveSupport::TestCase
     rows = WeeklyReport::Monthly.new(month: Date.new(2026, 10, 1)).source_rows
     assert_equal 1, rows.find { |row| row.source.include?("search engine") }.returning
     assert_equal 0, rows.find { |row| row.source.include?("friend or family") }.returning
+  end
+
+  test "monthly people use stable client and contact links with unresolved inquiries separate" do
+    client = Client.create!(name: "Known person", perfectbook_contact_id: 44)
+    @lead.convert_to_client!(expected_client_id: client.id)
+    Lead.create!(name: "Same client", existing_client: client, received_at: @lead.received_at)
+    Lead.create!(name: "Same contact", perfectbook_contact_id: 44, received_at: @lead.received_at)
+    Lead.create!(name: "Unresolved", email: @lead.email, received_at: @lead.received_at)
+    Lead.create!(name: "Contact only", perfectbook_contact_id: 45, received_at: @lead.received_at)
+    local = Client.create!(name: "CRM identity")
+    Lead.create!(name: "CRM only", existing_client: local, received_at: @lead.received_at)
+    %w[reported paid first].each do |view|
+      report = WeeklyReport::Monthly.new(month: Date.new(2026, 10, 1), view: view)
+      assert_equal [ 6, 3, 1 ], report.totals.values_at(:inquiries, :unique_people, :unresolved_identities)
+      assert_equal 1, report.completeness[:unresolved_identities]
+    end
+  end
+
+  test "cohort receipt membership respects exact time and date-only precision" do
+    booking(id: 100, receipt: Time.zone.local(2026, 10, 1, 9))
+    booking(id: 101, receipt: Time.zone.local(2026, 9, 30), first_received_at: nil, first_received_precision: "date")
+    same_day = booking(id: 102, receipt: Time.zone.local(2026, 10, 1, 9), first_received_at: nil, first_received_precision: "date")
+    report = WeeklyReport::Monthly.new(month: Date.new(2026, 10, 1))
+    assert_equal 1, report.cohorts[:bookings]
+    assert_equal 1, report.cohorts[:horizons][30][:booked_inquiries]
+    assert_equal({ "USD" => 900_000 }, report.cohorts[:booked_value])
+    assert_equal({ "USD" => 50_000 }, report.cohorts[:net_received])
+    assert_nil same_day.reload.first_received_at
   end
 
   test "source-free inferred inquiries remain missing in every report view" do

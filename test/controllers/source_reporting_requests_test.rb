@@ -57,6 +57,8 @@ class SourceReportingRequestsTest < ActionDispatch::IntegrationTest
     assert_select "h2", text: "Where people come from"
     assert_select "input[type=month]"
     assert_select "a", text: "Review missing sources"
+    assert_includes response.body, "known unique people from stable Client/PerfectBook links"
+    assert_includes response.body, "inquiries with unresolved identity"
     assert_includes response.body, "As of"
     assert_includes response.body, "Q-fit"
     assert_includes response.body, "Platform-qualified"
