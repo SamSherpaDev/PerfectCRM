@@ -88,5 +88,4 @@ class SourceHistoryRetentionJobTest < ActiveJob::TestCase
     assert_equal "Returned as a lead", events.last.summary
     assert_equal "Converted to client", returning.activity_events.where(kind: "conversion").last.summary
   end
-
 end

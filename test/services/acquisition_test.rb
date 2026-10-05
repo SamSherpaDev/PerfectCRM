@@ -76,5 +76,4 @@ class AcquisitionTest < ActiveSupport::TestCase
       assert_nil result[key]
     end
   end
-
 end
