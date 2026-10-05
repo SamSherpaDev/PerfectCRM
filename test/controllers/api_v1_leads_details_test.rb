@@ -197,6 +197,38 @@ class ApiV1LeadsDetailsTest < ActionDispatch::IntegrationTest
     assert_equal "Alex", @lead.reload.reported_source_detail
   end
 
+  test "stale permission retries cannot undo withdrawal or restore advertising evidence" do
+    first_at = 2.minutes.ago.change(usec: 0)
+    withdrawn_at = 1.minute.ago.change(usec: 0)
+    allowed = details_body("acquisition" => {
+      "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true, "observed_at" => first_at.iso8601 },
+      "last_touch" => { "observed_at" => first_at.iso8601, "gclid" => "old-click", "utm_campaign" => "old-campaign" },
+      "submission_page" => { "url" => "https://example.com" }
+    })
+    post_details allowed
+    assert_response :ok
+    assert AdConversions.measurement_permitted?(@lead.reload)
+    post_details details_body("acquisition" => { "permission" => { "state" => "withdrawn", "observed_at" => withdrawn_at.iso8601 } })
+    assert_response :ok
+    retained = @lead.reload.metadata.deep_dup
+    [ first_at, withdrawn_at ].each do |stale_at|
+      assert_no_difference([ "Note.count", "ActivityEvent.count", "LeadNotification.count" ]) do
+        post_details allowed.deep_merge("acquisition" => { "permission" => { "observed_at" => stale_at.iso8601 } })
+      end
+      assert_response :unprocessable_entity
+      assert_equal "stale", response.parsed_body.dig("fields", "acquisition.permission")
+      assert_equal retained, @lead.reload.metadata
+      assert_not AdConversions.measurement_permitted?(@lead)
+      assert_nil @lead.metadata.dig("attribution", "gclid")
+    end
+    renewed = allowed.deep_merge("acquisition" => { "permission" => { "observed_at" => Time.current.iso8601 },
+      "last_touch" => { "observed_at" => Time.current.iso8601, "gclid" => "new-click" } })
+    post_details renewed
+    assert_response :ok
+    assert AdConversions.measurement_permitted?(@lead.reload)
+    assert_equal "new-click", @lead.metadata.dig("attribution", "gclid")
+  end
+
   test "a missing first touch can capture a later genuine permission-allowed observation" do
     post_details details_body("acquisition" => { "permission" => { "state" => "allowed" }, "first_touch" => { "observed_at" => Time.current.iso8601, "unknown_reason" => "unavailable" } })
     assert_response :ok

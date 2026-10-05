@@ -76,6 +76,18 @@ module Api
             end
             if acquisition
               previous = (lead.metadata || {})["acquisition"] || {}
+              incoming_permission = acquisition["permission"]
+              previous_permission = previous["permission"] || {}
+              incoming_at = Time.iso8601(incoming_permission["observed_at"] || incoming_permission["recorded_at"])
+              previous_at = previous_permission["observed_at"] || previous_permission["recorded_at"]
+              if previous_at
+                previous_at = Time.iso8601(previous_at)
+                conflicting = incoming_permission.except("recorded_at", "observed_at") != previous_permission.except("recorded_at", "observed_at")
+                if incoming_at < previous_at || (incoming_at == previous_at && conflicting &&
+                    incoming_permission["observed_at"].present? && previous_permission["observed_at"].present?)
+                  return render json: { error: "validation", fields: { "acquisition.permission" => "stale" } }, status: :unprocessable_entity
+                end
+              end
               acquisition = previous.merge(acquisition)
               acquisition["first_touch"] = previous["first_touch"] if ::Leads::Acquisition.eligible?(previous["first_touch"])
               acquisition["permission"]["recorded_at"] = previous.dig("permission", "recorded_at") if
