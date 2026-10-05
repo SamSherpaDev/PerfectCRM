@@ -153,11 +153,11 @@ class ApiV1LeadsDetailsTest < ActionDispatch::IntegrationTest
   end
 
   test "renewed permission projects last touch despite withdrawn non-direct placeholder" do
-    post_details details_body("acquisition" => { "permission" => { "state" => "withdrawn" } })
+    post_details details_body("acquisition" => { "permission" => { "state" => "withdrawn", "observed_at" => 1.minute.ago.iso8601 } })
     assert_response :ok
     observed = Time.current.iso8601
     post_details details_body("acquisition" => {
-      "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true },
+      "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true, "observed_at" => observed },
       "last_touch" => { "observed_at" => observed, "gclid" => "fresh-click", "utm_campaign" => "fresh-campaign" }
     })
     assert_response :ok
@@ -227,6 +227,44 @@ class ApiV1LeadsDetailsTest < ActionDispatch::IntegrationTest
     assert_response :ok
     assert AdConversions.measurement_permitted?(@lead.reload)
     assert_equal "new-click", @lead.metadata.dig("attribution", "gclid")
+  end
+
+  test "unordered grants cannot reverse withdrawal or broaden export permission" do
+    grant = details_body("acquisition" => { "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true },
+      "last_touch" => { "observed_at" => 2.minutes.ago.iso8601, "gclid" => "old" } })
+    post_details grant
+    assert_response :ok
+    post_details details_body("acquisition" => { "permission" => { "state" => "withdrawn", "observed_at" => 1.minute.ago.iso8601 } })
+    assert_response :ok
+    post_details grant
+    assert_response :unprocessable_entity
+    assert_not AdConversions.measurement_permitted?(@lead.reload)
+    assert_nil @lead.metadata.dig("attribution", "gclid")
+    @lead.update!(metadata: { "acquisition" => { "permission" => { "state" => "allowed", "measurement" => false, "sharing" => false } } })
+    post_details grant
+    assert_response :unprocessable_entity
+    assert_not AdConversions.measurement_permitted?(@lead.reload)
+  end
+
+  test "latest visits survive delayed retries and newer visits replace complete snapshots" do
+    permission = { "state" => "allowed", "measurement" => true, "sharing" => true, "observed_at" => 3.minutes.ago.iso8601 }
+    payload = lambda do |at, click, campaign|
+      details_body("acquisition" => { "permission" => permission,
+        "last_touch" => { "observed_at" => at.iso8601, "gclid" => click, "utm_campaign" => campaign },
+        "last_non_direct_touch" => { "observed_at" => at.iso8601, "fbclid" => click, "utm_campaign" => campaign } })
+    end
+    old = payload.call(2.minutes.ago, "old", "old-campaign")
+    fresh = payload.call(1.minute.ago, "fresh", "fresh-campaign")
+    [ old, fresh, old ].each { |body| post_details body; assert_response :ok }
+    %w[last_touch last_non_direct_touch].each do |key|
+      assert_equal "fresh-campaign", @lead.reload.metadata.dig("acquisition", key, "utm_campaign")
+    end
+    assert_equal "fresh", @lead.metadata.dig("attribution", "fbclid")
+    post_details details_body("acquisition" => { "permission" => permission,
+      "last_non_direct_touch" => { "observed_at" => Time.current.iso8601, "utm_source" => "google" } })
+    assert_response :ok
+    assert_nil @lead.reload.metadata.dig("attribution", "fbclid")
+    assert_nil @lead.metadata.dig("attribution", "utm_campaign")
   end
 
   test "a missing first touch can capture a later genuine permission-allowed observation" do

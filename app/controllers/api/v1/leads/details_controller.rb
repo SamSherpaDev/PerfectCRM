@@ -78,14 +78,24 @@ module Api
               previous = (lead.metadata || {})["acquisition"] || {}
               incoming_permission = acquisition["permission"]
               previous_permission = previous["permission"] || {}
-              incoming_at = Time.iso8601(incoming_permission["observed_at"] || incoming_permission["recorded_at"])
-              previous_at = previous_permission["observed_at"] || previous_permission["recorded_at"]
-              if previous_at
-                previous_at = Time.iso8601(previous_at)
-                conflicting = incoming_permission.except("recorded_at", "observed_at") != previous_permission.except("recorded_at", "observed_at")
-                if incoming_at < previous_at || (incoming_at == previous_at && conflicting &&
-                    incoming_permission["observed_at"].present? && previous_permission["observed_at"].present?)
-                  return render json: { error: "validation", fields: { "acquisition.permission" => "stale" } }, status: :unprocessable_entity
+              incoming_at = incoming_permission["observed_at"]
+              previous_at = previous_permission["observed_at"]
+              comparable = incoming_at.present? && previous_at.present?
+              broadening = previous_permission.present? && (
+                (::Leads::Acquisition.permitted?(acquisition) && !::Leads::Acquisition.permitted?(previous)) ||
+                %w[measurement sharing].any? { |key| incoming_permission[key] == true && previous_permission[key] != true } ||
+                (previous_permission["opted_out"] == true && incoming_permission["opted_out"] != true))
+              stale = comparable && Time.iso8601(incoming_at) < Time.iso8601(previous_at)
+              if stale || (broadening && (!comparable || Time.iso8601(incoming_at) <= Time.iso8601(previous_at)))
+                return render json: { error: "validation", fields: { "acquisition.permission" => "stale" } }, status: :unprocessable_entity
+              end
+              %w[last_touch last_non_direct_touch].each do |key|
+                old_touch = previous[key]
+                new_touch = acquisition[key]
+                next unless ::Leads::Acquisition.eligible?(old_touch) && new_touch
+
+                if !::Leads::Acquisition.eligible?(new_touch) || Time.iso8601(new_touch["observed_at"]) <= Time.iso8601(old_touch["observed_at"])
+                  acquisition[key] = old_touch
                 end
               end
               acquisition = previous.merge(acquisition)
