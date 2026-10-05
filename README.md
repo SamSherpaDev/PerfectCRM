@@ -550,6 +550,94 @@ n8n/Panda AI workflows are configured separately; see the
 [website intake contract](docs/leads-intake.md) for setup, delivery behavior,
 and the allowed automation actions.
 
+## Source history and calls
+
+Record **How did you first hear about SherpaHolidays? (Optional)** using one
+shared list. The same question is first in the manual form and immediately
+available in record Details at the start of a call. Missing answers open
+**Confirm source**; after recording, **Edit source** stays quiet. The short
+answer is optional, 240 characters; for referrals a first name is enough.
+Confirming a form answer records the call confirmation without losing the
+original answer. Corrections need a reason and append history, never rewrite it.
+Call logging is a separate disclosure: time, direction, outcome and optional
+duration. Only a `connected` call event counts as connected, not a completed
+task. Double saves with the same save UUID produce one event. Client calls
+explicitly select an inquiry; no unbound calls are counted as inquiry outcomes.
+
+| Answer | Stable code |
+|---|---|
+| A friend or family member | `personal_referral` |
+| Google or another search engine | `search` |
+| Facebook | `facebook` |
+| Instagram | `instagram` |
+| YouTube | `youtube` |
+| TikTok | `tiktok` |
+| Pinterest | `pinterest` |
+| A travel show or event | `event` |
+| A travel advisor or another business | `advisor_partner` |
+| Google Maps or Tripadvisor | `maps_reviews` |
+| An email from SherpaHolidays | `email_marketing` |
+| I already knew Sam, Gyalgin or SherpaHolidays | `existing_relationship` |
+| Somewhere else | `other` |
+| I don't remember | `unsure` |
+
+Internal states are `answered`, `unsure`, `declined` (Declined to answer) and
+`not_asked` (Not asked yet). Arrival channels are `website_form`, `phone`,
+`email`, `social_dm`, `trade_show`, `in_person`, `other`; they are independent
+of discovery. Typed source/test/origin fields live on Lead, Client and Person;
+source changes use append-only ActivityEvents. A new conversion preserves the
+answer, confirmation, advisor and personal referrals; copied companions retain
+their own source and origin-person pointer. Returning inquiries keep their
+own source and explicitly link `existing_client_id`, without replacing the
+client's lifetime origin. A shared email is a clue requiring review, not proof
+that everyone is the same person. No person is created or contacted merely
+because someone named a referrer. Personal referrals cannot self-link or cycle.
+
+Customer testimony, first observed website touch, and last inquiry-session
+website touch are three separate facts. Versioned metadata holds `first_touch`,
+`last_touch`, `last_non_direct_touch`, `submission_page` and permission.
+Snapshots include actual observed time, source/campaign from the same visit,
+stable campaign/ad IDs, sanitized landing URL/referrer host and permitted
+`gclid`/`gbraid`/`wbraid`/`fbclid`. First touch is immutable while retained;
+missing/denied collection is unknown, not direct. `fbclid` alone is not paid
+Meta. Legacy broad source remains compatible, not proven first discovery.
+
+The additive payload and exact field contract are in
+[docs/leads-intake.md](docs/leads-intake.md#source-database-contract-v1).
+Optional post-send testimony saves to the existing submission with its existing
+24-hour window, never creates another inquiry or conversion. Signed-in operators
+can confirm later. Public callers cannot confirm, set test flags, change client
+origins or bind bookings. Contact consent is not newsletter, measurement/sharing,
+referrer-contact or future phone/SMS campaign permission. Advertising exports
+require explicit allowed measurement and sharing permission, no opt-out and
+no test/spam exclusions; an old click ID alone is insufficient. Test records
+are excluded from inquiry reporting and exports. No sensitive traveler documents
+or DOB enter this database; source details/referrer identities are not ad data.
+
+Shared future booking key: `crm_inquiry_ref` is the existing unique `SH-XXXX`
+lead reference. PerfectBook validates and owns that binding; one primary inquiry
+per booking, multiple bookings per inquiry. Its additive API fields are
+`first_received_at`, `first_received_on`, `first_received_precision`,
+`receipts_minor`, `refunds_minor`, `net_received_minor`, `traveler_count`,
+`cancelled_at`, `cash_events`, and `crm_inquiry_ref`. Binding/sync, monthly
+reporting and backfill are separate work. Existing manual/shopify booking source
+and financial fields retain their meaning. Months use America/Los_Angeles;
+wire timestamps have ISO 8601 offsets, date-only evidence is not made into exact
+times. Money is integer minor units with explicit currency (the agreed sibling
+contract is USD); PerfectBook alone owns receipts, refunds and recognized revenue.
+Group travelers inherit the booker's source for reporting, not individual
+acquisition testimony. Repeat trips remain distinct bookings, not new people.
+
+Source retention is bounded: 90-day browser cookies (storefront implementation),
+180-day detailed clicks/URLs, 24 months after last substantive contact for
+unbooked source history, seven years after last booking for booked discovery
+and relationships with annual review. `SourceHistoryRetentionJob` runs daily
+and covers archives and copied source/call history. Without complete booking
+mirrors converted clients use the conservative seven-year horizon. Contact,
+correspondence, backup and PerfectBook document/accounting expiry remain in the
+separate privacy/deletion review. De-identified source/month aggregates can
+support decades of trends; no decades-long identifiable browser history.
+
 ## Ad conversions
 
 PerfectCRM tells Google Ads and Meta which ad clicks became real inquiries
@@ -566,8 +654,10 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
 
 - Only leads that arrived with a click ID (`gclid`, `gbraid`, `wbraid`, or
   `fbclid`, with `fbclid` also read from the landing URL) are reported: the form drops
-  click IDs when marketing consent is off. Archived, suspected-spam, and
-  lost "not a fit" leads are never reported. Tests using the business mailbox
+  click IDs when marketing consent is off. Explicit allowed measurement/sharing
+  permission and no opt-out are required at recording and delivery; missing
+  legacy permission is withheld. Archived, suspected-spam, explicit `is_test`,
+  and lost "not a fit" leads are never reported. Tests using the business mailbox
   or an owner address in `ALLOWED_GOOGLE_EMAILS` are also excluded.
 - Purchase time is `first_paid_at`, stamped by the booking model on the first
   observation of `paid_minor > 0` and retained across later syncs and refunds.

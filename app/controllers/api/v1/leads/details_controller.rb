@@ -36,6 +36,19 @@ module Api
             return render json: { error: "expired" }, status: :gone
           end
           updates, errors = extract_updates(payload)
+          answer = payload["source_answer"]
+          if payload.key?("source_answer")
+            if !answer.is_a?(Hash) || !::SourceHistory::ANSWERS.key?(answer["code"]) ||
+                (answer["detail"].present? && (!answer["detail"].is_a?(String) || answer["detail"].length > 240)) ||
+                (answer["question_version"].present? && answer["question_version"] != ::SourceHistory::QUESTION_VERSION)
+              errors["source_answer"] = "invalid"
+            end
+          end
+          begin
+            acquisition = ::Leads::Acquisition.parse(payload)
+          rescue ArgumentError => error
+            errors[error.message] = "invalid"
+          end
           if errors.any?
             return render json: { error: "validation", fields: errors }, status: :bad_request
           end
@@ -49,6 +62,25 @@ module Api
             end
 
             lead.assign_attributes(updates)
+            if answer
+              return render json: { error: "validation", fields: { "source_answer" => "confirmed" } }, status: :unprocessable_entity if lead.source_confirmed_at.present?
+              lead.source_collection_method = "website_form"
+              lead.source_choice = answer["code"]
+              lead.reported_source_detail = answer["detail"].to_s.strip.presence
+            end
+            if acquisition
+              previous = (lead.metadata || {})["acquisition"] || {}
+              acquisition = previous.merge(acquisition)
+              acquisition["first_touch"] = previous["first_touch"] if previous.dig("first_touch", "observed_at").present?
+              acquisition["permission"]["recorded_at"] = previous.dig("permission", "recorded_at") if
+                acquisition["permission"].except("recorded_at") == (previous["permission"] || {}).except("recorded_at")
+              if acquisition.dig("permission", "state") != "allowed" || acquisition.dig("permission", "opted_out") == true
+                ::Leads::Acquisition::TOUCHES.each { |key| acquisition[key] = { "unknown_reason" => "declined_permission" } }
+                acquisition.delete("submission_page")
+              end
+              lead.metadata = (lead.metadata || {}).merge("acquisition" => acquisition,
+                "attribution" => ::Leads::Acquisition.legacy_attribution((lead.metadata || {})["attribution"] || {}, acquisition: acquisition))
+            end
             if lead.changed?
               unless lead.save
                 fields = lead.errors.map { |error| [ error.attribute, "invalid" ] }.to_h

@@ -1,4 +1,7 @@
 class Person < ApplicationRecord
+  include SourceHistory
+  belongs_to :origin_person, class_name: "Person", optional: true
+  has_many :activity_events, as: :subject, dependent: :destroy
   encrypts :phone
 
   belongs_to :client, touch: true, optional: true

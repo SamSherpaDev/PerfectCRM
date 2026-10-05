@@ -114,6 +114,195 @@ to clear them; `timing_unknown` accepts only `true` or `false`. Invalid field
 values return `400`; model validation failures return `422`. Setting unknown
 timing does not clear stored dates; see [Leads](../README.md#leads) for display behavior.
 
+## Source database contract (v1)
+
+Three independent facts are retained: what the person says first introduced
+SherpaHolidays, the first eligible website touch actually observed, and the
+latest inquiry visit. None overwrites either of the others. Existing `source`
+and `campaign_name` remain compatibility groups, not self-reported testimony;
+`last_touch_at` remains sales contact time, not a website visit. Legacy source
+is not backfilled as an answer or a proven first touch.
+
+### Exact optional question and stable answers
+
+After the inquiry is saved: **How did you first hear about SherpaHolidays? (Optional)**
+No source is preselected. Operators use the same codes, and can record the
+answer immediately at the start of a call. Short detail is optional (240 chars).
+
+| Visible answer | Code | Optional detail |
+|---|---|---|
+| A friend or family member | `personal_referral` | Who mentioned us? First name is enough. |
+| Google or another search engine | `search` | Search engine; ad versus ordinary result only if remembered on the call. |
+| Facebook | `facebook` | Paid/organic unknown unless separately supported. |
+| Instagram | `instagram` | Paid/organic unknown unless separately supported. |
+| YouTube | `youtube` | Video name/link on the call. |
+| TikTok | `tiktok` | Account/video. |
+| Pinterest | `pinterest` | Pin/article. |
+| A travel show or event | `event` | Event name. |
+| A travel advisor or another business | `advisor_partner` | Business/advisor name, optional code. |
+| Google Maps or Tripadvisor | `maps_reviews` | Which one, if remembered. |
+| An email from SherpaHolidays | `email_marketing` | No implied newsletter permission. |
+| I already knew Sam, Gyalgin or SherpaHolidays | `existing_relationship` | Relationship or past trip, clarified on the call. |
+| Somewhere else | `other` | Short explanation, including an AI assistant or article. |
+| I don't remember | `unsure` | No forced follow-up. |
+
+Internal answer states: `not_asked` (Not asked yet), `answered`, `unsure`, and
+`declined` (Declined to answer). A source code of `unsure` uses state `unsure`;
+other codes use `answered`. `not_asked` and `declined` have no code or detail.
+The source answer is optional and never inferred from a click. `source_confirmed_at`
+marks operator confirmation; original website answers stay in append-only
+`ActivityEvent` history with `question_version=how-heard-v1`, answer/detail,
+server recording time/actor, collection method, prior answer, correction reason
+and optional evidence reference. A correction needs a reason. A form answer
+cannot replace a later operator-confirmed answer.
+
+Leads, clients and people have typed `reported_source_code`,
+`reported_source_detail`, `source_answer_state`, `source_confirmed_at`,
+`capture_channel`, `is_test`, `origin_lead_id`, and optional
+`referred_by_client_id` / `referred_by_person_id`. Channel values:
+`website_form`, `phone`, `email`, `social_dm`, `trade_show`, `in_person`, `other`.
+Missing legacy channels remain null. Leads may explicitly link `existing_client_id`;
+people copied at conversion link `origin_person_id`. New clients inherit the
+inquiry's answer/referrals; returning inquiries do not replace a client's
+lifetime origin. Companions retain their own answers, never the booker's.
+Emails are match clues requiring operator review, not global identity proof.
+Personal referrals cannot self-link or cycle, do not create marketable contacts,
+and do not authorize contact with the referrer. Advisor codes remain separate;
+commissions remain in PerfectBook. Tests are explicit, not inferred from source,
+and excluded from inquiry reporting and ad exports.
+
+### Additive browser payloads
+
+Existing schemas, callers and success bodies remain unchanged. Intake and
+post-send details accept an optional `acquisition` object. Details additionally
+accept `source_answer`; it updates the existing submission within the same
+24-hour window, locks, CORS/auth and rate limits. No second lead, conversion,
+or ad outcome is created. Identical answers are no-ops. Converted and archived
+inquiries stay protected. The authenticated CRM confirmation has no public
+24-hour limit.
+
+```json
+{
+  "acquisition": {
+    "permission": {
+      "state": "allowed", "measurement": true, "sharing": true,
+      "opted_out": false, "observed_at": "2026-10-04T18:00:00Z"
+    },
+    "first_touch": {
+      "observed_at": "2026-10-04T18:00:00Z", "utm_source": "instagram",
+      "utm_medium": "social", "landing_url": "https://www.sherpaholidays.com/",
+      "referrer": "https://www.instagram.com/"
+    },
+    "last_touch": {
+      "observed_at": "2026-10-04T20:00:00Z", "utm_source": "google",
+      "utm_medium": "cpc", "utm_campaign": "nepal", "campaign_id": "campaign-42",
+      "gclid": "example-click", "landing_url": "https://www.sherpaholidays.com/pages/contact"
+    },
+    "last_non_direct_touch": {
+      "observed_at": "2026-10-04T20:00:00Z", "utm_source": "google",
+      "utm_medium": "cpc", "campaign_id": "campaign-42", "gclid": "example-click"
+    },
+    "submission_page": { "url": "https://www.sherpaholidays.com/pages/contact" }
+  },
+  "source_answer": {
+    "code": "personal_referral", "detail": "A friend, Alex",
+    "question_version": "how-heard-v1"
+  }
+}
+```
+
+Each touch is a complete snapshot, never merged click-by-click. Allowed keys:
+`observed_at`, `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`,
+`utm_term`, `campaign_id`, `ad_id`, `adset_id`, `gclid`, `gbraid`, `wbraid`,
+`fbclid`, `landing_url` (also accepts `landing_page`), `referrer` (or
+`referrer_host`), `unknown_reason`. IDs/campaign strings max 200 chars;
+URLs store host/path (path max 512), only allowlisted campaign queries,
+no fragments, credentials, arbitrary queries or referrer paths. Click IDs are
+separate columns of the snapshot, never retained inside URLs. Timestamps must
+be ISO 8601 and cannot be future-dated beyond five minutes. The CRM records
+classifier version `crm-source-v1` and permission recording time itself.
+Normalized `source` is server-derived. Classifier v1 values are `google_ads`,
+`meta_ads`, `trade_show`, `google`, `facebook`, `instagram`, `youtube`, `tiktok`,
+`pinterest`, `search`, `email`, `referral`, `direct`, `unknown`. These observed
+codes are independent of the self-reported list. `fbclid` alone does not prove paid Meta.
+Paid source/campaign must come from the same snapshot. `first_touch` is immutable
+on details updates while retained; last touch can reflect a genuine direct
+return. Internal navigation is not new acquisition. No timestamp means unknown,
+not direct. Missing reasons: `legacy_missing`, `not_asked`, `declined_permission`,
+`no_detectable_referrer`, `unresolved_identity`, `unavailable`, `withdrawn`,
+`consent_granted_late`. Do not backdate a click when permission is granted late.
+Anonymous cross-device identity stitching and fingerprinting are not supported.
+
+Permission states: `allowed`, `denied`, `unavailable`, `withdrawn`.
+Touch persistence requires Shopify marketing processing permission and respects
+sale/sharing opt-out and withdrawal; there is no analytics-cookie workaround.
+Denied/unavailable/withdrawn or `opted_out: true` stores a missing reason instead
+of marketing evidence. Withdrawal through details removes existing evidence.
+Server ad exports require explicit allowed state plus `measurement: true`,
+`sharing: true`, no opt-out, and no test/spam exclusion. Legacy records with
+no permission snapshot are withheld, not silently treated as consented.
+Contact consent, optional source testimony, newsletter subscriptions and
+measurement/sharing permission are distinct. No messages, source details,
+referrer identities, passport/visa/insurance/DOB/medical/emergency data enter ad
+exports or this source database. Hashing contact facts is not anonymization.
+
+### Calls, booking references, time and money
+
+Connected calls are explicit `ActivityEvent(kind=call)` entries on an inquiry,
+not task completion. Outcomes: `attempted`, `connected`, `voicemail`, `no_answer`;
+direction inbound/outbound, occurrence time, optional duration, operator and
+source-answer event reference. A stable per-save UUID is unique per inquiry;
+a double save counts once. Client call logging requires selection of one of
+that client's explicit inquiries. Copying a timeline on conversion retains the
+original inquiry ID; count only inquiry-subject events for business call counts.
+
+The shared booking reference is **`crm_inquiry_ref` = Lead.reference**, the
+existing unique `SH-` plus four characters from `Lead.build_reference`, not the
+submission UUID or PerfectBook contact ID. One primary inquiry per booking;
+multiple bookings per inquiry. PerfectBook must validate the reference through
+the trusted authenticated sibling integration, not trust a browser query alone.
+Link edits need actor/date/evidence/reason. Booking binding and sync are later
+work; no inference is upgraded to reviewed evidence in this task.
+
+PerfectBook's additive booking API contract: `crm_inquiry_ref`,
+`first_received_at`, `first_received_on`, `first_received_precision`
+(`timestamp` / `date` / null), `receipts_minor`, `refunds_minor`,
+`net_received_minor`, `traveler_count`, `cancelled_at`, and
+`cash_events` containing `{id, kind: receipt|refund, occurred_at, occurred_on,
+time_precision, amount_minor, currency}`. USD only in the agreed sibling
+contract. Existing `total_minor`, `paid_minor`, `party_size`, `status`,
+`currency`, and booking `source` (`manual`/`shopify`) retain their meaning.
+Date-only money evidence must not be invented as an exact receipt timestamp.
+Calendar months use `America/Los_Angeles`; timestamp wire values use ISO 8601
+with offset/UTC. Money uses integer minor units and explicit currency; no FX
+mixing or inferred recognized revenue. PerfectBook remains the money/traveler
+system of record. Bookings/travelers are distinct IDs; group attribution is
+labeled booker's source, not each companion's discovery. Repeat bookings do
+not reacquire a person. Current weekly inference and both qualification counts
+remain compatibility behavior until the separate binding/report tasks ship.
+
+### Retention and access
+
+Recommended bounded schedule: browser cookies 90 days (storefront task);
+detailed click IDs/URLs at most 180 days after inquiry; unbooked source history
+24 months after last substantive contact; booked-client discovery/relationship
+history 7 years after last booking, reviewed annually. The scheduled
+`SourceHistoryRetentionJob` enforces these bounds for source snapshots,
+source/referral events and call logs, including archived records. Converted
+clients without complete booking mirrors use the conservative seven-year
+horizon until authoritative binding is available. The job does not delete CRM
+contacts/correspondence or PerfectBook accounting/documents; whole-contact
+and backup expiry belong to the separate privacy policy/deletion review.
+De-identified source/month aggregates may be retained for long-term trends;
+monthly aggregates are later work. No arbitrary 20-year identifiable tracker.
+
+Access stays within existing signed-in operator authentication. Public callers
+can only add optional testimony to their accepted submission under existing
+window/auth limits, never confirm identity, bind bookings, set tests, authorize
+commissions or overwrite client origins. Source corrections/deletions must cover
+metadata, copied history and referral pointers, with deliberate backup expiry.
+Customer-facing privacy text stays minimal and replaceable pending policy review.
+
 ## Relay mode (n8n, Panda AI, any server)
 
 Signed with the relay secret (Settings → Automations, shown once at

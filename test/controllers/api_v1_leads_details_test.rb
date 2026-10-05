@@ -70,6 +70,64 @@ class ApiV1LeadsDetailsTest < ActionDispatch::IntegrationTest
     assert_response :ok
   end
 
+  test "post-send source answer retries preserve one inquiry and original testimony" do
+    body = details_body("source_answer" => { "code" => "personal_referral", "detail" => "Alex", "question_version" => "how-heard-v1" })
+    assert_no_difference([ "Lead.count", "Client.count", "AdConversion.count" ]) { post_details body }
+    assert_response :ok
+    assert_equal "personal_referral", @lead.reload.reported_source_code
+    original = @lead.activity_events.where(kind: "source_answer").last
+    assert_equal "website_form", original.metadata["collection_method"]
+    assert_nil @lead.source_confirmed_at
+    assert_no_difference([ "ActivityEvent.count", "Note.count", "LeadNotification.count" ]) { post_details body }
+    assert_response :ok
+    post_details details_body("source_answer" => { "code" => "search" })
+    assert_response :ok
+    assert_equal "personal_referral", original.reload.metadata["answer_code"]
+    assert_equal "search", @lead.reload.reported_source_code
+  end
+
+  test "source errors and confirmed answers cannot change any details" do
+    post_details details_body("source_answer" => { "code" => "google_ads" })
+    assert_response :bad_request
+    assert_nil @lead.reload.travel_month
+    SourceAnswers.record!(@lead, choice: "search", method: "website_form")
+    @lead.update_column(:source_confirmed_at, Time.current)
+    post_details details_body("source_answer" => { "code" => "facebook" })
+    assert_response :unprocessable_entity
+    assert_nil @lead.reload.travel_month
+    assert_equal "search", @lead.reported_source_code
+  end
+
+  test "first touch remains immutable and withdrawal removes legacy and snapshot identifiers" do
+    permission = { "state" => "allowed", "measurement" => true, "sharing" => true, "observed_at" => Time.current.iso8601 }
+    first = { "observed_at" => 1.hour.ago.iso8601, "gclid" => "first-google" }
+    body = details_body("acquisition" => { "permission" => permission, "first_touch" => first, "last_touch" => first })
+    post_details body
+    assert_response :ok
+    assert_no_difference([ "Note.count", "ActivityEvent.count", "LeadNotification.count" ]) { post_details body }
+    post_details details_body("acquisition" => { "permission" => permission, "first_touch" => { "observed_at" => Time.current.iso8601, "fbclid" => "meta" },
+      "last_touch" => { "observed_at" => Time.current.iso8601, "fbclid" => "meta" } })
+    assert_response :ok
+    assert_equal "first-google", @lead.reload.metadata.dig("acquisition", "first_touch", "gclid")
+    assert_nil @lead.metadata.dig("acquisition", "last_touch", "gclid")
+    post_details details_body("acquisition" => { "permission" => { "state" => "withdrawn" } })
+    assert_response :ok
+    assert_nil @lead.reload.metadata.dig("attribution", "gclid")
+    assert_nil @lead.metadata.dig("attribution", "fbclid")
+    assert_equal({ "unknown_reason" => "declined_permission" }, @lead.metadata.dig("acquisition", "first_touch"))
+  end
+
+  test "a missing first touch can capture a later genuine permission-allowed observation" do
+    post_details details_body("acquisition" => { "permission" => { "state" => "denied" }, "first_touch" => { "fbclid" => "not-retained" } })
+    assert_response :ok
+    observed = Time.current.iso8601
+    post_details details_body("acquisition" => { "permission" => { "state" => "allowed" },
+      "first_touch" => { "observed_at" => observed, "fbclid" => "newly-observed", "unknown_reason" => "consent_granted_late" } })
+    assert_response :ok
+    assert_equal "newly-observed", @lead.reload.metadata.dig("acquisition", "first_touch", "fbclid")
+    assert_equal Time.iso8601(observed).utc.iso8601, @lead.metadata.dig("acquisition", "first_touch", "observed_at")
+  end
+
   test "unknown submission id is 404" do
     post_details details_body("submission_id" => SecureRandom.uuid)
     assert_response :not_found

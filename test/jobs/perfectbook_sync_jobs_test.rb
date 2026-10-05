@@ -83,7 +83,8 @@ class PerfectBookSyncJobsTest < ActiveSupport::TestCase
     PerfectBook::Contact.create!(perfectbook_id: 7, kind: "customer", name: "Ama", synced_at: now)
     lead = Lead.create!(name: "Anna", email: "anna@example.com", source: "google_ads",
       perfectbook_contact_id: 7, received_at: now - 1.day,
-      metadata: { "attribution" => { "gclid" => "paid-click" } })
+      metadata: { "attribution" => { "gclid" => "paid-click" },
+        "acquisition" => { "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true } } })
     booking = pb_booking
     booking.paid_minor = 0
     client = FakePbCatalogClient.new(bookings_by_contact: { 7 => [ booking ] })

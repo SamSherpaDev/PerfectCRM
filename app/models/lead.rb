@@ -32,6 +32,9 @@ class Lead < ApplicationRecord
   accepts_nested_attributes_for :people, allow_destroy: true,
     reject_if: proc { |attrs| attrs["name"].blank? && attrs["email"].blank? && attrs["phone"].blank? }
 
+  include SourceHistory
+  belongs_to :existing_client, class_name: "Client", optional: true
+
   include TaggedRecord
   include NestedPeople
   include ReferralCode
@@ -51,6 +54,7 @@ class Lead < ApplicationRecord
   validates :name, presence: true
   validates :kind, inclusion: { in: KINDS }
   validates :source, inclusion: { in: SOURCES }
+  validate :existing_client_link_valid
   validates :status, inclusion: { in: STATUSES }
   validates :email, format: { with: URI::MailTo::EMAIL_REGEXP, allow_blank: true }
   # Email is not an inquiry identity: repeat visitors can ask about different trips.
@@ -171,9 +175,18 @@ class Lead < ApplicationRecord
     converted?
   end
 
+  def existing_client_link_valid
+    if existing_client_id.present? && existing_client.nil?
+      errors.add(:existing_client, "must be an existing record")
+    elsif existing_client && perfectbook_contact_id && existing_client.perfectbook_contact_id &&
+        perfectbook_contact_id != existing_client.perfectbook_contact_id
+      errors.add(:existing_client, "does not match the PerfectBook contact")
+    end
+  end
+
   def matching_client
     by_perfectbook = Client.find_by(perfectbook_contact_id: perfectbook_contact_id) if perfectbook_contact_id.present?
-    by_perfectbook || (Client.find_by(email: email.to_s.strip.downcase) if email.present?)
+    existing_client || by_perfectbook || (Client.find_by(email: email.to_s.strip.downcase) if email.present?)
   end
 
   def convert_to_client!(expected_client_id: nil)
@@ -197,15 +210,23 @@ class Lead < ApplicationRecord
         campaign_name: campaign_name,
         referred_by_organization: referred_by_organization,
         referral_code: referral_code,
-        perfectbook_contact_id: perfectbook_contact_id
+        perfectbook_contact_id: perfectbook_contact_id,
+        origin_lead: self, source_collection_method: "conversion",
+        **source_copy_attributes.symbolize_keys
       )
       client.update!(ai_opt_out: true) if ai_opt_out?
       people.find_each do |person|
         next if person.email.present? && client.people.exists?(email: person.email)
 
-        client.people.create!(
-          name: person.name, email: person.email, phone: person.phone, role: person.role
+        copied_person = client.people.create!(
+          name: person.name, email: person.email, phone: person.phone, role: person.role,
+          origin_lead: self, origin_person: person, source_collection_method: "conversion",
+          **person.source_copy_attributes.symbolize_keys
         )
+        person.activity_events.find_each do |event|
+          ActivityEvent.create!(subject: copied_person, kind: event.kind, summary: event.summary,
+            occurred_at: event.occurred_at, metadata: (event.metadata || {}).merge("from_person_id" => person.id))
+        end
       end
       client.reload
       ambiguity = client.ambiguous_recipient_emails | ambiguous_recipient_emails
@@ -226,7 +247,8 @@ class Lead < ApplicationRecord
         end
       end
       activity_events.find_each do |event|
-        metadata = (event.metadata || {}).merge("from_lead_id" => id)
+        next if event.kind == "call" && client.activity_events.where(kind: "call").where("json_extract(metadata, '$.from_lead_event_id') = ?", event.id).exists?
+        metadata = (event.metadata || {}).merge("from_lead_id" => id, "from_lead_event_id" => event.id)
         metadata["note_id"] = note_ids.fetch(metadata["note_id"]) if note_ids.key?(metadata["note_id"])
         ActivityEvent.create!(
           subject: client, kind: event.kind, summary: event.summary,

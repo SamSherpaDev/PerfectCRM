@@ -192,7 +192,8 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
     client = Client.create!(name: "=SUM(1,2)", phone: "+123456", tag_list: "@tag")
     inquiry = Lead.create!(name: "Website traveler", message: "Spring adventure", trip_title: "Nepal",
       travel_month: 4, travel_year: 2027, timing_unknown: true, party_size: 2,
-      budget_band: "4000_7000", metadata: { attribution: { gclid: "export-click" } })
+      budget_band: "4000_7000", metadata: { attribution: { gclid: "export-click" },
+        acquisition: { permission: { state: "allowed", measurement: true, sharing: true } } })
     client.notes.create!(body: "=1+1")
     visit edit_settings_path
     assert_link "Export everything"

@@ -51,7 +51,9 @@ Rails.application.routes.draw do
       post :commit
     end
   end
+  resources :source_answers, only: :create
   resources :leads, except: %i[destroy] do
+    resources :calls, only: :create
     member do
       post :convert
       patch :archive
@@ -64,6 +66,7 @@ Rails.application.routes.draw do
     post :draft, to: "drafts#update"
   end
   resources :clients, except: %i[destroy] do
+    resources :calls, only: :create
     collection do
       get "by-perfectbook/:perfectbook_contact_id", action: :by_perfectbook, as: :by_perfectbook
     end

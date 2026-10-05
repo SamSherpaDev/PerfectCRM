@@ -43,6 +43,7 @@ class AdConversionsTest < ActiveSupport::TestCase
       received_at: @now - 2.days,
       metadata: {
         "attribution" => attribution,
+        "acquisition" => { "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true } },
         "page" => { "url" => "https://www.sherpaholidays.com/pages/everest-base-camp" },
         "user_agent" => "Mozilla/5.0 Test"
       }
@@ -62,6 +63,21 @@ class AdConversionsTest < ActiveSupport::TestCase
   def with_meta(code: "200", body: { "events_received" => 1 }.to_json)
     fake = FakeHttp.new(code, body)
     Net::HTTP.stub(:new, ->(*_) { fake }) { yield fake }
+  end
+
+  test "test flags missing permission and withdrawal withhold recorded and queued exports" do
+    lead = ad_lead
+    assert AdConversions.reportable?(lead)
+    row = AdConversions.record!(lead).first
+    lead.update!(is_test: true)
+    assert_not AdConversions.reportable?(lead)
+    lead.update!(is_test: false)
+    Lead.find(lead.id).update!(metadata: lead.metadata.deep_merge("acquisition" => { "permission" => { "state" => "withdrawn" } }))
+    assert_equal :skipped, AdConversions.deliver_meta!(row)
+    assert_equal "skipped", row.reload.meta_status
+    assert_empty AdConversions::GoogleFeed.rows
+    legacy = ad_lead(metadata: { "attribution" => { "gclid" => "old-click" } })
+    assert_not AdConversions.reportable?(legacy)
   end
 
   test "leads without a click ID are never recorded" do

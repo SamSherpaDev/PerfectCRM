@@ -1,0 +1,43 @@
+<%# locals: (record:, read_only: false) %>
+<div class="mt-4">
+  <p class="text-sm"><span class="muted">Heard about us:</span> <%= record.source_label %></p>
+  <% if record.reported_source_detail.present? %><p class="text-xs muted mt-1"><%= record.reported_source_detail %></p><% end %>
+  <% unless record.source_missing? %><p class="text-xs muted mt-1"><%= record.source_confirmed_at ? "Confirmed on the call." : "Not yet confirmed." %></p><% end %>
+  <% unless read_only %>
+    <details class="mt-2" <%= "open" if record.source_missing? %>>
+      <summary class="link-quiet text-xs"><%= record.source_missing? ? "Confirm source" : "Edit source" %></summary>
+      <%= form_with url: source_answers_path, class: "mt-3 space-y-3" do |form| %>
+        <%= form.hidden_field :record_type, value: record.class.name %>
+        <%= form.hidden_field :record_id, value: record.id %>
+        <div>
+          <%= form.label :source_choice, "How did you first hear about SherpaHolidays?", class: "label", for: "source-choice-#{record.class.name}-#{record.id}" %>
+          <%= form.select :source_choice, source_answer_options, { selected: record.source_choice }, class: "select", id: "source-choice-#{record.class.name}-#{record.id}" %>
+        </div>
+        <div>
+          <%= form.label :detail, "Short answer", class: "label", for: "source-detail-#{record.class.name}-#{record.id}" %>
+          <%= form.text_field :detail, value: record.reported_source_detail, maxlength: 240, class: "input", id: "source-detail-#{record.class.name}-#{record.id}" %>
+          <p class="hint">For a referral, first name is enough.</p>
+        </div>
+        <% unless record.source_missing? %>
+          <div>
+            <%= form.label :correction_reason, "Reason if correcting", class: "label", for: "source-reason-#{record.class.name}-#{record.id}" %>
+            <%= form.text_field :correction_reason, maxlength: 240, class: "input", id: "source-reason-#{record.class.name}-#{record.id}" %>
+          </div>
+        <% end %>
+        <details>
+          <summary class="link-quiet text-xs">Link a known referrer</summary>
+          <p class="hint mt-2">Use one existing client or person ID from their record. Otherwise keep the short name above.</p>
+          <div class="mt-2">
+            <%= form.label :referred_by_client_id, "Client ID", class: "label", for: "source-referrer-client-#{record.class.name}-#{record.id}" %>
+            <%= form.number_field :referred_by_client_id, value: record.referred_by_client_id, min: 1, class: "input", id: "source-referrer-client-#{record.class.name}-#{record.id}" %>
+          </div>
+          <div class="mt-2">
+            <%= form.label :referred_by_person_id, "Person ID", class: "label", for: "source-referrer-person-#{record.class.name}-#{record.id}" %>
+            <%= form.number_field :referred_by_person_id, value: record.referred_by_person_id, min: 1, class: "input", id: "source-referrer-person-#{record.class.name}-#{record.id}" %>
+          </div>
+        </details>
+        <%= form.submit "Save source", class: "btn-secondary" %>
+      <% end %>
+    </details>
+  <% end %>
+</div>

@@ -29,6 +29,7 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
 
   driven_by :selenium, using: :headless_chrome, screen_size: [ 1400, 1400 ] do |option|
     option.args.concat(CONTAINER_CHROME_ARGS) if container_chrome?
+    option.args << "mute-audio"
   end
 
   # Runs an action (select, choose, or click) that submits a full-page POST

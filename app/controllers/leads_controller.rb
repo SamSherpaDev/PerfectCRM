@@ -150,7 +150,7 @@ class LeadsController < ApplicationController
   end
 
   def lead_prefill
-    params.permit(:name, :email, :source, :campaign_name, :external_ref).to_h
+    params.permit(:name, :email, :source, :campaign_name, :external_ref, :existing_client_id, :capture_channel).to_h
   end
 
   def lead_params
@@ -159,6 +159,8 @@ class LeadsController < ApplicationController
       :external_ref, :fit_score, :fit_band, :fit_reason, :status,
       :referred_by_organization_id, :perfectbook_contact_id, :tag_list, :ai_opt_out,
       :trip_interest, :expected_value_dollars, :lost_reason, :lost_note,
+      :source_choice, :reported_source_detail, :source_correction_reason, :capture_channel, :is_test,
+      :existing_client_id, :referred_by_client_id, :referred_by_person_id,
       people_attributes: %i[id name email phone role _destroy]
     )
   end

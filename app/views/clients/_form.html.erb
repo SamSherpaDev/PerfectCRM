@@ -15,6 +15,7 @@
     <h2 class="section-title" id="client-facts-heading">Facts</h2>
     <%= card_caption "Name and email identify the client. Everything else helps the next reply." %>
     <div class="mt-4 grid gap-4 sm:grid-cols-2">
+      <%= render "records/source_fields", form: form %>
       <div class="sm:col-span-2">
         <%= form.label :name, "Display name", class: "label" %>
         <%= form.text_field :name, required: true, autocomplete: "off", class: "input" %>

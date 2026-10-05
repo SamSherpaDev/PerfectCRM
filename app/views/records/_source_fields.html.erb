@@ -1,0 +1,24 @@
+<%# locals: (form:) %>
+<div class="sm:col-span-2">
+  <%= form.label :source_choice, "How did you first hear about SherpaHolidays? (Optional)", class: "label" %>
+  <%= form.select :source_choice, source_answer_options, {}, class: "select" %>
+</div>
+<div>
+  <%= form.label :reported_source_detail, "Short answer", class: "label" %>
+  <%= form.text_field :reported_source_detail, maxlength: 240, class: "input" %>
+  <p class="hint">For a referral, first name is enough.</p>
+</div>
+<div>
+  <%= form.label :capture_channel, "Arrival channel", class: "label" %>
+  <%= form.select :capture_channel, [["Not recorded", ""]] + SourceHistory::CHANNELS.map { |channel| [channel.humanize, channel] }, {}, class: "select" %>
+</div>
+<% unless form.object.source_missing? %>
+  <div class="sm:col-span-2">
+    <%= form.label :source_correction_reason, "Reason if correcting the source", class: "label" %>
+    <%= form.text_field :source_correction_reason, maxlength: 240, class: "input" %>
+  </div>
+<% end %>
+<div class="sm:col-span-2 flex items-center gap-2">
+  <%= form.check_box :is_test, class: "checkbox" %>
+  <%= form.label :is_test, "Test record (excluded from reporting)", class: "text-xs muted" %>
+</div>

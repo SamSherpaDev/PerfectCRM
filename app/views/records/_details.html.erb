@@ -11,6 +11,9 @@
   </div>
   <%= card_caption lead ? "Where this ask came from and what they want." : "Who this client is and how they found Sherpa Holidays." %>
 
+  <%= render "records/source", record: record, read_only: read_only %>
+  <% unless read_only %><%= render "records/call", record: record %><% end %>
+
   <% if lead %>
     <div class="fit-head">
       <% if record.fit_score.present? || record.fit_band.present? %>
@@ -36,6 +39,19 @@
             <p class="mt-1 text-xs muted">Started as a lead<% if @origin_lead.campaign_name.present? %> · <%= @origin_lead.campaign_name %><% end %> · <%= link_to "open it", lead_path(@origin_lead), class: "link" %></p>
           <% end %>
         <% end %>
+        <% if record.capture_channel.present? %><p class="mt-1 text-xs muted">Arrival: <%= record.capture_channel.humanize %></p><% end %>
+        <% if lead && record.metadata&.dig("acquisition") %>
+          <details class="mt-1 text-xs muted">
+            <summary class="link-quiet">Website evidence</summary>
+            <% %w[first_touch last_touch last_non_direct_touch].each do |touch_key| %>
+              <% touch = record.metadata.dig("acquisition", touch_key) %>
+              <% if touch.is_a?(Hash) %>
+                <p class="mt-1"><%= { "first_touch" => "First observed", "last_touch" => "Inquiry visit", "last_non_direct_touch" => "Last external visit" }[touch_key] %>: <%= touch["source"].presence&.humanize || "Unknown" %><% if touch["unknown_reason"].present? %> (<%= touch["unknown_reason"].humanize.downcase %>)<% end %></p>
+              <% end %>
+            <% end %>
+          </details>
+        <% end %>
+        <% if record.is_test? %><p class="mt-1 text-xs muted">Test record, excluded from reporting.</p><% end %>
         <% if record.perfectbook_contact_id.present? %>
           <p class="mt-1 text-xs"><%= link_to "PerfectBook contact ##{record.perfectbook_contact_id}", perfectbook_contact_url(record.perfectbook_contact_id), class: "link", target: "_blank", rel: "noopener" %></p>
         <% end %>
@@ -96,6 +112,12 @@
         <dd><%= link_to record.referred_by_organization.name, organization_path(record.referred_by_organization), class: "link" %></dd>
       </div>
     <% end %>
+    <% if (referrer = record.referred_by_client || record.referred_by_person) %>
+      <div>
+        <dt>Personal referral</dt>
+        <dd><%= link_to referrer.name, referrer.is_a?(Person) ? referrer.owner : referrer, class: "link" %></dd>
+      </div>
+    <% end %>
     <% if record.referral_code.present? %>
       <div>
         <dt>Referral code</dt>
@@ -132,6 +154,10 @@
           <span class="text-ink font-medium"><%= person.name %></span>
           <% if person.role.present? %><span class="muted"> · <%= person.role %></span><% end %>
           <% if person.email.present? %><p class="text-xs muted"><%= person.email %></p><% end %>
+          <details class="mt-1">
+            <summary class="link-quiet text-xs">Their source</summary>
+            <%= render "records/source", record: person, read_only: read_only %>
+          </details>
         </li>
       <% end %>
     </ul>

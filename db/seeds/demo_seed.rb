@@ -59,6 +59,19 @@ module DemoSeed
           end
         end
       end
+      # Source origins cross the lead/client deletion order. Clear only links
+      # owned by this demo, and refuse to detach unrelated records from it.
+      [ Lead, Client, Person ].each do |model|
+        demo_ids = DemoRecord.where(record_type: model.name).pluck(:record_id)
+        model.reflect_on_all_associations(:belongs_to).each do |association|
+          next unless %i[origin_lead origin_person referred_by_client referred_by_person existing_client].include?(association.name)
+          target_ids = DemoRecord.where(record_type: association.klass.name).pluck(:record_id)
+          if model.where(association.foreign_key => target_ids).where.not(id: demo_ids).exists?
+            raise "Cannot wipe demo: unmarked #{model.name} has a source link to it"
+          end
+          model.where(id: demo_ids).update_all(association.foreign_key => nil)
+        end
+      end
       RECORD_TYPES.each do |type|
         records = type.constantize.where(id: DemoRecord.where(record_type: type).select(:record_id))
         records.each(&:remove_fts_row) if type.constantize.method_defined?(:remove_fts_row)

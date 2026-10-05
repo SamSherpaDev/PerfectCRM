@@ -321,10 +321,9 @@ module WeeklyReport
         booked: deposits.size, travelers: deposits.sum { |booking| booking.party_size.to_i })
     end
 
-    # Leads that count as inquiries: not archived (tests and junk are
-    # archived) and not flagged as suspected spam at intake.
+    # Inquiries exclude explicit tests, archives, and suspected spam.
     def counted_leads
-      Lead.active.where.not(id: spam_lead_ids)
+      Lead.active.where(is_test: false).where.not(id: spam_lead_ids)
     end
 
     def spam_lead_ids
@@ -394,6 +393,7 @@ module WeeklyReport
       @deposits[window] ||= PerfectBook::Booking.where("paid_minor > 0")
         .where(first_paid_at: window)
         .where("status IS NULL OR status NOT IN (?)", TemplateContext::INACTIVE_BOOKING_STATUSES).to_a
+        .reject { |booking| booking_origin(booking).compact.any?(&:is_test?) }
     end
 
     def booking_origin(booking)
