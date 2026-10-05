@@ -90,6 +90,31 @@ class QuoteTermsTest < ActiveSupport::TestCase
     assert_not_includes @quote.terms_bundle["pre_payment_disclosure"], "This transaction is covered"
   end
 
+  test "reported prior payments reduce the requested amount and never count twice" do
+    complete_quote_terms(@quote, days: 180)
+    @quote.disclosure_details["paid_to_date"] = "400.00"
+    @quote.save!
+    assert @quote.deliver!
+    assert_equal 10_000, @quote.payment_requested_minor
+    assert_equal 347_500, @quote.remaining_balance_minor
+    assert_includes @quote.terms_bundle["pre_payment_disclosure"], "| Amount paid to date | $400.00 |"
+    assert_includes @quote.terms_bundle["pre_payment_disclosure"], "| Payment requested now: amount and purpose | $100.00:"
+    assert_equal "$100.00", TemplateContext.for(@client)["deposit_due"]
+    assert @quote.accept!(bundle_sha256: @quote.terms_bundle_sha256)
+    assert_equal 40_000, @quote.intake_details["paid_to_date_minor"]
+    assert_equal 10_000, @quote.intake_details["payment_now_minor"]
+  end
+
+  test "prior payment field must be exact dollars within the quote total" do
+    complete_quote_terms(@quote)
+    [ "1,000", "already paid", "3975.01" ].each do |amount|
+      @quote.disclosure_details["paid_to_date"] = amount
+      @quote.save!
+      assert_not @quote.deliver!
+      assert_includes @quote.errors.full_messages.join, "Amount paid to date must be US dollars"
+    end
+  end
+
   test "old sent quote is not backfilled with new terms" do
     @quote.update!(status: "sent", sent_at: Time.current)
     assert @quote.accept!

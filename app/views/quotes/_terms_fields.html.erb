@@ -22,7 +22,7 @@
     <p class="hint mt-2">Do not guess operator, fund eligibility or bond coverage. Verify the LLC rider, filed signature and current security before sending. Use None only where it actually applies. Quote acceptance does not sign a participant release or authorize a charge.</p>
     <%= form.fields_for :disclosure_details, quote.disclosure_details || {}, skip_default_ids: true do |fields| %>
       <% QuoteTerms::FIELDS.each do |key, label| %>
-        <%= fields.label key, label, for: "quote-disclosure-#{key}", class: "label mt-3" %>
+        <%= fields.label key, key == "paid_to_date" ? "#{label} (US dollars, no commas)" : label, for: "quote-disclosure-#{key}", class: "label mt-3" %>
         <%= fields.text_area key, value: quote.disclosure_details&.dig(key), id: "quote-disclosure-#{key}", rows: 2, class: "textarea" %>
       <% end %>
       <%= fields.label :fund_notice, "Verified fund notice for this transaction", for: "quote-disclosure-fund-notice", class: "label mt-3" %>

@@ -4,8 +4,10 @@
 # These exact stale phrases came from both launch generations. Sent/queued
 # messages and stored drafts are not touched. Unknown edits need human review.
 class TemplatePolicyRefresh
-  ALTITUDE = QuoteTerms.excerpt("ALTITUDE").freeze
-  PRECEDENCE = QuoteTerms.excerpt("PRECEDENCE").freeze
+  # Pin the rollout to its released source, independent of future quote versions.
+  LIBRARY = Rails.root.join("config/booking_terms/SH-TC-2026-10-04/replacement-library.md").read.freeze
+  ALTITUDE = LIBRARY.split("## ALTITUDE\n", 2).last.split("\n## ", 2).first.strip.freeze
+  PRECEDENCE = LIBRARY.split("## PRECEDENCE\n", 2).last.split("\n## ", 2).first.strip.freeze
   DOCUMENTS = "Our Privacy Policy at https://www.sherpaholidays.com/policies/privacy-policy explains how we collect, use and share booking and traveler information, including information needed by overseas operators and authorities. We collect relevant passport, emergency-contact, health, dietary and mobility information where needed to arrange your journey. We share necessary information with the operators, service providers and authorities involved in your arrangements, including in the countries you visit. Please contact us for the private PerfectBook upload instructions; do not email sensitive documents.".freeze
   CONFIRMATION = "A booking is confirmed when the required payment and booking acceptance are received and we issue written confirmation. Private journeys also require a signed booking agreement.".freeze
   PAYMENT_REQUEST = "Payment requested now for {{trip}} on {{departure_dates}}: {{deposit_due}}, due {{payment_due_on}}, under your booking terms {{terms_version}}. Please read your delivered booking documents before paying.".freeze

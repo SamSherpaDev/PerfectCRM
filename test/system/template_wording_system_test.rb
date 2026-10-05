@@ -117,7 +117,7 @@ class TemplateWordingSystemTest < ApplicationSystemTestCase
 
   test "sent quotes show SherpaHolidays in email PDF and public acceptance page" do
     quote = Quote.create!(client: Client.find_by!(email: "maya@example.test"),
-      party_size: 2, valid_until: Date.current + 14)
+      trip_name: "Custom SherpaHolidays trip", party_size: 2, valid_until: Date.current + 14)
     quote.lines.create!(kind: "custom", description: "Nepal trek", quantity: 2, unit_minor: 150000)
     complete_quote_terms(quote, days: 180)
     visit quote_path(quote)

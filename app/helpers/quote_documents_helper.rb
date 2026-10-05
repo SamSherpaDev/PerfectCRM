@@ -14,7 +14,7 @@ module QuoteDocumentsHelper
       elsif lines.first.start_with?("#")
         tag.h3(lines.first.sub(/\A\#+\s*/, ""), class: "font-display text-lg mt-4")
       else
-        tag.p(document_inline(block), class: "mt-3 text-sm break-words")
+        tag.p(document_inline(block), class: "mt-3 text-sm break-words whitespace-pre-line")
       end
     end
     safe_join(blocks)

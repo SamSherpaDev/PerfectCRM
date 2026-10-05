@@ -461,10 +461,10 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
     QuoteMailer.delivery_job.queue_adapter.stub(:enqueue, reject) do
       post quotes_path, params: { client_id: @client.id, send_now: "1", quote: {
         party_size: 2, valid_until: Date.current + 14, notes: "New journey",
-        journey_kind: "scheduled", local_operator: "Synthetic Operator LLC", trip_differences: "None",
+        trip_name: "Synthetic journey", journey_kind: "scheduled", local_operator: "Synthetic Operator LLC", trip_differences: "None",
         included: "Synthetic services", departure_start_on: Date.current + 30, departure_end_on: Date.current + 40,
         deposit_dollars: "1500", balance_due_on: Date.current - 60,
-        disclosure_details: QuoteTerms::FIELDS.keys.index_with { |key| "Synthetic #{key} evidence" }.merge("fund_notice" => "covered"),
+        disclosure_details: QuoteTerms::FIELDS.keys.index_with { |key| "Synthetic #{key} evidence" }.merge("fund_notice" => "covered", "paid_to_date" => "0.00"),
         lines_attributes: {
           "0" => { kind: "custom", description: "Trek", quantity: "1", unit_dollars: "1500" }
         }

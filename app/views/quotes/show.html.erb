@@ -78,7 +78,7 @@
       <p class="text-xs muted"><%= @quote.party_size ? "Total for #{pluralize(@quote.party_size, 'guest')}" : "Total" %></p>
       <p class="font-display text-3xl tabular-nums text-ink"><%= money_in(@quote.subtotal_minor, @quote.currency) %></p>
       <% if @quote.deposit_minor.to_i.positive? %>
-        <p class="mt-1 text-sm muted">Deposit <%= money_in(@quote.deposit_minor, @quote.currency) %> · balance <%= money_in(@quote.balance_due_minor, @quote.currency) %><% if @quote.balance_due_on %> due <%= date_short(@quote.balance_due_on) %><% end %></p>
+        <p class="mt-1 text-sm muted"><%= @quote.terms_bundle.present? ? "Payment requested now" : "Deposit" %> <%= money_in(@quote.payment_requested_minor, @quote.currency) %> · balance <%= money_in(@quote.remaining_balance_minor, @quote.currency) %><% if @quote.balance_due_on %> due <%= date_short(@quote.balance_due_on) %><% end %></p>
       <% end %>
     </div>
   </section>

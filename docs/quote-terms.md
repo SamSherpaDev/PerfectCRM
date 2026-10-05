@@ -13,18 +13,27 @@ The captain selects **one** transaction-specific fund notice based on verified
 facts, not residence alone. No operator, fund eligibility or bond coverage is
 inferred. The LLC rider, filed signature and current security evidence must be
 verified before filling that field. The app records staff-supplied facts; it is
-not independent verification of the bond or legal eligibility.
+not independent verification of the bond or legal eligibility. New sends stop
+after the released bond term ends on March 7, 2027 until a verified new
+disclosure version is available.
 
 New payment schedules must match the master: $500 per person scheduled or 30%
 private more than 90 days out, full payment at 90 days or fewer, balance date
 start minus 90 days. A draft's deposit and date are still entered by the captain
-and validated on send. Custom journeys have editable start/end dates.
+and validated on send. The disclosed amount already paid is exact US dollars
+without commas, never more than the quote total. It reduces payment requested
+now and the remaining balance without counting the same dollars twice; this is
+staff-supplied disclosure information, not a CRM payment ledger.
+Custom journeys have editable start/end dates. A sent
+deposit quote crossing into the 90-day full-payment window needs a fresh quote
+before acceptance; the delivered documents are not silently revised.
 
 `terms_bundle` freezes the delivered master (only its operator placeholder is
 filled), completed disclosure, itinerary, differences, versions and quote
 reference. The disclosure is projected from the released form: booking fields
 are populated, the unselected fund branch is removed, and paper receipt blanks
-are replaced by electronic quote-acceptance information. SHA-256 is over the
+are replaced by electronic quote-acceptance information. The separate activity
+release is not falsely described as attached to this quote bundle. SHA-256 is over the
 UTF-8 result of `JSON.generate(terms_bundle)`. Emails carry the exact text files
 and JSON; the PDF includes those texts. The public page renders the stored
 bytes, not today's website. Delivered quote details, identity and lines cannot
@@ -40,7 +49,8 @@ release and payment-compliance checks remain PerfectBook's responsibility.
 
 No automatic booking is created. The staff intake download and acceptance-notice
 attachment contain JSON with `quote_reference`, trip/dates/party, USD total,
-`deposit_minor`, `balance_due_minor`, `balance_due_on`, `accepted_at`,
+`deposit_minor` (the master deposit target), `paid_to_date_minor`,
+`payment_now_minor`, `balance_due_minor`, `balance_due_on`, `accepted_at`,
 `accepted_terms_version`, `accepted_bundle_sha256`, and the complete
 `terms_bundle`. Import these **bytes and evidence**, not just a version label.
 The booking-page URL passes reference/version/hash only; it cannot carry the

@@ -61,7 +61,7 @@ class QuotesSystemTest < ApplicationSystemTestCase
     assert_field "quote_balance_due_on", with: (Date.new(2027, 5, 4) - 90).iso8601
     find("summary", text: "Complete pre-payment disclosure").click
     QuoteTerms::FIELDS.each do |key, _|
-      fill_in "quote-disclosure-#{key}", with: "Synthetic #{key} evidence"
+      fill_in "quote-disclosure-#{key}", with: (key == "paid_to_date" ? "0.00" : "Synthetic #{key} evidence")
     end
     select "Covered", from: "quote-disclosure-fund-notice"
     assert_no_overflow("builder with lines")

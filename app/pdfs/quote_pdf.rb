@@ -103,8 +103,9 @@ class QuotePdf
     if @quote.deposit_minor.to_i.positive?
       pdf.move_down 2
       pdf.fill_color MUTED
-      pdf.text "Deposit #{money(@quote.deposit_minor)} · " \
-        "Balance #{money(@quote.balance_due_minor)}" \
+      label = @quote.terms_bundle.present? ? "Payment requested now" : "Deposit"
+      pdf.text "#{label} #{money(@quote.payment_requested_minor)} · " \
+        "Balance #{money(@quote.remaining_balance_minor)}" \
         "#{@quote.balance_due_on ? " due #{@quote.balance_due_on.strftime('%-d %B %Y')}" : ""}",
         size: 10, align: :right
       pdf.fill_color INK

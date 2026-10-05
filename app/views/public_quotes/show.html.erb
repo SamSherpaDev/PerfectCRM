@@ -62,7 +62,7 @@
       <p class="text-xs muted"><%= @quote.party_size ? "Total for #{pluralize(@quote.party_size, 'guest')}" : "Total" %></p>
       <p class="font-display text-3xl tabular-nums text-ink"><%= money_in(@quote.subtotal_minor, @quote.currency) %></p>
       <% if @quote.deposit_minor.to_i.positive? %>
-        <p class="mt-1 text-sm muted">Deposit <%= money_in(@quote.deposit_minor, @quote.currency) %> · balance <%= money_in(@quote.balance_due_minor, @quote.currency) %><% if @quote.balance_due_on %> due <%= date_short(@quote.balance_due_on) %><% end %></p>
+        <p class="mt-1 text-sm muted"><%= @quote.terms_bundle.present? ? "Payment requested now" : "Deposit" %> <%= money_in(@quote.payment_requested_minor, @quote.currency) %><%= " to hold your seats" if @quote.terms_bundle.blank? %> · balance <%= money_in(@quote.remaining_balance_minor, @quote.currency) %><% if @quote.balance_due_on %> due <%= date_short(@quote.balance_due_on) %><% end %></p>
       <% end %>
       <% if @quote.valid_until && !@quote.expired? %>
         <p class="mt-1 text-xs muted">Valid until <%= date_short(@quote.valid_until) %></p>
@@ -115,7 +115,7 @@
         <% end %>
         <%= link_to "Ask a question", "mailto:info@sherpaholidays.com?subject=#{CGI.escape("Question about quote #{@quote.reference}")}", class: "btn btn-secondary w-full" %>
       </div>
-      <p class="mt-2 text-center text-xs muted">A booking is confirmed when the required payment and booking acceptance are received and we issue written confirmation. Private journeys also require a signed booking agreement.</p>
+      <p class="mt-2 text-center text-xs muted"><% if @quote.terms_bundle.present? %>A booking is confirmed when the required payment and booking acceptance are received and we issue written confirmation. Private journeys also require a signed booking agreement.<% else %>Accepting tells Sam to hold your seats. The booking is confirmed together.<% end %></p>
     <% end %>
   </div>
 </div>

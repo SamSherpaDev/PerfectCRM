@@ -7,7 +7,7 @@ module QuoteTermsTestHelper
       departure_start_on: start, departure_end_on: quote.departure_end_on || start + 10,
       party_size: quote.party_size || 1, included: quote.included.presence || "Synthetic itinerary services",
       trip_differences: "None", balance_due_on: start - 90,
-      disclosure_details: QuoteTerms::FIELDS.keys.index_with { |key| "Synthetic #{key} evidence" }.merge("fund_notice" => "covered"))
+      disclosure_details: QuoteTerms::FIELDS.keys.index_with { |key| "Synthetic #{key} evidence" }.merge("fund_notice" => "covered", "paid_to_date" => "0.00"))
     quote.update!(deposit_minor: QuoteTerms.deposit_minor(quote))
     quote
   end

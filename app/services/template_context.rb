@@ -145,8 +145,8 @@ class TemplateContext
   def self.quote_context(quote)
     {
       "trip" => quote.trip_name, "departure_dates" => departure_dates_for(quote),
-      "deposit_due" => money_for(quote.deposit_minor, quote.currency),
-      "payment_due_on" => "at booking", "balance_due" => money_for(quote.balance_due_minor, quote.currency),
+      "deposit_due" => money_for(quote.payment_requested_minor, quote.currency),
+      "payment_due_on" => "at booking", "balance_due" => money_for(quote.remaining_balance_minor, quote.currency),
       "balance_due_on" => quote.balance_due_on&.iso8601,
       "terms_version" => quote.terms_bundle.fetch("terms_version")
     }

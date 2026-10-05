@@ -6,6 +6,7 @@ class QuoteTerms
   VERSION = "SH-TC-2026-10-04".freeze
   DISCLOSURE_VERSION = "SH-DISC-2026-10-04".freeze
   ROOT = Rails.root.join("config/booking_terms", VERSION)
+  BOND_EXPIRES_ON = Date.new(2027, 3, 7)
   FIELDS = {
     "travelers" => "Booking reference and travelers",
     "start_place" => "Trip start: date and place",
@@ -39,6 +40,18 @@ class QuoteTerms
     quote.journey_kind == "private" ? (quote.total_minor * 30 + 50) / 100 : 50_000 * quote.party_size
   end
 
+  def self.paid_minor(quote)
+    QuoteMoney.parse(quote.disclosure_details&.dig("paid_to_date").to_s.strip)
+  end
+
+  def self.payment_now_minor(quote)
+    [ quote.deposit_minor - paid_minor(quote).to_i, 0 ].max
+  end
+
+  def self.remaining_balance_minor(quote)
+    [ quote.total_minor - paid_minor(quote).to_i - payment_now_minor(quote), 0 ].max
+  end
+
   def self.bundle(quote)
     details = quote.disclosure_details
     master = source("master-terms").sub("[verified operator legal name]", quote.local_operator)
@@ -55,13 +68,16 @@ class QuoteTerms
       "Services, occupancy, inclusions and exclusions" => details.fetch("services"),
       "Itemized price, supplements and mandatory charges" => quote.lines.map { |line| "#{line.description}: #{line.quantity} x #{money(line.unit_minor)} = #{money(line.total_minor)}" }.join("; "),
       "Total price in US dollars" => money(quote.total_minor),
-      "Amount paid to date" => details.fetch("paid_to_date"),
-      "Payment requested now: amount and purpose" => "#{money(quote.deposit_minor)}: #{details.fetch('payment_purpose')}",
-      "Itemized remaining balance" => money(quote.balance_due_minor),
-      "Each future payment: amount and exact due date" => quote.balance_due_minor.positive? ? "#{money(quote.balance_due_minor)}, due #{quote.balance_due_on}" : "None",
+      "Amount paid to date" => money(paid_minor(quote)),
+      "Payment requested now: amount and purpose" => "#{money(payment_now_minor(quote))}: #{details.fetch('payment_purpose')}",
+      "Itemized remaining balance" => money(remaining_balance_minor(quote)),
+      "Each future payment: amount and exact due date" => remaining_balance_minor(quote).positive? ? "#{money(remaining_balance_minor(quote))}, due #{quote.balance_due_on}" : "None",
       "Trip-specific differences: affected provision, supplier, amount and effect, or “None”" => quote.trip_differences
     }
-    values.each { |label, value| disclosure = disclosure.sub("| #{label} | ____________________ |", "| #{label} | #{value} |") }
+    values.each do |label, value|
+      cell = value.to_s.gsub(/\s*\n+\s*/, "; ")
+      disclosure = disclosure.sub("| #{label} | ____________________ |", "| #{label} | #{cell} |")
+    end
     %w[passenger_location payer_location].each do |key|
       disclosure = disclosure.sub("#{FIELDS.fetch(key)}: ____________________", "#{FIELDS.fetch(key)}: #{details.fetch(key)}")
     end
@@ -73,6 +89,8 @@ class QuoteTerms
       disclosure = disclosure.sub(/### Notice for a covered transaction\n.*?(?=### Notice for a transaction not covered)/m, "")
       disclosure = disclosure.sub("Transaction-specific reason: ____________________", "Transaction-specific reason: #{details.fetch('fund_reason')}")
     end
+    # The activity document is handled separately, not falsely attached here.
+    disclosure = disclosure.sub("The attached separate participant risk release", "The separate participant risk release")
     # This quote acceptance is not a personal activity signature or a charge mandate.
     disclosure = disclosure.sub(/## Receipt and acceptance\n.*/m, <<~TEXT)
       ## Receipt and acceptance
@@ -85,6 +103,8 @@ class QuoteTerms
     {
       "terms_version" => VERSION, "disclosure_version" => DISCLOSURE_VERSION,
       "quote_reference" => quote.reference, "quote_revision" => quote.version,
+      "paid_to_date_minor" => paid_minor(quote), "payment_now_minor" => payment_now_minor(quote),
+      "remaining_balance_minor" => remaining_balance_minor(quote),
       "delivered_at" => Time.current.iso8601,
       "client" => quote.owner_name, "email" => quote.owner_email,
       "master_terms" => master, "pre_payment_disclosure" => disclosure,

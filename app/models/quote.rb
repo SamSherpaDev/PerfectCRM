@@ -111,6 +111,14 @@ class Quote < ApplicationRecord
     [ subtotal_minor - deposit_minor.to_i, 0 ].max
   end
 
+  def payment_requested_minor
+    terms_bundle.present? ? terms_bundle.fetch("payment_now_minor") : deposit_minor
+  end
+
+  def remaining_balance_minor
+    terms_bundle.present? ? terms_bundle.fetch("remaining_balance_minor") : balance_due_minor
+  end
+
   def draft?
     status == "draft"
   end
@@ -228,7 +236,9 @@ class Quote < ApplicationRecord
       "party_size" => party_size, "total_minor" => subtotal_minor,
       "currency" => currency, "client" => owner_name, "email" => owner_email,
       "quote_reference" => reference,
-      "deposit_minor" => deposit_minor, "balance_due_minor" => balance_due_minor,
+      "deposit_minor" => deposit_minor, "balance_due_minor" => remaining_balance_minor,
+      "payment_now_minor" => payment_requested_minor,
+      "paid_to_date_minor" => terms_bundle&.fetch("paid_to_date_minor"),
       "balance_due_on" => balance_due_on&.iso8601,
       "accepted_at" => accepted_at&.iso8601,
       "accepted_terms_version" => accepted_terms_version,
@@ -260,6 +270,12 @@ class Quote < ApplicationRecord
     validates_presence_of :journey_kind, :local_operator, :trip_differences, :departure_start_on, :departure_end_on, :included, :trip_name
     errors.add(:journey_kind, "must be scheduled or private") unless %w[scheduled private].include?(journey_kind)
     details = disclosure_details || {}
+    if Date.current > QuoteTerms::BOND_EXPIRES_ON
+      errors.add(:base, "The released disclosure's bond term has ended. A verified new disclosure version is required before sending.")
+    end
+    if details["security_evidence"].to_s.strip.casecmp?("None")
+      errors.add(:base, "Verified customer-fund security evidence cannot be None")
+    end
     QuoteTerms::FIELDS.each do |key, label|
       value = details[key].to_s
       errors.add(:base, "Complete #{label.downcase} before sending") if value.blank? || value.match?(/_{3,}|\[.*?\]|\b(?:TBD|TODO|unknown)\b/i)
@@ -269,6 +285,10 @@ class Quote < ApplicationRecord
     end
     if local_operator.to_s.match?(/\[|_{3,}|\b(?:TBD|TODO|unknown)\b/i)
       errors.add(:local_operator, "must be the verified legal name")
+    end
+    paid = QuoteTerms.paid_minor(self)
+    if paid.nil? || paid > subtotal_minor
+      errors.add(:base, "Amount paid to date must be US dollars without commas and cannot exceed the quote total")
     end
     expected = QuoteTerms.deposit_minor(self)
     errors.add(:deposit_minor, "must match the master payment schedule (#{QuoteTerms.money(expected)})") if expected && deposit_minor != expected
