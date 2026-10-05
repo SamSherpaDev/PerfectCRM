@@ -24,7 +24,8 @@ and validated on send. The disclosed amount already paid is exact US dollars
 without commas, never more than the quote total. It reduces payment requested
 now and the remaining balance without counting the same dollars twice; this is
 staff-supplied disclosure information, not a CRM payment ledger.
-Custom journeys have editable start/end dates. A sent
+Custom journeys and catalog journeys without supplied departure dates have
+editable start/end dates; dates supplied by a catalog departure take precedence. A sent
 deposit quote crossing into the 90-day full-payment window needs a fresh quote
 before acceptance; the delivered documents are not silently revised.
 
@@ -70,9 +71,14 @@ Review flagged customized text separately. The migration replaces exact known
 stale clauses even in renamed/partly edited templates; unrelated text remains.
 It does not rewrite sent/queued messages, drafts, quotes or bookings.
 
-Pending delivered quote context supplies actual scheduled/private/timing amounts.
-For an existing mirrored booking, amounts and due dates come only from optional
-PerfectBook API `payment_terms`:
+Without a mirrored booking, template context uses the newest unexpired delivered
+quote for the owner and resolved recipient, including quotes from converted leads.
+Unaccepted quotes must still have a current payment schedule. Other recipients
+do not inherit that quote's payment instructions. This context supplies the
+delivered amounts, remaining balance, due date and terms version.
+For an existing mirrored booking, the remaining balance comes from PerfectBook's
+`balance_due_minor`; the requested payment, due dates and terms version come
+only from optional PerfectBook API `payment_terms`:
 
 ```json
 {

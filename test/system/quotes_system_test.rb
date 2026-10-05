@@ -609,6 +609,124 @@ class QuotesSystemTest < ApplicationSystemTestCase
     end
   end
 
+  test "booking documents block incomplete sends and require exact public acceptance" do
+    client = Client.create!(name: "Synthetic Traveler", email: "traveler@example.com")
+    quote = Quote.create!(client: client, party_size: 1, valid_until: Date.current + 14)
+    quote.lines.create!(description: "Synthetic journey", quantity: 1, unit_minor: 397_500)
+    visit quote_path(quote)
+    click_button "Send quote"
+    assert_text "This quote needs attention"
+    assert_equal "draft", quote.reload.status
+
+    complete_quote_terms(quote, days: 180)
+    visit quote_path(quote)
+    click_button "Send quote", match: :first
+    assert_text "Quote sent"
+    Capybara.using_session(:traveler) do
+      page.current_window.resize_to(390, 844)
+      visit public_quote_path(quote.accept_token)
+      assert_text "No refund."
+      documents_url = URI.join(page.current_url, find_link("Download booking documents")[:href])
+      response = Net::HTTP.get_response(documents_url)
+      assert_equal "200", response.code
+      assert_equal quote.reload.terms_bundle, JSON.parse(response.body)
+      if ENV["QUOTE_EVIDENCE_DIR"].present?
+        File.binwrite(File.join(ENV.fetch("QUOTE_EVIDENCE_DIR"), "delivered-booking-documents.json"), response.body)
+      end
+      click_button "Accept this quote"
+      assert_equal "viewed", quote.reload.status
+      find("summary", text: "Master terms", exact_text: true).click
+      assert_text "24 months"
+      assert_text "Westfield National Insurance Company"
+      assert_no_overflow("released master terms public phone")
+      find("summary", text: "Master terms", exact_text: true).click
+      find("summary", text: "Pre-payment disclosure", exact_text: true).click
+      assert_text "This transaction is covered"
+      assert_no_text "This transaction is not covered"
+      assert_no_overflow("released disclosure public phone")
+      check "terms_accepted"
+      click_button "Accept this quote"
+      assert_text "Accepted"
+      assert_equal quote.terms_bundle_sha256, quote.reload.accepted_bundle_sha256
+      assert_no_overflow("released acceptance public phone")
+    end
+  end
+
+  test "flexible private catalog dates survive editing and delivery" do
+    client = Client.create!(name: "Synthetic Traveler", email: "traveler@example.com")
+    PerfectBook::Trip.create!(perfectbook_id: 42, name: "Private trek", active: true, synced_at: Time.current)
+    visit new_quote_path(client_id: client.id, trip_id: 42)
+    start = Date.current + 180
+    fill_in "Trip start date", with: start
+    fill_in "Trip end date", with: start + 10
+    within(all("[data-line-row]").first) { fill_in "Each ($)", with: "3975" }
+    click_button "Save draft", match: :first
+    tolerate_navigation_assertion { assert_text "Quote saved as a draft" }
+    quote = Quote.order(:id).last
+    assert_equal start, quote.departure_start_on
+    visit edit_quote_path(quote)
+    fill_in "Trip start date", with: start + 1
+    click_button "Save draft", match: :first
+    tolerate_navigation_assertion { assert_text "Quote saved" }
+    assert_equal start + 1, quote.reload.departure_start_on
+    complete_quote_terms(quote, journey_kind: "private")
+    visit quote_path(quote)
+    click_button "Send quote", match: :first
+    assert_text "Quote sent"
+    visit public_quote_path(quote.accept_token)
+    assert_text "$2,385.00"
+    assert_no_overflow("flexible private delivered public phone")
+  end
+
+  test "crossing ninety days blocks acceptance without replacing delivered documents" do
+    client = Client.create!(name: "Synthetic Traveler", email: "traveler@example.com")
+    quote = Quote.create!(client: client, party_size: 1, valid_until: Date.current + 14)
+    quote.lines.create!(description: "Synthetic journey", quantity: 1, unit_minor: 397_500)
+    complete_quote_terms(quote, days: 91)
+    assert quote.deliver!
+    bundle = quote.terms_bundle
+    travel 1.day do
+      visit public_quote_path(quote.accept_token)
+      assert_text "payment schedule needs a refresh"
+      assert_no_button "Accept this quote"
+      assert_equal bundle, quote.reload.terms_bundle
+      assert_no_overflow("ninety day acceptance guard")
+    end
+  end
+
+  test "converted lead payment merge resolves delivered recipient and guards other people" do
+    lead = Lead.create!(name: "Synthetic Traveler", email: "traveler@example.com")
+    quote = Quote.create!(lead: lead, party_size: 1, valid_until: Date.current + 14)
+    quote.lines.create!(description: "Synthetic journey", quantity: 1, unit_minor: 397_500)
+    complete_quote_terms(quote, days: 180)
+    assert quote.deliver!
+    client = lead.convert_to_client!
+    client.people.create!(name: "Traveler", email: "traveler@example.com")
+    PerfectBook::Contact.create!(perfectbook_id: 987, name: "Traveler", email: "traveler@example.com", synced_at: Time.current)
+    client.people.create!(name: "Other", email: "other@example.com")
+    Template.create!(name: "Synthetic payment", purpose: :deposit_nudge,
+      subject: "Payment for {{trip}}", body: "Payment {{deposit_due}} under {{terms_version}}.")
+    page.current_window.resize_to(1400, 900)
+    visit merge_templates_path
+    select "Synthetic payment", from: "Template"
+    fill_in "Recipients", with: "Traveler <traveler@example.com>"
+    click_button "Preview merge"
+    within("[aria-label='Merged messages']") do
+      assert_text "$500.00"
+      assert_text QuoteTerms::VERSION
+      assert_no_text "[missing:"
+    end
+    if ENV["QUOTE_EVIDENCE_DIR"].present?
+      page.scroll_to(find("[aria-label='Merged messages']"), align: :top)
+      page.save_screenshot(File.join(ENV.fetch("QUOTE_EVIDENCE_DIR"), "converted-recipient-payment-preview.png"))
+    end
+    visit merge_templates_path
+    select "Synthetic payment", from: "Template"
+    fill_in "Recipients", with: "Other <other@example.com>"
+    click_button "Preview merge"
+    within("[aria-label='Merged messages']") { assert_text "Missing:" }
+  end
+
   private
 
   def assert_no_overflow(context)

@@ -111,11 +111,8 @@ Placeholders render through `TemplateRenderer` against live values; see
 [Replying](#replying) for context resolution and missing-value behavior.
 The placeholder chooser uses `TemplateRenderer::PLACEHOLDERS` as its source.
 Templates are seeded from `db/seeds/templates.rb` (idempotent; reruns never
-overwrite captain edits). The initial wording migration matched whole defaults.
-The terms rollout replaces only exact known stale clauses, including within
-renamed/edited templates, while preserving unrelated wording and all previously
-sent messages. Run the read-only `bin/rails terms:template_inventory` before
-rollout and review flagged customized copy; see [quote terms](docs/quote-terms.md).
+overwrite captain edits). For existing-template wording migrations and the
+pre-rollout inventory, see [quote terms](docs/quote-terms.md#operational-templates-and-rollout).
 Unknown financial amounts, accepted dates or terms versions must be completed
 before an outbound payment instruction can queue.
 
@@ -348,21 +345,17 @@ the converted client's timeline.
 Each quote carries an unguessable tap-to-accept link (`/q/:token`, no
 sign-in). Public views are rate-limited and logged through `QuoteView`.
 After `valid_until`, the page remains readable but acceptance is disabled.
-A new-version deposit quote that crosses the 90-day full-payment boundary also
-needs a fresh quote; its delivered documents are never rewritten.
-New quotes carry the immutable master terms, completed pre-payment disclosure,
-itinerary and explicit trip-specific differences in email attachments, PDF and
-public page. A checkbox and delivered SHA-256 bind acceptance to those bytes.
-Historical sent quotes are not backfilled with newly released terms.
-Accepting records `accepted_at` and the terms version/hash, queues an email to the captain at
+Clients read the delivered booking documents and confirm acceptance on the
+public page. Document preservation, payment-schedule expiry, historical quote
+compatibility and acceptance evidence are defined in [quote terms](docs/quote-terms.md).
+Accepting queues an email to the captain at
 `info@`, writes the timeline, and stages an intake payload on the quote
 page in the "Create booking in PerfectBook" panel. Its "Open PerfectBook
 booking page" button opens
 PerfectBook's new-booking page with the intake details in query parameters
-and a copyable JSON payload alongside for manual entry. Download the accepted
-documents/intake JSON (also attached to the acceptance notice) and import its
-exact bytes, version, hash, acceptance timestamp and amounts into PerfectBook.
-The URL carries references only, not the full documents. All use the intake
+and a copyable JSON payload alongside for manual entry. Use the intake download
+and follow the [PerfectBook handoff](docs/quote-terms.md#manual-perfectbook-handoff)
+to preserve the accepted documents and evidence. All use the intake
 details saved at acceptance, so later client edits do not change the staged intake.
 The captain reviews
 and creates the actual booking in PerfectBook. If the acceptance notice
