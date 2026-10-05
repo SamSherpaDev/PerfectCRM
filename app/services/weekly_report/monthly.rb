@@ -88,15 +88,15 @@ module WeeklyReport
     def cohorts
       ids = leads.map(&:id)
       bookings = countable_bookings.joins(:inquiry_binding).where(booking_inquiry_bindings: { lead_id: ids })
-        .where("first_received_at <= ?", as_of).includes(inquiry_binding: :lead).to_a.reject { |booking| booking.binding_issue.present? }
-      first_receipts = bookings.group_by { |booking| booking.inquiry_binding.lead_id }.transform_values { |list| list.min_by(&:first_received_at) }
+        .received_by(as_of).includes(inquiry_binding: :lead).to_a.reject { |booking| booking.binding_issue.present? }
+      first_receipts = bookings.group_by { |booking| booking.inquiry_binding.lead_id }.transform_values { |list| list.min_by { |booking| [ booking.receipt_date, booking.perfectbook_id ] } }
       horizons = HORIZONS.to_h do |days|
         mature = leads.select { |lead| inquiry_time(lead) + days.days <= as_of }
         converted = mature.count do |lead|
           booking = first_receipts[lead.id]
           next false unless booking
           if booking.first_received_precision == "date"
-            (inquiry_time(lead).to_date..(inquiry_time(lead) + days.days).to_date).cover?(booking.first_received_on || booking.first_received_at.to_date)
+            (inquiry_time(lead).to_date..(inquiry_time(lead) + days.days).to_date).cover?(booking.receipt_date)
           else
             (inquiry_time(lead)..(inquiry_time(lead) + days.days)).cover?(booking.first_received_at)
           end
@@ -111,7 +111,7 @@ module WeeklyReport
     def lifetime_bookers
       @lifetime_bookers ||= lifetime_bookings.group_by(&:perfectbook_contact_id).map do |contact, bookings|
         original = bookings.map(&:primary_inquiry).min_by { |lead| [ inquiry_time(lead), lead.id ] }
-        ordered = bookings.sort_by { |booking| [ booking.first_received_at, booking.perfectbook_id ] }
+        ordered = bookings.sort_by { |booking| [ booking.receipt_date, booking.perfectbook_id ] }
         { contact_id: contact, inquiry: original, source: original_source(contact),
           currencies: bookings.group_by(&:currency).transform_values do |list|
             { bookings: list.size, repeat_bookings: list.count { |booking| booking != ordered.first },
@@ -189,7 +189,7 @@ module WeeklyReport
 
     def lifetime_bookings
       @lifetime_bookings ||= countable_bookings.joins(:inquiry_binding).where(binding_issue: [ nil, "" ])
-        .where("first_received_at <= ?", as_of).includes(inquiry_binding: { lead: [ :converted_client, :existing_client ] }).to_a
+        .received_by(as_of).includes(inquiry_binding: { lead: [ :converted_client, :existing_client ] }).to_a
     end
 
     def reported_identity(lead)
@@ -264,7 +264,7 @@ module WeeklyReport
           row.missing_traveler_counts += 1 if booking.traveler_count.nil?
           row.booked_value[booking.currency] += booking.total_minor.to_i
           row.returning += 1 if returning?(booking)
-          if first_bookings.fetch(booking.perfectbook_contact_id).last.in_time_zone("America/Los_Angeles").to_date < month
+          if first_bookings.fetch(booking.perfectbook_contact_id).last < month
             row.returning_booker_ids |= [ booking.perfectbook_contact_id ]
           else
             row.new_booker_ids |= [ booking.perfectbook_contact_id ]
@@ -355,7 +355,7 @@ module WeeklyReport
 
     def deposit_in_month?(booking)
       return false if booking.first_received_at && booking.first_received_at > as_of
-      date = booking.first_received_on || booking.first_received_at&.in_time_zone("America/Los_Angeles")&.to_date
+      date = booking.receipt_date
       date && (month..end_date).cover?(date)
     end
 
@@ -363,7 +363,7 @@ module WeeklyReport
       @first_bookings ||= countable_bookings.where(perfectbook_contact_id: relevant_bookings.map(&:perfectbook_contact_id).uniq)
         .where("first_received_at IS NOT NULL OR first_received_on IS NOT NULL")
         .pluck(:perfectbook_contact_id, :perfectbook_id, :first_received_at, :first_received_on)
-        .map { |contact, id, at, on| [ contact, id, at || on.in_time_zone("America/Los_Angeles") ] }
+        .map { |contact, id, at, on| [ contact, id, on || at.in_time_zone("America/Los_Angeles").to_date ] }
         .sort_by { |_, id, at| [ at, id ] }.each_with_object({}) { |(contact, id, at), first| first[contact] ||= [ id, at ] }
     end
 

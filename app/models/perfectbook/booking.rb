@@ -8,6 +8,12 @@ module PerfectBook
     # Nudge-worthy statuses from the sibling API.
     MISSING_STATUSES = %w[missing expiring].freeze
 
+    scope :received_by, ->(at) { where("first_received_at <= :at OR (first_received_precision = 'date' AND first_received_on <= :on)", at: at, on: at.in_time_zone("America/Los_Angeles").to_date) }
+
+    def receipt_date
+      first_received_on || first_received_at&.in_time_zone("America/Los_Angeles")&.to_date
+    end
+
     scope :available, -> { where(unavailable_at: nil) }
 
     def available?

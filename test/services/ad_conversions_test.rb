@@ -459,4 +459,52 @@ class AdConversionsTest < ActiveSupport::TestCase
     end
     assert_equal "sent", lead.ad_conversions.sole.meta_status
   end
+
+  test "undelivered Purchase follows corrected binding and exports once" do
+    lead = ad_lead(perfectbook_contact_id: 77)
+    other = ad_lead(existing_client: Client.create!(name: "Synthetic booker", perfectbook_contact_id: 77), attribution: { "gclid" => "corrected-click" })
+    booking = PerfectBook::Booking.create!(perfectbook_id: 9002, perfectbook_contact_id: 77, status: "confirmed",
+      first_received_at: @now - 1.hour, first_received_precision: "timestamp", receipts_minor: 50_000,
+      total_minor: 700_000, synced_at: @now)
+    BookingInquiryBinding.link!(booking, lead: lead, actor: "test", evidence: "Initial")
+    row = AdConversions.record!(lead).find { |entry| entry.event == "booked" }
+    BookingInquiryBinding.link!(booking, lead: other, actor: "test", evidence: "Corrected", reason: "Wrong inquiry")
+    AdConversions.record!(other)
+    assert_equal other.id, row.reload.lead_id
+    assert_equal 1, AdConversion.where(event: "booked").count
+    assert_equal "sh-booking-9002-purchase", row.event_id
+    with_meta do |fake|
+      assert_equal :sent, AdConversions.deliver_meta!(row, settings: @settings)
+      assert_nil AdConversions.deliver_meta!(row, settings: @settings)
+      assert_equal 1, fake.requests.size
+    end
+    assert_includes AdConversions::GoogleFeed.serve!(settings: @settings), "corrected-click"
+  end
+
+  test "exported Purchase stays unchanged and correction is held for review" do
+    %w[meta google].each_with_index do |platform, index|
+      lead = ad_lead(perfectbook_contact_id: 77 + index)
+      other = ad_lead(existing_client: Client.create!(name: "Synthetic booker", perfectbook_contact_id: 77 + index))
+      booking = PerfectBook::Booking.create!(perfectbook_id: 9010 + index, perfectbook_contact_id: 77 + index, status: "confirmed",
+        first_received_at: @now - 1.hour, first_received_precision: "timestamp", receipts_minor: 50_000, synced_at: @now)
+      BookingInquiryBinding.link!(booking, lead: lead, actor: "test", evidence: "Initial")
+      row = AdConversions.record!(lead).find { |entry| entry.event == "booked" }
+      if platform == "meta"
+        with_meta { assert_equal :sent, AdConversions.deliver_meta!(row, settings: @settings) }
+      else
+        AdConversions::GoogleFeed.serve!(settings: @settings)
+      end
+      BookingInquiryBinding.link!(booking, lead: other, actor: "test", evidence: "Corrected", reason: "Wrong inquiry")
+      AdConversions.record!(other)
+      assert_equal lead.id, row.reload.lead_id
+      assert_match(/review platform history/, row.meta_error)
+      assert_not_includes AdConversions::GoogleFeed.rows.map(&:id), row.id
+      with_meta do |fake|
+        AdConversions.deliver_meta!(row, settings: @settings)
+        assert_empty fake.requests
+      end
+      assert_equal 1, AdConversion.where(event: "booked", perfectbook_id: booking.perfectbook_id).count
+    end
+  end
+
 end

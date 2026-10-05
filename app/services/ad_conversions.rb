@@ -106,11 +106,20 @@ module AdConversions
       next if event != "booked" && existing.include?(event)
       next if facts[:occurred_at].nil? || facts[:occurred_at] > now
 
-      AdConversion.create!(
+      attributes = {
         lead: lead, event: event, event_id: event == "booked" ? "sh-booking-#{facts[:perfectbook_id]}-purchase" : event_id(lead, event),
         perfectbook_id: facts[:perfectbook_id], occurred_at: facts[:occurred_at], value_minor: facts[:value_minor],
         google: google && event != "lead", meta_status: "pending"
-      )
+      }
+      if event == "booked"
+        booking = PerfectBook::Booking.find_by!(perfectbook_id: facts[:perfectbook_id])
+        booking.with_lock do
+          next unless paid_bookings(lead).exists?(perfectbook_id: booking.perfectbook_id)
+          AdConversion.create!(**attributes)
+        end
+      else
+        AdConversion.create!(**attributes)
+      end
     rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid
       nil
     end
@@ -168,6 +177,21 @@ module AdConversions
     AdConversion.where(event: "booked", perfectbook_id: nil, lead_id: inquiries)
       .where("created_at >= ?", booking.first_received_at)
       .where("meta_attempts > 0 OR google_serve_count > 0 OR meta_sent_at IS NOT NULL OR google_first_served_at IS NOT NULL").exists?
+  end
+
+  def correct_booking_owner!(booking, lead:)
+    row = AdConversion.find_by(event: "booked", perfectbook_id: booking.perfectbook_id)
+    return unless row
+    row.with_lock do
+      next if row.lead_id == lead.id
+      if row.meta_attempts.positive? || row.meta_sent_at || row.google_first_served_at || row.google_serve_count.positive?
+        row.update!(google_skip_reason: "Booking inquiry corrected after export; review platform history",
+          meta_error: "Booking inquiry corrected after export; review platform history")
+      else
+        row.update!(lead: lead, google: google_click_ids(lead).any?, meta_status: "pending",
+          meta_error: nil, google_skip_reason: nil)
+      end
+    end
   end
 
   def booking_skip_reason(row)
@@ -234,9 +258,10 @@ module AdConversions
   # intake job and the nightly sweep cannot share an active delivery claim.
   # Returns :sent, :failed, :skipped, or nil when nothing happened.
   def deliver_meta!(row, settings: Setting.current, now: Time.current)
+    row.reload
     return nil unless meta_due?(row, now)
 
-    claim = AdConversion.where(id: row.id, meta_status: row.meta_status,
+    claim = AdConversion.where(id: row.id, lead_id: row.lead_id, meta_status: row.meta_status,
       meta_attempts: row.meta_attempts, updated_at: row.updated_at)
     lead = row.lead.reload
     skip_reason = if excluded?(lead)

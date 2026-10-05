@@ -27,6 +27,7 @@ class BookingInquiryBinding < ApplicationRecord
         occurred_at: Time.current, metadata: { "perfectbook_id" => booking.perfectbook_id,
           "upstream_fingerprint" => fingerprint, "prior" => prior, "state" => state, "actor" => actor, "evidence" => evidence, "reason" => reason })
       booking.update!(binding_issue: nil)
+      AdConversions.correct_booking_owner!(booking, lead: lead)
       binding
     end
   end

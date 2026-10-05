@@ -42,7 +42,7 @@ class SourceHistoryRetentionJob < ApplicationJob
   def expired?(record, now)
     client = record.is_a?(Client) ? record : record.converted_client
     linked = if record.is_a?(Lead)
-      PerfectBook::Booking.where(perfectbook_id: BookingInquiryBinding.where(lead_id: record.id).select(:perfectbook_id)).where.not(first_received_at: nil)
+      PerfectBook::Booking.where(perfectbook_id: BookingInquiryBinding.where(lead_id: record.id).select(:perfectbook_id)).received_by(now)
     end
     if client || linked&.exists?
       bookings = if client&.perfectbook_contact_id
@@ -54,8 +54,9 @@ class SourceHistoryRetentionJob < ApplicationJob
       # Recording a note or editing source must not restart the lifetime clock.
       # Until a complete mirror exists, creation uses the conservative booked
       # horizon, explicitly not an asserted financial receipt date.
-      baseline = last_booking&.in_time_zone || bookings&.maximum(:first_received_at) || client&.created_at || record.created_at
-      baseline <= now - 7.years
+      last_receipt = [ bookings&.maximum(:first_received_on), bookings&.maximum(:first_received_at)&.in_time_zone&.to_date ].compact.max
+      baseline = last_booking || last_receipt || (client&.created_at || record.created_at).to_date
+      baseline <= (now - 7.years).to_date
     else
       # A returning inquiry is still a separate unbooked ask until conversion.
       last_contact = record.last_touch_at || record.received_at || record.created_at

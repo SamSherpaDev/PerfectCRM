@@ -71,18 +71,21 @@ module AdConversions
     # One authenticated pull: builds the file and records what was served.
     def serve!(settings: Setting.current, now: Time.current)
       served = rows(now: now)
-      body = csv(served)
       AdConversion.transaction do
-        served.each do |row|
+        served = served.filter_map do |row|
+          row.lock!
+          next unless servable?(row, now)
           row.update!(
             google_first_served_at: row.google_first_served_at || now,
             google_last_served_at: now,
             google_serve_count: row.google_serve_count + 1
           )
+          row
         end
+        body = csv(served)
         settings.update_columns(google_feed_last_fetched_at: now, google_feed_last_row_count: served.size, updated_at: now)
+        body
       end
-      body
     end
   end
 end

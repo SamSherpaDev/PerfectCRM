@@ -146,4 +146,20 @@ class SourceHistoryRetentionJobTest < ActiveJob::TestCase
     assert_equal "Returned as a lead", events.last.summary
     assert_equal "Converted to client", returning.activity_events.where(kind: "conversion").last.summary
   end
+
+  test "date-only paid bindings use the seven-year receipt horizon" do
+    now = Time.zone.local(2026, 10, 5, 10)
+    lead = Lead.create!(name: "Date-only booked", source: "manual", perfectbook_contact_id: 90,
+      received_at: now - 8.years, source_choice: "search")
+    lead.update_columns(last_touch_at: now - 8.years)
+    booking = PerfectBook::Booking.create!(perfectbook_id: 90, perfectbook_contact_id: 90,
+      first_received_precision: "date", first_received_on: (now - 3.years).to_date, synced_at: now)
+    BookingInquiryBinding.link!(booking, lead: lead, actor: "test", evidence: "Reviewed receipt date")
+    SourceHistoryRetentionJob.perform_now(now: now)
+    assert_equal "search", lead.reload.reported_source_code
+    SourceHistoryRetentionJob.perform_now(now: now + 5.years)
+    assert lead.reload.source_missing?
+    assert_nil booking.reload.first_received_at
+  end
+
 end

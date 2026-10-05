@@ -377,4 +377,33 @@ class SourceReportingTest < ActiveSupport::TestCase
     assert_not settings.meta_configured?
     assert_not settings.google_feed_configured?
   end
+
+  test "date-only receipts stay in cohorts lifetime and repeat ordering without timestamps" do
+    first = booking(first_received_at: nil, first_received_precision: "date")
+    booking(id: 52, receipt: Time.zone.local(2026, 10, 16, 9))
+    report = WeeklyReport::Monthly.new(month: Date.new(2026, 10, 1))
+    assert_equal 2, report.totals[:bookings]
+    assert_equal 2, report.cohorts[:bookings]
+    assert_equal 1, report.cohorts[:horizons][30][:booked_inquiries]
+    assert_equal 1_800_000, report.lifetime_bookers.sole[:currencies]["USD"][:booked_value]
+    assert_equal 1, report.lifetime_bookers.sole[:currencies]["USD"][:repeat_bookings]
+    assert_equal({ "USD" => 100_000 }, report.lifetime_bookers.sole[:net_received])
+    assert_nil first.reload.first_received_at
+    assert_equal Date.new(2026, 10, 15), first.receipt_date
+  end
+
+  test "source-free inferred inquiries remain missing in every report view" do
+    @lead.update!(source: "manual", metadata: {}, source_choice: "not_asked", source_correction_reason: "No verified source")
+    item = booking(crm_inquiry_ref: nil)
+    BookingInquiryBinding.link!(item, lead: @lead, actor: "test", evidence: "Contact trip time", state: "inferred")
+    %w[reported paid first].each do |view|
+      report = WeeklyReport::Monthly.new(month: Date.new(2026, 10, 1), view: view)
+      row = report.rows.find { |entry| entry.booked == 1 }
+      assert_equal(view == "reported" ? "Not asked yet" : "Unknown (legacy_missing)", row.source)
+      assert_equal 1, report.cohorts[:bookings]
+      assert_equal "Unknown original acquisition", report.lifetime_bookers.sole[:source]
+      assert_equal "Unknown original acquisition", report.original_source_lifetime.sole[:source]
+    end
+  end
+
 end
