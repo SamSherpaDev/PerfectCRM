@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_05_055233) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_05_201722) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -57,6 +57,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_05_055233) do
   create_table "ad_conversions", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "currency", default: "USD", null: false
+    t.string "delivery_status", default: "not_sent", null: false
     t.string "event", null: false
     t.string "event_id", null: false
     t.boolean "google", default: false, null: false
@@ -64,6 +65,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_05_055233) do
     t.datetime "google_last_served_at"
     t.integer "google_serve_count", default: 0, null: false
     t.string "google_skip_reason"
+    t.string "last_skip_reason"
     t.integer "lead_id", null: false
     t.integer "meta_attempts", default: 0, null: false
     t.text "meta_error"

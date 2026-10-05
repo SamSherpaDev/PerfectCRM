@@ -53,11 +53,11 @@ class SourceReportingTest < ActiveSupport::TestCase
 
   test "a previously exported unbound legacy Purchase cannot replay under a new booking event ID" do
     AdConversion.insert_all!([ { lead_id: @lead.id, event: "booked", event_id: "legacy-purchase", occurred_at: @now - 1.day,
-      value_minor: 3000, meta_status: "sent", meta_attempts: 1, meta_sent_at: @now - 1.day, created_at: @now - 1.day, updated_at: @now - 1.day } ])
+      value_minor: 3000, delivery_status: "accepted", meta_status: "sent", meta_attempts: 1, meta_sent_at: @now - 1.day, created_at: @now - 1.day, updated_at: @now - 1.day } ])
     booking(receipt: @now - 2.days)
     row = AdConversions.record!(@lead).find { |event| event.event == "booked" }
     assert_equal :skipped, AdConversions.deliver_meta!(row)
-    assert_match(/Legacy Purchase/, row.reload.meta_error)
+    assert_match(/Legacy Purchase/, row.reload.last_skip_reason)
     assert_not AdConversions::GoogleFeed.servable?(row, @now)
     assert_match(/Legacy Purchase/, row.reload.google_skip_reason)
     # A genuinely later repeat receipt cannot have been the old recorded outcome.

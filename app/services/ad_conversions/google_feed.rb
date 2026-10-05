@@ -3,24 +3,18 @@
 require "csv"
 
 module AdConversions
-  # The CSV Google Ads pulls on its own daily schedule (Goals > Uploads >
-  # Schedules, source HTTPS). Offline click conversions plus hashed email
-  # and phone for enhanced conversions for leads. Each row stays in the file
-  # for REPEAT_WINDOW after Google first fetches it, so one failed pull
-  # loses nothing; Google ignores the repeats as duplicates (same Order ID).
   module GoogleFeed
     HEADERS = [
       "Google Click ID", "Email", "Phone Number", "Conversion Name",
       "Conversion Time", "Conversion Value", "Conversion Currency", "Order ID"
     ].freeze
     USERNAME = "sherpaholidays"
-    REPEAT_WINDOW = 3.days
 
     module_function
 
     def rows(now: Time.current)
       AdConversion.for_google.includes(lead: :tags)
-        .where("google_first_served_at IS NULL OR google_first_served_at >= ?", now - REPEAT_WINDOW)
+        .where(delivery_status: %w[not_sent rejected])
         .order(:occurred_at, :id)
         .select { |row| servable?(row, now) }
     end
@@ -32,8 +26,7 @@ module AdConversions
     end
 
     def skip_reason(row, now)
-      return "Meta delivery result unknown; review platform history" if row.meta_status == "uncertain" ||
-        (row.meta_attempts.positive? && %w[sending failed].include?(row.meta_status))
+      return "Delivery already accepted or unknown; review platform history" if row.possibly_delivered?
       lead = row.lead
       return "No measurement/sharing permission or excluded inquiry" if AdConversions.excluded?(lead)
       booking_issue = AdConversions.booking_skip_reason(row)
@@ -78,6 +71,7 @@ module AdConversions
           row.lock!
           next unless servable?(row, now)
           row.update!(
+            delivery_status: "accepted", last_skip_reason: nil,
             google_first_served_at: row.google_first_served_at || now,
             google_last_served_at: now,
             google_serve_count: row.google_serve_count + 1

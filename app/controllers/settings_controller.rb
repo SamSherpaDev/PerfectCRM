@@ -184,7 +184,7 @@ class SettingsController < ApplicationController
     @ai_calls_today = AiCall.today.count
     @ai_cost_today = AiCall.daily_cost_cents
     @ad_conversions_recent = AdConversion.newest_first.includes(:lead).limit(10)
-    @ad_conversion_meta_counts = AdConversion.group(:meta_status).count
+    @ad_conversion_delivery_counts = AdConversion.group(:delivery_status).count
     @google_feed_waiting = @settings.google_feed_configured? ? AdConversions::GoogleFeed.rows.size : 0
     @spend_weeks = (0...SPEND_WEEKS).map { |ago| WeeklyReport::Summary.last_complete_week - (7 * ago) }
     @ad_spends = AdSpend.where(week_start: @spend_weeks.last..).newest_first

@@ -19,7 +19,7 @@ class AdConversions::ExportJob < ApplicationJob
     end
 
     meta = Hash.new(0)
-    AdConversion.where(meta_status: %w[pending sending rejected]).includes(lead: :tags).find_each do |row|
+    AdConversion.where(delivery_status: %w[not_sent rejected]).includes(lead: :tags).find_each do |row|
       result = AdConversions.deliver_meta!(row, settings: settings, now: now)
       meta[result] += 1 if result
     end

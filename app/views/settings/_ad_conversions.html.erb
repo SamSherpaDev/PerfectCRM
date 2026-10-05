@@ -1,4 +1,4 @@
-<%# locals: (settings:, recent:, meta_counts:, google_waiting:, fresh_password: nil) %>
+<%# locals: (settings:, recent:, delivery_counts:, google_waiting:, fresh_password: nil) %>
 <%# Ad conversions card: Meta Conversions API setup, the Google Ads feed, and the last run. %>
 <% stamp = ->(time) { time ? "#{date_short(time)}, #{time_24_12(time)}" : "Never" } %>
 <section class="card card-pad mt-6" aria-labelledby="ad-conversions-heading">
@@ -19,8 +19,8 @@
       <% end %>
     </div>
     <div class="flex flex-wrap gap-x-2">
-      <dt class="muted">Meta events:</dt>
-      <dd><%= meta_counts.fetch("sent", 0) %> sent · <%= (meta_counts.fetch("pending", 0) + meta_counts.fetch("sending", 0)) %> waiting · <%= (meta_counts.fetch("failed", 0) + meta_counts.fetch("rejected", 0)) %> rejected/failed · <%= meta_counts.fetch("uncertain", 0) %> need review · <%= meta_counts.fetch("skipped", 0) %> skipped</dd>
+      <dt class="muted">Delivery:</dt>
+      <dd><%= delivery_counts.fetch("accepted", 0) %> accepted · <%= delivery_counts.fetch("not_sent", 0) %> not sent · <%= delivery_counts.fetch("rejected", 0) %> rejected · <%= delivery_counts.fetch("unknown", 0) %> need review</dd>
     </div>
     <div class="flex flex-wrap gap-x-2">
       <dt class="muted">Google pulls:</dt>
@@ -95,12 +95,13 @@
             <div class="min-w-0 flex-1">
               <p class="text-sm text-ink"><%= row.label %> · <%= money(row.value_minor) %> · <%= link_to row.lead.reference || row.lead.name, lead_path(row.lead), class: "link-quiet" %></p>
               <p class="text-xs muted"><%= stamp.(row.occurred_at) %> · Google: <%= row.google? ? (row.google_serve_count.positive? ? "pulled #{pluralize(row.google_serve_count, 'time')}" : "waiting") : "not sent" %></p>
+              <% if row.last_skip_reason.present? %><p class="text-xs muted">Withheld: <%= row.last_skip_reason %></p><% end %>
               <% if row.google_skip_reason.present? %><p class="text-xs muted">Google skipped: <%= row.google_skip_reason %></p><% end %>
               <% if row.meta_error.present? %>
                 <p class="text-xs <%= %w[failed rejected uncertain].include?(row.meta_status) ? "text-bad" : "muted" %>"><%= row.meta_error %></p>
               <% end %>
             </div>
-            <%= row.meta_status == "not_applicable" ? badge("Meta n/a") : status_badge(%w[failed rejected uncertain].include?(row.meta_status) ? "error" : row.meta_status, label: "Meta #{row.meta_status}") %>
+            <%= row.meta_status == "not_applicable" ? badge("Meta n/a") : status_badge(%w[failed rejected uncertain].include?(row.meta_status) ? "error" : row.meta_status, label: "Delivery #{row.delivery_status}") %>
           </li>
         <% end %>
       </ul>

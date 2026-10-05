@@ -671,17 +671,20 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
 - Meta: Settings → Ad conversions takes the dataset ID and access token
   (stored encrypted). Email and phone are
   SHA-256 hashed; `fbc` comes from the click. Definite rejections become eligible for retry after 1, 4, 9,
-  and 16 hours (five attempts), checked by the nightly sweep; events older than Meta's 7-day limit are
+  and subsequent squared-hour intervals, checked by the nightly sweep; events older than Meta's 7-day limit are
   skipped. Delivery claims prevent overlapping sends. Timeouts, unknown responses,
-  and claims interrupted for five minutes are held for review and never retried.
+  and interrupted claims are held for review and never retried.
   Only an explicit positive `events_received` confirms Meta acceptance.
+  Each outcome has one delivery status: not sent, accepted, rejected, or unknown.
+  Eligibility is checked on each sweep; withholding only records a diagnostic.
+  Booking review restores undelivered outcomes, including the same inquiry.
+  Acceptance by either platform stops further sends of that outcome.
 - Google: create a feed password in the same card, then in Google Ads add a
   daily schedule under Goals → Conversions → Uploads → Schedules with source
   HTTPS, the feed URL (`/feeds/google-conversions.csv`), username
   `sherpaholidays`, and the password. The CSV carries the gclid, hashed email
   and phone (enhanced conversions for leads), and Pacific-time conversion
-  times. A row stays in the feed for three days after Google first pulls it;
-  Google ignores the repeats by Order ID. The feed includes gclid rows up to 90
+  times. A pulled row is accepted and never sent again. The feed includes gclid rows up to 90
   days after the click and rows matched by email/phone up to 63 days. Braid-only clicks
   use email/phone matching; this scheduled feed does not send gbraid/wbraid.
   Accept/reject counts are in Google Ads > Goals > Conversions > Uploads.

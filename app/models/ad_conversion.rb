@@ -4,6 +4,7 @@
 # Meta receives each row once through the Conversions API
 # (AdConversions::MetaClient). Rules live in AdConversions.
 class AdConversion < ApplicationRecord
+  DELIVERY_STATUSES = %w[not_sent accepted rejected unknown].freeze
   EVENTS = %w[lead qualified quote booked].freeze
   META_STATUSES = %w[not_applicable pending sending sent failed rejected uncertain skipped].freeze
   LABELS = {
@@ -13,6 +14,7 @@ class AdConversion < ApplicationRecord
 
   belongs_to :lead
 
+  validates :delivery_status, inclusion: { in: DELIVERY_STATUSES }
   validates :event, inclusion: { in: EVENTS }
   validates :event, uniqueness: { scope: :lead_id }, unless: -> { event == "booked" }
   validates :perfectbook_id, presence: true, uniqueness: true, if: -> { event == "booked" && new_record? }
@@ -26,8 +28,7 @@ class AdConversion < ApplicationRecord
   scope :for_google, -> { where(google: true) }
 
   def possibly_delivered?
-    meta_sent_at.present? || google_first_served_at.present? || google_serve_count.positive? ||
-      (meta_attempts.positive? && meta_status != "rejected")
+    %w[accepted unknown].include?(delivery_status)
   end
 
   def label
