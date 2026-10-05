@@ -185,7 +185,12 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
       visit(model == Lead ? leads_path : clients_path(tab: model == Organization ? "organizations" : "clients"))
       fill_in(model == Lead ? "Search leads" : "Search clients", with: "Match")
       click_button "Search"
+      # Wait for the server-rendered search value, not the value just typed:
+      # otherwise the search response can replace the sort form mid-submit.
+      assert_selector "input[name=q][value='Match']"
       select "Name", from: "sort"
+      # The selected attribute comes from the response, unlike the live
+      # selection property, so this waits for the sorted page to render.
       assert_selector "select option[selected][value=name]"
       assert_equal [ "Match Alpha", "Match Zulu" ], all("main a").map(&:text).select { |text| text.start_with?("Match") }
     end
