@@ -617,8 +617,10 @@ The booking and money wire contract lives in
 
 Source retention is bounded: 90-day browser cookies (storefront implementation),
 180-day detailed clicks/URLs, 24 months after last substantive contact for
-unbooked source history, seven years after last booking for booked discovery
-and relationships with annual review. `SourceHistoryRetentionJob` runs daily
+unbooked source history, seven years after the latest booking start/end or actual
+first receipt date for booked discovery and relationships with annual review.
+An inquiry with an actually paid binding uses this booked horizon even before
+client conversion. `SourceHistoryRetentionJob` runs daily
 and covers archives and copied source/call history. Without complete booking
 mirrors converted clients use the conservative seven-year horizon. Contact,
 correspondence, backup and PerfectBook document/accounting expiry remain in the
@@ -666,8 +668,10 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
   Purchase without a booking ID conservatively holds potentially already
   reported receipts for that contact, with a visible diagnostic, rather than
   replaying them under a new ID. A genuinely later first receipt remains eligible.
-  Undelivered booking outcomes follow reviewed inquiry corrections. Accepted or
-  possibly delivered outcomes remain unchanged and require platform-history review.
+  Undelivered booking outcomes follow reviewed inquiry corrections and refresh
+  their receipt time and scoring value from current PerfectBook facts, including
+  when the same inquiry is reconfirmed. Accepted or possibly delivered outcomes
+  remain unchanged and require platform-history review.
 - Meta: Settings → Ad conversions takes the dataset ID and access token
   (stored encrypted). Email and phone are
   SHA-256 hashed; `fbc` comes from the click. Definite rejections become eligible for retry after 1, 4, 9,
@@ -684,7 +688,8 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
   HTTPS, the feed URL (`/feeds/google-conversions.csv`), username
   `sherpaholidays`, and the password. The CSV carries the gclid, hashed email
   and phone (enhanced conversions for leads), and Pacific-time conversion
-  times. A pulled row is accepted and never sent again. The feed includes gclid rows up to 90
+  times. CRM marks a pulled row accepted and never sends it again; this local
+  status records delivery, not Google import acceptance. The feed includes gclid rows up to 90
   days after the click and rows matched by email/phone up to 63 days. Braid-only clicks
   use email/phone matching; this scheduled feed does not send gbraid/wbraid.
   Accept/reject counts are in Google Ads > Goals > Conversions > Uploads.
@@ -698,7 +703,9 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
 ## Monthly source reports and reviewed backfill
 
 `/settings/weekly_report` also shows calendar-month results in Los Angeles time,
-with an explicit as-of time. `WeeklyReport::Monthly` offers separate reported
+with an explicit as-of time. Known unique people are counted separately using
+stable Client/PerfectBook links; inquiries with unresolved identity are disclosed
+separately, never matched by email or name. `WeeklyReport::Monthly` offers separate reported
 (discovery testimony, provisional until confirmed), first-observed and inquiry
 paid-performance views. Each view reconciles independently; never add them.
 Connected calls count inquiry-subject call events, not client copies or tasks.
@@ -718,7 +725,10 @@ judgment (Strong/Possible), with no reply required. **Platform-qualified** stays
 current strong/possible fit plus your stage move. An AI score is never silently
 substituted for your review count. Unreviewed fit is shown in completeness.
 Cohorts use inquiry dates and mature 30/60/90/180-day denominators; immature
-inquiries show as pending. Eventual value/net cash are separated by currency.
+inquiries show as pending. Cohort bookings and their eventual value/net cash
+exclude bookings whose first receipt precedes the inquiry. Timestamped receipts
+retain exact ordering and horizon comparisons; date-only evidence stays date-only.
+Eventual value/net cash are separated by currency.
 
 Monthly ad costs use exact daily spend through the last completed day for the selected month, keyed by
 stable campaign ID and currency. Every day, including explicitly zero days,

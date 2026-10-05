@@ -327,5 +327,4 @@ module AdConversions
     return false if row.possibly_delivered?
     row.delivery_status == "not_sent" || row.updated_at <= now - (row.meta_attempts**2).hours
   end
-
 end

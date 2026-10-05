@@ -23,7 +23,8 @@ reports, but held out of timestamped platform events. Balance payments never
 create another Purchase. Browser Lead submission IDs stay unchanged. Previously
 attempted/pulled legacy Purchases without booking IDs hold potentially already
 reported receipts, rather than replaying them under a new ID. Genuinely later
-first receipts remain eligible; old ad outcomes are not remapped or rewritten.
+first receipts remain eligible. Delivery states and recovery of undelivered
+outcomes are defined in [Ad conversions](../README.md#ad-conversions).
 
 CRM provides `GET /api/v1/inquiries/:reference`, protected by a Bearer
 `PERFECTBOOK_INQUIRY_TOKEN` configured separately from browser credentials.
@@ -84,10 +85,9 @@ Inventory separates invoice-currency booked value/legacy paid totals from the
 agreed USD-ledger cash totals. Snapshots remain observations, inferred links stay
 labelled, and imports never generate historical ad events.
 
-The existing source-retention clock covers legacy snapshots, owner-fit and
-link-review evidence. An actually paid inquiry binding uses the booked horizon
-before client conversion; expiring source evidence does not delete its binding
-or financial facts.
+The [source retention policy](../README.md#source-history-and-calls) covers
+legacy snapshots, owner-fit and link-review evidence. Expiring source evidence
+does not delete its binding or financial facts.
 
 See README, **Monthly source reports and reviewed backfill**, for dry-run/review
 commands. Production backfill/deployment and real platform verification belong
