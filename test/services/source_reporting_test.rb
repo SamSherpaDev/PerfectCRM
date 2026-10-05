@@ -359,8 +359,8 @@ class SourceReportingTest < ActiveSupport::TestCase
     %w[reported paid first].each do |view|
       report = WeeklyReport::Monthly.new(month: Date.new(2026, 10, 1), view: view)
       assert_equal 2, report.source_rows.sum(&:returning)
-      assert_equal [44], report.source_rows.flat_map(&:returning_booker_ids).uniq
-      assert_equal [2, 1, 0], report.totals.values_at(:repeat_bookings, :returning_bookers, :new_bookers)
+      assert_equal [ 44 ], report.source_rows.flat_map(&:returning_booker_ids).uniq
+      assert_equal [ 2, 1, 0 ], report.totals.values_at(:repeat_bookings, :returning_bookers, :new_bookers)
     end
   end
 
@@ -368,7 +368,7 @@ class SourceReportingTest < ActiveSupport::TestCase
     booking
     booking(id: 52, receipt: Time.zone.local(2026, 10, 25))
     report = WeeklyReport::Monthly.new(month: Date.new(2026, 10, 1))
-    assert_equal [1, 0, 1], report.totals.values_at(:repeat_bookings, :returning_bookers, :new_bookers)
+    assert_equal [ 1, 0, 1 ], report.totals.values_at(:repeat_bookings, :returning_bookers, :new_bookers)
   end
 
   test "credentials without owner terms confirmation stay off" do

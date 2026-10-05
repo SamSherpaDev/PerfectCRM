@@ -42,7 +42,7 @@ class SourceReportingRequestsTest < ActionDispatch::IntegrationTest
     headers = { "Authorization" => "Bearer synthetic-sibling-token" }
     get "/api/v1/inquiries/#{lead.reference}", headers: headers
     assert_response :success
-    assert_equal({ "crm_inquiry_ref" => lead.reference, "perfectbook_contact_ids" => [55],
+    assert_equal({ "crm_inquiry_ref" => lead.reference, "perfectbook_contact_ids" => [ 55 ],
       "trip_title" => nil, "trip_interest" => "Test trip", "travel_month" => 10, "travel_year" => 2026 }, response.parsed_body)
     get "/api/v1/inquiries/SH-NONE", headers: headers
     assert_response :not_found
@@ -125,5 +125,4 @@ class SourceReportingRequestsTest < ActionDispatch::IntegrationTest
     assert_equal "reviewed", booking.inquiry_binding.state
     assert_equal 1, lead.activity_events.where(kind: "booking_link").count
   end
-
 end

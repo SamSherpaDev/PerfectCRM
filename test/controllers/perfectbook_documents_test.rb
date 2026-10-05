@@ -44,7 +44,7 @@ class PerfectBookDocumentsTest < ActionDispatch::IntegrationTest
     booking = make_booking
     booking.update!(start_date: Date.current + 5.days, end_date: Date.current + 12.days, departure_id: 20,
       invoice_badge: "sent", first_received_at: 1.day.ago, first_received_on: Date.yesterday,
-      traveler_count: 2, cash_events_json: [{ "kind" => "receipt", "occurred_on" => Date.yesterday.iso8601, "currency" => "USD", "amount_minor" => 100_000 }])
+      traveler_count: 2, cash_events_json: [ { "kind" => "receipt", "occurred_on" => Date.yesterday.iso8601, "currency" => "USD", "amount_minor" => 100_000 } ])
     booking.update_columns(created_at: 6.days.ago)
     PerfectBook::Contact.create!(perfectbook_id: 7, name: @client.name, email: @client.email, kind: "customer", synced_at: Time.current)
     PerfectBook::Contact.create!(perfectbook_id: 8, name: "Available booker", email: "available@example.test", kind: "customer", synced_at: Time.current)

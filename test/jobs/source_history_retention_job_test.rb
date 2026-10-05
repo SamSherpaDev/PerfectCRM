@@ -36,8 +36,8 @@ class SourceHistoryRetentionJobTest < ActiveJob::TestCase
       booking = PerfectBook::Booking.create!(perfectbook_id: 70 + index, perfectbook_contact_id: 70 + index,
         trip_id: 10, trip_name: "Past trip", departure_id: 20, start_date: received.to_date, end_date: received.to_date + 10,
         first_received_at: received, first_received_on: received.to_date, total_minor: 900_000,
-        currency: "USD", cash_events_json: [{ "kind" => "receipt", "occurred_on" => received.to_date.iso8601,
-          "currency" => "USD", "amount_minor" => 50_000 }], synced_at: now)
+        currency: "USD", cash_events_json: [ { "kind" => "receipt", "occurred_on" => received.to_date.iso8601,
+          "currency" => "USD", "amount_minor" => 50_000 } ], synced_at: now)
       BookingInquiryBinding.link!(booking, lead: lead, actor: "test", evidence: "Expired personal statement", state: state)
       fingerprint = booking.inquiry_binding.upstream_fingerprint
       SourceHistoryRetentionJob.perform_now(now: now)

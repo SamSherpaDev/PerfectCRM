@@ -40,7 +40,7 @@ class SourceBackfillTest < ActiveSupport::TestCase
     travel_to start
     lead = Lead.create!(name: "Synthetic legacy", source: "manual", perfectbook_contact_id: 44,
       trip_interest: "Test trip", received_at: 2.months.ago)
-    [55, 56].each do |id|
+    [ 55, 56 ].each do |id|
       PerfectBook::Booking.create!(perfectbook_id: id, perfectbook_contact_id: 44, trip_name: "Test trip",
         first_received_at: 1.month.ago, synced_at: Time.current)
     end
