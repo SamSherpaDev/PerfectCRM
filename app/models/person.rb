@@ -1,8 +1,13 @@
 class Person < ApplicationRecord
+  include SourceHistory
+  belongs_to :origin_person, class_name: "Person", optional: true
+  has_many :activity_events, as: :subject, dependent: :destroy
   encrypts :phone
 
   belongs_to :client, touch: true, optional: true
   belongs_to :lead, touch: true, optional: true
+
+  before_destroy :preserve_linked_source_history, prepend: true
 
   before_validation :normalize_email
   validate :exactly_one_owner
@@ -28,7 +33,19 @@ class Person < ApplicationRecord
     target&.record_email_redirect(old_email, new_email)
   end
 
+  def linked_source_history?
+    persisted? && ([ Lead, Client, Person ].any? { |model| model.where(referred_by_person_id: id).exists? } ||
+      Person.where(origin_person_id: id).exists?)
+  end
+
   private
+
+  def preserve_linked_source_history
+    return unless linked_source_history?
+
+    errors.add(:base, "Cannot remove a person linked to source history")
+    throw :abort
+  end
 
   def exactly_one_owner
     has_client = client_id.present? || client.present?

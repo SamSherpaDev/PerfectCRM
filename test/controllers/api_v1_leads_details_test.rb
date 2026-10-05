@@ -70,6 +70,214 @@ class ApiV1LeadsDetailsTest < ActionDispatch::IntegrationTest
     assert_response :ok
   end
 
+  test "post-send source answer retries preserve one inquiry and original testimony" do
+    body = details_body("source_answer" => { "code" => "personal_referral", "detail" => "Alex", "question_version" => "how-heard-v1" })
+    assert_no_difference([ "Lead.count", "Client.count", "AdConversion.count" ]) { post_details body }
+    assert_response :ok
+    assert_equal "personal_referral", @lead.reload.reported_source_code
+    original = @lead.activity_events.where(kind: "source_answer").last
+    assert_equal "website_form", original.metadata["collection_method"]
+    assert_nil @lead.source_confirmed_at
+    assert_no_difference([ "ActivityEvent.count", "Note.count", "LeadNotification.count" ]) { post_details body }
+    assert_response :ok
+    post_details details_body("source_answer" => { "code" => "search" })
+    assert_response :ok
+    assert_equal "personal_referral", original.reload.metadata["answer_code"]
+    assert_equal "search", @lead.reload.reported_source_code
+  end
+
+  test "source errors and confirmed answers cannot change any details" do
+    post_details details_body("source_answer" => { "code" => "google_ads" })
+    assert_response :bad_request
+    assert_nil @lead.reload.travel_month
+    SourceAnswers.record!(@lead, choice: "search", method: "website_form")
+    @lead.update_column(:source_confirmed_at, Time.current)
+    post_details details_body("source_answer" => { "code" => "facebook" })
+    assert_response :unprocessable_entity
+    assert_nil @lead.reload.travel_month
+    assert_equal "search", @lead.reported_source_code
+  end
+
+  test "first touch remains immutable and withdrawal removes legacy and snapshot identifiers" do
+    permission = { "state" => "allowed", "measurement" => true, "sharing" => true, "observed_at" => Time.current.iso8601 }
+    first = { "observed_at" => 1.hour.ago.iso8601, "gclid" => "first-google" }
+    body = details_body("acquisition" => { "permission" => permission, "first_touch" => first, "last_touch" => first })
+    post_details body
+    assert_response :ok
+    assert_no_difference([ "Note.count", "ActivityEvent.count", "LeadNotification.count" ]) { post_details body }
+    post_details details_body("acquisition" => { "permission" => permission, "first_touch" => { "observed_at" => Time.current.iso8601, "fbclid" => "meta" },
+      "last_touch" => { "observed_at" => Time.current.iso8601, "fbclid" => "meta" } })
+    assert_response :ok
+    assert_equal "first-google", @lead.reload.metadata.dig("acquisition", "first_touch", "gclid")
+    assert_nil @lead.metadata.dig("acquisition", "last_touch", "gclid")
+    post_details details_body("acquisition" => { "permission" => { "state" => "withdrawn" } })
+    assert_response :ok
+    assert_nil @lead.reload.metadata.dig("attribution", "gclid")
+    assert_nil @lead.metadata.dig("attribution", "fbclid")
+    assert_equal({ "unknown_reason" => "declined_permission" }, @lead.metadata.dig("acquisition", "first_touch"))
+  end
+
+  test "permission withdrawal clears compatibility advertising fields before conversion" do
+    SourceAnswers.record!(@lead, choice: "personal_referral", detail: "Alex", method: "website_form")
+    @lead.update!(source: "google_ads", campaign_name: "nepal-paid", metadata: {
+      "acquisition" => { "permission" => { "state" => "allowed" },
+        "last_touch" => { "observed_at" => Time.current.iso8601, "gclid" => "paid-click", "utm_campaign" => "nepal-paid" } },
+      "attribution" => { "gclid" => "paid-click", "utm_campaign" => "nepal-paid" }
+    })
+    post_details details_body("acquisition" => { "permission" => { "state" => "withdrawn" } })
+    assert_response :ok
+    assert_nil @lead.reload.campaign_name
+    assert_equal "website_form", @lead.source
+    assert_equal "personal_referral", @lead.reported_source_code
+    assert_equal "Alex", @lead.reported_source_detail
+    client = @lead.convert_to_client!(expected_client_id: "new")
+    assert_nil client.campaign_name
+    assert_equal "website_form", client.source
+    assert_equal "personal_referral", client.reported_source_code
+    event = client.activity_events.where(kind: "conversion").last
+    assert_nil event.metadata["campaign"]
+    assert_equal "website_form", event.metadata["source"]
+  end
+
+  test "all denied permission states clear both paid classifications" do
+    [ { "state" => "denied" }, { "state" => "unavailable" },
+      { "state" => "withdrawn" }, { "state" => "allowed", "opted_out" => true } ].each do |permission|
+      %w[google_ads meta_ads].each do |source|
+        @lead.update!(source: source, campaign_name: "paid-campaign")
+        post_details details_body("acquisition" => { "permission" => permission })
+        assert_response :ok
+        assert_nil @lead.reload.campaign_name
+        assert_equal "website_form", @lead.source
+      end
+    end
+  end
+
+  test "renewed permission projects last touch despite withdrawn non-direct placeholder" do
+    post_details details_body("acquisition" => { "permission" => { "state" => "withdrawn", "observed_at" => 1.minute.ago.iso8601 } })
+    assert_response :ok
+    observed = Time.current.iso8601
+    post_details details_body("acquisition" => {
+      "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true, "observed_at" => observed },
+      "last_touch" => { "observed_at" => observed, "gclid" => "fresh-click", "utm_campaign" => "fresh-campaign" }
+    })
+    assert_response :ok
+    assert_equal "fresh-click", @lead.reload.metadata.dig("attribution", "gclid")
+    assert_equal "fresh-campaign", @lead.metadata.dig("attribution", "utm_campaign")
+    assert_equal Time.iso8601(observed).utc.iso8601, @lead.metadata.dig("attribution", "first_seen_at")
+  end
+
+  test "identical confirmed answer permits withdrawal without changing testimony" do
+    answer = { "code" => "personal_referral", "detail" => "Alex" }
+    post_details details_body("source_answer" => answer)
+    assert_response :ok
+    SourceAnswers.record!(@lead, choice: "personal_referral", detail: "Alex", method: "call")
+    confirmed_at = @lead.reload.source_confirmed_at
+    answer_ids = @lead.activity_events.where(kind: "source_answer").pluck(:id)
+    @lead.update!(source: "google_ads", campaign_name: "paid", metadata: {
+      "acquisition" => { "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true } },
+      "attribution" => { "gclid" => "old-click", "utm_campaign" => "paid" }, "page" => { "url" => "https://example.com" }
+    })
+    body = details_body("source_answer" => answer.merge("detail" => " Alex "),
+      "acquisition" => { "permission" => { "state" => "withdrawn" } })
+    post_details body
+    assert_response :ok
+    assert_equal "withdrawn", @lead.reload.metadata.dig("acquisition", "permission", "state")
+    assert_nil @lead.metadata.dig("attribution", "gclid")
+    assert_nil @lead.metadata["page"]
+    assert_nil @lead.campaign_name
+    assert_equal "website_form", @lead.source
+    assert_equal "personal_referral", @lead.reported_source_code
+    assert_equal "Alex", @lead.reported_source_detail
+    assert_equal confirmed_at, @lead.source_confirmed_at
+    assert_equal answer_ids, @lead.activity_events.where(kind: "source_answer").pluck(:id)
+    assert_no_difference([ "Note.count", "ActivityEvent.count", "LeadNotification.count" ]) { post_details body }
+    assert_response :ok
+    post_details body.deep_merge("source_answer" => { "detail" => "Someone else" })
+    assert_response :unprocessable_entity
+    assert_equal "Alex", @lead.reload.reported_source_detail
+  end
+
+  test "stale permission retries cannot undo withdrawal or restore advertising evidence" do
+    first_at = 2.minutes.ago.change(usec: 0)
+    withdrawn_at = 1.minute.ago.change(usec: 0)
+    allowed = details_body("acquisition" => {
+      "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true, "observed_at" => first_at.iso8601 },
+      "last_touch" => { "observed_at" => first_at.iso8601, "gclid" => "old-click", "utm_campaign" => "old-campaign" },
+      "submission_page" => { "url" => "https://example.com" }
+    })
+    post_details allowed
+    assert_response :ok
+    assert AdConversions.measurement_permitted?(@lead.reload)
+    post_details details_body("acquisition" => { "permission" => { "state" => "withdrawn", "observed_at" => withdrawn_at.iso8601 } })
+    assert_response :ok
+    retained = @lead.reload.metadata.deep_dup
+    [ first_at, withdrawn_at ].each do |stale_at|
+      assert_no_difference([ "Note.count", "ActivityEvent.count", "LeadNotification.count" ]) do
+        post_details allowed.deep_merge("acquisition" => { "permission" => { "observed_at" => stale_at.iso8601 } })
+      end
+      assert_response :unprocessable_entity
+      assert_equal "stale", response.parsed_body.dig("fields", "acquisition.permission")
+      assert_equal retained, @lead.reload.metadata
+      assert_not AdConversions.measurement_permitted?(@lead)
+      assert_nil @lead.metadata.dig("attribution", "gclid")
+    end
+    renewed = allowed.deep_merge("acquisition" => { "permission" => { "observed_at" => Time.current.iso8601 },
+      "last_touch" => { "observed_at" => Time.current.iso8601, "gclid" => "new-click" } })
+    post_details renewed
+    assert_response :ok
+    assert AdConversions.measurement_permitted?(@lead.reload)
+    assert_equal "new-click", @lead.metadata.dig("attribution", "gclid")
+  end
+
+  test "unordered grants cannot reverse withdrawal or broaden export permission" do
+    grant = details_body("acquisition" => { "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true },
+      "last_touch" => { "observed_at" => 2.minutes.ago.iso8601, "gclid" => "old" } })
+    post_details grant
+    assert_response :ok
+    post_details details_body("acquisition" => { "permission" => { "state" => "withdrawn", "observed_at" => 1.minute.ago.iso8601 } })
+    assert_response :ok
+    post_details grant
+    assert_response :unprocessable_entity
+    assert_not AdConversions.measurement_permitted?(@lead.reload)
+    assert_nil @lead.metadata.dig("attribution", "gclid")
+    @lead.update!(metadata: { "acquisition" => { "permission" => { "state" => "allowed", "measurement" => false, "sharing" => false } } })
+    post_details grant
+    assert_response :unprocessable_entity
+    assert_not AdConversions.measurement_permitted?(@lead.reload)
+  end
+
+  test "latest visits survive delayed retries and newer visits replace complete snapshots" do
+    permission = { "state" => "allowed", "measurement" => true, "sharing" => true, "observed_at" => 3.minutes.ago.iso8601 }
+    payload = lambda do |at, click, campaign|
+      details_body("acquisition" => { "permission" => permission,
+        "last_touch" => { "observed_at" => at.iso8601, "gclid" => click, "utm_campaign" => campaign },
+        "last_non_direct_touch" => { "observed_at" => at.iso8601, "fbclid" => click, "utm_campaign" => campaign } })
+    end
+    old = payload.call(2.minutes.ago, "old", "old-campaign")
+    fresh = payload.call(1.minute.ago, "fresh", "fresh-campaign")
+    [ old, fresh, old ].each { |body| post_details body; assert_response :ok }
+    %w[last_touch last_non_direct_touch].each do |key|
+      assert_equal "fresh-campaign", @lead.reload.metadata.dig("acquisition", key, "utm_campaign")
+    end
+    assert_equal "fresh", @lead.metadata.dig("attribution", "fbclid")
+    post_details details_body("acquisition" => { "permission" => permission,
+      "last_non_direct_touch" => { "observed_at" => Time.current.iso8601, "utm_source" => "google" } })
+    assert_response :ok
+    assert_nil @lead.reload.metadata.dig("attribution", "fbclid")
+    assert_nil @lead.metadata.dig("attribution", "utm_campaign")
+  end
+
+  test "a missing first touch can capture a later genuine permission-allowed observation" do
+    post_details details_body("acquisition" => { "permission" => { "state" => "allowed" }, "first_touch" => { "observed_at" => Time.current.iso8601, "unknown_reason" => "unavailable" } })
+    assert_response :ok
+    observed = Time.current.iso8601
+    post_details details_body("acquisition" => { "permission" => { "state" => "allowed" },
+      "first_touch" => { "observed_at" => observed, "fbclid" => "newly-observed", "unknown_reason" => "consent_granted_late" } })
+    assert_response :ok
+    assert_equal "newly-observed", @lead.reload.metadata.dig("acquisition", "first_touch", "fbclid")
+    assert_equal Time.iso8601(observed).utc.iso8601, @lead.metadata.dig("acquisition", "first_touch", "observed_at")
+  end
+
   test "unknown submission id is 404" do
     post_details details_body("submission_id" => SecureRandom.uuid)
     assert_response :not_found

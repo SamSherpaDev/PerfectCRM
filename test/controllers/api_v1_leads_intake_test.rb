@@ -170,11 +170,41 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     assert_empty AdConversions.record!(Lead.last)
   end
 
-  test "a new lead queues its ad conversion job" do
+  test "a new permission-allowed lead queues its ad conversion job" do
     assert_enqueued_with(job: AdConversions::LeadJob) do
+      post_intake intake_body("acquisition" => {
+        "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true },
+        "last_touch" => { "observed_at" => Time.current.iso8601, "gclid" => "Cj0K" }
+      })
+    end
+    assert_response :accepted
+    assert_equal "website_form", Lead.last.capture_channel
+    assert_equal "google_ads", Lead.last.source
+  end
+
+  test "legacy intake remains accepted but missing advertising permission withholds exports" do
+    assert_no_enqueued_jobs only: AdConversions::LeadJob do
       post_intake intake_body("attribution" => { "gclid" => "Cj0K" })
     end
     assert_response :accepted
+    assert_equal "Cj0K", Lead.last.metadata.dig("attribution", "gclid")
+    assert_equal "google_ads", Lead.last.source
+  end
+
+  test "denied fbclid landing is scrubbed and new snapshots are bounded" do
+    post_intake intake_body("acquisition" => {
+      "permission" => { "state" => "denied" },
+      "first_touch" => { "fbclid" => "secret-click", "landing_url" => "https://www.sherpaholidays.com/?fbclid=secret-click" }
+    }, "page" => { "url" => "https://www.sherpaholidays.com/?fbclid=secret-click&email=private%40example.com" },
+      "attribution" => { "fbclid" => "secret-click", "landing_url" => "https://www.sherpaholidays.com/?fbclid=secret-click" })
+    assert_response :accepted
+    assert_nil Lead.last.metadata.dig("page", "url")
+    assert_equal({ "unknown_reason" => "declined_permission" }, Lead.last.metadata.dig("acquisition", "first_touch"))
+    assert_nil Lead.last.metadata.dig("attribution", "fbclid")
+    assert_no_difference("Lead.count") do
+      post_intake intake_body("acquisition" => { "permission" => { "state" => "anything" } })
+    end
+    assert_response :bad_request
   end
 
   # -- replay -----------------------------------------------------------------

@@ -14,7 +14,12 @@
   <section class="card card-pad" aria-labelledby="lead-facts-heading">
     <h2 class="section-title" id="lead-facts-heading">Facts</h2>
     <%= card_caption "Name and source identify the lead. Campaign and fit come from ads and Panda AI." %>
+    <% if @lead.existing_client %>
+      <p class="hint mt-2">Inquiry for <%= link_to @lead.existing_client.name, @lead.existing_client, class: "link" %>. Their original source stays unchanged.</p>
+      <%= form.hidden_field :existing_client_id %>
+    <% end %>
     <div class="mt-4 grid gap-4 sm:grid-cols-2">
+      <%= render "records/source_fields", form: form %>
       <div class="sm:col-span-2">
         <%= form.label :name, "Display name", class: "label" %>
         <%= form.text_field :name, required: true, autocomplete: "off", class: "input" %>

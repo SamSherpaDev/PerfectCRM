@@ -128,6 +128,8 @@ class ClientsController < ApplicationController
     params.require(:client).permit(
       :name, :email, :phone, :country, :state, :kind, :source,
       :referred_by_organization_id, :perfectbook_contact_id, :tag_list, :ai_opt_out,
+      :source_choice, :reported_source_detail, :source_correction_reason, :capture_channel, :is_test,
+      :referred_by_client_id, :referred_by_person_id,
       people_attributes: %i[id name email phone role _destroy]
     )
   end

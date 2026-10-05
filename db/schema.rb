@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_02_054000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_05_015657) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -41,6 +41,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_02_054000) do
 
   create_table "activity_events", force: :cascade do |t|
     t.datetime "created_at", null: false
+    t.string "idempotency_key"
     t.string "kind", null: false
     t.text "metadata"
     t.datetime "occurred_at", null: false
@@ -49,6 +50,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_02_054000) do
     t.string "summary", null: false
     t.datetime "updated_at", null: false
     t.index ["occurred_at"], name: "index_activity_events_on_occurred_at"
+    t.index ["subject_type", "subject_id", "kind", "idempotency_key"], name: "index_activity_event_idempotency", unique: true
     t.index ["subject_type", "subject_id"], name: "index_activity_events_on_subject_type_and_subject_id"
   end
 
@@ -124,28 +126,42 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_02_054000) do
     t.text "ambiguous_emails", default: "[]", null: false
     t.datetime "archived_at"
     t.string "campaign_name"
+    t.string "capture_channel"
     t.string "country"
     t.datetime "created_at", null: false
     t.string "email"
     t.text "email_redirects", default: "{}", null: false
+    t.boolean "is_test", default: false, null: false
     t.string "kind", default: "individual", null: false
     t.datetime "last_activity_at"
     t.string "name", null: false
     t.integer "notes_count", default: 0, null: false
+    t.integer "origin_lead_id"
     t.integer "perfectbook_contact_id"
     t.string "phone"
     t.string "pipeline_stage", default: "won", null: false
     t.string "referral_code"
+    t.integer "referred_by_client_id"
     t.integer "referred_by_organization_id"
+    t.integer "referred_by_person_id"
+    t.string "reported_source_code"
+    t.string "reported_source_detail"
     t.string "source"
+    t.string "source_answer_state", default: "not_asked", null: false
+    t.datetime "source_confirmed_at"
     t.string "state"
     t.datetime "updated_at", null: false
     t.index ["archived_at"], name: "index_clients_on_archived_at"
     t.index ["email"], name: "index_clients_on_email", unique: true, where: "email IS NOT NULL AND email != ''"
     t.index ["last_activity_at"], name: "index_clients_on_last_activity_at"
+    t.index ["origin_lead_id"], name: "index_clients_on_origin_lead_id"
     t.index ["perfectbook_contact_id"], name: "index_clients_on_perfectbook_contact_id", unique: true, where: "perfectbook_contact_id IS NOT NULL"
     t.index ["pipeline_stage"], name: "index_clients_on_pipeline_stage"
+    t.index ["referred_by_client_id"], name: "index_clients_on_referred_by_client_id"
     t.index ["referred_by_organization_id"], name: "index_clients_on_referred_by_organization_id"
+    t.index ["referred_by_person_id"], name: "index_clients_on_referred_by_person_id"
+    t.index ["reported_source_code"], name: "index_clients_on_reported_source_code"
+    t.index ["source_answer_state"], name: "index_clients_on_source_answer_state"
   end
 
   create_table "conversations", force: :cascade do |t|
@@ -281,6 +297,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_02_054000) do
     t.datetime "archived_at"
     t.string "budget_band"
     t.string "campaign_name"
+    t.string "capture_channel"
     t.datetime "consent_contact_at"
     t.string "consent_text_version"
     t.datetime "converted_at"
@@ -289,11 +306,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_02_054000) do
     t.datetime "created_at", null: false
     t.string "email"
     t.text "email_redirects", default: "{}", null: false
+    t.integer "existing_client_id"
     t.integer "expected_value_minor"
     t.string "external_ref"
     t.string "fit_band"
     t.text "fit_reason"
     t.integer "fit_score"
+    t.boolean "is_test", default: false, null: false
     t.string "kind", default: "individual", null: false
     t.datetime "last_activity_at"
     t.datetime "last_touch_at"
@@ -303,6 +322,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_02_054000) do
     t.text "metadata"
     t.string "name", null: false
     t.integer "notes_count", default: 0, null: false
+    t.integer "origin_lead_id"
     t.integer "party_size"
     t.integer "perfectbook_contact_id"
     t.string "phone"
@@ -311,8 +331,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_02_054000) do
     t.datetime "received_at"
     t.string "reference"
     t.string "referral_code"
+    t.integer "referred_by_client_id"
     t.integer "referred_by_organization_id"
+    t.integer "referred_by_person_id"
+    t.string "reported_source_code"
+    t.string "reported_source_detail"
     t.string "source", default: "manual", null: false
+    t.string "source_answer_state", default: "not_asked", null: false
+    t.datetime "source_confirmed_at"
     t.integer "spam_score", default: 0, null: false
     t.datetime "stage_changed_at"
     t.string "state"
@@ -326,12 +352,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_02_054000) do
     t.datetime "updated_at", null: false
     t.index ["archived_at"], name: "index_leads_on_archived_at"
     t.index ["converted_client_id"], name: "index_leads_on_converted_client_id"
+    t.index ["existing_client_id"], name: "index_leads_on_existing_client_id"
     t.index ["external_ref"], name: "index_leads_on_external_ref", unique: true, where: "external_ref IS NOT NULL AND external_ref != ''"
     t.index ["last_activity_at"], name: "index_leads_on_last_activity_at"
     t.index ["last_touch_at"], name: "index_leads_on_last_touch_at"
+    t.index ["origin_lead_id"], name: "index_leads_on_origin_lead_id"
     t.index ["perfectbook_contact_id"], name: "index_leads_on_perfectbook_contact_id", unique: true, where: "perfectbook_contact_id IS NOT NULL AND converted_client_id IS NULL AND status != 'lost' AND archived_at IS NULL"
     t.index ["reference"], name: "index_leads_on_reference", unique: true, where: "reference IS NOT NULL AND reference != ''"
+    t.index ["referred_by_client_id"], name: "index_leads_on_referred_by_client_id"
     t.index ["referred_by_organization_id"], name: "index_leads_on_referred_by_organization_id"
+    t.index ["referred_by_person_id"], name: "index_leads_on_referred_by_person_id"
+    t.index ["reported_source_code"], name: "index_leads_on_reported_source_code"
+    t.index ["source_answer_state"], name: "index_leads_on_source_answer_state"
     t.index ["status"], name: "index_leads_on_status"
   end
 
@@ -433,19 +465,35 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_02_054000) do
   end
 
   create_table "people", force: :cascade do |t|
+    t.string "capture_channel"
     t.integer "client_id"
     t.datetime "created_at", null: false
     t.string "email"
+    t.boolean "is_test", default: false, null: false
     t.integer "lead_id"
     t.string "name", null: false
+    t.integer "origin_lead_id"
+    t.integer "origin_person_id"
     t.string "phone"
+    t.integer "referred_by_client_id"
+    t.integer "referred_by_person_id"
+    t.string "reported_source_code"
+    t.string "reported_source_detail"
     t.string "role"
+    t.string "source_answer_state", default: "not_asked", null: false
+    t.datetime "source_confirmed_at"
     t.datetime "updated_at", null: false
     t.index ["client_id", "email"], name: "index_people_on_client_and_email", unique: true, where: "client_id IS NOT NULL AND email IS NOT NULL AND email != ''"
     t.index ["client_id"], name: "index_people_on_client_id"
     t.index ["email"], name: "index_people_on_email"
     t.index ["lead_id", "email"], name: "index_people_on_lead_and_email", unique: true, where: "lead_id IS NOT NULL AND email IS NOT NULL AND email != ''"
     t.index ["lead_id"], name: "index_people_on_lead_id"
+    t.index ["origin_lead_id"], name: "index_people_on_origin_lead_id"
+    t.index ["origin_person_id"], name: "index_people_on_origin_person_id"
+    t.index ["referred_by_client_id"], name: "index_people_on_referred_by_client_id"
+    t.index ["referred_by_person_id"], name: "index_people_on_referred_by_person_id"
+    t.index ["reported_source_code"], name: "index_people_on_reported_source_code"
+    t.index ["source_answer_state"], name: "index_people_on_source_answer_state"
   end
 
   create_table "perfectbook_bookings", force: :cascade do |t|
@@ -745,20 +793,31 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_02_054000) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "ad_conversions", "leads"
+  add_foreign_key "clients", "clients", column: "referred_by_client_id"
+  add_foreign_key "clients", "leads", column: "origin_lead_id"
   add_foreign_key "clients", "organizations", column: "referred_by_organization_id"
+  add_foreign_key "clients", "people", column: "referred_by_person_id"
   add_foreign_key "drafts", "conversations"
   add_foreign_key "drafts", "templates"
   add_foreign_key "group_sends", "templates"
   add_foreign_key "lead_notifications", "leads"
   add_foreign_key "lead_webhook_deliveries", "leads"
   add_foreign_key "leads", "clients", column: "converted_client_id"
+  add_foreign_key "leads", "clients", column: "existing_client_id"
+  add_foreign_key "leads", "clients", column: "referred_by_client_id"
+  add_foreign_key "leads", "leads", column: "origin_lead_id"
   add_foreign_key "leads", "organizations", column: "referred_by_organization_id"
+  add_foreign_key "leads", "people", column: "referred_by_person_id"
   add_foreign_key "messages", "conversations"
   add_foreign_key "messages", "group_sends"
   add_foreign_key "messages", "templates"
   add_foreign_key "notes", "users", column: "author_id"
   add_foreign_key "people", "clients"
+  add_foreign_key "people", "clients", column: "referred_by_client_id"
   add_foreign_key "people", "leads"
+  add_foreign_key "people", "leads", column: "origin_lead_id"
+  add_foreign_key "people", "people", column: "origin_person_id"
+  add_foreign_key "people", "people", column: "referred_by_person_id"
   add_foreign_key "quote_lines", "quotes"
   add_foreign_key "quote_views", "quotes"
   add_foreign_key "quotes", "clients"

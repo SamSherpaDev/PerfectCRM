@@ -20,6 +20,33 @@ class NestedPeopleRegressionsTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "linked person removal returns form feedback and preserves every source relationship" do
+    [ Client, Lead ].each do |owner_model|
+      [ Lead, Client, Person, :origin ].each do |referrer_model|
+        owner = owner_model.create!(name: "Travelers")
+        person = owner.people.create!(name: "Linked traveler")
+        attributes = { name: "Source record", referred_by_person: person }
+        attributes[:client] = Client.create!(name: "Other owner") if referrer_model == Person
+        linked = if referrer_model == :origin
+          Person.create!(name: "Copied traveler", client: Client.create!(name: "Converted owner"), origin_person: person)
+        else
+          referrer_model.create!(**attributes)
+        end
+        patch polymorphic_path(owner), params: { owner_model.model_name.param_key => {
+          name: "Changed", people_attributes: { "0" => { id: person.id, _destroy: "1" } }
+        } }
+        assert_response :unprocessable_entity
+        assert_select "body", text: /this person is linked to source history/
+        assert_equal "Travelers", owner.reload.name
+        assert Person.exists?(person.id)
+        field = referrer_model == :origin ? :origin_person_id : :referred_by_person_id
+        assert_equal person.id, linked.reload.public_send(field)
+        assert_not person.destroy
+        assert_includes person.errors.full_messages, "Cannot remove a person linked to source history"
+      end
+    end
+  end
+
   test "pending nested edits cannot introduce duplicate emails" do
     [ Client, Lead ].each do |model|
       record = model.create!(name: "Travelers")

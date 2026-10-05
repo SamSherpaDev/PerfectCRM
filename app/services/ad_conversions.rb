@@ -70,8 +70,14 @@ module AdConversions
     first_seen || lead.received_at || lead.created_at
   end
 
+  def measurement_permitted?(lead)
+    permission = lead.metadata&.dig("acquisition", "permission")
+    permission.is_a?(Hash) && permission["state"] == "allowed" && permission["measurement"] == true &&
+      permission["sharing"] == true && permission["opted_out"] != true
+  end
+
   def excluded?(lead)
-    lead.archived? || lead.suspected_spam? || (lead.status == "lost" && lead.lost_reason == "not_a_fit") ||
+    lead.is_test? || !measurement_permitted?(lead) || lead.archived? || lead.suspected_spam? || (lead.status == "lost" && lead.lost_reason == "not_a_fit") ||
       [ "info@sherpaholidays.com", Mail.mailbox_address ].include?(contact_email(lead)) ||
       User.allowed_email?(contact_email(lead))
   end
@@ -205,9 +211,9 @@ module AdConversions
 
     claim = AdConversion.where(id: row.id, meta_status: row.meta_status,
       meta_attempts: row.meta_attempts, updated_at: row.updated_at)
-    lead = row.lead
+    lead = row.lead.reload
     skip_reason = if excluded?(lead)
-      "Archived, spam, not a fit, or business test"
+      "No measurement permission, archived, spam, not a fit, or test"
     elsif row.occurred_at < now - META_WINDOW
       "Older than Meta's 7-day limit"
     end

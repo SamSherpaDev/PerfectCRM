@@ -49,7 +49,8 @@ class ApiV1LeadsVerdictsTest < ActionDispatch::IntegrationTest
   end
 
   test "automated qualification waits for an owner transition and uses its time" do
-    @lead.update!(received_at: 12.days.ago, metadata: { "attribution" => { "gclid" => "review-click" } })
+    @lead.update!(received_at: 12.days.ago, metadata: { "attribution" => { "gclid" => "review-click" },
+      "acquisition" => { "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true } } })
     post_verdict @lead.id, { "fit_band" => "strong", "status" => "chatting" }
     assert_response :ok
     assert_equal %w[lead], AdConversions.record!(@lead.reload).map(&:event)
@@ -68,7 +69,8 @@ class ApiV1LeadsVerdictsTest < ActionDispatch::IntegrationTest
 
   test "the sweep qualifies a weak AI verdict upgraded by the owner" do
     @settings.update!(google_feed_password: "review-password", meta_dataset_id: nil)
-    @lead.update!(received_at: 1.day.ago, metadata: { "attribution" => { "gclid" => "review-click" } })
+    @lead.update!(received_at: 1.day.ago, metadata: { "attribution" => { "gclid" => "review-click" },
+      "acquisition" => { "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true } } })
     post_verdict @lead.id, { "fit_band" => "weak" }
     assert_response :ok
     @lead.reload.update!(fit_band: "possible")

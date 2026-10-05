@@ -3,8 +3,8 @@
 module Api
   module V1
     module Leads
-      # POST /api/v1/leads/intake/details — the optional step-two answers
-      # (when, how many, budget) posted after a successful send. Same auth
+      # POST /api/v1/leads/intake/details - optional trip, source and acquisition
+      # details posted after a successful send. Same auth
       # and CORS as intake; separate IP limit, no email limit.
       # Contract: docs/leads-intake.md.
       class DetailsController < BaseController
@@ -36,6 +36,19 @@ module Api
             return render json: { error: "expired" }, status: :gone
           end
           updates, errors = extract_updates(payload)
+          answer = payload["source_answer"]
+          if payload.key?("source_answer")
+            if !answer.is_a?(Hash) || !::SourceHistory::ANSWERS.key?(answer["code"]) ||
+                (answer["detail"].present? && (!answer["detail"].is_a?(String) || answer["detail"].length > 240)) ||
+                (answer["question_version"].present? && answer["question_version"] != ::SourceHistory::QUESTION_VERSION)
+              errors["source_answer"] = "invalid"
+            end
+          end
+          begin
+            acquisition = ::Leads::Acquisition.parse(payload)
+          rescue ArgumentError => error
+            errors[error.message] = "invalid"
+          end
           if errors.any?
             return render json: { error: "validation", fields: errors }, status: :bad_request
           end
@@ -49,6 +62,56 @@ module Api
             end
 
             lead.assign_attributes(updates)
+            if answer
+              detail = answer["detail"].to_s.strip.presence
+              if lead.source_confirmed_at.present?
+                unless lead.reported_source_code == answer["code"] && lead.reported_source_detail == detail
+                  return render json: { error: "validation", fields: { "source_answer" => "confirmed" } }, status: :unprocessable_entity
+                end
+              else
+                lead.source_collection_method = "website_form"
+                lead.source_choice = answer["code"]
+                lead.reported_source_detail = detail
+              end
+            end
+            if acquisition
+              previous = (lead.metadata || {})["acquisition"] || {}
+              incoming_permission = acquisition["permission"]
+              previous_permission = previous["permission"] || {}
+              incoming_at = incoming_permission["observed_at"]
+              previous_at = previous_permission["observed_at"]
+              comparable = incoming_at.present? && previous_at.present?
+              broadening = previous_permission.present? && (
+                (::Leads::Acquisition.permitted?(acquisition) && !::Leads::Acquisition.permitted?(previous)) ||
+                %w[measurement sharing].any? { |key| incoming_permission[key] == true && previous_permission[key] != true } ||
+                (previous_permission["opted_out"] == true && incoming_permission["opted_out"] != true))
+              stale = comparable && Time.iso8601(incoming_at) < Time.iso8601(previous_at)
+              if stale || (broadening && (!comparable || Time.iso8601(incoming_at) <= Time.iso8601(previous_at)))
+                return render json: { error: "validation", fields: { "acquisition.permission" => "stale" } }, status: :unprocessable_entity
+              end
+              %w[last_touch last_non_direct_touch].each do |key|
+                old_touch = previous[key]
+                new_touch = acquisition[key]
+                next unless ::Leads::Acquisition.eligible?(old_touch) && new_touch
+
+                if !::Leads::Acquisition.eligible?(new_touch) || Time.iso8601(new_touch["observed_at"]) <= Time.iso8601(old_touch["observed_at"])
+                  acquisition[key] = old_touch
+                end
+              end
+              acquisition = previous.merge(acquisition)
+              acquisition["first_touch"] = previous["first_touch"] if ::Leads::Acquisition.eligible?(previous["first_touch"])
+              acquisition["permission"]["recorded_at"] = previous.dig("permission", "recorded_at") if
+                acquisition["permission"].except("recorded_at") == (previous["permission"] || {}).except("recorded_at")
+              if acquisition.dig("permission", "state") != "allowed" || acquisition.dig("permission", "opted_out") == true
+                ::Leads::Acquisition::TOUCHES.each { |key| acquisition[key] = { "unknown_reason" => "declined_permission" } }
+                acquisition.delete("submission_page")
+                lead.metadata = (lead.metadata || {}).except("page")
+                lead.campaign_name = nil
+                lead.source = "website_form" if %w[google_ads meta_ads].include?(lead.source)
+              end
+              lead.metadata = (lead.metadata || {}).merge("acquisition" => acquisition,
+                "attribution" => ::Leads::Acquisition.legacy_attribution((lead.metadata || {})["attribution"] || {}, acquisition: acquisition))
+            end
             if lead.changed?
               unless lead.save
                 fields = lead.errors.map { |error| [ error.attribute, "invalid" ] }.to_h

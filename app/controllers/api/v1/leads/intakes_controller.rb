@@ -34,6 +34,12 @@ module Api
               status: :bad_request
           end
 
+          begin
+            acquisition = ::Leads::Acquisition.parse(payload)
+          rescue ArgumentError => error
+            return render json: { error: "validation", fields: { error.message => "invalid" } }, status: :bad_request
+          end
+          payload["_acquisition"] = acquisition
           external_ref = "website_form:#{payload['submission_id']}"
           lead = build_lead(payload, fields, external_ref, caller_name)
           existing = nil
@@ -159,8 +165,11 @@ module Api
         def build_lead(payload, fields, external_ref, caller_name)
           contact = payload["contact"]
           trip = payload["trip"].is_a?(Hash) ? payload["trip"] : {}
-          attribution = payload["attribution"].is_a?(Hash) ? payload["attribution"] : {}
-          page = payload["page"].is_a?(Hash) ? payload["page"] : {}
+          acquisition = payload["_acquisition"]
+          attribution = ::Leads::Acquisition.legacy_attribution(payload["attribution"].is_a?(Hash) ? payload["attribution"] : {}, acquisition: acquisition)
+          raw_page = payload["page"].is_a?(Hash) ? payload["page"] : {}
+          page = { "url" => ::Leads::Acquisition.safe_url(raw_page["url"]), "referrer" => ::Leads::Acquisition.host(raw_page["referrer"]), "locale" => raw_page["locale"].to_s.first(20) }
+          page.except!("url", "referrer") if acquisition && !::Leads::Acquisition.permitted?(acquisition)
           timing = payload["timing"].is_a?(Hash) ? payload["timing"] : {}
           client_info = payload["client"].is_a?(Hash) ? payload["client"] : {}
           consent = payload["consent"]
@@ -191,6 +200,7 @@ module Api
             consent_contact_at: (Time.zone.parse(consent["contact_at"].to_s) rescue nil),
             consent_text_version: consent["text_version"].to_s.strip.presence&.truncate(64),
             placement: placement,
+            capture_channel: "website_form",
             source: ::Leads.derive_source(attribution),
             campaign_name: attribution["utm_campaign"].to_s.strip.presence&.truncate(160),
             external_ref: external_ref,
@@ -198,6 +208,7 @@ module Api
             status: "new",
             received_at: Time.current,
             metadata: {
+              "acquisition" => acquisition,
               "attribution" => attribution,
               "page" => page,
               "timing" => timing,
