@@ -5,7 +5,7 @@
 # (AdConversions::MetaClient). Rules live in AdConversions.
 class AdConversion < ApplicationRecord
   EVENTS = %w[lead qualified quote booked].freeze
-  META_STATUSES = %w[not_applicable pending sending sent failed skipped].freeze
+  META_STATUSES = %w[not_applicable pending sending sent failed rejected uncertain skipped].freeze
   LABELS = {
     "lead" => "Inquiry", "qualified" => "Qualified inquiry",
     "quote" => "Quote sent", "booked" => "Booking (deposit paid)"
@@ -24,6 +24,11 @@ class AdConversion < ApplicationRecord
 
   scope :newest_first, -> { order(created_at: :desc, id: :desc) }
   scope :for_google, -> { where(google: true) }
+
+  def possibly_delivered?
+    meta_sent_at.present? || google_first_served_at.present? || google_serve_count.positive? ||
+      (meta_attempts.positive? && meta_status != "rejected")
+  end
 
   def label
     LABELS.fetch(event)

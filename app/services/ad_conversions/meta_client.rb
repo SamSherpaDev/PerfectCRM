@@ -8,6 +8,7 @@ module AdConversions
   # travels in the body and never reaches logs or stored errors.
   class MetaClient
     class Error < StandardError; end
+    class Rejected < Error; end
 
     GRAPH_VERSION = "v24.0"
 
@@ -16,14 +17,15 @@ module AdConversions
     end
 
     def deliver(row)
-      raise Error, "Meta credentials and owner terms confirmation are required" unless @settings.meta_configured?
-      raise Error, "Measurement/sharing permission is required" if AdConversions.excluded?(row.lead.reload)
-      raise Error, "Booking receipt evidence missing" if AdConversions.invalid_booking_outcome?(row)
+      raise Rejected, "Meta credentials and owner terms confirmation are required" unless @settings.meta_configured?
+      raise Rejected, "Measurement/sharing permission is required" if AdConversions.excluded?(row.lead.reload)
+      raise Rejected, "Booking receipt evidence missing" if AdConversions.invalid_booking_outcome?(row)
       response = post(JSON.generate(body(row)))
       parsed = JSON.parse(response.body.to_s) rescue {}
-      unless response.is_a?(Net::HTTPSuccess) && parsed["events_received"].to_i >= 1
-        message = parsed.dig("error", "error_user_msg").presence || parsed.dig("error", "message").presence
-        raise Error, [ "HTTP #{response.code}", message ].compact.join(": ").gsub(@settings.meta_access_token.to_s, "[redacted]")
+      unless parsed.is_a?(Hash) && parsed["events_received"].is_a?(Numeric) && parsed["events_received"] > 0
+        message = parsed.is_a?(Hash) && parsed["error"].is_a?(Hash) ? (parsed.dig("error", "error_user_msg").presence || parsed.dig("error", "message").presence) : nil
+        rejected = parsed.is_a?(Hash) && (parsed["events_received"] == 0 || (response.code.to_i.between?(400, 499) && parsed["error"].is_a?(Hash)))
+        raise(rejected ? Rejected : Error, [ "HTTP #{response.code}", message ].compact.join(": ").gsub(@settings.meta_access_token.to_s, "[redacted]"))
       end
       parsed
     rescue Timeout::Error, SystemCallError, SocketError, OpenSSL::SSL::SSLError, IOError, EOFError => error

@@ -32,6 +32,8 @@ module AdConversions
     end
 
     def skip_reason(row, now)
+      return "Meta delivery result unknown; review platform history" if row.meta_status == "uncertain" ||
+        (row.meta_attempts.positive? && %w[sending failed].include?(row.meta_status))
       lead = row.lead
       return "No measurement/sharing permission or excluded inquiry" if AdConversions.excluded?(lead)
       booking_issue = AdConversions.booking_skip_reason(row)

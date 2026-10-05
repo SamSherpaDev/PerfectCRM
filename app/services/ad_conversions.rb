@@ -176,7 +176,7 @@ module AdConversions
       .or(Lead.where(converted_client_id: clients)).or(Lead.where(existing_client_id: clients)).select(:id)
     AdConversion.where(event: "booked", perfectbook_id: nil, lead_id: inquiries)
       .where("created_at >= ?", booking.first_received_at)
-      .where("meta_attempts > 0 OR google_serve_count > 0 OR meta_sent_at IS NOT NULL OR google_first_served_at IS NOT NULL").exists?
+      .where("(meta_attempts > 0 AND meta_status != 'rejected') OR google_serve_count > 0 OR meta_sent_at IS NOT NULL OR google_first_served_at IS NOT NULL").exists?
   end
 
   def correct_booking_owner!(booking, lead:)
@@ -184,11 +184,11 @@ module AdConversions
     return unless row
     row.with_lock do
       next if row.lead_id == lead.id
-      if row.meta_attempts.positive? || row.meta_sent_at || row.google_first_served_at || row.google_serve_count.positive?
+      if row.possibly_delivered?
         row.update!(google_skip_reason: "Booking inquiry corrected after export; review platform history",
           meta_error: "Booking inquiry corrected after export; review platform history")
       else
-        row.update!(lead: lead, google: google_click_ids(lead).any?, meta_status: "pending",
+        row.update!(lead: lead, google: google_click_ids(lead).any?, meta_status: "pending", meta_attempts: 0,
           meta_error: nil, google_skip_reason: nil)
       end
     end
@@ -259,6 +259,12 @@ module AdConversions
   # Returns :sent, :failed, :skipped, or nil when nothing happened.
   def deliver_meta!(row, settings: Setting.current, now: Time.current)
     row.reload
+    if row.meta_status == "sending" && row.updated_at <= now - META_CLAIM_TIMEOUT
+      changed = AdConversion.where(id: row.id, meta_status: "sending", updated_at: row.updated_at)
+        .update_all(meta_status: "uncertain", meta_error: "Delivery result unknown; review platform history", updated_at: now)
+      row.reload
+      return changed.positive? ? :failed : nil
+    end
     return nil unless meta_due?(row, now)
 
     claim = AdConversion.where(id: row.id, lead_id: row.lead_id, meta_status: row.meta_status,
@@ -282,22 +288,18 @@ module AdConversions
     end
     return nil unless settings.meta_configured?
 
-    if row.meta_attempts >= META_MAX_ATTEMPTS
-      changed = claim.update_all(meta_status: "failed", meta_error: "Delivery interrupted; attempt limit reached", updated_at: now)
-      row.reload
-      return changed.positive? ? :failed : nil
-    end
-
     attempt = row.meta_attempts + 1
     return nil if claim.update_all(meta_status: "sending", meta_attempts: attempt, updated_at: now).zero?
 
-    delivery = AdConversion.where(id: row.id, meta_status: "sending", meta_attempts: attempt)
+    delivery = AdConversion.where(id: row.id, meta_status: %w[sending uncertain], meta_attempts: attempt)
     begin
       MetaClient.new(settings).deliver(row)
       changed = delivery.update_all(meta_status: "sent", meta_sent_at: now, meta_error: nil, updated_at: now)
       changed.positive? ? :sent : nil
     rescue MetaClient::Error => error
-      changed = delivery.update_all(meta_status: "failed", meta_error: error.message.truncate(300), updated_at: now)
+      status = error.is_a?(MetaClient::Rejected) ? "rejected" : "uncertain"
+      message = status == "uncertain" ? "#{error.message}; delivery result unknown; review platform history" : error.message
+      changed = delivery.update_all(meta_status: status, meta_error: message.truncate(300), updated_at: now)
       if changed.positive?
         Rails.logger.warn("[ad conversions] meta #{row.event} for lead #{row.lead_id} failed: #{error.message.truncate(200)}")
         :failed
@@ -312,8 +314,7 @@ module AdConversions
   def meta_due?(row, now)
     case row.meta_status
     when "pending" then true
-    when "sending" then row.updated_at <= now - META_CLAIM_TIMEOUT
-    when "failed"
+    when "rejected"
       row.meta_attempts < META_MAX_ATTEMPTS && row.updated_at <= now - (row.meta_attempts**2).hours
     else false
     end

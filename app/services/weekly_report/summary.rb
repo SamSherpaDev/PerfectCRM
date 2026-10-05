@@ -400,7 +400,8 @@ module WeeklyReport
     def deposits_in(window)
       @deposits ||= {}
       @deposits[window] ||= PerfectBook::Booking.where("paid_minor > 0")
-        .where("first_received_at BETWEEN :from AND :to OR (first_received_at IS NULL AND first_paid_at BETWEEN :from AND :to)", from: window.first, to: window.last)
+        .where("first_received_at BETWEEN :from AND :to OR (first_received_precision = 'date' AND first_received_on BETWEEN :start AND :end) OR (first_received_at IS NULL AND first_received_on IS NULL AND first_paid_at BETWEEN :from AND :to)",
+          from: window.first, to: window.last, start: window.first.in_time_zone("America/Los_Angeles").to_date, end: window.last.in_time_zone("America/Los_Angeles").to_date)
         .where("status IS NULL OR status NOT IN (?)", TemplateContext::INACTIVE_BOOKING_STATUSES).to_a
         .reject do |booking|
           Client.where(perfectbook_contact_id: booking.perfectbook_contact_id, is_test: true).exists? || [ booking.inquiry_binding&.lead ].compact.any? { |lead| lead.is_test? || lead.converted_client&.is_test? || lead.existing_client&.is_test? }

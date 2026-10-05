@@ -232,7 +232,7 @@ class AdConversionsTest < ActiveSupport::TestCase
       assert_equal :failed, AdConversions.deliver_meta!(row, settings: @settings, now: @now)
     end
     row.reload
-    assert_equal "failed", row.meta_status
+    assert_equal "rejected", row.meta_status
     assert_equal "HTTP 400: Invalid OAuth access token.", row.meta_error
     assert_not_includes row.meta_error, "EAAB"
 
@@ -261,40 +261,31 @@ class AdConversionsTest < ActiveSupport::TestCase
     assert_equal 1, row.meta_attempts
   end
 
-  test "the nightly sweep recovers an interrupted delivery claim" do
+  test "the nightly sweep holds interrupted delivery claims for review without retrying" do
     row = AdConversions.record!(ad_lead).first
     row.update!(meta_status: "sending", meta_attempts: 1, updated_at: @now)
     with_meta do |fake|
       AdConversions::ExportJob.perform_now(now: @now + 4.minutes)
-      assert_empty fake.requests
       AdConversions::ExportJob.perform_now(now: @now + 6.minutes)
-      assert_equal 1, fake.requests.size
+      AdConversions::ExportJob.perform_now(now: @now + 1.day)
+      assert_empty fake.requests
     end
-    assert_equal "sent", row.reload.meta_status
-    assert_equal 2, row.meta_attempts
+    assert_equal "uncertain", row.reload.meta_status
+    assert_equal 1, row.meta_attempts
+    assert_match(/review platform history/, row.meta_error)
   end
 
-  test "a late failure cannot overwrite a successful replacement attempt" do
+  test "a late accepted response resolves an interrupted claim without another attempt" do
     row = AdConversions.record!(ad_lead).first
-    calls = 0
-    later = @now + 6.minutes
     with_meta do |fake|
       fake.define_singleton_method(:request) do |_request|
-        calls += 1
-        if calls == 1
-          AdConversions.deliver_meta!(AdConversion.find(row.id), now: later)
-          FakeResponse.new("500", { "error" => { "message" => "Late failure" } }.to_json)
-        else
-          FakeResponse.new("200", { "events_received" => 1 }.to_json)
-        end
+        AdConversions.deliver_meta!(AdConversion.find(row.id), now: Time.current + 6.minutes)
+        FakeResponse.new("200", { "events_received" => 1 }.to_json)
       end
-      assert_nil AdConversions.deliver_meta!(row, now: @now)
+      assert_equal :sent, AdConversions.deliver_meta!(row)
     end
-    assert_equal 2, calls
     assert_equal "sent", row.reload.meta_status
-    assert_equal later, row.meta_sent_at
-    assert_nil row.meta_error
-    assert_equal 2, row.meta_attempts
+    assert_equal 1, row.meta_attempts
   end
 
   test "a stale excluded row cannot overwrite a completed delivery" do
@@ -315,9 +306,9 @@ class AdConversionsTest < ActiveSupport::TestCase
       AdConversions::ExportJob.perform_now(now: @now + 1.day)
       assert_empty fake.requests
     end
-    assert_equal "failed", row.reload.meta_status
+    assert_equal "uncertain", row.reload.meta_status
     assert_equal 5, row.meta_attempts
-    assert_match(/attempt limit reached/, row.meta_error)
+    assert_match(/review platform history/, row.meta_error)
   end
 
   test "events past Meta's 7-day limit are skipped, and nothing leaves while Meta is off" do
@@ -504,6 +495,50 @@ class AdConversionsTest < ActiveSupport::TestCase
         assert_empty fake.requests
       end
       assert_equal 1, AdConversion.where(event: "booked", perfectbook_id: booking.perfectbook_id).count
+    end
+  end
+
+
+  test "definitely rejected Purchase follows correction but unknown delivery is held" do
+    %w[rejected unknown].each_with_index do |result, index|
+      lead = ad_lead(perfectbook_contact_id: 80 + index)
+      other = ad_lead(existing_client: Client.create!(name: "Booker", perfectbook_contact_id: 80 + index))
+      booking = PerfectBook::Booking.create!(perfectbook_id: 9050 + index, perfectbook_contact_id: 80 + index,
+        status: "confirmed", first_received_at: @now - 1.hour, first_received_precision: "timestamp",
+        receipts_minor: 50_000, synced_at: @now)
+      BookingInquiryBinding.link!(booking, lead: lead, actor: "test", evidence: "Initial")
+      row = AdConversions.record!(lead).find { |entry| entry.event == "booked" }
+      with_meta(body: result == "rejected" ? { "events_received" => 0 }.to_json : "invalid response") do
+        assert_equal :failed, AdConversions.deliver_meta!(row)
+      end
+      assert_equal(result == "rejected" ? "rejected" : "uncertain", row.reload.meta_status)
+      BookingInquiryBinding.link!(booking, lead: other, actor: "test", evidence: "Correction", reason: "Wrong inquiry")
+      if result == "rejected"
+        assert_equal other.id, row.reload.lead_id
+        with_meta { assert_equal :sent, AdConversions.deliver_meta!(row) }
+      else
+        assert_equal lead.id, row.reload.lead_id
+        with_meta do |fake|
+          assert_nil AdConversions.deliver_meta!(row, now: @now + 1.day)
+          assert_empty fake.requests
+        end
+        assert_not_includes AdConversions::GoogleFeed.rows.map(&:id), row.id
+        assert_match(/review platform history/, row.meta_error)
+      end
+      assert_equal 1, AdConversion.where(event: "booked", perfectbook_id: booking.perfectbook_id).count
+    end
+  end
+
+  test "Meta timeouts stay indeterminate and never retry" do
+    row = AdConversions.record!(ad_lead).first
+    with_meta do |fake|
+      fake.define_singleton_method(:request) { |_request| raise Net::ReadTimeout }
+      assert_equal :failed, AdConversions.deliver_meta!(row)
+    end
+    assert_equal "uncertain", row.reload.meta_status
+    with_meta do |fake|
+      assert_nil AdConversions.deliver_meta!(row, now: @now + 1.day)
+      assert_empty fake.requests
     end
   end
 

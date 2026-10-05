@@ -20,7 +20,7 @@
     </div>
     <div class="flex flex-wrap gap-x-2">
       <dt class="muted">Meta events:</dt>
-      <dd><%= meta_counts.fetch("sent", 0) %> sent · <%= (meta_counts.fetch("pending", 0) + meta_counts.fetch("sending", 0)) %> waiting · <%= meta_counts.fetch("failed", 0) %> failed · <%= meta_counts.fetch("skipped", 0) %> skipped</dd>
+      <dd><%= meta_counts.fetch("sent", 0) %> sent · <%= (meta_counts.fetch("pending", 0) + meta_counts.fetch("sending", 0)) %> waiting · <%= (meta_counts.fetch("failed", 0) + meta_counts.fetch("rejected", 0)) %> rejected/failed · <%= meta_counts.fetch("uncertain", 0) %> need review · <%= meta_counts.fetch("skipped", 0) %> skipped</dd>
     </div>
     <div class="flex flex-wrap gap-x-2">
       <dt class="muted">Google pulls:</dt>
@@ -97,10 +97,10 @@
               <p class="text-xs muted"><%= stamp.(row.occurred_at) %> · Google: <%= row.google? ? (row.google_serve_count.positive? ? "pulled #{pluralize(row.google_serve_count, 'time')}" : "waiting") : "not sent" %></p>
               <% if row.google_skip_reason.present? %><p class="text-xs muted">Google skipped: <%= row.google_skip_reason %></p><% end %>
               <% if row.meta_error.present? %>
-                <p class="text-xs <%= row.meta_status == "failed" ? "text-bad" : "muted" %>"><%= row.meta_error %></p>
+                <p class="text-xs <%= %w[failed rejected uncertain].include?(row.meta_status) ? "text-bad" : "muted" %>"><%= row.meta_error %></p>
               <% end %>
             </div>
-            <%= row.meta_status == "not_applicable" ? badge("Meta n/a") : status_badge(row.meta_status == "failed" ? "error" : row.meta_status, label: "Meta #{row.meta_status}") %>
+            <%= row.meta_status == "not_applicable" ? badge("Meta n/a") : status_badge(%w[failed rejected uncertain].include?(row.meta_status) ? "error" : row.meta_status, label: "Meta #{row.meta_status}") %>
           </li>
         <% end %>
       </ul>

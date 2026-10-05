@@ -666,13 +666,15 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
   Purchase without a booking ID conservatively holds potentially already
   reported receipts for that contact, with a visible diagnostic, rather than
   replaying them under a new ID. A genuinely later first receipt remains eligible.
-  Old outcomes are not guessed, remapped or rewritten.
+  Undelivered booking outcomes follow reviewed inquiry corrections. Accepted or
+  possibly delivered outcomes remain unchanged and require platform-history review.
 - Meta: Settings → Ad conversions takes the dataset ID and access token
   (stored encrypted). Email and phone are
-  SHA-256 hashed; `fbc` comes from the click. Failures become eligible for retry after 1, 4, 9,
+  SHA-256 hashed; `fbc` comes from the click. Definite rejections become eligible for retry after 1, 4, 9,
   and 16 hours (five attempts), checked by the nightly sweep; events older than Meta's 7-day limit are
-  skipped. Delivery claims prevent overlapping sends; interrupted claims become
-  retryable after five minutes, and only the owning attempt can save its result.
+  skipped. Delivery claims prevent overlapping sends. Timeouts, unknown responses,
+  and claims interrupted for five minutes are held for review and never retried.
+  Only an explicit positive `events_received` confirms Meta acceptance.
 - Google: create a feed password in the same card, then in Google Ads add a
   daily schedule under Goals → Conversions → Uploads → Schedules with source
   HTTPS, the feed URL (`/feeds/google-conversions.csv`), username
