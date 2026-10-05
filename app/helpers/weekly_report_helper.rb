@@ -1,6 +1,11 @@
 # Formatting for the Monday ads report, shared by the email and its
 # preview on Settings. Whole dollars: the report is for decisions.
 module WeeklyReportHelper
+  def source_report_money(amounts)
+    return "Unavailable" if amounts.nil? || amounts.empty?
+    amounts.map { |currency, amount| amount.nil? ? "#{currency} unavailable" : "#{currency} #{number_with_precision(amount / 100.0, precision: 2, delimiter: ',')}" }.join("; ")
+  end
+
   def report_money(minor)
     return "-" if minor.nil?
 

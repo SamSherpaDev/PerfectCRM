@@ -228,6 +228,18 @@ class PerfectBookClientTest < ActiveSupport::TestCase
     assert_equal "https://pb.test/bookings/11", booking.deep_link
   end
 
+  test "booking payload maps authoritative cash facts and preserves precision without unknown fields" do
+    cash = { "id" => "receipt-1", "kind" => "receipt", "occurred_at" => "2026-10-01T07:00:00Z", "occurred_on" => "2026-10-01", "time_precision" => "date", "amount_minor" => 50000, "currency" => "USD", "unrelated_private_field" => "not-retained" }
+    row = { "id" => 11, "crm_inquiry_ref" => "SH-AB23", "first_received_at" => cash["occurred_at"], "first_received_on" => cash["occurred_on"], "first_received_precision" => "date", "traveler_count" => 3, "receipts_minor" => 50000, "refunds_minor" => 10000, "net_received_minor" => 40000, "cancelled_at" => "2026-10-02T07:00:00Z", "cash_events" => [ cash ] }
+    client = StubPbClient.new(responses: [ FakePbResponse.new("200", { "data" => [ row ], "pagination" => { "has_more" => false } }.to_json, {}) ])
+    booking = client.list_contact_bookings(7)[:data].first
+    assert_equal "SH-AB23", booking.crm_inquiry_ref
+    assert_equal "date", booking.first_received_precision
+    assert_equal [ 3, 50000, 10000, 40000 ], [ booking.traveler_count, booking.receipts_minor, booking.refunds_minor, booking.net_received_minor ]
+    assert_equal cash.except("unrelated_private_field"), booking.cash_events.first
+    assert_equal "2026-10-02T07:00:00Z", booking.cancelled_at
+  end
+
   test "booking payload maps the documents summary and checklist" do
     row = { "id" => 11, "ref" => "SH-1", "status" => "deposit_received",
             "trip" => { "id" => 2, "name" => "Everest" },

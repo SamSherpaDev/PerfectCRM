@@ -33,7 +33,7 @@ class AdConversionsTest < ActiveSupport::TestCase
     @now = Time.zone.parse("2026-10-12 10:00")
     travel_to @now
     @settings = Setting.current
-    @settings.update!(meta_dataset_id: "123456789012345", meta_access_token: "EAAB-secret-token")
+    @settings.update!(meta_dataset_id: "123456789012345", meta_access_token: "EAAB-secret-token", meta_terms_accepted: true, google_terms_accepted: true)
   end
 
   def ad_lead(attribution: { "gclid" => "Cj0K-click" }, **attrs)
@@ -42,7 +42,7 @@ class AdConversionsTest < ActiveSupport::TestCase
       source: "google_ads", external_ref: "website_form:sub-#{SecureRandom.hex(4)}",
       received_at: @now - 2.days,
       metadata: {
-        "attribution" => attribution,
+        "attribution" => { "first_seen_at" => (attrs[:received_at] || @now - 2.days).iso8601 }.merge(attribution),
         "acquisition" => { "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true } },
         "page" => { "url" => "https://www.sherpaholidays.com/pages/everest-base-camp" },
         "user_agent" => "Mozilla/5.0 Test"
@@ -165,8 +165,10 @@ class AdConversionsTest < ActiveSupport::TestCase
       paid_minor: 50_000, total_minor: 800_000, synced_at: @now)
     assert_not_includes AdConversions.record!(lead, now: @now).map(&:event), "booked"
 
-    PerfectBook::Booking.create!(perfectbook_id: 9002, perfectbook_contact_id: 77, status: "deposit_received",
+    booking = PerfectBook::Booking.create!(perfectbook_id: 9002, perfectbook_contact_id: 77, status: "deposit_received",
+      first_received_at: @now - 1.hour, first_received_precision: "timestamp", receipts_minor: 50_000,
       paid_minor: 50_000, total_minor: 700_000, synced_at: @now)
+    BookingInquiryBinding.link!(booking, lead: lead, actor: "test", evidence: "test", state: "explicit")
     row = AdConversions.record!(lead, now: @now).find { |r| r.event == "booked" }
     assert_equal 245_000, row.value_minor
     assert_equal "Purchase", row.meta_event_name
@@ -174,8 +176,10 @@ class AdConversionsTest < ActiveSupport::TestCase
 
   test "a paid non-USD booking reports the fixed quote value in USD" do
     lead = ad_lead(perfectbook_contact_id: 77)
-    PerfectBook::Booking.create!(perfectbook_id: 9002, perfectbook_contact_id: 77, status: "deposit_received",
+    booking = PerfectBook::Booking.create!(perfectbook_id: 9002, perfectbook_contact_id: 77, status: "deposit_received",
+      first_received_at: @now - 1.hour, first_received_precision: "timestamp", receipts_minor: 50_000,
       paid_minor: 50_000, total_minor: 14_000_000, currency: "NPR", synced_at: @now)
+    BookingInquiryBinding.link!(booking, lead: lead, actor: "test", evidence: "test", state: "explicit")
     row = AdConversions.record!(lead, now: @now).find { |item| item.event == "booked" }
     assert_equal AdConversions::VALUES_MINOR["quote"], row.value_minor
     assert_equal "USD", row.currency

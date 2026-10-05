@@ -53,16 +53,23 @@ module PerfectBook
             payment_terms: booking.payment_terms,
             documents_json: booking.documents.presence || {}, missing_count: booking.missing_count.to_i,
             checklist_json: booking.checklist.presence || [],
-            synced_at: now
+            crm_inquiry_ref: booking.crm_inquiry_ref,
+            first_received_at: booking.first_received_at, first_received_on: parse_date(booking.first_received_on),
+            first_received_precision: booking.first_received_precision,
+            receipts_minor: booking.receipts_minor, refunds_minor: booking.refunds_minor,
+            net_received_minor: booking.net_received_minor, traveler_count: booking.traveler_count,
+            cancelled_at: booking.cancelled_at, cash_events_json: booking.cash_events,
+            unavailable_at: nil, synced_at: now
           )
           booking_mirror.save!
+          BookingInquiryBinding.sync!(booking_mirror)
           DemoRecord.where(record_type: Booking.name, record_id: booking_mirror.id).delete_all
         end
       end
       # A successful response is the full list, even when empty. Only a
       # first-page 304 above preserves all existing rows for this contact.
       Booking.where(perfectbook_contact_id: mirror.perfectbook_id)
-        .where.not(perfectbook_id: seen_ids).delete_all
+        .where.not(perfectbook_id: seen_ids).update_all(unavailable_at: now)
       result[:commit_etags]&.call
     end
 

@@ -20,6 +20,7 @@
   <% end %>
 
   <nav class="tabs" aria-label="Lead stages">
+    <% if @tab == "missing_source" %><%= tab_link "Missing source", leads_path(tab: "missing_source", q: @query, sort: @sort), icon: :list, active: true, count: @leads.size %><% end %>
     <%= tab_link "New", leads_path(tab: "new", q: @query, sort: @sort), icon: :plus, active: @tab == "new", count: @counts["new"] %>
     <%= tab_link "Chatting", leads_path(tab: "chatting", q: @query, sort: @sort), icon: :list, active: @tab == "chatting", count: @counts["chatting"] %>
     <%= tab_link "Quoted", leads_path(tab: "quoted", q: @query, sort: @sort), icon: :receipt, active: @tab == "quoted", count: @counts["quoted"] %>
@@ -33,7 +34,7 @@
     <div class="card-header">
       <h2 class="card-title" id="leads-heading"><%= @tab == "archived" ? "Archived" : @tab.humanize %></h2>
     </div>
-    <%= card_caption(@tab == "archived" ? "Leads set aside for now. Restore any time." : (@tab == "converted" ? "Leads that became clients. Read-only, kept for memory." : "Best fit first. Tap a lead to see the full story.")) %>
+    <%= card_caption(@tab == "missing_source" ? "All inquiries without a discovery answer, including converted records. Tests and spam stay out." : (@tab == "archived" ? "Leads set aside for now. Restore any time." : (@tab == "converted" ? "Leads that became clients. Read-only, kept for memory." : "Best fit first. Tap a lead to see the full story."))) %>
     <% if @leads.any? %>
       <ul class="divide-y divide-rule-2">
         <% @leads.each do |lead| %>

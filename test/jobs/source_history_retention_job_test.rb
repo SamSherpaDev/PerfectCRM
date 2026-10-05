@@ -4,6 +4,28 @@ class SourceHistoryRetentionJobTest < ActiveJob::TestCase
   setup { Current.user_email = nil }
   teardown { Current.reset }
 
+  test "new source backfill evidence and fit audits expire without deleting booking bindings or money" do
+    now = Time.current
+    lead = Lead.create!(name: "Synthetic booked lead", source: "google_ads", perfectbook_contact_id: 33,
+      source_choice: "search", owner_fit_at_inquiry: "strong", received_at: now - 3.years,
+      metadata: { "legacy_observed" => { "source" => "google_ads" } })
+    lead.update_columns(last_touch_at: now - 3.years)
+    booking = PerfectBook::Booking.create!(perfectbook_id: 55, perfectbook_contact_id: 33, first_received_at: now - 3.years,
+      end_date: (now - 2.years).to_date, receipts_minor: 50000, net_received_minor: 50000, synced_at: now)
+    BookingInquiryBinding.link!(booking, lead: lead, actor: "test", evidence: "Synthetic private review evidence")
+    lead.activity_events.create!(kind: "source_backfill", summary: "Legacy source", occurred_at: now,
+      metadata: { "new_value" => { "source" => "google_ads" } })
+    SourceHistoryRetentionJob.perform_now(now: now)
+    assert_equal "search", lead.reload.reported_source_code, "an explicitly paid binding has the booked seven-year horizon even before conversion"
+    SourceHistoryRetentionJob.perform_now(now: now + 8.years)
+    assert_nil lead.reload.metadata["legacy_observed"]
+    assert_nil lead.owner_fit_at_inquiry
+    assert_equal 0, lead.activity_events.where(kind: %w[source_backfill inquiry_fit booking_link]).count
+    assert_equal "Source-link evidence expired", booking.reload.inquiry_binding.evidence
+    assert_equal lead.id, booking.inquiry_binding.lead_id
+    assert_equal 50000, booking.net_received_minor
+  end
+
   test "detailed clicks and URLs expire at 180 days without removing the answer or coarse source" do
     now = Time.current
     lead = Lead.create!(name: "Retention Example", received_at: now - 181.days, metadata: {

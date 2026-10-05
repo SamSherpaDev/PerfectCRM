@@ -13,7 +13,10 @@ class AdConversion < ApplicationRecord
 
   belongs_to :lead
 
-  validates :event, inclusion: { in: EVENTS }, uniqueness: { scope: :lead_id }
+  validates :event, inclusion: { in: EVENTS }
+  validates :event, uniqueness: { scope: :lead_id }, unless: -> { event == "booked" }
+  validates :perfectbook_id, presence: true, uniqueness: true, if: -> { event == "booked" && new_record? }
+  belongs_to :booking, class_name: "PerfectBook::Booking", foreign_key: :perfectbook_id, primary_key: :perfectbook_id, optional: true
   validates :event_id, presence: true, uniqueness: true
   validates :meta_status, inclusion: { in: META_STATUSES }
   validates :occurred_at, presence: true

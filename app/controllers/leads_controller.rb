@@ -6,10 +6,10 @@ class LeadsController < ApplicationController
   before_action :block_converted_edit, only: %i[edit update]
   before_action :block_archived_edit, only: %i[edit update]
 
-  TABS = %w[new chatting quoted nudged lost converted archived].freeze
+  TABS = %w[new chatting quoted nudged lost converted archived missing_source].freeze
 
   def index
-    @tab = TABS.include?(params[:tab]) ? params[:tab] : "new"
+    @tab = params[:source_missing] == "1" ? "missing_source" : (TABS.include?(params[:tab]) ? params[:tab] : "new")
     @query = params[:q].to_s.strip
     @sort = %w[activity name newest fit].include?(params[:sort]) ? params[:sort] : "activity"
 
@@ -32,6 +32,7 @@ class LeadsController < ApplicationController
     else
       Lead.by_status(@tab)
     end
+    base = WeeklyReport::Monthly.new.eligible_leads.where(source_answer_state: "not_asked") if @tab == "missing_source"
     scope = @query.present? ? base.search(@query) : base
     @leads = sort_leads(scope).includes(:tags, :people, :referred_by_organization, :converted_client)
   end
@@ -156,7 +157,7 @@ class LeadsController < ApplicationController
   def lead_params
     params.require(:lead).permit(
       :name, :email, :phone, :country, :state, :kind, :source, :campaign_name,
-      :external_ref, :fit_score, :fit_band, :fit_reason, :status,
+      :external_ref, :fit_score, :fit_band, :fit_reason, :owner_fit_at_inquiry, :status,
       :referred_by_organization_id, :perfectbook_contact_id, :tag_list, :ai_opt_out,
       :trip_interest, :expected_value_dollars, :lost_reason, :lost_note,
       :source_choice, :reported_source_detail, :source_correction_reason, :capture_channel, :is_test,

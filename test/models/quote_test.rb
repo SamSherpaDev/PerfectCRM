@@ -7,6 +7,19 @@ class QuoteTest < ActiveSupport::TestCase
     @client = Client.create!(name: "Maya Gurung", email: "maya@example.com")
   end
 
+  test "PerfectBook handoff keeps the exact inquiry reference and known departure route" do
+    lead = Lead.create!(name: "Synthetic inquiry", source: "manual")
+    quote = Quote.create!(lead: lead)
+    quote.lines.create!(kind: "departure", description: "Synthetic departure", quantity: 3, unit_minor: 10000, perfectbook_departure_id: 7)
+    assert_equal lead.reference, quote.intake_details["crm_inquiry_ref"]
+    uri = URI.parse(quote.perfectbook_intake_url)
+    assert_equal "/departures/7/bookings/new", uri.path
+    assert_equal lead.reference, Rack::Utils.parse_query(uri.query)["crm_inquiry_ref"]
+    legacy = Quote.create!(lead: lead, intake_payload: { "quote_reference" => "Legacy" }.to_json)
+    assert_equal lead.reference, Rack::Utils.parse_query(URI.parse(legacy.perfectbook_intake_url).query)["crm_inquiry_ref"]
+    assert_nil Rack::Utils.parse_query(URI.parse(Quote.create!(client: @client).perfectbook_intake_url).query)["crm_inquiry_ref"]
+  end
+
   test "needs exactly one owner" do
     bare = Quote.new
     assert_not bare.valid?

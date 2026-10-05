@@ -61,6 +61,14 @@ module WeeklyReport
       @today = today
     end
 
+    def monthly
+      @monthly ||= Monthly.new(month: week_end.beginning_of_month)
+    end
+
+    def q_fit
+      week_inquiries.count { |lead| QUALIFIED_FITS.include?(lead.owner_fit_at_inquiry) }
+    end
+
     def range
       @week_start.in_time_zone.beginning_of_day..@week_end.in_time_zone.end_of_day
     end
@@ -323,7 +331,9 @@ module WeeklyReport
 
     # Inquiries exclude explicit tests, archives, and suspected spam.
     def counted_leads
-      Lead.active.where(is_test: false).where.not(id: spam_lead_ids)
+      tests = Client.where(is_test: true).select(:id)
+      test_inquiries = Lead.where(converted_client_id: tests).or(Lead.where(existing_client_id: tests)).select(:id)
+      Lead.active.where(is_test: false).where.not(id: test_inquiries).where.not(id: spam_lead_ids)
     end
 
     def spam_lead_ids
@@ -391,15 +401,21 @@ module WeeklyReport
     def deposits_in(window)
       @deposits ||= {}
       @deposits[window] ||= PerfectBook::Booking.where("paid_minor > 0")
-        .where(first_paid_at: window)
+        .where("first_received_at BETWEEN :from AND :to OR (first_received_at IS NULL AND first_paid_at BETWEEN :from AND :to)", from: window.first, to: window.last)
         .where("status IS NULL OR status NOT IN (?)", TemplateContext::INACTIVE_BOOKING_STATUSES).to_a
-        .reject { |booking| booking_origin(booking).compact.any?(&:is_test?) }
+        .reject do |booking|
+          booking_origin(booking).compact.any? { |origin| origin.is_test? || (origin.is_a?(Lead) && (origin.converted_client&.is_test? || origin.existing_client&.is_test?)) }
+        end
     end
 
     def booking_origin(booking)
+      return [ booking.primary_inquiry, nil ] if booking.inquiry_binding || booking.crm_inquiry_ref.present?
       client = Client.find_by(perfectbook_contact_id: booking.perfectbook_contact_id)
-      lead = client&.converted_leads&.where("converted_at <= ?", booking.first_paid_at)&.order(:converted_at, :id)&.last
-      lead ||= Lead.where(converted_client_id: nil, perfectbook_contact_id: booking.perfectbook_contact_id).order(:created_at, :id).last
+      cutoff = booking.first_received_at || booking.first_paid_at
+      return [ nil, nil ] if cutoff.nil?
+      lead = client&.converted_leads&.where("converted_at <= ?", cutoff)&.order(:converted_at, :id)&.last
+      lead ||= Lead.where(converted_client_id: nil, perfectbook_contact_id: booking.perfectbook_contact_id)
+        .where("COALESCE(received_at, leads.created_at) <= ?", cutoff).order(:received_at, :id).last
       [ lead, client ]
     end
 

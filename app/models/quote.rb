@@ -246,7 +246,7 @@ class Quote < ApplicationRecord
       "departure_end" => departure_end_on&.iso8601,
       "party_size" => party_size, "total_minor" => subtotal_minor,
       "currency" => currency, "client" => owner_name, "email" => owner_email,
-      "quote_reference" => reference,
+      "quote_reference" => reference, "crm_inquiry_ref" => lead&.reference,
       "deposit_minor" => deposit_minor, "balance_due_minor" => remaining_balance_minor,
       "payment_now_minor" => payment_requested_minor,
       "paid_to_date_minor" => terms_bundle&.fetch("paid_to_date_minor"),
@@ -268,11 +268,13 @@ class Quote < ApplicationRecord
       trip: details["trip"], departure: details["departure"],
       start_date: details["departure_start"], end_date: details["departure_end"],
       party_size: details["party_size"], name: details["client"], email: details["email"],
-      quote: details["quote_reference"],
+      quote: details["quote_reference"], crm_inquiry_ref: details["crm_inquiry_ref"].presence || lead&.reference,
       terms_version: details["accepted_terms_version"],
       terms_sha256: details["accepted_bundle_sha256"]
     }.compact_blank
-    "#{PerfectBook.base_url}/bookings/new?#{params.to_query}"
+    departure_id = lines.where.not(perfectbook_departure_id: nil).pick(:perfectbook_departure_id)
+    path = departure_id ? "/departures/#{departure_id}/bookings/new" : "/bookings/new"
+    "#{PerfectBook.base_url}#{path}?#{params.to_query}"
   end
 
   private

@@ -77,7 +77,7 @@ class PerfectBookSyncJobsTest < ActiveSupport::TestCase
     PerfectBook::Circuit.reset!
   end
 
-  test "payment first observed after an unpaid sync remains the purchase time" do
+  test "delayed sync uses the upstream receipt timestamp and never sync time" do
     now = Time.current.change(usec: 0)
     travel_to now
     PerfectBook::Contact.create!(perfectbook_id: 7, kind: "customer", name: "Ama", synced_at: now)
@@ -92,10 +92,15 @@ class PerfectBookSyncJobsTest < ActiveSupport::TestCase
     mirror = PerfectBook::Booking.find_by!(perfectbook_id: booking.id)
     assert_nil mirror.first_paid_at
     travel 10.days
-    paid_at = Time.current
+    paid_at = Time.current - 2.days
+    booking.crm_inquiry_ref = lead.reference
+    booking.first_received_at = paid_at.iso8601
+    booking.first_received_on = paid_at.to_date.iso8601
+    booking.first_received_precision = "timestamp"
+    booking.receipts_minor = 5000
     booking.paid_minor = 5000
     PerfectBook::SyncBookingsJob.perform_now(client: client)
-    assert_equal paid_at, mirror.reload.first_paid_at
+    assert_equal paid_at, mirror.reload.first_received_at
     row = AdConversions.record!(lead).find { |item| item.event == "booked" }
     assert_equal paid_at, row.occurred_at
     assert_equal now, mirror.created_at
@@ -104,16 +109,16 @@ class PerfectBookSyncJobsTest < ActiveSupport::TestCase
     PerfectBook::SyncBookingsJob.perform_now(client: client)
     booking.paid_minor = 10000
     PerfectBook::SyncBookingsJob.perform_now(client: client)
-    assert_equal paid_at, mirror.reload.first_paid_at
+    assert_equal paid_at, mirror.reload.first_received_at
   end
 
-  test "successful empty bookings delete mirrors while 304 preserves them" do
+  test "successful empty bookings retain unavailable facts while 304 preserves them" do
     PerfectBook::Contact.create!(perfectbook_id: 7, kind: "customer", name: "Ama", synced_at: Time.current)
     PerfectBook::Booking.create!(perfectbook_id: 11, perfectbook_contact_id: 7, synced_at: Time.current)
     PerfectBook::SyncBookingsJob.perform_now(client: FakePbCatalogClient.new(not_modified: { bookings_7: true }))
     assert PerfectBook::Booking.exists?(perfectbook_id: 11)
     PerfectBook::SyncBookingsJob.perform_now(client: FakePbCatalogClient.new)
-    assert_not PerfectBook::Booking.exists?(perfectbook_id: 11)
+    assert PerfectBook::Booking.find_by!(perfectbook_id: 11).unavailable_at.present?
   end
 
   test "contacts watermark records poll start instead of completion" do
@@ -223,25 +228,25 @@ class PerfectBookSyncJobsTest < ActiveSupport::TestCase
     assert_equal "Lukla", booking.departure_place
   end
 
-  test "bookings sync stamps the first sync that sees money paid and keeps it" do
+  test "legacy payloads never invent a first receipt date" do
     PerfectBook::Contact.create!(perfectbook_id: 7, kind: "customer", name: "Ama", synced_at: Time.current)
     PerfectBook::Booking.create!(perfectbook_id: 11, perfectbook_contact_id: 7, ref: "BK-11",
       status: "quoted", paid_minor: 0, synced_at: Time.current)
     client = FakePbCatalogClient.new(bookings_by_contact: { 7 => [ pb_booking ] })
     first = Time.zone.local(2026, 9, 16, 9)
     travel_to(first) { PerfectBook::SyncBookingsJob.perform_now(client: client) }
-    assert_equal first, PerfectBook::Booking.find_by(perfectbook_id: 11).first_paid_at
+    assert_nil PerfectBook::Booking.find_by(perfectbook_id: 11).first_paid_at
 
     travel_to(first + 1.day) { PerfectBook::SyncBookingsJob.perform_now(client: client) }
-    assert_equal first, PerfectBook::Booking.find_by(perfectbook_id: 11).first_paid_at
+    assert_nil PerfectBook::Booking.find_by(perfectbook_id: 11).first_received_at
   end
 
-  test "bookings sync drops rows the server no longer returns" do
+  test "bookings sync marks unavailable rows rather than silently deleting financial facts" do
     PerfectBook::Contact.create!(perfectbook_id: 7, kind: "customer", name: "Ama", synced_at: Time.current)
     PerfectBook::Booking.create!(perfectbook_id: 99, perfectbook_contact_id: 7, ref: "GONE", synced_at: Time.current)
     client = FakePbCatalogClient.new(bookings_by_contact: { 7 => [ pb_booking ] })
     PerfectBook::SyncBookingsJob.perform_now(client: client)
-    assert_nil PerfectBook::Booking.find_by(perfectbook_id: 99)
+    assert PerfectBook::Booking.find_by!(perfectbook_id: 99).unavailable_at.present?
     assert_not_nil PerfectBook::Booking.find_by(perfectbook_id: 11)
   end
 

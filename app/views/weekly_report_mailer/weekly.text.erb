@@ -23,5 +23,10 @@ Trip, month and party size filled: <%= @summary.details_filled %> of <%= @summar
 <% end %><% if @summary.suspected_spam_count.positive? %>Held back as suspected spam: <%= @summary.suspected_spam_count %>
 <% end %><%= report_agreement_line(@summary) %>
 
+Inquiry review Q-fit: <%= @summary.q_fit %> (your judgment, no reply required). Platform-qualified: <%= @summary.total.qualified %> (fit plus owner stage move).
+<% monthly = @summary.monthly; facts = monthly.totals; quality = monthly.completeness %>
+Source database, <%= monthly.month.strftime('%B') %>, as of <%= monthly.as_of.strftime('%b %-d %H:%M %Z') %>: <%= facts[:inquiries] %> inquiries, <%= facts[:connected_calls] %> connected calls, <%= facts[:bookings] %> bookings, <%= facts[:travelers] %> travelers (booker's source). Net received: <%= source_report_money(facts[:net_received]) %>. Discovery confirmed: <%= quality[:confirmed] %> of <%= quality[:inquiries] %>; <%= quality[:unlinked_bookings] %> unlinked bookings.
+Monthly sources and cohorts: <%= settings_weekly_report_url(month: monthly.month.strftime('%Y-%m')) %>
+
 Qualified = AI fit strong or possible and you moved the lead to Chatting or Quoted. Booked = deposit paid.
 Open the report: <%= settings_weekly_report_url(week: @summary.week_start.iso8601) %>

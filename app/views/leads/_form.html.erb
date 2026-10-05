@@ -92,7 +92,10 @@
         <%= form.number_field :fit_score, min: 0, max: 100, class: "input", placeholder: "0 to 100 from Panda AI" %>
       </div>
       <div>
-        <%= form.label :fit_band, "Fit band", class: "label" %>
+        <%= form.label :owner_fit_at_inquiry, "Your fit judgment at inquiry", class: "label" %>
+        <%= form.select :owner_fit_at_inquiry, [["Not reviewed", ""]] + Lead::FIT_BANDS.map { |band| [band.humanize, band] }, {}, class: "select" %>
+        <p class="hint">Q-fit for review thresholds. No reply required. Separate from Panda AI and platform qualification.</p>
+        <%= form.label :fit_band, "Fit band", class: "label mt-3" %>
         <%= form.select :fit_band, [ [ "Scoring…", "" ] ] + Lead::FIT_BANDS.map { |band| [ band.humanize, band ] }, {}, class: "select" %>
       </div>
       <div class="sm:col-span-2">

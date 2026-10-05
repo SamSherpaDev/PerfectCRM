@@ -3,6 +3,7 @@
 class WeeklyReportsController < ApplicationController
   def show
     @summary = WeeklyReport::Summary.new(week_start: requested_week)
+    @monthly = WeeklyReport::Monthly.new(month: requested_month, view: params[:view])
     @subject = WeeklyReportMailer.subject_for(@summary)
     @recipient = Setting.current.weekly_report_to
     @current_week = Date.current.beginning_of_week(:monday)
@@ -18,6 +19,13 @@ class WeeklyReportsController < ApplicationController
   end
 
   private
+
+  def requested_month
+    date = Date.strptime(params[:month].to_s, "%Y-%m").beginning_of_month
+    date > Date.current ? Date.current.beginning_of_month : date
+  rescue Date::Error
+    Date.current.beginning_of_month
+  end
 
   # A Monday on or before this week; anything else falls back to last week.
   def requested_week

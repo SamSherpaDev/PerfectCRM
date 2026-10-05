@@ -644,7 +644,7 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
 | Inquiry | Lead created | Existing web tag, not in the feed | `Lead`, sent at intake | $300 |
 | Qualified | Current fit band strong or possible, and you moved it to Chatting or Quoted | `Qualified inquiry` | `QualifiedLead` | $1,000 |
 | Quote | Current or recorded past status Quoted, or a CRM quote sent | `Quote sent` | `Quote` | $2,000 |
-| Booked | A linked active PerfectBook booking with money still paid, first observed at or after the inquiry | `Booking (deposit paid)` | `Purchase` | USD booking total times the booking value percent (default 35); other currencies report a fixed 2,000 USD |
+| Booked | An explicitly linked or reviewed active PerfectBook booking with an authoritative timestamped first receipt at or after the inquiry | `Booking (deposit paid)` | `Purchase` | USD booking total times the booking value percent (default 35); other currencies report a fixed 2,000 USD |
 
 - Only leads that arrived with a click ID (`gclid`, `gbraid`, `wbraid`, or
   `fbclid`, with `fbclid` also read from the landing URL) are reported: the form drops
@@ -653,20 +653,27 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
   legacy permission is withheld. Archived, suspected-spam, explicit `is_test`,
   and lost "not a fit" leads are never reported. Tests using the business mailbox
   or an owner address in `ALLOWED_GOOGLE_EMAILS` are also excluded.
-- Purchase time is `first_paid_at`, stamped by the booking model on the first
-  observation of `paid_minor > 0` and retained across later syncs and refunds.
-  The repair migration replaces the original shared backfill timestamp with
-  each mirror's creation date for still-paid rows created before that timestamp;
-  see `test/models/first_paid_at_repair_migration_test.rb`.
+- Purchase time is PerfectBook's `first_received_at` with `timestamp` precision,
+  never sync time. Date-only manual receipts remain valid business facts but do
+  not export an invented exact Purchase time. Inferred/unresolved links and old
+  unbound Purchase rows are withheld. `first_paid_at` remains legacy estimated
+  evidence for weekly compatibility only; no new observation dates are stamped.
   Qualification and quote
   milestones use activity history; qualification also requires the current
   fit band to be strong/possible at sweep time, without requiring an AI verdict
   in history. Its timestamp is the first owner transition to Chatting or Quoted.
   Lowering the band before the sweep prevents qualification; already recorded
   outcomes are retained.
-- Each outcome is one `AdConversion` row per lead, recorded once, so a status
-  moving back and forth never reports twice. The Lead event ID is the form's
-  `submission_id`, so a browser pixel Lead with the same event ID deduplicates.
+- Inquiry, qualification and quote are unique per lead/event. Purchase is unique
+  per PerfectBook booking ID (`sh-booking-ID-purchase`), so two inquiries cannot
+  export the same booking and a balance payment is not another Purchase. Repeat
+  bookings get distinct IDs. The Lead event keeps the browser `submission_id`
+  unchanged for deduplication. Events retain actual times; none are clamped to
+  the click, refresh or export date. A previously attempted/pulled legacy
+  Purchase without a booking ID conservatively holds potentially already
+  reported receipts for that contact, with a visible diagnostic, rather than
+  replaying them under a new ID. A genuinely later first receipt remains eligible.
+  Old outcomes are not guessed, remapped or rewritten.
 - Meta: Settings → Ad conversions takes the dataset ID and access token
   (stored encrypted). Email and phone are
   SHA-256 hashed; `fbc` comes from the click. Failures become eligible for retry after 1, 4, 9,
@@ -683,9 +690,70 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
   days after the click and rows matched by email/phone up to 63 days. Braid-only clicks
   use email/phone matching; this scheduled feed does not send gbraid/wbraid.
   Accept/reject counts are in Google Ads > Goals > Conversions > Uploads.
-- Both are off until configured. The card shows the last run, Meta sent,
-  waiting, failed, and skipped counts, Google's last pull, and the latest
-  outcomes with any error.
+- Both are off until the owner enters credentials and confirms acceptance of
+  the applicable platform terms himself. Settings lists missing inputs plainly.
+  Configured is not verified acceptance: Meta received-event diagnostics and
+  Google Uploads accepted/rejected counts must be checked in those platforms.
+  Expired/missing-time clicks have stored visible Google skip reasons. A legacy
+  click ID never fabricates a click observation time or restores permission.
+
+## Monthly source reports and reviewed backfill
+
+`/settings/weekly_report` also shows calendar-month results in Los Angeles time,
+with an explicit as-of time. `WeeklyReport::Monthly` offers separate reported
+(discovery testimony, provisional until confirmed), first-observed and inquiry
+paid-performance views. Each view reconciles independently; never add them.
+Connected calls count inquiry-subject call events, not client copies or tasks.
+Bookings use actual first receipts, including later cancellations; attached
+traveler counts inherit the booker's source. Cash is receipts minus refunds by
+cash-event date/currency, not contracted booking value. Missing cash/traveler
+facts, unresolved identity and unlinked/inferred bookings remain visible.
+Recognized revenue and unique returning travelers are unavailable upstream.
+New paying bookers and repeat bookings use PerfectBook contact/booking IDs.
+
+Inquiry review **Q-fit** is your separately audited `owner_fit_at_inquiry`
+judgment (Strong/Possible), with no reply required. **Platform-qualified** stays
+current strong/possible fit plus your stage move. An AI score is never silently
+substituted for your review count. Unreviewed fit is shown in completeness.
+Cohorts use inquiry dates and mature 30/60/90/180-day denominators; immature
+inquiries show as pending. Eventual value/net cash are separated by currency.
+
+Monthly ad costs use exact daily spend through the month/as-of date, keyed by
+stable campaign ID and currency. Every day, including explicitly zero days,
+must be present for a ratio. Missing days or zero bookings means unavailable.
+Weekly spend is never prorated or added on top. See the additive
+[daily spend contract](docs/channel-checks.md#daily-spend-request).
+The existing Monday email adds the monthly summary/link, not a second digest.
+
+`BookingInquiryBinding` holds one primary inquiry per PerfectBook booking ID.
+Sync validates returned references against CRM contact, trip and date evidence;
+unknown/mismatched/changed references require review. The Trip panel's quiet
+review disclosure accepts a contact-linked inquiry and evidence/reason, with
+actor/date/prior-link audit. Correct changed upstream references in PerfectBook
+as well. Binding edits never edit either application's creation/source fields.
+A lead-owned quote handoff passes that exact inquiry reference, including legacy
+staged quotes, and uses PerfectBook's departure booking route when known. A
+client-only quote never guesses its latest inquiry. Missing upstream bookings are retained as unavailable for reconciliation.
+
+Backfill is **dry-run first**, never a production action during development:
+
+```sh
+OUTPUT=/private/source-review bin/rails sources:dry_run
+# Review inventory.json and each deterministic batch-NNNN.csv (100 rows max).
+sha256sum /private/source-review/batch-0001.csv
+BATCH=/private/source-review/batch-0001.csv REVIEWER=operator APPROVED_SHA256=<reviewed-sha256> bin/rails sources:apply
+```
+
+Only existing source/campaign is copied to a provenance-labeled
+`metadata.legacy_observed`, never to self-reported/first-touch fields. A sole
+exact-contact/trip/time candidate may receive an **inferred** binding; ambiguous
+cases remain unresolved. No email/name merges, deletions, test guesses or ad
+history rewrites. No historical ad events are created; inferred links cannot
+export. Each reviewed batch is content-addressed, replay-safe and atomic;
+stale evidence fails the whole batch. `SourceBackfillBatch` stores before/after
+counts and per-currency money reconciliation, and ActivityEvents retain the
+added-key/prior-link change trail for reviewed reversal. Original metadata stays
+intact. Keep outputs private; run production only after operator review.
 
 ## Mail
 
@@ -909,9 +977,9 @@ Definitions, in `WeeklyReport::Summary`:
   whichever came first. Inquiry, qualified, and quote counts exclude explicit
   tests, archived and suspected-spam leads across all sources; Paid total includes only Google
   Ads and Meta Ads.
-- **Booked**: a mirrored PerfectBook booking whose deposit was first seen
-  paid that week (`first_paid_at`; payment timing and historical backfill are
-  defined in [Ad conversions](#ad-conversions)), unless
+- **Booked**: a mirrored PerfectBook booking whose authoritative first receipt
+  falls that week (`first_received_at`; old rows without it retain the estimated
+  `first_paid_at` compatibility count), unless
   since cancelled, voided, or refunded, or its matched lead or client is
   marked as a test. It counts toward the channel and
   campaign selected by the attribution rules below; travelers are its party
@@ -934,9 +1002,12 @@ exclude the lead from the comparison. The window uses judgment dates, not inquir
 Owner stage changes retain their loss reason even if automation later changes
 the lead; older events without that snapshot use the lead's current reason.
 
-Booking attribution uses the client's latest lead converted at or before the
-deposit event, then an unconverted lead with the same PerfectBook contact,
-then the client's source and campaign. Source and campaign always come from
+Booking attribution uses the unique booking inquiry binding first. An explicit
+reference that is unresolved/conflicting stays unknown, never falls back to a
+later inquiry. Only legacy unbound weekly rows use the client's latest converted
+lead before the deposit, then an unconverted contact-matched lead also received
+before the deposit, then the client's source/campaign. This compatibility path
+is inferred, not reviewed discovery. Source and campaign always come from
 the same selected record, even when its campaign is empty. Bookings with no
 CRM origin appear as "Booked outside the CRM". Booked value and cost per
 booking are shown by campaign whenever bookings exist, independent of ROAS;

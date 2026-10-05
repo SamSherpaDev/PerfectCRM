@@ -29,6 +29,20 @@
             <div><dt>Paid</dt><dd><%= money_in(booking.paid_minor, booking.currency) %></dd></div>
             <div><dt>Balance due</dt><dd><%= money_in(booking.balance_due_minor, booking.currency) %></dd></div>
           </dl>
+          <p class="hint mt-2">Primary inquiry: <% if booking.primary_inquiry %><%= link_to booking.primary_inquiry.reference, lead_path(booking.primary_inquiry), class: "link-quiet" %> (<%= booking.inquiry_binding.state %>)<% else %>Unlinked<% end %>.</p>
+          <% if booking.binding_issue.present? %><p class="hint"><%= booking.binding_issue %></p><% end %>
+          <% if booking.unavailable_at %><p class="hint">No longer returned by PerfectBook. Retained for reconciliation.</p><% end %>
+          <details class="mt-2">
+            <summary class="hint cursor-pointer">Review inquiry link</summary>
+            <%= form_with scope: :binding, url: booking_inquiry_bindings_path(booking_id: booking.id), class: "mt-2 space-y-2" do |form| %>
+              <%= form.label :lead_id, "Purchasing inquiry", for: "booking-#{booking.id}-inquiry", class: "label" %>
+              <%= form.select :lead_id, booking_inquiry_choices(booking), { include_blank: "Choose inquiry", selected: booking.inquiry_binding&.lead_id }, id: "booking-#{booking.id}-inquiry", required: true, class: "select" %>
+              <%= form.label :reason, "Evidence and reason", for: "booking-#{booking.id}-reason", class: "label" %>
+              <%= form.text_field :reason, id: "booking-#{booking.id}-reason", maxlength: 240, required: true, class: "input" %>
+              <p class="hint">Check contact, trip and dates. If replacing an upstream reference, also correct it in PerfectBook.</p>
+              <%= form.submit "Confirm inquiry link", class: "btn-secondary btn btn-sm" %>
+            <% end %>
+          </details>
           <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
             <% if booking.invoice_badge.present? %><%= status_badge booking.invoice_badge %><% end %>
             <% if booking.invoice_number.present? %><span class="muted"><%= booking.invoice_number %></span><% end %>

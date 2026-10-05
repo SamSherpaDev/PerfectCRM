@@ -65,6 +65,9 @@ class Lead < ApplicationRecord
   validates :perfectbook_contact_id, numericality: { only_integer: true, greater_than: 0, allow_nil: true }
   validates :fit_score, numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 100, allow_nil: true }
   validates :fit_band, inclusion: { in: FIT_BANDS }, allow_blank: true
+  validates :owner_fit_at_inquiry, inclusion: { in: FIT_BANDS }, allow_blank: true
+  before_save :stamp_inquiry_review_fit
+  after_save :audit_inquiry_review_fit
   validates :lost_reason, inclusion: { in: LOST_REASONS }, allow_nil: true
   validate :lost_reason_required_when_lost
   validates :expected_value_minor,
@@ -411,6 +414,19 @@ class Lead < ApplicationRecord
 
   def stamp_activity
     update_column(:last_activity_at, Time.current)
+  end
+
+  def stamp_inquiry_review_fit
+    return unless will_save_change_to_owner_fit_at_inquiry?
+    self.owner_fit_recorded_at = Time.current
+    self.owner_fit_recorded_by = Current.user_email.presence || "manual"
+  end
+
+  def audit_inquiry_review_fit
+    return unless saved_change_to_owner_fit_at_inquiry?
+    activity_events.create!(kind: "inquiry_fit", summary: "Inquiry fit reviewed: #{owner_fit_at_inquiry.presence || 'not reviewed'}",
+      occurred_at: Time.current, metadata: { "fit" => owner_fit_at_inquiry, "prior" => owner_fit_at_inquiry_before_last_save,
+        "actor" => owner_fit_recorded_by })
   end
 
   def assign_reference

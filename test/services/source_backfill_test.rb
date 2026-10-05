@@ -1,0 +1,62 @@
+require "test_helper"
+require "tmpdir"
+
+class SourceBackfillTest < ActiveSupport::TestCase
+  test "dry run is deterministic and reviewed import reconciles without testimony or ad events" do
+    lead = Lead.create!(name: "Synthetic legacy", source: "google_ads", campaign_name: "Legacy", perfectbook_contact_id: 44,
+      trip_interest: "Test trip", received_at: 2.months.ago, metadata: { "attribution" => { "gclid" => "test-only" } })
+    PerfectBook::Booking.create!(perfectbook_id: 55, perfectbook_contact_id: 44, trip_name: "Test trip",
+      first_received_at: 1.month.ago, total_minor: 900_000, receipts_minor: 50_000, net_received_minor: 50_000, currency: "USD", synced_at: Time.current)
+    before = SourceBackfill.inventory
+    original = lead.metadata.deep_dup
+    Dir.mktmpdir do |directory|
+      SourceBackfill.dry_run!(directory)
+      assert_equal before, SourceBackfill.inventory
+      assert_equal original, lead.reload.metadata
+      path = File.join(directory, "batch-0001.csv")
+      digest = Digest::SHA256.file(path).hexdigest
+      # A normal mirror refresh is transport noise, not changed review evidence.
+      PerfectBook::Booking.find_by!(perfectbook_id: 55).update_columns(synced_at: 1.minute.from_now, updated_at: 1.minute.from_now)
+      repeated = File.join(directory, "repeat")
+      SourceBackfill.dry_run!(repeated)
+      assert_equal File.binread(path), File.binread(File.join(repeated, "batch-0001.csv"))
+      result = SourceBackfill.apply!(path, reviewer: "test-reviewer", approved_digest: digest)
+      assert result["count_money_reconciled"]
+      assert_equal before["money"], SourceBackfill.inventory["money"]
+      assert_equal "not_asked", lead.reload.source_answer_state
+      assert_equal original["attribution"], lead.metadata["attribution"]
+      assert lead.metadata["legacy_observed"]["not_self_reported"]
+      assert_equal "inferred", BookingInquiryBinding.find_by!(perfectbook_id: 55).state
+      assert_equal 0, AdConversion.count
+      assert_equal 1, SourceBackfillBatch.count
+      assert_equal result, SourceBackfill.apply!(path, reviewer: "test-reviewer", approved_digest: digest)
+      assert_equal 1, SourceBackfillBatch.count
+      assert_equal 1, lead.activity_events.where(kind: "source_backfill").count
+    end
+  end
+
+  test "stale evidence and wrong approvals rollback whole batches" do
+    first = Lead.create!(name: "Synthetic first", source: "manual")
+    second = Lead.create!(name: "Synthetic second", source: "manual")
+    Dir.mktmpdir do |directory|
+      SourceBackfill.dry_run!(directory)
+      path = File.join(directory, "batch-0001.csv")
+      assert_raises(ArgumentError) { SourceBackfill.apply!(path, reviewer: "test", approved_digest: "wrong") }
+      second.update!(source: "referral")
+      digest = Digest::SHA256.file(path).hexdigest
+      assert_raises(ArgumentError) { SourceBackfill.apply!(path, reviewer: "test", approved_digest: digest) }
+      assert_nil first.reload.metadata&.dig("legacy_observed")
+      assert_equal 0, SourceBackfillBatch.count
+    end
+  end
+
+  test "multiple contact trip candidates never become newest-lead credit" do
+    first = Lead.create!(name: "Synthetic first", source: "manual", perfectbook_contact_id: 44, trip_interest: "Test trip", received_at: 2.months.ago)
+    client = first.convert_to_client!
+    Lead.create!(name: "Synthetic repeat", source: "manual", existing_client: client, trip_interest: "Test trip", received_at: 2.months.ago)
+    PerfectBook::Booking.create!(perfectbook_id: 55, perfectbook_contact_id: 44, trip_name: "Test trip", first_received_at: 1.month.ago, synced_at: Time.current)
+    rows = SourceBackfill.proposals
+    assert_equal "unresolved", rows.last.first
+    assert_match(/2 defensible/, rows.last.last)
+  end
+end

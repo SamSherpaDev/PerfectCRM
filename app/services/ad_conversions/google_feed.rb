@@ -26,16 +26,24 @@ module AdConversions
     end
 
     def servable?(row, now)
-      lead = row.lead
-      return false if AdConversions.excluded?(lead)
+      reason = skip_reason(row, now)
+      row.update_column(:google_skip_reason, reason) if row.google_skip_reason != reason
+      reason.nil?
+    end
 
+    def skip_reason(row, now)
+      lead = row.lead
+      return "No measurement/sharing permission or excluded inquiry" if AdConversions.excluded?(lead)
+      booking_issue = AdConversions.booking_skip_reason(row)
+      return booking_issue if booking_issue
       clicked = AdConversions.click_at(lead)
-      if AdConversions.google_click_ids(lead)["gclid"].present?
-        clicked >= now - AdConversions::GCLID_WINDOW
-      else
-        clicked >= now - AdConversions::ENHANCED_WINDOW &&
-          (AdConversions.contact_email(lead) || AdConversions.contact_phone(lead)).present?
-      end
+      return "Click observation time missing" if clicked.nil?
+      return "Event precedes click or is in the future" if row.occurred_at < clicked || row.occurred_at > now || clicked > now
+      window = AdConversions.google_click_ids(lead)["gclid"].present? ? AdConversions::GCLID_WINDOW : AdConversions::ENHANCED_WINDOW
+      return "Expired click (#{window.in_days.to_i}-day import window)" if clicked < now - window
+      return "Missing matching email/phone" if AdConversions.google_click_ids(lead)["gclid"].blank? &&
+        (AdConversions.contact_email(lead) || AdConversions.contact_phone(lead)).blank?
+      nil
     end
 
     def csv(rows)

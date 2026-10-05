@@ -34,7 +34,9 @@ module PerfectBook
       :departure_id, :departure_place, :start_date, :end_date, :party_size,
       :price_per_person_minor, :total_minor, :paid_minor, :balance_due_minor,
       :currency, :invoice_badge, :invoice_number, :payment_reference,
-      :deep_link, :documents, :checklist, :missing_count, :payment_terms, keyword_init: true)
+      :deep_link, :documents, :checklist, :missing_count, :payment_terms, :crm_inquiry_ref,
+      :first_received_at, :first_received_on, :first_received_precision, :receipts_minor,
+      :refunds_minor, :net_received_minor, :traveler_count, :cancelled_at, :cash_events, keyword_init: true)
 
     # Upload handoff result: traveler + document outcome, booking
     # missing_count, and whether PerfectBook replayed an earlier upload_id.
@@ -312,7 +314,12 @@ module PerfectBook
         payment_reference: invoice["payment_reference"], deep_link: row["deep_link"],
         payment_terms: row["payment_terms"],
         documents: documents, checklist: Array(row["checklist"]),
-        missing_count: documents["missing_count"].to_i
+        missing_count: documents["missing_count"].to_i,
+        crm_inquiry_ref: row["crm_inquiry_ref"], first_received_at: row["first_received_at"],
+        first_received_on: row["first_received_on"], first_received_precision: row["first_received_precision"],
+        receipts_minor: row["receipts_minor"], refunds_minor: row["refunds_minor"],
+        net_received_minor: row["net_received_minor"], traveler_count: row["traveler_count"],
+        cancelled_at: row["cancelled_at"], cash_events: row.key?("cash_events") ? Array(row["cash_events"]).map { |event| event.slice("id", "kind", "occurred_at", "occurred_on", "time_precision", "amount_minor", "currency") } : nil
       )
     end
 

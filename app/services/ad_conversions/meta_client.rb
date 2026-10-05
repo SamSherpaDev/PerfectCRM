@@ -16,11 +16,14 @@ module AdConversions
     end
 
     def deliver(row)
+      raise Error, "Meta credentials and owner terms confirmation are required" unless @settings.meta_configured?
+      raise Error, "Measurement/sharing permission is required" if AdConversions.excluded?(row.lead.reload)
+      raise Error, "Booking receipt evidence missing" if AdConversions.invalid_booking_outcome?(row)
       response = post(JSON.generate(body(row)))
       parsed = JSON.parse(response.body.to_s) rescue {}
       unless response.is_a?(Net::HTTPSuccess) && parsed["events_received"].to_i >= 1
         message = parsed.dig("error", "error_user_msg").presence || parsed.dig("error", "message").presence
-        raise Error, [ "HTTP #{response.code}", message ].compact.join(": ")
+        raise Error, [ "HTTP #{response.code}", message ].compact.join(": ").gsub(@settings.meta_access_token.to_s, "[redacted]")
       end
       parsed
     rescue Timeout::Error, SystemCallError, SocketError, OpenSSL::SSL::SSLError, IOError, EOFError => error
@@ -56,7 +59,7 @@ module AdConversions
       data = { external_id: [ AdConversions.sha256(lead.id.to_s) ] }
       data[:em] = [ AdConversions.meta_email_hash(email) ] if email
       data[:ph] = [ AdConversions.meta_phone_hash(phone) ] if phone
-      data[:fbc] = fbc(lead) if AdConversions.fbclid(lead)
+      data[:fbc] = fbc(lead) if AdConversions.fbclid(lead) && AdConversions.click_at(lead)
       data[:client_user_agent] = user_agent if user_agent
       data
     end
@@ -69,7 +72,13 @@ module AdConversions
     def source_url(lead)
       page = lead.metadata.is_a?(Hash) ? lead.metadata["page"] : nil
       url = page.is_a?(Hash) ? page["url"].to_s.presence : nil
-      url || AdConversions.attribution(lead)["landing_url"].to_s.presence
+      raw = url || AdConversions.attribution(lead)["landing_url"].to_s.presence
+      uri = URI.parse(raw.to_s)
+      return nil unless %w[http https].include?(uri.scheme) && uri.host.present?
+      uri.query = uri.fragment = uri.userinfo = nil
+      uri.to_s
+    rescue URI::InvalidURIError
+      nil
     end
 
     def post(body)
