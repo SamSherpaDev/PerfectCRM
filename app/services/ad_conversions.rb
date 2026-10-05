@@ -282,7 +282,7 @@ module AdConversions
       "Older than Meta's 7-day limit"
     end
     if skip_reason
-      changed = claim.update_all(meta_status: "skipped", meta_error: skip_reason, updated_at: now)
+      changed = claim.update_all(meta_status: row.meta_status == "rejected" ? "rejected" : "skipped", meta_error: skip_reason, updated_at: now)
       row.reload
       return changed.positive? ? :skipped : nil
     end

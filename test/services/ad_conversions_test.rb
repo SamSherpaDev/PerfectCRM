@@ -542,4 +542,59 @@ class AdConversionsTest < ActiveSupport::TestCase
     end
   end
 
+  test "rejection survives sync eligibility skip and follows reviewed ownership" do
+    lead = ad_lead(perfectbook_contact_id: 92)
+    other = ad_lead(existing_client: Client.create!(name: "Booker", perfectbook_contact_id: 92))
+    booking = PerfectBook::Booking.create!(perfectbook_id: 9092, perfectbook_contact_id: 92,
+      status: "confirmed", first_received_at: @now - 1.hour, first_received_precision: "timestamp",
+      receipts_minor: 50_000, synced_at: @now)
+    BookingInquiryBinding.link!(booking, lead: lead, actor: "test", evidence: "Initial")
+    row = AdConversions.record!(lead).find { |entry| entry.event == "booked" }
+    with_meta(body: { "events_received" => 0 }.to_json) do
+      assert_equal :failed, AdConversions.deliver_meta!(row)
+    end
+    booking.update!(trip_name: "Changed trip")
+    BookingInquiryBinding.sync!(booking)
+    with_meta do |fake|
+      assert_equal :skipped, AdConversions.deliver_meta!(row, now: @now + 61.minutes)
+      assert_empty fake.requests
+    end
+    assert_equal "rejected", row.reload.meta_status
+    assert_not row.possibly_delivered?
+    assert_match(/review required/, row.meta_error)
+    BookingInquiryBinding.link!(booking, lead: other, actor: "test", evidence: "Correction", reason: "Correct inquiry")
+    assert_equal other.id, row.reload.lead_id
+    assert_equal "pending", row.meta_status
+    assert_equal 0, row.meta_attempts
+    assert_nil row.meta_error
+    with_meta do |fake|
+      assert_equal :sent, AdConversions.deliver_meta!(row, now: @now + 62.minutes)
+      assert_nil AdConversions.deliver_meta!(row, now: @now + 63.minutes)
+      assert_equal 1, fake.requests.size
+    end
+    assert_equal 1, AdConversion.where(event: "booked", perfectbook_id: booking.perfectbook_id).count
+  end
+
+  test "every eligibility skip preserves definite rejection" do
+    %w[excluded future click expired].each do |reason|
+      lead = ad_lead
+      row = AdConversions.record!(lead).first
+      with_meta(body: { "events_received" => 0 }.to_json) { AdConversions.deliver_meta!(row) }
+      case reason
+      when "excluded" then lead.update!(archived_at: @now)
+      when "future" then row.update!(occurred_at: @now + 2.days)
+      when "click" then row.update!(occurred_at: @now - 3.days)
+      when "expired" then row.update!(occurred_at: @now - 8.days)
+        lead.update!(metadata: lead.metadata.deep_merge("attribution" => { "first_seen_at" => (@now - 10.days).iso8601 }))
+      end
+      with_meta do |fake|
+        assert_equal :skipped, AdConversions.deliver_meta!(row, now: @now + 61.minutes)
+        assert_empty fake.requests
+      end
+      assert_equal "rejected", row.reload.meta_status
+      assert_not row.possibly_delivered?
+      assert_equal 1, row.meta_attempts
+    end
+  end
+
 end
