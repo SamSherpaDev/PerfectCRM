@@ -20,6 +20,7 @@ module AdConversions
     end
 
     def servable?(row, now)
+      AdConversions.refresh_booking_facts!(row)
       reason = skip_reason(row, now)
       row.update_column(:google_skip_reason, reason) if row.google_skip_reason != reason
       reason.nil?

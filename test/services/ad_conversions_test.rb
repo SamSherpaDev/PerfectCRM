@@ -467,6 +467,9 @@ class AdConversionsTest < ActiveSupport::TestCase
       assert_equal :sent, AdConversions.deliver_meta!(row, settings: @settings)
       assert_nil AdConversions.deliver_meta!(row, settings: @settings)
       assert_equal 1, fake.requests.size
+      event = JSON.parse(fake.requests.sole.body)["data"].sole
+      assert_equal [ AdConversions.sha256(other.id.to_s) ], event["user_data"]["external_id"]
+      assert_equal "accepted", row.reload.delivery_status
     end
     assert_not_includes AdConversions::GoogleFeed.serve!(settings: @settings), "corrected-click"
   end
@@ -498,34 +501,29 @@ class AdConversionsTest < ActiveSupport::TestCase
   end
 
 
-  test "definitely rejected Purchase follows correction but unknown delivery is held" do
-    %w[rejected unknown].each_with_index do |result, index|
-      lead = ad_lead(perfectbook_contact_id: 80 + index)
-      other = ad_lead(existing_client: Client.create!(name: "Booker", perfectbook_contact_id: 80 + index))
-      booking = PerfectBook::Booking.create!(perfectbook_id: 9050 + index, perfectbook_contact_id: 80 + index,
-        status: "confirmed", first_received_at: @now - 1.hour, first_received_precision: "timestamp",
-        receipts_minor: 50_000, synced_at: @now)
-      BookingInquiryBinding.link!(booking, lead: lead, actor: "test", evidence: "Initial")
-      row = AdConversions.record!(lead).find { |entry| entry.event == "booked" }
-      with_meta(body: result == "rejected" ? { "events_received" => 0 }.to_json : "invalid response") do
-        assert_equal :failed, AdConversions.deliver_meta!(row)
-      end
-      assert_equal(result == "rejected" ? "rejected" : "uncertain", row.reload.meta_status)
-      BookingInquiryBinding.link!(booking, lead: other, actor: "test", evidence: "Correction", reason: "Wrong inquiry")
-      if result == "rejected"
-        assert_equal other.id, row.reload.lead_id
-        with_meta { assert_equal :sent, AdConversions.deliver_meta!(row) }
-      else
-        assert_equal lead.id, row.reload.lead_id
-        with_meta do |fake|
-          assert_nil AdConversions.deliver_meta!(row, now: @now + 1.day)
-          assert_empty fake.requests
-        end
-        assert_not_includes AdConversions::GoogleFeed.rows.map(&:id), row.id
-        assert_match(/review platform history/, row.meta_error)
-      end
-      assert_equal 1, AdConversion.where(event: "booked", perfectbook_id: booking.perfectbook_id).count
+  test "definitely rejected Purchase follows correction and exports once" do
+    lead = ad_lead(perfectbook_contact_id: 80)
+    other = ad_lead(existing_client: Client.create!(name: "Booker", perfectbook_contact_id: 80))
+    booking = PerfectBook::Booking.create!(perfectbook_id: 9050, perfectbook_contact_id: 80,
+      status: "confirmed", first_received_at: @now - 1.hour, first_received_precision: "timestamp",
+      receipts_minor: 50_000, synced_at: @now)
+    BookingInquiryBinding.link!(booking, lead: lead, actor: "test", evidence: "Initial")
+    row = AdConversions.record!(lead).find { |entry| entry.event == "booked" }
+    with_meta(body: { "events_received" => 0 }.to_json) do
+      assert_equal :failed, AdConversions.deliver_meta!(row)
     end
+    assert_equal "rejected", row.reload.delivery_status
+    BookingInquiryBinding.link!(booking, lead: other, actor: "test", evidence: "Correction", reason: "Wrong inquiry")
+    assert_equal other.id, row.reload.lead_id
+    with_meta do |fake|
+      assert_equal :sent, AdConversions.deliver_meta!(row)
+      assert_nil AdConversions.deliver_meta!(row)
+      assert_equal 1, fake.requests.size
+      event = JSON.parse(fake.requests.sole.body)["data"].sole
+      assert_equal [ AdConversions.sha256(other.id.to_s) ], event["user_data"]["external_id"]
+    end
+    assert_equal "accepted", row.reload.delivery_status
+    assert_equal 1, AdConversion.where(event: "booked", perfectbook_id: booking.perfectbook_id).count
   end
 
   test "Meta timeouts stay indeterminate and never retry" do
@@ -552,10 +550,12 @@ class AdConversionsTest < ActiveSupport::TestCase
     with_meta(body: { "events_received" => 0 }.to_json) do
       assert_equal :failed, AdConversions.deliver_meta!(row)
     end
+    AdConversions.record!(other)
+    AdConversion.where(lead_id: [ lead.id, other.id ], event: "lead").update_all(delivery_status: "accepted", meta_status: "sent")
     booking.update!(trip_name: "Changed trip")
     BookingInquiryBinding.sync!(booking)
     with_meta do |fake|
-      assert_equal :skipped, AdConversions.deliver_meta!(row, now: @now + 61.minutes)
+      AdConversions::ExportJob.perform_now(now: @now + 61.minutes)
       assert_empty fake.requests
     end
     assert_equal "rejected", row.reload.meta_status
@@ -570,6 +570,9 @@ class AdConversionsTest < ActiveSupport::TestCase
       assert_equal :sent, AdConversions.deliver_meta!(row, now: @now + 62.minutes)
       assert_nil AdConversions.deliver_meta!(row, now: @now + 63.minutes)
       assert_equal 1, fake.requests.size
+      event = JSON.parse(fake.requests.sole.body)["data"].sole
+      assert_equal [ AdConversions.sha256(other.id.to_s) ], event["user_data"]["external_id"]
+      assert_equal "accepted", row.reload.delivery_status
     end
     assert_equal 1, AdConversion.where(event: "booked", perfectbook_id: booking.perfectbook_id).count
   end
@@ -603,16 +606,27 @@ class AdConversionsTest < ActiveSupport::TestCase
       receipts_minor: 50_000, synced_at: @now)
     BookingInquiryBinding.link!(booking, lead: lead, actor: "test", evidence: "Initial")
     row = AdConversions.record!(lead).find { |entry| entry.event == "booked" }
+    lead.ad_conversions.where(event: "lead").update_all(delivery_status: "accepted", meta_status: "sent")
     booking.update!(departure_id: 96)
     BookingInquiryBinding.sync!(booking)
-    assert_equal :skipped, AdConversions.deliver_meta!(row)
+    with_meta do |fake|
+      AdConversions::ExportJob.perform_now
+      assert_empty fake.requests
+    end
     assert_equal "not_sent", row.reload.delivery_status
     assert row.last_skip_reason.present?
     BookingInquiryBinding.link!(booking, lead: lead, actor: "test", evidence: "Confirmed", reason: "Rescheduled")
     assert_equal row.id, AdConversion.find_by!(event: "booked", perfectbook_id: 9095).id
     assert_nil row.reload.last_skip_reason
-    with_meta { assert_equal :sent, AdConversions.deliver_meta!(row) }
+    with_meta do |fake|
+      assert_equal :sent, AdConversions.deliver_meta!(row)
+      assert_nil AdConversions.deliver_meta!(row)
+      assert_equal 1, fake.requests.size
+      event = JSON.parse(fake.requests.sole.body)["data"].sole
+      assert_equal [ AdConversions.sha256(lead.id.to_s) ], event["user_data"]["external_id"]
+    end
     assert_equal "accepted", row.reload.delivery_status
+    assert_equal 1, AdConversion.where(event: "booked", perfectbook_id: 9095).count
   end
 
   test "permission eligibility is recomputed without a new review or conversion row" do
@@ -625,6 +639,68 @@ class AdConversionsTest < ActiveSupport::TestCase
     with_meta { assert_equal :sent, AdConversions.deliver_meta!(row) }
     assert_equal "accepted", row.reload.delivery_status
     assert_nil row.last_skip_reason
+  end
+
+  test "undelivered Purchase refreshes current receipt facts through review record Meta and Google" do
+    %w[review record meta google].each_with_index do |path, index|
+      lead = ad_lead(perfectbook_contact_id: 100 + index)
+      booking = PerfectBook::Booking.create!(perfectbook_id: 9100 + index, perfectbook_contact_id: 100 + index,
+        status: "confirmed", first_received_at: @now - 1.hour, first_received_precision: "timestamp",
+        receipts_minor: 50_000, total_minor: 700_000, currency: "USD", synced_at: @now)
+      BookingInquiryBinding.link!(booking, lead: lead, actor: "test", evidence: "Initial")
+      row = AdConversions.record!(lead).find { |entry| entry.event == "booked" }
+      with_meta(body: { "events_received" => 0 }.to_json) { AdConversions.deliver_meta!(row) } if path == "review"
+      corrected = @now - 30.minutes
+      booking.update!(first_received_at: corrected, total_minor: 900_000)
+      BookingInquiryBinding.sync!(booking)
+      case path
+      when "review"
+        BookingInquiryBinding.link!(booking, lead: lead, actor: "test", evidence: "Confirmed receipt", reason: "Receipt corrected")
+      when "record"
+        AdConversions.record!(lead)
+      when "meta"
+        with_meta do |fake|
+          assert_equal :sent, AdConversions.deliver_meta!(row)
+          event = JSON.parse(fake.requests.sole.body)["data"].sole
+          assert_equal corrected.to_i, event["event_time"]
+          assert_equal 3150.0, event["custom_data"]["value"]
+        end
+      when "google"
+        csv = CSV.parse(AdConversions::GoogleFeed.serve!(settings: @settings))
+        line = csv.find { |entry| entry.last == row.event_id }
+        assert_equal corrected.strftime("%Y-%m-%d %H:%M:%S"), line[4]
+        assert_equal "3150.00", line[5]
+      end
+      assert_equal corrected, row.reload.occurred_at
+      assert_equal 315_000, row.value_minor
+      assert_equal "USD", row.currency
+      assert_equal 1, AdConversion.where(event: "booked", perfectbook_id: booking.perfectbook_id).count
+    end
+  end
+
+  test "accepted and unknown booking facts are immutable after sync review recording and export" do
+    %w[accepted unknown].each_with_index do |state, index|
+      lead = ad_lead(perfectbook_contact_id: 110 + index)
+      other = ad_lead(existing_client: Client.create!(name: "Booker", perfectbook_contact_id: 110 + index))
+      booking = PerfectBook::Booking.create!(perfectbook_id: 9110 + index, perfectbook_contact_id: 110 + index,
+        status: "confirmed", first_received_at: @now - 1.hour, first_received_precision: "timestamp",
+        receipts_minor: 50_000, total_minor: 700_000, currency: "USD", synced_at: @now)
+      BookingInquiryBinding.link!(booking, lead: lead, actor: "test", evidence: "Initial")
+      row = AdConversions.record!(lead).find { |entry| entry.event == "booked" }
+      with_meta(body: state == "accepted" ? { "events_received" => 1 }.to_json : "unknown") { AdConversions.deliver_meta!(row) }
+      prior = row.reload.attributes.slice("occurred_at", "value_minor", "currency", "lead_id", "delivery_status")
+      booking.update!(first_received_at: @now - 30.minutes, total_minor: 900_000)
+      BookingInquiryBinding.sync!(booking)
+      BookingInquiryBinding.link!(booking, lead: other, actor: "test", evidence: "Confirmed", reason: "Changed receipt and inquiry")
+      AdConversions.record!(other)
+      AdConversions::GoogleFeed.serve!(settings: @settings)
+      with_meta do |fake|
+        assert_nil AdConversions.deliver_meta!(row)
+        assert_empty fake.requests
+      end
+      assert_equal prior, row.reload.attributes.slice(*prior.keys)
+      assert_match(/review platform history/, row.meta_error)
+    end
   end
 
 end

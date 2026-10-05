@@ -113,7 +113,12 @@ module AdConversions
         booking = PerfectBook::Booking.find_by!(perfectbook_id: facts[:perfectbook_id])
         booking.with_lock do
           next unless paid_bookings(lead).exists?(perfectbook_id: booking.perfectbook_id)
-          AdConversion.create!(**attributes)
+          prior = AdConversion.find_by(event: "booked", perfectbook_id: booking.perfectbook_id)
+          if prior
+            refresh_booking_facts!(prior)
+            next
+          end
+          AdConversion.create!(**attributes.merge(booking_facts(booking, lead)))
         end
       else
         AdConversion.create!(**attributes)
@@ -187,7 +192,22 @@ module AdConversions
       else
         row.update!(lead: lead, google: google_click_ids(lead).any?, meta_status: "pending", delivery_status: "not_sent", meta_attempts: 0, last_skip_reason: nil,
           meta_error: nil, google_skip_reason: nil)
+        refresh_booking_facts!(row)
       end
+    end
+  end
+
+  def booking_facts(booking, lead)
+    { occurred_at: booking.first_received_at, value_minor: booking_value_minor(booking),
+      currency: "USD", perfectbook_id: booking.perfectbook_id, google: google_click_ids(lead).any? }
+  end
+
+  def refresh_booking_facts!(row)
+    return unless row.event == "booked"
+    row.with_lock do
+      next if row.possibly_delivered?
+      booking = paid_bookings(row.lead).find_by(perfectbook_id: row.perfectbook_id)
+      row.update!(**booking_facts(booking, row.lead)) if booking
     end
   end
 
@@ -255,6 +275,7 @@ module AdConversions
   # intake job and the nightly sweep cannot share an active delivery claim.
   # Returns :sent, :failed, :skipped, or nil when nothing happened.
   def deliver_meta!(row, settings: Setting.current, now: Time.current)
+    refresh_booking_facts!(row)
     row.reload
     return nil unless meta_due?(row, now)
 
