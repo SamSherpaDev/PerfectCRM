@@ -114,7 +114,11 @@ class TaskWorkflowsTest < ApplicationSystemTestCase
     assert client.activity_events.exists?(summary: "Completed: Existing follow-up")
     visit templates_path
     within("li", text: "Review invitation") { click_button "Archive" }
+    # Wait for the archive redirect before starting another Turbo navigation.
+    assert_text "Template archived."
+    assert_no_selector "li", text: "Review invitation"
     click_link "Archived", exact: false
+    assert_current_path templates_path(tab: "archived")
     within("li", text: "Review invitation") { accept_confirm { click_button "Delete" } }
     assert_no_text "Review invitation"
     assert_nil task.reload.template_id
