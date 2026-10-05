@@ -51,14 +51,14 @@ module Today
     end
 
     def departing_soon
-      PerfectBook::Booking
+      PerfectBook::Booking.available
         .where(start_date: @today..@today + DEPARTING_WITHIN)
         .order(:start_date, :id)
     end
 
     # Back from the mountains: the departure ended within the last 7 days.
     def returned
-      PerfectBook::Booking
+      PerfectBook::Booking.available
         .where(end_date: (@today - RETURNED_WITHIN)..@today)
         .order(:end_date, :id)
     end

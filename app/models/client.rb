@@ -8,7 +8,7 @@ class Client < ApplicationRecord
 
   belongs_to :referred_by_organization, class_name: "Organization", optional: true
   has_many :converted_leads, class_name: "Lead", foreign_key: :converted_client_id
-  has_many :perfectbook_bookings, class_name: "PerfectBook::Booking",
+  has_many :perfectbook_bookings, -> { available }, class_name: "PerfectBook::Booking",
     primary_key: :perfectbook_contact_id, foreign_key: :perfectbook_contact_id
   has_many :people, -> { order(:created_at, :id) }, dependent: :destroy, inverse_of: :client
   has_many :notes, as: :notable, dependent: :destroy

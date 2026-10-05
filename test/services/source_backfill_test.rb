@@ -35,6 +35,33 @@ class SourceBackfillTest < ActiveSupport::TestCase
     end
   end
 
+  test "audit activity clocks do not stale later inferences across reviewed batches" do
+    start = Time.zone.local(2026, 10, 4, 10)
+    travel_to start
+    lead = Lead.create!(name: "Synthetic legacy", source: "manual", perfectbook_contact_id: 44,
+      trip_interest: "Test trip", received_at: 2.months.ago)
+    [55, 56].each do |id|
+      PerfectBook::Booking.create!(perfectbook_id: id, perfectbook_contact_id: 44, trip_name: "Test trip",
+        first_received_at: 1.month.ago, synced_at: Time.current)
+    end
+    original = SourceBackfill.fingerprint(lead)
+    rows = SourceBackfill.proposals
+    Dir.mktmpdir do |directory|
+      rows.each_with_index do |row, index|
+        travel_to start + (index + 1).hours
+        path = File.join(directory, "batch-#{index}.csv")
+        File.write(path, CSV.generate { |out| out << SourceBackfill::HEADERS; out << row })
+        result = SourceBackfill.apply!(path, reviewer: "test", approved_digest: Digest::SHA256.file(path).hexdigest)
+        assert result["count_money_reconciled"]
+        assert_equal original, SourceBackfill.fingerprint(lead.reload)
+      end
+    end
+    assert_equal 2, BookingInquiryBinding.where(lead: lead, state: "inferred").count
+    assert_equal start + 3.hours, lead.reload.last_activity_at
+    lead.update!(trip_interest: "Changed trip")
+    assert_not_equal original, SourceBackfill.fingerprint(lead.reload)
+  end
+
   test "inventory includes metadata duplicate and candidate aggregates without customer details" do
     lead = Lead.create!(name: "Synthetic inquiry", email: "shared@example.test", source: "manual",
       perfectbook_contact_id: 44, trip_interest: "Test trip", received_at: 2.months.ago, metadata: { "custom_key" => "private value" })

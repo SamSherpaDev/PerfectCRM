@@ -51,7 +51,7 @@
                 <%= render "shared/icon", name: :external, class: "h-3.5 w-3.5" %>Open in PerfectBook
               <% end %>
             <% end %>
-            <% unless booking.documents_ready? %>
+            <% if booking.available? && !booking.documents_ready? %>
               <span class="muted">Document status arrives with the PerfectBook update</span>
               <%= link_to "Nudge for missing documents", document_nudge_path(booking_id: booking.id), class: "link-quiet", title: "Open the document-request template for this booking" %>
             <% end %>

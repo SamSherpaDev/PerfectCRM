@@ -80,7 +80,7 @@ module RecordPage
     rows += record_quotes(record).live.where("valid_until >= ?", Date.current).map do |quote|
       Upcoming.new(quote.valid_until, :quote, quote)
     end
-    rows += bookings_for(record).where("start_date >= ?", Date.current)
+    rows += bookings_for(record).available.where("start_date >= ?", Date.current)
       .where.not(status: INACTIVE_BOOKING_STATUSES).map do |booking|
       Upcoming.new(booking.start_date, :departure, booking)
     end

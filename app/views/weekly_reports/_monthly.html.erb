@@ -21,13 +21,13 @@
       </tbody>
     </table>
   </div>
-  <p class="hint mt-2"><% if report.view == "paid" %>Source totals above, campaign detail below. Missing campaign spend keeps source cost unavailable. <% end %>Bookings use the first actual receipt, including those later cancelled. Net received uses receipt/refund event dates. Recognized revenue: unavailable from PerfectBook. Weekly spend is never split across months.</p>
+  <p class="hint mt-2"><% if report.view == "paid" %>Source totals above, campaign detail below. Missing campaign spend keeps source cost unavailable. <% end %>Bookings use the first actual receipt, including those later cancelled. Net received uses receipt/refund event dates. <%= total[:new_bookers] %> distinct new paying bookers; <%= total[:returning_bookers] %> distinct returning paying bookers; <%= total[:repeat_bookings] %> repeat bookings. Recognized revenue: unavailable from PerfectBook. Weekly spend is never split across months.</p>
   <details class="mt-4">
     <summary class="text-sm cursor-pointer">Qualification, cancellations and cash detail</summary>
     <p class="hint mt-2">Q-fit: your fit judgment on the inquiry, no reply required. Platform-qualified: current strong/possible fit plus your move to Chatting or Quoted. They are separate counts.</p>
     <ul class="mt-3 space-y-3 text-sm">
       <% report.rows.each do |row| %>
-        <li><p class="font-medium"><%= row.label %></p><p><%= row.q_fit %> Q-fit; <%= row.platform_qualified %> platform-qualified; <%= row.attempts %> other call attempts.</p><p><% if row.inferred_links.positive? %><%= row.inferred_links %> source links inferred, not yet reviewed. <% end %><%= row.personal_referrals %> personally referred inquiries; <%= row.advisor_referrals %> advisor-referred inquiries (separate measures).</p><p><%= row.active %> currently active; <%= row.cancelled %> cancelled/inactive; <%= row.returning %> repeat bookings; <%= row.new_booker_ids.size %> new paying bookers; <%= row.cancellations_in_month %> cancellations during this month.</p><p>Booked trip value: <%= source_report_money(row.booked_value) %>. Receipts: <%= source_report_money(row.receipts) %>. Refunds: <%= source_report_money(row.refunds) %>.</p><% if report.view == "paid" %><p>Exact daily spend: <%= source_report_money(row.spend) %>. Ad cost / booking: <%= source_report_money(row.cost_per_booking) %>. Ad cost / traveler: <%= source_report_money(row.cost_per_traveler) %>.</p><% end %></li>
+        <li><p class="font-medium"><%= row.label %></p><p><%= row.q_fit %> Q-fit; <%= row.platform_qualified %> platform-qualified; <%= row.attempts %> other call attempts.</p><p><% if row.inferred_links.positive? %><%= row.inferred_links %> source links inferred, not yet reviewed. <% end %><%= row.personal_referrals %> personally referred inquiries; <%= row.advisor_referrals %> advisor-referred inquiries (separate measures).</p><p><%= row.active %> currently active; <%= row.cancelled %> cancelled/inactive; <%= row.returning %> repeat bookings; <%= row.new_booker_ids.size %> new paying bookers; <%= row.returning_booker_ids.size %> returning paying bookers; <%= row.cancellations_in_month %> cancellations during this month.</p><p>Booked trip value: <%= source_report_money(row.booked_value) %>. Receipts: <%= source_report_money(row.receipts) %>. Refunds: <%= source_report_money(row.refunds) %>.</p><% if report.view == "paid" %><p>Exact daily spend: <%= source_report_money(row.spend) %>. Ad cost / booking: <%= source_report_money(row.cost_per_booking) %>. Ad cost / traveler: <%= source_report_money(row.cost_per_traveler) %>.</p><% end %></li>
       <% end %>
     </ul>
   </details>
@@ -44,7 +44,7 @@
   </details>
   <details class="mt-4">
     <summary class="text-sm cursor-pointer">Lifetime bookers, original sources and direct referrals</summary>
-    <p class="hint mt-2">Reported discovery, through the as-of time. Original source is the earliest inquiry with an exact contact/client link for each PerfectBook contact; earlier acquisition is unknown. Unique linked bookings only. Referral values are a separate view and must not be added to original-source totals.</p>
+    <p class="hint mt-2">Original acquisition, through the as-of time. Original source uses the established client's confirmed or corrected discovery answer, otherwise the earliest eligible first touch, labeled observed. Unknown stays unknown. Unique linked bookings only. Referral values are a separate view and must not be added to original-source totals.</p>
     <h3 class="text-sm font-medium mt-3">Lifetime by booker</h3>
     <ul class="text-sm space-y-2 mt-2">
       <% report.lifetime_bookers.each do |booker| %>

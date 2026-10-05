@@ -3,7 +3,7 @@
     version, and traveler documents mirrored from PerfectBook. No uploads
     here; files arrive by email or from the quote builder. %>
 <% lead = record.is_a?(Lead) %>
-<% doc_bookings = bookings.select(&:documents_ready?) %>
+<% doc_bookings = bookings.select { |booking| booking.available? && booking.documents_ready? } %>
 <section class="card card-pad" aria-labelledby="files-heading">
   <div class="card-header">
     <h2 class="card-title" id="files-heading">Files</h2>

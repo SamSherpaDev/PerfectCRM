@@ -15,7 +15,7 @@ class TasksController < ApplicationController
   end
 
   def create_review_ask
-    booking = PerfectBook::Booking.find(params[:booking_id])
+    booking = PerfectBook::Booking.available.find(params[:booking_id])
     subject = Tasks::Automatic.subject_for(booking)
     return render_not_found if subject.nil?
 

@@ -50,7 +50,7 @@ module SourceBackfill
 
   def fingerprint(record)
     fields = if record.is_a?(Lead)
-      record.attributes.except("updated_at", "metadata")
+      record.attributes.except("updated_at", "last_activity_at", "metadata")
         .merge("metadata" => (record.metadata || {}).except("legacy_observed"), "suspected_spam" => record.suspected_spam?)
     else
       record.attributes.except("synced_at", "updated_at")

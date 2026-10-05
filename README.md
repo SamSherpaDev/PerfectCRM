@@ -709,7 +709,11 @@ traveler counts inherit the booker's source. Cash is receipts minus refunds by
 cash-event date/currency, not contracted booking value. Missing cash/traveler
 facts, unresolved identity and unlinked/inferred bookings remain visible.
 Recognized revenue and unique returning travelers are unavailable upstream.
-New paying bookers and repeat bookings use PerfectBook contact/booking IDs.
+New and returning paying bookers use distinct PerfectBook contact IDs; repeat
+bookings use distinct booking IDs. Returning bookers first paid before the month.
+Original-source lifetime value uses the established client's confirmed/corrected
+answer, otherwise the earliest eligible first touch labeled observed. Unknown
+stays unknown; later purchasing inquiries retain their own source separately.
 
 Inquiry review **Q-fit** is your separately audited `owner_fit_at_inquiry`
 judgment (Strong/Possible), with no reply required. **Platform-qualified** stays

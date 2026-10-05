@@ -259,6 +259,102 @@ class SourceReportingTest < ActiveSupport::TestCase
     assert_equal({ "USD" => 50_000 }, report.downstream_referrals.sole[:net_received])
   end
 
+  test "inferred and reviewed bindings validate every upstream matching field" do
+    id = 70
+    %w[inferred reviewed].each do |state|
+      { crm_inquiry_ref: "SH-OTHER", perfectbook_contact_id: 99, trip_name: "Changed trip", start_date: Date.new(2027, 1, 1) }.each do |field, value|
+        item = booking(id: id, crm_inquiry_ref: nil)
+        id += 1
+        BookingInquiryBinding.link!(item, lead: @lead, actor: "test", evidence: "Matched", state: state)
+        item.update!(paid_minor: 100_000)
+        BookingInquiryBinding.sync!(item)
+        assert_equal @lead, item.reload.primary_inquiry
+        before = item[field]
+        item.update!(field => value)
+        BookingInquiryBinding.sync!(item)
+        assert_nil item.reload.primary_inquiry
+        assert_match(/evidence changed/, item.binding_issue)
+        report = WeeklyReport::Monthly.new(month: Date.new(2026, 10, 1))
+        assert_equal 1, report.rows.find { |row| row.source == "Unlinked booking" }.booked
+        assert_equal id - 71, report.lifetime_bookers.sum { |booker| booker[:currencies].values.sum { |currency| currency[:bookings] } }
+        item.update!(field => before)
+        BookingInquiryBinding.sync!(item)
+        assert_equal @lead, item.reload.primary_inquiry
+      end
+    end
+  end
+
+  test "original lifetime source uses established client testimony and its corrections" do
+    client = Current.set(user_email: "captain@example.test") do
+      Client.create!(name: "Original client", perfectbook_contact_id: 44, source_choice: "event")
+    end
+    @lead.update!(existing_client: client)
+    booking
+    report = -> { WeeklyReport::Monthly.new(month: Date.new(2026, 10, 1)) }
+    assert_equal SourceHistory::ANSWERS["event"], report.call.original_source_lifetime.sole[:source]
+    Current.set(user_email: "captain@example.test") do
+      client.source_correction_reason = "Confirmed original discovery on call"
+      client.update!(source_choice: "youtube")
+    end
+    assert_equal SourceHistory::ANSWERS["youtube"], report.call.original_source_lifetime.sole[:source]
+    assert_equal "personal_referral", @lead.reload.reported_source_code
+  end
+
+  test "converted client corrections override the copied original lead answer" do
+    Current.set(user_email: "captain@example.test") do
+      @lead.source_correction_reason = "Confirmed on call"
+      @lead.update!(source_choice: "event")
+    end
+    client = @lead.convert_to_client!
+    booking
+    Current.set(user_email: "captain@example.test") do
+      client.source_correction_reason = "Corrected original discovery"
+      client.update!(source_choice: "youtube")
+    end
+    assert_equal "event", @lead.reload.reported_source_code
+    assert_equal SourceHistory::ANSWERS["youtube"], WeeklyReport::Monthly.new(month: Date.new(2026, 10, 1)).original_source_lifetime.sole[:source]
+  end
+
+  test "original acquisition without confirmed testimony uses earliest first touch or stays unknown" do
+    client = Client.create!(name: "Original client", perfectbook_contact_id: 44)
+    @lead.update!(existing_client: client)
+    booking
+    later = Lead.create!(name: "Later search", source: "manual", existing_client: client, received_at: Time.zone.local(2026, 10, 20),
+      metadata: { "acquisition" => { "first_touch" => { "observed_at" => "2026-10-20T16:00:00Z", "source" => "search" } } })
+    item = booking(id: 52, receipt: Time.zone.local(2026, 10, 25))
+    BookingInquiryBinding.link!(item, lead: later, actor: "test", evidence: "Repeat", reason: "Repeat inquiry")
+    report = -> { WeeklyReport::Monthly.new(month: Date.new(2026, 10, 1)) }
+    assert_equal "instagram (first observed)", report.call.original_source_lifetime.sole[:source]
+    @lead.update!(metadata: {})
+    later.update!(metadata: {})
+    assert_equal "Unknown original acquisition", report.call.original_source_lifetime.sole[:source]
+  end
+
+  test "repeat bookings and distinct new and returning paying bookers remain separate in all views" do
+    booking(id: 50, receipt: Time.zone.local(2026, 9, 15))
+    booking
+    client = @lead.convert_to_client!
+    metadata = @lead.metadata.deep_dup
+    metadata["acquisition"]["last_non_direct_touch"]["campaign_id"] = "999"
+    other = Lead.create!(name: "Second repeat", source: "google_ads", perfectbook_contact_id: 44, existing_client: client,
+      received_at: Time.zone.local(2026, 10, 20), metadata: metadata)
+    item = booking(id: 52, receipt: Time.zone.local(2026, 10, 25))
+    BookingInquiryBinding.link!(item, lead: other, actor: "test", evidence: "Second inquiry", reason: "Repeat booking")
+    %w[reported paid first].each do |view|
+      report = WeeklyReport::Monthly.new(month: Date.new(2026, 10, 1), view: view)
+      assert_equal 2, report.source_rows.sum(&:returning)
+      assert_equal [44], report.source_rows.flat_map(&:returning_booker_ids).uniq
+      assert_equal [2, 1, 0], report.totals.values_at(:repeat_bookings, :returning_bookers, :new_bookers)
+    end
+  end
+
+  test "a new monthly booker remains new when buying a second booking" do
+    booking
+    booking(id: 52, receipt: Time.zone.local(2026, 10, 25))
+    report = WeeklyReport::Monthly.new(month: Date.new(2026, 10, 1))
+    assert_equal [1, 0, 1], report.totals.values_at(:repeat_bookings, :returning_bookers, :new_bookers)
+  end
+
   test "credentials without owner terms confirmation stay off" do
     settings = Setting.current
     settings.update!(meta_dataset_id: "123456789012345", meta_access_token: "synthetic-token", google_feed_password: "synthetic-password", meta_terms_accepted: false, google_terms_accepted: false)

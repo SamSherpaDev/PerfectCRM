@@ -55,7 +55,7 @@ module Ai
       contact_id = record.try(:perfectbook_contact_id)
       return "No mirrored bookings." if contact_id.blank?
 
-      rows = ::PerfectBook::Booking.where(perfectbook_contact_id: contact_id).limit(3)
+      rows = ::PerfectBook::Booking.available.where(perfectbook_contact_id: contact_id).limit(3)
       return "No mirrored bookings." if rows.empty?
 
       rows.map do |booking|

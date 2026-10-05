@@ -8,6 +8,12 @@ module PerfectBook
     # Nudge-worthy statuses from the sibling API.
     MISSING_STATUSES = %w[missing expiring].freeze
 
+    scope :available, -> { where(unavailable_at: nil) }
+
+    def available?
+      unavailable_at.nil?
+    end
+
     serialize :documents_json, coder: JSON
     serialize :checklist_json, coder: JSON
     serialize :cash_events_json, coder: JSON

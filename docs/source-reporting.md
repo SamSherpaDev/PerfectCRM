@@ -88,6 +88,17 @@ to the operator after review, not the implementation worker.
 Paid monthly activity and spend use the same completed-day cutoff. Lifetime bookers
 retain invoice currency and cash-event currency separately. Original-source lifetime
 and direct referral values are separate alternatives under one disclosure. Original
-source uses the earliest inquiry with an exact contact/client link; pre-inquiry acquisition is unknown.
+source uses established client testimony, including confirmed corrections, otherwise
+the earliest eligible first touch labeled observed. Missing acquisition stays unknown.
 Inventory includes metadata-key counts, Person/PerfectBook email duplicate groups,
 and zero/one/multiple candidate counts for all bookings, including linked ones.
+
+Unavailable booking mirrors remain in reconciliation reports, but do not supply
+composer placeholders, document handoffs, nudges, group recipients, departures,
+automatic proposals, AI booking context or current pipeline booking value.
+Inferred and reviewed bindings retain their recorded upstream matching evidence;
+changes require review. Backfill fingerprints exclude activity clocks changed by
+its own audits while retaining substantive evidence checks. Monthly repeat bookings
+are counted separately from distinct returning paying bookers (first receipt
+before the selected month); bookers first paying this month are new even if they
+make another booking in the same month.

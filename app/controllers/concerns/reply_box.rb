@@ -57,7 +57,7 @@ module ReplyBox
     mirror_id = params[:nudge_booking_id].presence
     return if mirror_id.nil? || !@reply_draft.empty?
 
-    booking = PerfectBook::Booking.find_by(id: mirror_id,
+    booking = PerfectBook::Booking.available.find_by(id: mirror_id,
       perfectbook_contact_id: owner.try(:perfectbook_contact_id))
     return if booking.nil? || booking.missing_lines.blank?
 

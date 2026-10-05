@@ -35,7 +35,7 @@ class Pipeline::Board
 
   def trip_options
     (Lead.active.where.not(trip_interest: [ nil, "" ]).distinct.pluck(:trip_interest) +
-      PerfectBook::Booking.where.not(trip_name: [ nil, "" ]).distinct.pluck(:trip_name)).uniq.sort
+      PerfectBook::Booking.available.where.not(trip_name: [ nil, "" ]).distinct.pluck(:trip_name)).uniq.sort
   end
 
   def advisor_options
@@ -56,7 +56,7 @@ class Pipeline::Board
     scope = scope.where(referred_by_organization_id: filters[:advisor]) if filters[:advisor]
     if filters[:trip]
       lead_clients = Lead.converted.where(trip_interest: filters[:trip]).select(:converted_client_id)
-      booking_contacts = PerfectBook::Booking.where(trip_name: filters[:trip]).select(:perfectbook_contact_id)
+      booking_contacts = PerfectBook::Booking.available.where(trip_name: filters[:trip]).select(:perfectbook_contact_id)
       scope = scope.where(id: lead_clients).or(scope.where(perfectbook_contact_id: booking_contacts))
     end
     scope

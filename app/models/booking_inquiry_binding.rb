@@ -25,7 +25,7 @@ class BookingInquiryBinding < ApplicationRecord
 
   def self.sync!(booking)
     binding = find_by(perfectbook_id: booking.perfectbook_id)
-    if binding&.state == "reviewed"
+    if binding
       review = binding.lead.activity_events.where(kind: "booking_link")
         .where("json_extract(metadata, '$.perfectbook_id') = ?", booking.perfectbook_id).order(:id).last
       issue = review&.metadata&.dig("upstream") == upstream_evidence(booking) ? nil : "Booking evidence changed; review required"

@@ -6,7 +6,7 @@ module WeeklyReport
     HORIZONS = [ 30, 60, 90, 180 ].freeze
     Row = Struct.new(:source, :campaign_id, :campaign, :inquiries, :q_fit, :platform_qualified,
       :connected_calls, :reached_ids, :attempts, :booked, :travelers, :missing_traveler_counts,
-      :active, :cancelled, :cancellations_in_month, :returning, :inferred_links, :new_booker_ids, :personal_referrals, :advisor_referrals,
+      :active, :cancelled, :cancellations_in_month, :returning, :inferred_links, :new_booker_ids, :returning_booker_ids, :personal_referrals, :advisor_referrals,
       :booked_value, :receipts, :refunds, :spend, keyword_init: true) do
       def label
         [ source.humanize, campaign.presence || campaign_id ].compact.join(" · ")
@@ -61,6 +61,8 @@ module WeeklyReport
     def totals
       { inquiries: rows.sum(&:inquiries), connected_calls: rows.sum(&:connected_calls),
         bookings: rows.sum(&:booked), travelers: rows.sum(&:travelers),
+        new_bookers: rows.flat_map(&:new_booker_ids).uniq.size, returning_bookers: rows.flat_map(&:returning_booker_ids).uniq.size,
+        repeat_bookings: rows.sum(&:returning),
         net_received: sum_money(rows.map(&:net_received)), booked_value: sum_money(rows.map(&:booked_value)) }
     end
 
@@ -108,9 +110,9 @@ module WeeklyReport
 
     def lifetime_bookers
       @lifetime_bookers ||= lifetime_bookings.group_by(&:perfectbook_contact_id).map do |contact, bookings|
-        original = original_inquiries[contact] || bookings.map(&:primary_inquiry).min_by { |lead| [ inquiry_time(lead), lead.id ] }
+        original = bookings.map(&:primary_inquiry).min_by { |lead| [ inquiry_time(lead), lead.id ] }
         ordered = bookings.sort_by { |booking| [ booking.first_received_at, booking.perfectbook_id ] }
-        { contact_id: contact, inquiry: original, source: reported_identity(original),
+        { contact_id: contact, inquiry: original, source: original_source(contact),
           currencies: bookings.group_by(&:currency).transform_values do |list|
             { bookings: list.size, repeat_bookings: list.count { |booking| booking != ordered.first },
               booked_value: list.sum { |booking| booking.total_minor.to_i } }
@@ -139,17 +141,46 @@ module WeeklyReport
 
     private
 
-    def original_inquiries
-      @original_inquiries ||= begin
+    def acquisition_clients
+      @acquisition_clients ||= begin
         contacts = lifetime_bookings.map(&:perfectbook_contact_id).uniq
-        clients = Client.where(perfectbook_contact_id: contacts).pluck(:id, :perfectbook_contact_id).to_h
+        clients = Client.where(perfectbook_contact_id: contacts).includes(:origin_lead).index_by(&:perfectbook_contact_id)
+        lifetime_bookings.group_by(&:perfectbook_contact_id).each do |contact, bookings|
+          next if clients.key?(contact)
+          linked = bookings.flat_map { |booking| [ booking.primary_inquiry.converted_client, booking.primary_inquiry.existing_client ] }
+            .compact.uniq.select { |client| client.perfectbook_contact_id.nil? || client.perfectbook_contact_id == contact }
+          clients[contact] = linked.sole if linked.one?
+        end
+        clients
+      end
+    end
+
+    def acquisition_inquiries
+      @acquisition_inquiries ||= begin
+        clients = acquisition_clients.to_h { |contact, client| [ client.id, contact ] }
+        contacts = lifetime_bookings.map(&:perfectbook_contact_id).uniq
         candidates = eligible_leads.where(perfectbook_contact_id: contacts)
           .or(eligible_leads.where(converted_client_id: clients.keys)).or(eligible_leads.where(existing_client_id: clients.keys))
-        candidates.order(Arel.sql("COALESCE(received_at, leads.created_at), leads.id")).each_with_object({}) do |lead, first|
-          contact = clients[lead.converted_client_id] || clients[lead.existing_client_id] || lead.perfectbook_contact_id
-          first[contact] ||= lead if inquiry_time(lead) <= as_of
+          .where("COALESCE(received_at, leads.created_at) <= ?", as_of)
+        candidates.order(Arel.sql("COALESCE(received_at, leads.created_at), leads.id")).group_by do |lead|
+          clients[lead.converted_client_id] || clients[lead.existing_client_id] || lead.perfectbook_contact_id
         end
       end
+    end
+
+    def original_source(contact)
+      client = acquisition_clients[contact]
+      inquiries = acquisition_inquiries.fetch(contact, [])
+      origin = client || inquiries.first
+      return reported_identity(origin) if origin && origin.source_confirmed_at.present? && !origin.source_missing?
+
+      evidence = [ client&.origin_lead, *inquiries ].compact.uniq.filter_map do |lead|
+        touch = lead.metadata&.dig("acquisition", "first_touch")
+        next unless Leads::Acquisition.eligible?(touch)
+        at = Time.iso8601(touch["observed_at"])
+        [ at, touch ] if at <= as_of
+      end.min_by(&:first)&.last
+      evidence ? "#{evidence['source'].presence || 'Unknown'} (first observed)" : "Unknown original acquisition"
     end
 
     def lifetime_bookings_by_inquiry
@@ -158,7 +189,7 @@ module WeeklyReport
 
     def lifetime_bookings
       @lifetime_bookings ||= countable_bookings.joins(:inquiry_binding).where(binding_issue: [ nil, "" ])
-        .where("first_received_at <= ?", as_of).includes(inquiry_binding: :lead).to_a
+        .where("first_received_at <= ?", as_of).includes(inquiry_binding: { lead: [ :converted_client, :existing_client ] }).to_a
     end
 
     def reported_identity(lead)
@@ -180,7 +211,7 @@ module WeeklyReport
     def new_row(source, id, name)
       Row.new(source: source, campaign_id: id, campaign: name, inquiries: 0, q_fit: 0, platform_qualified: 0,
         connected_calls: 0, reached_ids: [], attempts: 0, booked: 0, travelers: 0, missing_traveler_counts: 0,
-        active: 0, cancelled: 0, cancellations_in_month: 0, returning: 0, inferred_links: 0, new_booker_ids: [], personal_referrals: 0, advisor_referrals: 0,
+        active: 0, cancelled: 0, cancellations_in_month: 0, returning: 0, inferred_links: 0, new_booker_ids: [], returning_booker_ids: [], personal_referrals: 0, advisor_referrals: 0,
         booked_value: Hash.new(0), receipts: Hash.new(0), refunds: Hash.new(0))
     end
 
@@ -232,8 +263,9 @@ module WeeklyReport
           row.travelers += booking.traveler_count.to_i
           row.missing_traveler_counts += 1 if booking.traveler_count.nil?
           row.booked_value[booking.currency] += booking.total_minor.to_i
-          if returning?(booking)
-            row.returning += 1
+          row.returning += 1 if returning?(booking)
+          if first_bookings.fetch(booking.perfectbook_contact_id).last.in_time_zone("America/Los_Angeles").to_date < month
+            row.returning_booker_ids |= [ booking.perfectbook_contact_id ]
           else
             row.new_booker_ids |= [ booking.perfectbook_contact_id ]
           end
@@ -269,12 +301,13 @@ module WeeklyReport
 
     def merge_rows(list)
       result = list.first.dup
-      %i[reached_ids new_booker_ids booked_value receipts refunds].each { |field| result[field] = result[field].dup }
+      %i[reached_ids new_booker_ids returning_booker_ids booked_value receipts refunds].each { |field| result[field] = result[field].dup }
       result.spend = list.all?(&:spend) ? sum_money(list.map(&:spend)) : nil
       list.drop(1).each do |row|
         %i[inquiries q_fit platform_qualified connected_calls attempts booked travelers missing_traveler_counts active cancelled cancellations_in_month returning inferred_links personal_referrals advisor_referrals].each { |field| result[field] += row[field] }
         result.reached_ids |= row.reached_ids
         result.new_booker_ids |= row.new_booker_ids
+        result.returning_booker_ids |= row.returning_booker_ids
         %i[booked_value receipts refunds].each { |field| row[field].each { |currency, amount| result[field][currency] += amount } }
       end
       result
@@ -326,11 +359,16 @@ module WeeklyReport
       date && (month..end_date).cover?(date)
     end
 
+    def first_bookings
+      @first_bookings ||= countable_bookings.where(perfectbook_contact_id: relevant_bookings.map(&:perfectbook_contact_id).uniq)
+        .where("first_received_at IS NOT NULL OR first_received_on IS NOT NULL")
+        .pluck(:perfectbook_contact_id, :perfectbook_id, :first_received_at, :first_received_on)
+        .map { |contact, id, at, on| [ contact, id, at || on.in_time_zone("America/Los_Angeles") ] }
+        .sort_by { |_, id, at| [ at, id ] }.each_with_object({}) { |(contact, id, at), first| first[contact] ||= [ id, at ] }
+    end
+
     def returning?(booking)
-      @first_bookings ||= PerfectBook::Booking.where(perfectbook_contact_id: relevant_bookings.map(&:perfectbook_contact_id).uniq)
-        .where.not(first_received_at: nil).order(:first_received_at, :perfectbook_id)
-        .pluck(:perfectbook_contact_id, :perfectbook_id).each_with_object({}) { |(contact, id), first| first[contact] ||= id }
-      @first_bookings[booking.perfectbook_contact_id] != booking.perfectbook_id
+      first_bookings[booking.perfectbook_contact_id]&.first != booking.perfectbook_id
     end
 
     def inquiry_time(lead) = lead.received_at || lead.created_at
