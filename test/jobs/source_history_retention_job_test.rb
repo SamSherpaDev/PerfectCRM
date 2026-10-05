@@ -26,6 +26,42 @@ class SourceHistoryRetentionJobTest < ActiveJob::TestCase
     assert_equal 50000, booking.net_received_minor
   end
 
+  test "retention of audits cannot change binding validity or erase report money on sync" do
+    now = Time.zone.local(2026, 10, 5, 10)
+    travel_to now
+    %w[explicit inferred reviewed].each_with_index do |state, index|
+      received = now - 8.years
+      lead = Lead.create!(name: "Expired #{state}", source: "manual", perfectbook_contact_id: 70 + index,
+        received_at: received, source_choice: "search")
+      booking = PerfectBook::Booking.create!(perfectbook_id: 70 + index, perfectbook_contact_id: 70 + index,
+        trip_id: 10, trip_name: "Past trip", departure_id: 20, start_date: received.to_date, end_date: received.to_date + 10,
+        first_received_at: received, first_received_on: received.to_date, total_minor: 900_000,
+        currency: "USD", cash_events_json: [{ "kind" => "receipt", "occurred_on" => received.to_date.iso8601,
+          "currency" => "USD", "amount_minor" => 50_000 }], synced_at: now)
+      BookingInquiryBinding.link!(booking, lead: lead, actor: "test", evidence: "Expired personal statement", state: state)
+      fingerprint = booking.inquiry_binding.upstream_fingerprint
+      SourceHistoryRetentionJob.perform_now(now: now)
+      assert_empty lead.activity_events.where(kind: "booking_link")
+      assert_equal "Source-link evidence expired", booking.reload.inquiry_binding.evidence
+      assert_equal fingerprint, booking.inquiry_binding.upstream_fingerprint
+      BookingInquiryBinding.sync!(booking)
+      assert_equal lead, booking.reload.primary_inquiry
+      assert_equal state, booking.inquiry_binding.state
+      report = WeeklyReport::Monthly.new(month: received.to_date.beginning_of_month)
+      assert_equal index + 1, report.cohorts[:bookings]
+      assert_equal({ "USD" => (index + 1) * 50_000 }, report.totals[:net_received])
+      assert_equal({ "USD" => (index + 1) * 900_000 }, report.original_source_lifetime.sole[:booked_value])
+      booking.update!(paid_minor: 100_000)
+      BookingInquiryBinding.sync!(booking)
+      assert_equal lead, booking.reload.primary_inquiry
+    end
+    booking = PerfectBook::Booking.find_by!(perfectbook_id: 72)
+    booking.update!(departure_id: 21)
+    BookingInquiryBinding.sync!(booking)
+    assert_nil booking.reload.primary_inquiry
+    assert_match(/evidence changed/, booking.binding_issue)
+  end
+
   test "detailed clicks and URLs expire at 180 days without removing the answer or coarse source" do
     now = Time.current
     lead = Lead.create!(name: "Retention Example", received_at: now - 181.days, metadata: {

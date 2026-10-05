@@ -80,6 +80,50 @@ class SourceBackfillTest < ActiveSupport::TestCase
     assert_not_includes JSON.generate(inventory), "private value"
   end
 
+  test "snapshot-only application never matches unrelated booking candidates" do
+    lead = Lead.create!(name: "Snapshot", source: "manual")
+    PerfectBook::Booking.create!(perfectbook_id: 80, perfectbook_contact_id: 80,
+      first_received_at: 1.day.ago, trip_name: "Unrelated trip", synced_at: Time.current)
+    row = [ "legacy_snapshot", lead.id, nil, SourceBackfill.fingerprint(lead), "Existing fields" ]
+    Dir.mktmpdir do |directory|
+      path = File.join(directory, "snapshot.csv")
+      File.write(path, CSV.generate { |out| out << SourceBackfill::HEADERS; out << row })
+      SourceBackfill.stub(:candidates_for, ->(*) { raise "Unrelated candidate scan" }) do
+        result = SourceBackfill.apply!(path, reviewer: "test", approved_digest: Digest::SHA256.file(path).hexdigest)
+        assert result["count_money_reconciled"]
+        assert_equal 1, result["after"]["bookings"]
+        assert_equal result["before"], result["after"]
+        assert_not result["after"].key?("booking_candidate_counts")
+      end
+    end
+    assert lead.reload.metadata["legacy_observed"]
+  end
+
+  test "binding application matches only the affected booking" do
+    lead = Lead.create!(name: "Matched", source: "manual", perfectbook_contact_id: 90,
+      received_at: 2.days.ago, trip_interest: "Matched trip")
+    booking = PerfectBook::Booking.create!(perfectbook_id: 90, perfectbook_contact_id: 90,
+      first_received_at: 1.day.ago, trip_name: "Matched trip", synced_at: Time.current)
+    PerfectBook::Booking.create!(perfectbook_id: 91, perfectbook_contact_id: 91,
+      first_received_at: 1.day.ago, trip_name: "Unrelated trip", synced_at: Time.current)
+    row = [ "infer_binding", booking.id, lead.id, SourceBackfill.fingerprint(booking), SourceBackfill.fingerprint(lead) ]
+    match = SourceBackfill.method(:candidates_for)
+    queried = []
+    Dir.mktmpdir do |directory|
+      path = File.join(directory, "binding.csv")
+      File.write(path, CSV.generate { |out| out << SourceBackfill::HEADERS; out << row })
+      SourceBackfill.stub(:candidates_for, ->(candidate) { queried << candidate.perfectbook_id; match.call(candidate) }) do
+        result = SourceBackfill.apply!(path, reviewer: "test", approved_digest: Digest::SHA256.file(path).hexdigest)
+        assert result["count_money_reconciled"]
+      end
+    end
+    assert_equal [ 90 ], queried
+    assert_equal lead, booking.reload.primary_inquiry
+    assert_equal "inferred", booking.inquiry_binding.state
+    assert booking.inquiry_binding.upstream_fingerprint.present?
+    assert_not BookingInquiryBinding.exists?(perfectbook_id: 91)
+  end
+
   test "stale evidence and wrong approvals rollback whole batches" do
     first = Lead.create!(name: "Synthetic first", source: "manual")
     second = Lead.create!(name: "Synthetic second", source: "manual")

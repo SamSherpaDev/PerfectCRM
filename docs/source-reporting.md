@@ -30,8 +30,14 @@ CRM provides `GET /api/v1/inquiries/:reference`, protected by a Bearer
 It returns only the reference, exact PerfectBook contact IDs, trip title/interest,
 and departure month/year; unknown references return 404 and failed auth 401.
 PerfectBook must call this before storage in a separate sibling follow-up.
-Until then, matching returned references still require captain review. Reviewed
-links survive refreshes with unchanged reference/contact/trip/departure evidence.
+This is approved temporary containment until that separately filed PerfectBook
+follow-up lands: returned references remain candidates needing one captain review.
+Each binding stores a digest of its reference/contact/trip/departure/start-date
+evidence on the binding row. Sync compares only that digest, preserving the kind
+and reviewer decision while the evidence is unchanged. Changed evidence requires
+one review. Deleting source audits at retention expiry does not change validity;
+the digest retains no source testimony or raw matching fields. Older bindings
+without a stored digest need a review to establish it.
 
 ## Operator checks before enabling exports
 
@@ -96,9 +102,13 @@ and zero/one/multiple candidate counts for all bookings, including linked ones.
 Unavailable booking mirrors remain in reconciliation reports, but do not supply
 composer placeholders, document handoffs, nudges, group recipients, departures,
 automatic proposals, AI booking context or current pipeline booking value.
-Inferred and reviewed bindings retain their recorded upstream matching evidence;
+All binding kinds retain their upstream evidence digest independently of audits;
 changes require review. Backfill fingerprints exclude activity clocks changed by
 its own audits while retaining substantive evidence checks. Monthly repeat bookings
 are counted separately from distinct returning paying bookers (first receipt
 before the selected month); bookers first paying this month are new even if they
 make another booking in the same month.
+
+Full completeness, duplicate and booking-candidate inventory runs only during dry
+run. Batch application checks affected record fingerprints and reconciles stable
+counts and currency totals, without scanning unrelated booking candidates.

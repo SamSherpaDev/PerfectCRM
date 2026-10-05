@@ -259,16 +259,17 @@ class SourceReportingTest < ActiveSupport::TestCase
     assert_equal({ "USD" => 50_000 }, report.downstream_referrals.sole[:net_received])
   end
 
-  test "inferred and reviewed bindings validate every upstream matching field" do
+  test "all binding kinds validate every upstream matching field" do
     id = 70
-    %w[inferred reviewed].each do |state|
-      { crm_inquiry_ref: "SH-OTHER", perfectbook_contact_id: 99, trip_name: "Changed trip", start_date: Date.new(2027, 1, 1) }.each do |field, value|
+    %w[explicit inferred reviewed].each do |state|
+      { crm_inquiry_ref: "SH-OTHER", perfectbook_contact_id: 99, trip_id: 77, trip_name: "Changed trip", departure_id: 88, start_date: Date.new(2027, 1, 1) }.each do |field, value|
         item = booking(id: id, crm_inquiry_ref: nil)
         id += 1
         BookingInquiryBinding.link!(item, lead: @lead, actor: "test", evidence: "Matched", state: state)
         item.update!(paid_minor: 100_000)
         BookingInquiryBinding.sync!(item)
         assert_equal @lead, item.reload.primary_inquiry
+        assert_equal state, item.inquiry_binding.state
         before = item[field]
         item.update!(field => value)
         BookingInquiryBinding.sync!(item)
@@ -280,8 +281,23 @@ class SourceReportingTest < ActiveSupport::TestCase
         item.update!(field => before)
         BookingInquiryBinding.sync!(item)
         assert_equal @lead, item.reload.primary_inquiry
+        assert_equal state, item.inquiry_binding.state
       end
     end
+  end
+
+  test "re-review records changed evidence on the binding independently of audits" do
+    item = booking
+    fingerprint = item.inquiry_binding.upstream_fingerprint
+    item.update!(departure_id: 99)
+    BookingInquiryBinding.sync!(item)
+    assert_nil item.reload.primary_inquiry
+    BookingInquiryBinding.link!(item, lead: @lead, actor: "captain", evidence: "Confirmed changed departure", reason: "Rescheduled")
+    assert_not_equal fingerprint, item.reload.inquiry_binding.upstream_fingerprint
+    @lead.activity_events.where(kind: "booking_link").delete_all
+    BookingInquiryBinding.sync!(item)
+    assert_equal @lead, item.reload.primary_inquiry
+    assert_equal "reviewed", item.inquiry_binding.state
   end
 
   test "original lifetime source uses established client testimony and its corrections" do

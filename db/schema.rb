@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_05_041313) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_05_055233) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -119,6 +119,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_05_041313) do
     t.integer "perfectbook_id", null: false
     t.string "state", null: false
     t.datetime "updated_at", null: false
+    t.string "upstream_fingerprint"
     t.index ["lead_id"], name: "index_booking_inquiry_bindings_on_lead_id"
     t.index ["perfectbook_id"], name: "index_booking_inquiry_bindings_on_perfectbook_id", unique: true
   end

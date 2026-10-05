@@ -8,9 +8,22 @@ module SourceBackfill
   HEADERS = %w[action record_id inquiry_id fingerprint evidence].freeze
   module_function
 
-  def inventory
+  def reconciliation
     { "leads" => Lead.count, "clients" => Client.count, "people" => Person.count,
-      "cross_record_email_groups_for_review" => ActiveRecord::Base.connection.select_value(<<~SQL).to_i,
+      "bookings" => PerfectBook::Booking.count,
+      "answer_states" => Lead.group(:source_answer_state).count, "lead_sources" => Lead.group(:source).count,
+      "converted" => Lead.where.not(converted_client_id: nil).count, "tests" => Lead.where(is_test: true).count,
+      "referrals" => Lead.where.not(referral_code: [ nil, "" ]).count,
+      "missing_money" => PerfectBook::Booking.where(net_received_minor: nil).count,
+      "money" => {
+        "booked_value" => PerfectBook::Booking.group(:currency).sum(:total_minor),
+        "legacy_paid" => PerfectBook::Booking.group(:currency).sum(:paid_minor),
+        "cash_minor" => { "USD" => %w[receipts_minor refunds_minor net_received_minor].to_h { |field| [ field, PerfectBook::Booking.sum(field) ] } }
+      } }
+  end
+
+  def inventory
+    reconciliation.merge("cross_record_email_groups_for_review" => ActiveRecord::Base.connection.select_value(<<~SQL).to_i,
         SELECT COUNT(*) FROM (
           SELECT email_key FROM (
             SELECT LOWER(TRIM(email)) AS email_key FROM leads
@@ -25,27 +38,17 @@ module SourceBackfill
       "shared_perfectbook_email_groups_for_review" => PerfectBook::Contact.where.not(email: [ nil, "" ]).group(:email).having("COUNT(*) > 1").count.size,
       "booking_candidate_counts" => PerfectBook::Booking.find_each.each_with_object({ "zero" => 0, "one" => 0, "multiple" => 0 }) { |booking, counts| count = candidates_for(booking).size; counts[count.zero? ? "zero" : (count == 1 ? "one" : "multiple")] += 1 },
       "open" => Lead.where(converted_client_id: nil).count,
-      "lead_sources" => Lead.group(:source).count, "answer_states" => Lead.group(:source_answer_state).count,
       "placements" => Lead.group(:placement).count.transform_keys { |key| key || "(missing)" },
       "channels" => Lead.group(:capture_channel).count.transform_keys { |key| key || "(missing)" },
       "spam" => Tagging.joins(:tag).where(taggable_type: "Lead", tags: { name: Lead::SUSPECTED_SPAM_TAG }).count,
       "legacy_attribution" => Lead.where("json_type(metadata, '$.attribution') = 'object'").count,
       "acquisition_snapshots" => Lead.where("json_type(metadata, '$.acquisition') = 'object'").count,
       "shared_email_groups_for_review" => Lead.where.not(email: [ nil, "" ]).group(:email).having("COUNT(*) > 1").count.size,
-      "converted" => Lead.where.not(converted_client_id: nil).count, "tests" => Lead.where(is_test: true).count,
       "lead_kinds" => Lead.group(:kind).count, "client_kinds" => Client.group(:kind).count,
       "perfectbook_contacts" => PerfectBook::Contact.count, "perfectbook_contact_kinds" => PerfectBook::Contact.group(:kind).count,
       "shared_client_email_groups_for_review" => Client.where.not(email: [ nil, "" ]).group(:email).having("COUNT(*) > 1").count.size,
-      "referrals" => Lead.where.not(referral_code: [ nil, "" ]).count,
-      "bookings" => PerfectBook::Booking.count, "bindings" => BookingInquiryBinding.count,
-      "money" => {
-        "booked_value" => PerfectBook::Booking.group(:currency).sum(:total_minor),
-        "legacy_paid" => PerfectBook::Booking.group(:currency).sum(:paid_minor),
-        # The agreed scalar cash totals are USD-ledger facts, not invoice currency.
-        "cash_minor" => { "USD" => %w[receipts_minor refunds_minor net_received_minor].to_h { |field| [ field, PerfectBook::Booking.sum(field) ] } }
-      },
-      "missing_money" => PerfectBook::Booking.where(net_received_minor: nil).count,
-      "unlinked" => PerfectBook::Booking.where.not(perfectbook_id: BookingInquiryBinding.select(:perfectbook_id)).count }
+      "bindings" => BookingInquiryBinding.count,
+      "unlinked" => PerfectBook::Booking.where.not(perfectbook_id: BookingInquiryBinding.select(:perfectbook_id)).count)
   end
 
   def fingerprint(record)
@@ -111,7 +114,7 @@ module SourceBackfill
     rows = CSV.parse(raw, headers: true)
     raise ArgumentError, "Invalid batch" unless rows.headers == HEADERS && rows.size.between?(1, BATCH_SIZE)
     SourceBackfillBatch.transaction do
-      before = inventory
+      before = reconciliation
       rows.each do |row|
         case row["action"]
         when "legacy_snapshot"
@@ -140,9 +143,8 @@ module SourceBackfill
           raise ArgumentError, "Invalid action"
         end
       end
-      after = inventory
-      stable = %w[leads clients people bookings money answer_states lead_sources converted tests referrals missing_money]
-      raise "Count/money reconciliation failed" unless before.slice(*stable) == after.slice(*stable)
+      after = reconciliation
+      raise "Count/money reconciliation failed" unless before == after
       result = { "before" => before, "after" => after, "count_money_reconciled" => true, "rows" => rows.size }
       SourceBackfillBatch.create!(digest: digest, reviewer: reviewer, reconciliation_json: result)
       result
