@@ -12,12 +12,14 @@ class AdConversions::ExportJob < ApplicationJob
     return unless AdConversions.enabled?(settings)
 
     recorded = 0
-    Lead.where("created_at >= ?", now - AdConversions::LOOKBACK).includes(:tags).find_each do |lead|
+    recent_booking_leads = BookingInquiryBinding.where(state: %w[explicit reviewed])
+      .where(perfectbook_id: PerfectBook::Booking.where("first_received_at >= ?", now - AdConversions::LOOKBACK).select(:perfectbook_id)).select(:lead_id)
+    Lead.where("created_at >= ?", now - AdConversions::LOOKBACK).or(Lead.where(id: recent_booking_leads)).includes(:tags).find_each do |lead|
       recorded += AdConversions.record!(lead, now: now).size
     end
 
     meta = Hash.new(0)
-    AdConversion.where(meta_status: %w[pending sending failed]).includes(lead: :tags).find_each do |row|
+    AdConversion.where(delivery_status: %w[not_sent rejected]).includes(lead: :tags).find_each do |row|
       result = AdConversions.deliver_meta!(row, settings: settings, now: now)
       meta[result] += 1 if result
     end

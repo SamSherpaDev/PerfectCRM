@@ -2,7 +2,7 @@ class TemplatesController < ApplicationController
   before_action :set_template, only: %i[edit update destroy duplicate archive unarchive move use]
 
   def document_nudge
-    @booking = PerfectBook::Booking.find(params[:booking_id])
+    @booking = PerfectBook::Booking.available.find(params[:booking_id])
     @recipient = Client.find_by(perfectbook_contact_id: @booking.perfectbook_contact_id) ||
       Lead.open.find_by(perfectbook_contact_id: @booking.perfectbook_contact_id) ||
       Lead.lost.find_by(perfectbook_contact_id: @booking.perfectbook_contact_id)
@@ -172,7 +172,7 @@ class TemplatesController < ApplicationController
   def merge_departures
     # Note: NULL check only — comparing the integer column to "" makes
     # SQLite drop every row, so a blank string is never queried.
-    booked = PerfectBook::Booking.where.not(departure_id: nil).distinct.pluck(:departure_id)
+    booked = PerfectBook::Booking.available.where.not(departure_id: nil).distinct.pluck(:departure_id)
     PerfectBook::Departure.where(perfectbook_id: booked)
       .order(Arel.sql("start_date IS NULL, start_date DESC")).limit(100).to_a
   end
@@ -183,7 +183,7 @@ class TemplatesController < ApplicationController
     @skipped_without_email = 0
     return nil if departure.nil?
 
-    PerfectBook::Booking.where(departure_id: departure.perfectbook_id)
+    PerfectBook::Booking.available.where(departure_id: departure.perfectbook_id)
       .order(:id).filter_map do |booking|
         contact = PerfectBook::Contact.find_by(perfectbook_id: booking.perfectbook_contact_id)
         email = contact&.email.to_s.strip

@@ -79,5 +79,8 @@
     <%= report_agreement_line(summary) %>
   </p>
 
+  <p style="margin:14px 0 0;">Inquiry review Q-fit: <%= summary.q_fit %> (your judgment, no reply required). Platform-qualified: <%= summary.total.qualified %> (fit plus owner stage move).</p>
+  <% monthly = summary.monthly; facts = monthly.totals; quality = monthly.completeness %>
+  <p style="margin:14px 0 0;">Source database, <%= monthly.month.strftime('%B') %>, as of <%= monthly.as_of.strftime('%b %-d %H:%M %Z') %>: <%= facts[:inquiries] %> inquiries, <%= facts[:connected_calls] %> connected calls, <%= facts[:bookings] %> bookings, <%= facts[:travelers] %> travelers (booker's source). Net received: <%= source_report_money(facts[:net_received]) %>. Discovery confirmed: <%= quality[:confirmed] %> of <%= quality[:inquiries] %>; <%= quality[:unlinked_bookings] %> unlinked bookings. <%= link_to "Monthly sources and cohorts", settings_weekly_report_url(month: monthly.month.strftime('%Y-%m')), style: "color:#5c574f;" %>.</p>
   <p style="margin:14px 0 0;font-size:12px;color:#5c574f;">Qualified = AI fit strong or possible and you moved the lead to Chatting or Quoted. Booked = deposit paid. <%= link_to "Open the report", settings_weekly_report_url(week: summary.week_start.iso8601), style: "color:#5c574f;" %>.</p>
 </div>

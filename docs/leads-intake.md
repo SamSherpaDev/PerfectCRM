@@ -276,8 +276,9 @@ existing unique `SH-` plus four characters from `Lead.build_reference`, not the
 submission UUID or PerfectBook contact ID. One primary inquiry per booking;
 multiple bookings per inquiry. PerfectBook must validate the reference through
 the trusted authenticated sibling integration, not trust a browser query alone.
-Link edits need actor/date/evidence/reason. Booking binding and sync are later
-work; no inference is upgraded to reviewed evidence in this task.
+For CRM binding review, the authenticated inquiry lookup, and the approved
+temporary PerfectBook validation handoff, see
+[Link review](source-reporting.md#link-review).
 
 PerfectBook's additive booking API contract: `crm_inquiry_ref`,
 `first_received_at`, `first_received_on`, `first_received_precision`
@@ -293,8 +294,9 @@ with offset/UTC. Money uses integer minor units and explicit currency; no FX
 mixing or inferred recognized revenue. PerfectBook remains the money/traveler
 system of record. Bookings/travelers are distinct IDs; group attribution is
 labeled booker's source, not each companion's discovery. Repeat bookings do
-not reacquire a person. Current weekly inference and both qualification counts
-remain compatibility behavior until the separate binding/report tasks ship.
+not reacquire a person. Attribution and qualification definitions live in
+[Monthly source reports and reviewed backfill](../README.md#monthly-source-reports-and-reviewed-backfill)
+and [Weekly ads report](../README.md#weekly-ads-report).
 
 ### Retention and access
 

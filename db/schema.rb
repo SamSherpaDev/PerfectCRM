@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_05_031551) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_05_201722) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -57,25 +57,30 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_05_031551) do
   create_table "ad_conversions", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "currency", default: "USD", null: false
+    t.string "delivery_status", default: "not_sent", null: false
     t.string "event", null: false
     t.string "event_id", null: false
     t.boolean "google", default: false, null: false
     t.datetime "google_first_served_at"
     t.datetime "google_last_served_at"
     t.integer "google_serve_count", default: 0, null: false
+    t.string "google_skip_reason"
+    t.string "last_skip_reason"
     t.integer "lead_id", null: false
     t.integer "meta_attempts", default: 0, null: false
     t.text "meta_error"
     t.datetime "meta_sent_at"
     t.string "meta_status", default: "not_applicable", null: false
     t.datetime "occurred_at", null: false
+    t.integer "perfectbook_id"
     t.datetime "updated_at", null: false
     t.integer "value_minor", default: 0, null: false
     t.index ["event_id"], name: "index_ad_conversions_on_event_id", unique: true
-    t.index ["lead_id", "event"], name: "index_ad_conversions_on_lead_id_and_event", unique: true
+    t.index ["lead_id", "event"], name: "index_ad_conversions_lead_outcomes", unique: true, where: "event != 'booked'"
     t.index ["lead_id"], name: "index_ad_conversions_on_lead_id"
     t.index ["meta_status"], name: "index_ad_conversions_on_meta_status"
     t.index ["occurred_at"], name: "index_ad_conversions_on_occurred_at"
+    t.index ["perfectbook_id"], name: "index_ad_conversions_booking_outcomes", unique: true, where: "event = 'booked' AND perfectbook_id IS NOT NULL"
   end
 
   create_table "ad_spends", force: :cascade do |t|
@@ -105,6 +110,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_05_031551) do
     t.index ["conversation_id"], name: "index_ai_calls_on_conversation_id"
     t.index ["created_at"], name: "index_ai_calls_on_created_at"
     t.index ["purpose"], name: "index_ai_calls_on_purpose"
+  end
+
+  create_table "booking_inquiry_bindings", force: :cascade do |t|
+    t.string "actor", null: false
+    t.datetime "created_at", null: false
+    t.string "evidence", null: false
+    t.integer "lead_id", null: false
+    t.datetime "linked_at", null: false
+    t.integer "perfectbook_id", null: false
+    t.string "state", null: false
+    t.datetime "updated_at", null: false
+    t.string "upstream_fingerprint"
+    t.index ["lead_id"], name: "index_booking_inquiry_bindings_on_lead_id"
+    t.index ["perfectbook_id"], name: "index_booking_inquiry_bindings_on_perfectbook_id", unique: true
   end
 
   create_table "channel_snapshots", force: :cascade do |t|
@@ -189,6 +208,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_05_031551) do
     t.index ["last_message_at"], name: "index_conversations_on_last_message_at"
     t.index ["linkable_type", "linkable_id"], name: "index_conversations_on_linkable_type_and_linkable_id"
     t.index ["provider_thread_id"], name: "index_conversations_on_provider_thread_id", unique: true, where: "provider_thread_id IS NOT NULL AND provider_thread_id != ''"
+  end
+
+  create_table "daily_ad_spends", force: :cascade do |t|
+    t.integer "amount_minor", null: false
+    t.string "campaign_id", null: false
+    t.string "campaign_name", null: false
+    t.datetime "created_at", null: false
+    t.string "currency", default: "USD", null: false
+    t.string "source", null: false
+    t.date "spent_on", null: false
+    t.datetime "updated_at", null: false
+    t.index ["spent_on", "source", "campaign_id", "currency"], name: "index_daily_ad_spends_identity", unique: true
   end
 
   create_table "demo_records", force: :cascade do |t|
@@ -323,6 +354,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_05_031551) do
     t.string "name", null: false
     t.integer "notes_count", default: 0, null: false
     t.integer "origin_lead_id"
+    t.string "owner_fit_at_inquiry"
+    t.datetime "owner_fit_recorded_at"
+    t.string "owner_fit_recorded_by"
     t.integer "party_size"
     t.integer "perfectbook_contact_id"
     t.string "phone"
@@ -498,8 +532,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_05_031551) do
 
   create_table "perfectbook_bookings", force: :cascade do |t|
     t.integer "balance_due_minor"
+    t.string "binding_issue"
+    t.datetime "cancelled_at"
+    t.text "cash_events_json"
     t.text "checklist_json", default: "[]", null: false
     t.datetime "created_at", null: false
+    t.string "crm_inquiry_ref"
     t.string "currency", default: "USD"
     t.string "deep_link"
     t.integer "departure_id"
@@ -507,9 +545,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_05_031551) do
     t.text "documents_json", default: "{}", null: false
     t.date "end_date"
     t.datetime "first_paid_at"
+    t.datetime "first_received_at"
+    t.date "first_received_on"
+    t.string "first_received_precision"
     t.string "invoice_badge"
     t.string "invoice_number"
     t.integer "missing_count", default: 0, null: false
+    t.integer "net_received_minor"
     t.integer "paid_minor"
     t.integer "party_size"
     t.string "payment_reference"
@@ -517,14 +559,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_05_031551) do
     t.integer "perfectbook_contact_id", null: false
     t.integer "perfectbook_id", null: false
     t.integer "price_per_person_minor"
+    t.integer "receipts_minor"
     t.string "ref"
+    t.integer "refunds_minor"
     t.date "start_date"
     t.string "status"
     t.datetime "synced_at", null: false
     t.integer "total_minor"
+    t.integer "traveler_count"
     t.integer "trip_id"
     t.string "trip_name"
+    t.datetime "unavailable_at"
     t.datetime "updated_at", null: false
+    t.index ["cancelled_at"], name: "index_perfectbook_bookings_on_cancelled_at"
+    t.index ["first_received_at"], name: "index_perfectbook_bookings_on_first_received_at"
+    t.index ["first_received_on"], name: "index_perfectbook_bookings_on_first_received_on"
+    t.index ["perfectbook_contact_id", "first_received_at"], name: "index_bookings_contact_receipt"
     t.index ["perfectbook_contact_id"], name: "index_perfectbook_bookings_on_perfectbook_contact_id"
     t.index ["perfectbook_id"], name: "index_perfectbook_bookings_on_perfectbook_id", unique: true
   end
@@ -710,6 +760,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_05_031551) do
     t.integer "google_feed_last_row_count"
     t.text "google_feed_password"
     t.string "google_review_url", default: "", null: false
+    t.boolean "google_terms_accepted", default: false, null: false
     t.string "lead_webhook_url"
     t.text "mailbox_last_error"
     t.datetime "mailbox_last_error_at"
@@ -717,6 +768,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_05_031551) do
     t.datetime "mailbox_watched_since"
     t.text "meta_access_token"
     t.string "meta_dataset_id"
+    t.boolean "meta_terms_accepted", default: false, null: false
     t.text "ms_graph_refresh_token"
     t.boolean "pipeline_digest", default: true, null: false
     t.datetime "relay_last_used_at"
@@ -730,6 +782,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_05_031551) do
     t.index ["singleton_key"], name: "index_settings_on_singleton_key", unique: true
     t.index ["site_key"], name: "index_settings_on_site_key", unique: true, where: "site_key IS NOT NULL AND site_key != ''"
     t.check_constraint "singleton_key = 1", name: "settings_singleton"
+  end
+
+  create_table "source_backfill_batches", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "digest", null: false
+    t.text "reconciliation_json", null: false
+    t.string "reviewer", null: false
+    t.datetime "updated_at", null: false
+    t.index ["digest"], name: "index_source_backfill_batches_on_digest", unique: true
   end
 
   create_table "taggings", force: :cascade do |t|
@@ -802,6 +863,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_05_031551) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "ad_conversions", "leads"
+  add_foreign_key "booking_inquiry_bindings", "leads"
   add_foreign_key "clients", "clients", column: "referred_by_client_id"
   add_foreign_key "clients", "leads", column: "origin_lead_id"
   add_foreign_key "clients", "organizations", column: "referred_by_organization_id"

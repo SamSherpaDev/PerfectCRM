@@ -43,11 +43,12 @@ class WeeklyReportMailerTest < ActionMailer::TestCase
     assert_includes mail.text_part.body.decoded, "Spend not entered for this week yet."
   end
   test "booked values flags and missing campaign spend render in both formats without ROAS" do
-    Lead.create!(name: "Booker", source: "meta_ads", campaign_name: "social",
+    lead = Lead.create!(name: "Booker", source: "meta_ads", campaign_name: "social",
       perfectbook_contact_id: 42, received_at: Time.zone.local(2026, 9, 15))
     seen = Time.zone.local(2026, 9, 17)
-    PerfectBook::Booking.create!(perfectbook_id: 1, perfectbook_contact_id: 42, status: "confirmed",
+    booking = PerfectBook::Booking.create!(perfectbook_id: 1, perfectbook_contact_id: 42, status: "confirmed",
       party_size: 2, paid_minor: 50_000, total_minor: 700_000, first_paid_at: seen, synced_at: seen)
+    BookingInquiryBinding.link!(booking, lead: lead, actor: "test", evidence: "Reviewed booking")
     mail = WeeklyReportMailer.weekly
     [ mail.text_part, mail.html_part ].each do |part|
       body = part.body.decoded
@@ -74,5 +75,19 @@ class WeeklyReportMailerTest < ActionMailer::TestCase
     end
     mail = WeeklyReportMailer.weekly(week_start: Date.new(2028, 1, 3))
     [ mail.text_part, mail.html_part ].each { |part| assert_not_includes part.body.decoded, "Goal:" }
+  end
+
+  test "Monday email includes an authoritative date-only booking" do
+    lead = Lead.create!(name: "Date-only", source: "google_ads", perfectbook_contact_id: 88,
+      received_at: Time.zone.local(2026, 9, 15))
+    booking = PerfectBook::Booking.create!(perfectbook_id: 88, perfectbook_contact_id: 88,
+      first_received_on: Date.new(2026, 9, 17), first_received_precision: "date", paid_minor: 50_000,
+      total_minor: 700_000, currency: "USD", party_size: 3, status: "confirmed", synced_at: Time.current)
+    BookingInquiryBinding.link!(booking, lead: lead, actor: "test", evidence: "Reviewed date")
+    mail = WeeklyReportMailer.weekly
+    assert_includes mail.subject, "1 booked"
+    assert_includes mail.text_part.body.decoded, "1 booked"
+    assert_nil booking.reload.first_received_at
+    assert_nil booking.first_paid_at
   end
 end

@@ -6,7 +6,7 @@ class AdConversionsSettingsTest < ActionDispatch::IntegrationTest
 
   setup do
     @settings = Setting.current
-    @settings.update!(meta_dataset_id: nil, meta_access_token: nil, google_feed_password: nil)
+    @settings.update!(meta_dataset_id: nil, meta_access_token: nil, google_feed_password: nil, google_terms_accepted: true)
   end
 
   def basic(username, password)
@@ -32,7 +32,7 @@ class AdConversionsSettingsTest < ActionDispatch::IntegrationTest
     password = @settings.rotate_google_feed_password!
     lead = Lead.create!(name: "Anna Lindqvist", email: "anna@example.com", source: "google_ads",
       status: "chatting", fit_band: "strong", received_at: 1.day.ago,
-      metadata: { "attribution" => { "gclid" => "Cj0K-click" },
+      metadata: { "attribution" => { "gclid" => "Cj0K-click", "first_seen_at" => 1.day.ago.iso8601 },
         "acquisition" => { "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true } } })
     Leads::Transition.call(lead, to: "chatting")
     lead.activity_events.create!(kind: "automation", summary: "AI verdict", occurred_at: Time.current,
@@ -65,7 +65,7 @@ class AdConversionsSettingsTest < ActionDispatch::IntegrationTest
   test "saving Meta keeps the token encrypted and a blank token keeps the saved one" do
     sign_in
     patch ad_conversions_settings_path, params: { setting: {
-      meta_dataset_id: " 123456789012345 ", meta_access_token: "EAAB-token", ad_booking_value_percent: "30"
+      meta_dataset_id: " 123456789012345 ", meta_access_token: "EAAB-token", ad_booking_value_percent: "30", meta_terms_accepted: "1"
     } }
     assert_redirected_to edit_settings_path(anchor: "ad-conversions-heading")
     @settings.reload
@@ -79,7 +79,7 @@ class AdConversionsSettingsTest < ActionDispatch::IntegrationTest
     assert_equal "EAAB-token", @settings.reload.meta_access_token
 
     get edit_settings_path
-    assert_select "span.badge", text: "Meta on"
+    assert_select "span.badge", text: "Meta configured"
     assert_not_includes response.body, "EAAB-token"
   end
 
@@ -99,6 +99,6 @@ class AdConversionsSettingsTest < ActionDispatch::IntegrationTest
     assert_select "p[role=status]", text: /#{password}/
     get edit_settings_path
     assert_not_includes response.body, password
-    assert_select "span.badge", text: "Google on"
+    assert_select "span.badge", text: "Google configured"
   end
 end

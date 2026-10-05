@@ -34,6 +34,8 @@ class TemplateContext
   end
 
   def self.for_document_nudge(record, booking)
+    raise ActiveRecord::RecordNotFound unless booking.available?
+
     template = Template.active.for_purpose(:document_request).ordered.first
     context = self.for(record, booking: booking)
     context["missing_documents"] ||= booking.try(:missing_lines)&.join("; ") ||
@@ -83,7 +85,7 @@ class TemplateContext
       "signature" => EmailSignature.text_for(settings).presence,
       "google_review_link" => settings.google_review_url.presence
     }
-    if booking
+    if booking&.available?
       context.merge!(booking_context(booking))
     else
       quote = Quote.for_owner(quote_owner).where(status: %w[sent viewed accepted]).where.not(terms_bundle: nil).ordered.detect do |candidate|
@@ -106,7 +108,7 @@ class TemplateContext
   def self.bookings_for_contact(contact_id)
     return [] if contact_id.blank?
 
-    rows = PerfectBook::Booking.where(perfectbook_contact_id: contact_id).to_a
+    rows = PerfectBook::Booking.available.where(perfectbook_contact_id: contact_id).to_a
     rows.sort_by do |row|
       [ INACTIVE_BOOKING_STATUSES.include?(row.status.to_s) ? 1 : 0,
         row.start_date ? 0 : 1,

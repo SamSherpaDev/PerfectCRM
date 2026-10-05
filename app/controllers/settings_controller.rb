@@ -149,7 +149,7 @@ class SettingsController < ApplicationController
   # value share. Clearing the dataset ID turns Meta off.
   def ad_conversions
     @settings = Setting.current
-    attrs = params.require(:setting).permit(:meta_dataset_id, :ad_booking_value_percent)
+    attrs = params.require(:setting).permit(:meta_dataset_id, :ad_booking_value_percent, :meta_terms_accepted, :google_terms_accepted)
     @settings.assign_attributes(attrs.transform_values { |value| value.to_s.strip.presence })
     token = params.dig(:setting, :meta_access_token).to_s.strip
     @settings.meta_access_token = token if token.present?
@@ -184,7 +184,7 @@ class SettingsController < ApplicationController
     @ai_calls_today = AiCall.today.count
     @ai_cost_today = AiCall.daily_cost_cents
     @ad_conversions_recent = AdConversion.newest_first.includes(:lead).limit(10)
-    @ad_conversion_meta_counts = AdConversion.group(:meta_status).count
+    @ad_conversion_delivery_counts = AdConversion.group(:delivery_status).count
     @google_feed_waiting = @settings.google_feed_configured? ? AdConversions::GoogleFeed.rows.size : 0
     @spend_weeks = (0...SPEND_WEEKS).map { |ago| WeeklyReport::Summary.last_complete_week - (7 * ago) }
     @ad_spends = AdSpend.where(week_start: @spend_weeks.last..).newest_first

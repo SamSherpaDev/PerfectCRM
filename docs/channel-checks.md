@@ -170,5 +170,30 @@ channels have no separate CRM lead sources: their inquiries come only from the
 latest snapshot, labeled separately from the paid report period. Website form
 inquiries are not guessed into an organic channel. Organic rows show inquiries,
 reviews and followers; spend and cost per inquiry are omitted because these
-channels carry no ad spend. Intake tracking, conversion exports and the weekly
-report email behavior are unchanged.
+channels carry no ad spend. The weekly channel-spend calculation is unchanged. Monthly source reporting and
+conversion-link repair are described in [source reporting](source-reporting.md).
+
+## Daily spend request
+
+`POST /api/v1/channels/daily_spend`, JSON, with the same owner-configured Bearer
+`CHANNEL_CHECKS_TOKEN`. This additive endpoint leaves the weekly contract intact.
+
+```json
+{"spends":[{"spent_on":"2026-10-01","source":"google_ads","campaign_id":"123456","campaign_name":"EBC","currency":"USD","amount_minor":1800}]}
+```
+
+One to 100 rows, max 64 KiB; only these six keys. Date is an exact Pacific
+calendar day in the last two years, strictly before today. Source is
+`google_ads` or `meta_ads`; campaign ID/name max 160 characters; currency is a
+three-letter uppercase code; amount is a nonnegative integer in minor units.
+Every campaign/day includes explicit zero rows when genuinely zero. Stable
+campaign ID, not name, is identity. Upsert replaces the same date/source/ID/
+currency amount atomically; renamed campaigns do not split paid history.
+Returns `201 {"entries":N}`; malformed data is rejected atomically.
+
+Monthly costs require every day through the report cutoff in each supplied
+campaign currency. Missing days stay unavailable. No weekly proration, FX,
+budget-as-spend or summing daily totals on top of weekly entries. Weekly reports
+continue to use the existing weekly spend contract. The external channel check
+must be updated separately to post exact daily rows; CRM does not fetch ad
+platform spend or acquire tokens itself.

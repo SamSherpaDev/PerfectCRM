@@ -8,15 +8,46 @@ module PerfectBook
     # Nudge-worthy statuses from the sibling API.
     MISSING_STATUSES = %w[missing expiring].freeze
 
+    scope :received_by, ->(at) { where("first_received_at <= :at OR (first_received_precision = 'date' AND first_received_on <= :on)", at: at, on: at.in_time_zone("America/Los_Angeles").to_date) }
+
+    def receipt_date
+      first_received_on || first_received_at&.in_time_zone("America/Los_Angeles")&.to_date
+    end
+
+    def receipt_order
+      exact = first_received_precision != "date" && first_received_at.present?
+      [ receipt_date, exact ? 1 : 0, exact ? first_received_at.to_r : 0, perfectbook_id ]
+    end
+
+    scope :available, -> { where(unavailable_at: nil) }
+
+    def available?
+      unavailable_at.nil?
+    end
+
     serialize :documents_json, coder: JSON
     serialize :checklist_json, coder: JSON
+    serialize :cash_events_json, coder: JSON
+    has_one :inquiry_binding, class_name: "::BookingInquiryBinding", foreign_key: :perfectbook_id, primary_key: :perfectbook_id
+
+    def primary_inquiry
+      return nil if binding_issue.present?
+      inquiry_binding&.lead
+    end
+
+    def cash_events
+      Array(cash_events_json)
+    end
+
+    def receipt_time
+      first_received_at
+    end
 
     validates :perfectbook_id, presence: true, uniqueness: true
     validates :perfectbook_contact_id, presence: true
 
-    before_save do
-      self.first_paid_at ||= Time.current if paid_minor.to_i.positive?
-    end
+    # first_paid_at is legacy sync-observation evidence only. Never fabricate
+    # a payment timestamp from a refresh; authoritative receipts arrive upstream.
 
     # Per-traveler document rows from the mirrored summary:
     # [{ "id", "first_name", "documents" => [{ "type", "status", "received_at" }] }].

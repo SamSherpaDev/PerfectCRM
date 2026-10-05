@@ -89,12 +89,12 @@ class Setting < ApplicationRecord
 
   # Meta Conversions API is on once both the dataset and its token are set.
   def meta_configured?
-    meta_dataset_id.present? && meta_access_token.present?
+    meta_dataset_id.present? && meta_access_token.present? && meta_terms_accepted?
   end
 
   # Google's scheduled pull is on once a feed password exists.
   def google_feed_configured?
-    google_feed_password.present?
+    google_feed_password.present? && google_terms_accepted?
   end
 
   # The password Google Ads uses to pull the conversions feed. Shown once

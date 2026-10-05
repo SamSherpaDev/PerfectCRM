@@ -15,7 +15,7 @@ class DocumentHandoffsController < ApplicationController
   end
 
   def create
-    booking = PerfectBook::Booking.find_by(id: handoff_params[:booking_id])
+    booking = PerfectBook::Booking.available.find_by(id: handoff_params[:booking_id])
     traveler = traveler_for(booking, handoff_params[:traveler_id])
     document_type = handoff_params[:document_type].to_s
     unless booking && traveler && DOCUMENT_TYPES.include?(document_type)
@@ -121,9 +121,9 @@ class DocumentHandoffsController < ApplicationController
   def load_bookings
     contact_id = @message&.conversation&.linkable.try(:perfectbook_contact_id)
     @bookings = if contact_id.present?
-      PerfectBook::Booking.where(perfectbook_contact_id: contact_id).order(:start_date, :id).to_a
+      PerfectBook::Booking.available.where(perfectbook_contact_id: contact_id).order(:start_date, :id).to_a
     else
-      PerfectBook::Booking.order(Arel.sql("start_date IS NULL, start_date DESC")).limit(50).to_a
+      PerfectBook::Booking.available.order(Arel.sql("start_date IS NULL, start_date DESC")).limit(50).to_a
     end
   end
 

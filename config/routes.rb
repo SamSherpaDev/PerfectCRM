@@ -7,8 +7,10 @@ Rails.application.routes.draw do
   # Contracts: docs/leads-intake.md and docs/channel-checks.md.
   namespace :api do
     namespace :v1 do
+      get "inquiries/:reference", to: "inquiries#show"
       post "channels/snapshots", to: "channel_snapshots#create"
       post "channels/spend", to: "channel_spends#create"
+      post "channels/daily_spend", to: "daily_channel_spends#create"
       scope module: :leads do
         match "leads/intake", to: "intakes#preflight", via: :options
         post "leads/intake", to: "intakes#create"
@@ -142,6 +144,7 @@ Rails.application.routes.draw do
     end
     resources :ad_spends, only: %i[create destroy]
   end
+  post "booking_inquiry_bindings", to: "booking_inquiry_bindings#create", as: :booking_inquiry_bindings
   get "feeds/google-conversions.csv", to: "google_conversion_feeds#show", as: :google_conversions_feed, format: false
   namespace :ai do
     post "conversations/:conversation_id/draft", to: "drafts#create", as: :conversation_draft

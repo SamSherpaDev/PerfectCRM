@@ -6,6 +6,17 @@ class TemplateContextTest < ActiveSupport::TestCase
     Setting.current.update!(sender_name: "Sam", email_signature: "Sam Sherpa\nSherpa Holidays")
   end
 
+  test "explicit unavailable bookings cannot supply operational placeholders" do
+    booking = PerfectBook::Booking.create!(perfectbook_id: 9000, perfectbook_contact_id: 4242,
+      trip_name: "Removed trip", balance_due_minor: 185_000, currency: "USD", synced_at: Time.current,
+      unavailable_at: Time.current)
+    assert_nil TemplateContext.for(@client, booking: booking)["balance_due"]
+    assert_nil TemplateContext.for(@client, booking: booking)["trip"]
+    assert_raises(ActiveRecord::RecordNotFound) { TemplateContext.for_document_nudge(@client, booking) }
+    booking.update!(unavailable_at: nil)
+    assert_equal "$1,850.00", TemplateContext.for(@client, booking: booking)["balance_due"]
+  end
+
   test "fills names from the record without a booking" do
     context = TemplateContext.for(@client)
     assert_equal "Maya", context["first_name"]

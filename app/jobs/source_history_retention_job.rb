@@ -21,7 +21,7 @@ class SourceHistoryRetentionJob < ApplicationJob
           lead.update_columns(metadata: metadata)
         end
         if expired?(lead, now)
-          metadata.except!("acquisition", "attribution", "page")
+          metadata.except!("acquisition", "attribution", "page", "legacy_observed")
           lead.update_columns(metadata: metadata)
           purge_source(lead)
           lead.people.each { |person| purge_source(person) }
@@ -41,14 +41,22 @@ class SourceHistoryRetentionJob < ApplicationJob
 
   def expired?(record, now)
     client = record.is_a?(Client) ? record : record.converted_client
-    if client
-      bookings = PerfectBook::Booking.where(perfectbook_contact_id: client.perfectbook_contact_id) if client.perfectbook_contact_id
+    linked = if record.is_a?(Lead)
+      PerfectBook::Booking.where(perfectbook_id: BookingInquiryBinding.where(lead_id: record.id).select(:perfectbook_id)).received_by(now)
+    end
+    if client || linked&.exists?
+      bookings = if client&.perfectbook_contact_id
+        PerfectBook::Booking.where(perfectbook_contact_id: client.perfectbook_contact_id)
+      else
+        linked
+      end
       last_booking = [ bookings&.maximum(:end_date), bookings&.maximum(:start_date) ].compact.max
       # Recording a note or editing source must not restart the lifetime clock.
       # Until a complete mirror exists, creation uses the conservative booked
       # horizon, explicitly not an asserted financial receipt date.
-      baseline = last_booking&.in_time_zone || client.created_at
-      baseline <= now - 7.years
+      last_receipt = [ bookings&.maximum(:first_received_on), bookings&.maximum(:first_received_at)&.in_time_zone&.to_date ].compact.max
+      baseline = [ last_booking, last_receipt ].compact.max || (client&.created_at || record.created_at).to_date
+      baseline <= (now - 7.years).to_date
     else
       # A returning inquiry is still a separate unbooked ask until conversion.
       last_contact = record.last_touch_at || record.received_at || record.created_at
@@ -66,14 +74,19 @@ class SourceHistoryRetentionJob < ApplicationJob
       expired_fields.merge!(source: record.is_a?(Lead) ? "manual" : nil, campaign_name: nil,
         referral_code: nil, referred_by_organization_id: nil)
     end
+    if record.is_a?(Lead)
+      expired_fields.merge!(owner_fit_at_inquiry: nil, owner_fit_recorded_at: nil, owner_fit_recorded_by: nil)
+      BookingInquiryBinding.where(lead_id: record.id).update_all(evidence: "Source-link evidence expired", updated_at: Time.current)
+    end
     record.update_columns(expired_fields)
     # Deliberate retention exception to ordinary append-only sales history.
-    events = ActivityEvent.where(kind: %w[source_answer source_referral call])
+    source_kinds = %w[source_answer source_referral call source_backfill inquiry_fit booking_link]
+    events = ActivityEvent.where(kind: source_kinds)
     provenance = record.is_a?(Person) ? "from_person_id" : "from_lead_id"
     if record.is_a?(Lead) || record.is_a?(Person)
       events.where("json_extract(metadata, '$.#{provenance}') = ?", record.id).delete_all
     end
-    record.activity_events.where(kind: %w[source_answer source_referral call]).delete_all
+    record.activity_events.where(kind: source_kinds).delete_all
     conversions = record.activity_events.where(kind: "conversion")
     if record.is_a?(Lead)
       conversions = conversions.or(ActivityEvent.where(kind: "conversion").where(

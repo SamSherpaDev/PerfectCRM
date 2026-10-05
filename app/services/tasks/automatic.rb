@@ -13,7 +13,7 @@ module Tasks
     # Runs every rule for today's date. Returns the tasks created.
     def run!(today: Date.current)
       created = []
-      PerfectBook::Booking.find_each do |booking|
+      PerfectBook::Booking.available.find_each do |booking|
         subject = subject_for(booking)
         next if subject.nil?
 
@@ -25,6 +25,7 @@ module Tasks
     end
 
     def try_review_ask!(booking, subject, today)
+      return nil unless booking.available?
       return nil if booking.end_date.blank? || booking.end_date + REVIEW_DELAY > today
 
       create_once!(
@@ -36,6 +37,7 @@ module Tasks
     end
 
     def try_repeat_nudge!(booking, subject, today)
+      return nil unless booking.available?
       return nil if booking.end_date.blank?
       return nil if booking.end_date + REPEAT_DELAY > today
 
@@ -48,6 +50,7 @@ module Tasks
     end
 
     def try_deposit_nudge!(booking, subject, today)
+      return nil unless booking.available?
       return nil unless %w[sent overdue].include?(booking.invoice_badge.to_s)
       return nil if booking.balance_due_minor.to_i <= 0
       return nil if booking.start_date.present? && booking.start_date <= today

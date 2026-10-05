@@ -1,8 +1,8 @@
 # The numbers behind the Monday ads report (README.md, "Weekly ads
 # report"). Weeks run Monday to Sunday, Pacific time. Each weekly count is
 # an event inside that week: an inquiry received, a lead qualified or
-# quoted, a deposit first seen. Attribution is the lead's own source and
-# campaign, the CRM's system of record.
+# quoted, or a first receipt (with legacy estimated dates retained for weekly
+# compatibility). README.md owns timing and booking-binding attribution rules.
 module WeeklyReport
   class Summary
     PAID_SOURCES = AdSpend::SOURCES
@@ -59,6 +59,14 @@ module WeeklyReport
       @week_start = week_start.to_date.beginning_of_week(:monday)
       @week_end = @week_start + 6
       @today = today
+    end
+
+    def monthly
+      @monthly ||= Monthly.new(month: week_end.beginning_of_month)
+    end
+
+    def q_fit
+      week_inquiries.count { |lead| QUALIFIED_FITS.include?(lead.owner_fit_at_inquiry) }
     end
 
     def range
@@ -277,8 +285,7 @@ module WeeklyReport
       qualified_in(window).each { |lead| row_for.call(lead.source, lead.campaign_name).qualified += 1 }
       quoted_in(window).each { |lead| row_for.call(lead.source, lead.campaign_name).quoted += 1 }
       deposits_in(window).each do |booking|
-        lead, client = booking_origin(booking)
-        origin = lead || client
+        origin = booking.primary_inquiry
         row = row_for.call(origin&.source.presence, origin&.campaign_name)
         row.booked += 1
         row.booked_value_minor += booking.total_minor.to_i if booking.currency.to_s.upcase == "USD"
@@ -323,7 +330,9 @@ module WeeklyReport
 
     # Inquiries exclude explicit tests, archives, and suspected spam.
     def counted_leads
-      Lead.active.where(is_test: false).where.not(id: spam_lead_ids)
+      tests = Client.where(is_test: true).select(:id)
+      test_inquiries = Lead.where(converted_client_id: tests).or(Lead.where(existing_client_id: tests)).select(:id)
+      Lead.active.where(is_test: false).where.not(id: test_inquiries).where.not(id: spam_lead_ids)
     end
 
     def spam_lead_ids
@@ -391,16 +400,12 @@ module WeeklyReport
     def deposits_in(window)
       @deposits ||= {}
       @deposits[window] ||= PerfectBook::Booking.where("paid_minor > 0")
-        .where(first_paid_at: window)
+        .where("first_received_at BETWEEN :from AND :to OR (first_received_precision = 'date' AND first_received_on BETWEEN :start AND :end) OR (first_received_at IS NULL AND first_received_on IS NULL AND first_paid_at BETWEEN :from AND :to)",
+          from: window.first, to: window.last, start: window.first.in_time_zone("America/Los_Angeles").to_date, end: window.last.in_time_zone("America/Los_Angeles").to_date)
         .where("status IS NULL OR status NOT IN (?)", TemplateContext::INACTIVE_BOOKING_STATUSES).to_a
-        .reject { |booking| booking_origin(booking).compact.any?(&:is_test?) }
-    end
-
-    def booking_origin(booking)
-      client = Client.find_by(perfectbook_contact_id: booking.perfectbook_contact_id)
-      lead = client&.converted_leads&.where("converted_at <= ?", booking.first_paid_at)&.order(:converted_at, :id)&.last
-      lead ||= Lead.where(converted_client_id: nil, perfectbook_contact_id: booking.perfectbook_contact_id).order(:created_at, :id).last
-      [ lead, client ]
+        .reject do |booking|
+          Client.where(perfectbook_contact_id: booking.perfectbook_contact_id, is_test: true).exists? || [ booking.inquiry_binding&.lead ].compact.any? { |lead| lead.is_test? || lead.converted_client&.is_test? || lead.existing_client&.is_test? }
+        end
     end
 
     def inquired_at(lead)

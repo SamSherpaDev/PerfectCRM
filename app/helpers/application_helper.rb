@@ -238,6 +238,13 @@ module ApplicationHelper
   # Deep links into PerfectBook, the system of record for bookings.
   # Contact links are built from the base URL; booking links reuse the
   # absolute deep_link the API returns per booking.
+  def booking_inquiry_choices(booking)
+    clients = Client.where(perfectbook_contact_id: booking.perfectbook_contact_id).select(:id)
+    Lead.where(perfectbook_contact_id: booking.perfectbook_contact_id)
+      .or(Lead.where(converted_client_id: clients)).or(Lead.where(existing_client_id: clients))
+      .order(:received_at, :id).map { |lead| [ "#{lead.reference} · #{lead.trip_title.presence || lead.trip_interest.presence || lead.name}", lead.id ] }
+  end
+
   def perfectbook_contact_url(id)
     PerfectBook.contact_url(id)
   end

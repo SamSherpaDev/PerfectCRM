@@ -118,6 +118,7 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
     seen = Time.zone.local(2026, 9, 17, 12)
     PerfectBook::Booking.create!(perfectbook_id: 1, perfectbook_contact_id: 42, trip_name: "Everest Base Camp",
       status: "confirmed", party_size: 2, paid_minor: 50_000, total_minor: 700_000, first_paid_at: seen, synced_at: seen)
+    BookingInquiryBinding.link!(PerfectBook::Booking.find_by!(perfectbook_id: 1), lead: lead, actor: "test", evidence: "Reviewed booking")
     PerfectBook::Booking.create!(perfectbook_id: 2, perfectbook_contact_id: 42, trip_name: "Everest Base Camp",
       status: "cancelled", party_size: 3, paid_minor: 50_000, total_minor: 700_000, first_paid_at: seen, synced_at: seen)
     PerfectBook::Booking.create!(perfectbook_id: 3, perfectbook_contact_id: 99, trip_name: "Annapurna",
@@ -206,7 +207,7 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
     assert_equal({ agreed: 0, total: 1 }, WeeklyReport::Summary.new(week_start: WEEK).ai_agreement)
   end
 
-  test "booking attribution uses the lead converted before the deposit" do
+  test "unbound bookings stay unknown despite multiple converted inquiries" do
     original = inquiry("Original", source: "google_ads", campaign: "first")
     client = travel_to(Time.zone.local(2026, 9, 16)) { original.convert_to_client! }
     client.update!(perfectbook_contact_id: 42)
@@ -216,7 +217,8 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
     PerfectBook::Booking.create!(perfectbook_id: 1, perfectbook_contact_id: 42, status: "confirmed",
       party_size: 2, paid_minor: 50_000, total_minor: 700_000, first_paid_at: seen, synced_at: seen)
     summary = WeeklyReport::Summary.new(week_start: WEEK)
-    assert_equal 1, row(summary, "Google first").booked
+    assert_equal 0, row(summary, "Google first").booked
+    assert_equal 1, summary.rows.find { |entry| entry.source.nil? }.booked
     assert_equal 0, row(summary, "Meta return").booked
   end
 
@@ -231,6 +233,7 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
     PerfectBook::Booking.create!(perfectbook_id: 1, perfectbook_contact_id: 42, status: "confirmed",
       party_size: 2, paid_minor: 50_000, total_minor: 700_000, first_paid_at: seen, synced_at: seen)
 
+    BookingInquiryBinding.link!(PerfectBook::Booking.find_by!(perfectbook_id: 1), lead: returning, actor: "test", evidence: "Reviewed returning inquiry")
     summary = WeeklyReport::Summary.new(week_start: WEEK)
     assert_equal 1, row(summary, "Meta").booked
     assert_equal 700_000, row(summary, "Meta").booked_value_minor
@@ -315,5 +318,22 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
     flags = WeeklyReport::Summary.new(week_start: WEEK).flags
     assert_includes flags, "Google EBC cost per qualified inquiry over $300"
     assert_includes flags, "1 inquiry waiting over 24 h"
+  end
+
+  test "authoritative date-only receipts count in Pacific weeks instead of legacy sync dates" do
+    lead = inquiry("Date-only booker", perfectbook_contact_id: 81)
+    dates = [ WEEK - 1, WEEK, WEEK + 6, WEEK + 7 ]
+    dates.each_with_index do |date, index|
+      booking = PerfectBook::Booking.create!(perfectbook_id: 810 + index, perfectbook_contact_id: 81,
+        first_received_on: date, first_received_precision: "date", first_paid_at: Time.zone.local(2026, 9, 16),
+        paid_minor: 50_000, total_minor: 700_000, party_size: 3, status: "confirmed", synced_at: Time.current)
+      BookingInquiryBinding.link!(booking, lead: lead, actor: "test", evidence: "Reviewed date")
+    end
+    summary = WeeklyReport::Summary.new(week_start: WEEK)
+    google = row(summary, "Google")
+    assert_equal 2, google.booked
+    assert_equal 1_400_000, google.booked_value_minor
+    assert_equal 9, summary.year_travelers
+    assert_nil PerfectBook::Booking.find_by!(perfectbook_id: 811).first_received_at
   end
 end

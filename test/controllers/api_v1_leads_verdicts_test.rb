@@ -68,7 +68,7 @@ class ApiV1LeadsVerdictsTest < ActionDispatch::IntegrationTest
   end
 
   test "the sweep qualifies a weak AI verdict upgraded by the owner" do
-    @settings.update!(google_feed_password: "review-password", meta_dataset_id: nil)
+    @settings.update!(google_feed_password: "review-password", meta_dataset_id: nil, google_terms_accepted: true)
     @lead.update!(received_at: 1.day.ago, metadata: { "attribution" => { "gclid" => "review-click" },
       "acquisition" => { "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true } } })
     post_verdict @lead.id, { "fit_band" => "weak" }

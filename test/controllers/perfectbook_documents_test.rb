@@ -39,6 +39,72 @@ class PerfectBookDocumentsTest < ActionDispatch::IntegrationTest
       missing_count: missing_count, checklist_json: [], synced_at: Time.current)
   end
 
+  test "removed upstream bookings retain history but leave operational paths" do
+    travel_to Time.zone.local(2026, 10, 4, 10)
+    booking = make_booking
+    booking.update!(start_date: Date.current + 5.days, end_date: Date.current + 12.days, departure_id: 20,
+      invoice_badge: "sent", first_received_at: 1.day.ago, first_received_on: Date.yesterday,
+      traveler_count: 2, cash_events_json: [ { "kind" => "receipt", "occurred_on" => Date.yesterday.iso8601, "currency" => "USD", "amount_minor" => 100_000 } ])
+    booking.update_columns(created_at: 6.days.ago)
+    PerfectBook::Contact.create!(perfectbook_id: 7, name: @client.name, email: @client.email, kind: "customer", synced_at: Time.current)
+    PerfectBook::Contact.create!(perfectbook_id: 8, name: "Available booker", email: "available@example.test", kind: "customer", synced_at: Time.current)
+    PerfectBook::Departure.create!(perfectbook_id: 20, trip_name: "Everest Base Camp", start_date: booking.start_date, synced_at: Time.current)
+    PerfectBook::Booking.create!(perfectbook_id: 12, perfectbook_contact_id: 8, departure_id: 20, synced_at: Time.current)
+    assert_equal booking.perfectbook_id, TemplateContext.for_reply(to: @client.email, owner: @client)[:selected_booking_id]
+    get client_path(@client)
+    assert_select ".upcoming", text: /Everest Base Camp/
+    empty = Object.new
+    empty.define_singleton_method(:list_contact_bookings) { |*| { data: [], not_modified: false } }
+    PerfectBook::SyncBookingsJob.perform_now(perfectbook_contact_id: 7, client: empty)
+    assert_not booking.reload.available?
+    get client_path(@client, nudge_booking_id: booking.id)
+    assert_response :success
+    assert_select ".upcoming", count: 0
+    assert_select "a", text: "Nudge for missing documents", count: 0
+    assert_includes response.body, "Retained for reconciliation"
+    get reply_context_templates_path, params: { to: @client.email, owner_type: "Client", owner_id: @client.id, booking_id: booking.perfectbook_id }
+    assert_response :success
+    assert_nil response.parsed_body["selected_booking_id"]
+    assert_empty response.parsed_body["bookings"]
+    assert_nil response.parsed_body["context"]["balance_due"]
+    get merge_templates_path(departure_id: 20)
+    assert_response :success
+    assert_select "textarea[name=recipients]", text: /available@example.test/
+    assert_select "textarea[name=recipients]", text: /ama@example.com/, count: 0
+    get document_nudge_path(booking_id: booking.id)
+    assert_response :not_found
+    assert_no_difference "Task.count" do
+      post create_review_ask_tasks_path, params: { booking_id: booking.id }
+      assert_response :not_found
+      assert_empty Tasks::Automatic.run!
+    end
+    assert_not_includes Today::Summary.new.departing_soon, booking
+    assert_equal "No mirrored bookings.", Ai::Context.booking_facts(@client)
+    assert_equal({ "USD" => 0 }, @client.reload.pipeline_values_by_currency)
+    report = WeeklyReport::Monthly.new
+    assert_equal 1, report.totals[:bookings]
+    assert_equal({ "USD" => 100_000 }, report.totals[:net_received])
+    assert_equal 1, report.completeness[:unavailable_bookings]
+  end
+
+  test "unavailable booking handoffs reject selection and preserve the held file" do
+    booking = make_booking
+    booking.update!(unavailable_at: Time.current)
+    _message, holding = make_holding
+    fake, calls = stub_pb_upload
+    get new_document_handoff_path(holding_id: holding.id)
+    assert_response :success
+    assert_select "option[value='#{booking.id}']", count: 0
+    PerfectBook::Client.stub(:new, fake) do
+      post document_handoffs_path, params: { holding_id: holding.id,
+        handoff: { booking_id: booking.id, traveler_id: 3, document_type: "passport" } }
+    end
+    assert_response :unprocessable_entity
+    assert_empty calls
+    assert DocumentHolding.exists?(holding.id)
+    assert_equal "passport-bytes", holding.reload.file.download
+  end
+
   test "booking card shows each traveler document status with badges and the missing count" do
     make_booking
     get client_path(@client)

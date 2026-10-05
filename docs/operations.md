@@ -77,6 +77,7 @@ are not repeated here. This file covers only what differs for the CRM.
 | AI provider key | [AI setup](../README.md#ai-assistance) | Settings; encrypted in the primary database, password manager |
 | Mailbox grant (delegated) | [Mail setup](../README.md#mail) | Refresh token encrypted in the primary database (Settings → Mailbox → Connect mailbox), password manager |
 | `PERFECTBOOK_BASE_URL`, `PERFECTBOOK_API_TOKEN` | [PerfectBook connection setup](../README.md#perfectbook-connection) | CRM `.env.app`; token also in PerfectBook's `.env.app` and password manager |
+| `PERFECTBOOK_INQUIRY_TOKEN` | Owner-created bearer credential for the [inquiry lookup](source-reporting.md#link-review) | CRM `.env.app`, password manager; supply privately to the separately filed PerfectBook validation integration |
 
 Preserve the Active Record encryption keys with database backups and supply the
 same keys when restoring. Losing or replacing them makes encrypted values
@@ -89,12 +90,12 @@ secret. For relay credential setup and rotation, see the
 The owner sets `CHANNEL_CHECKS_TOKEN` in the app environment and supplies the
 same credential privately to the channels manager. Never commit, print or
 include it in a URL. Unset, empty or whitespace-only disables all snapshot and
-weekly spend requests, including otherwise valid callers. This credential is independent of
+weekly and daily spend requests, including otherwise valid callers. This credential is independent of
 website intake and mailbox credentials. To rotate, the owner replaces it in
 both environments and applies the app environment change through the normal
 release process; there is no UI token generator or manual check entry.
 
-The aggregate-only snapshot and weekly spend endpoints are documented in
+The aggregate-only snapshot, weekly spend and daily spend endpoints are documented in
 [channel checks](channel-checks.md). The page is under Channels in the Settings
 navigation group and under More on phones. Checks are retained for later trends.
 

@@ -4,8 +4,9 @@
 # Meta receives each row once through the Conversions API
 # (AdConversions::MetaClient). Rules live in AdConversions.
 class AdConversion < ApplicationRecord
+  DELIVERY_STATUSES = %w[not_sent accepted rejected unknown].freeze
   EVENTS = %w[lead qualified quote booked].freeze
-  META_STATUSES = %w[not_applicable pending sending sent failed skipped].freeze
+  META_STATUSES = %w[not_applicable pending sending sent failed rejected uncertain skipped].freeze
   LABELS = {
     "lead" => "Inquiry", "qualified" => "Qualified inquiry",
     "quote" => "Quote sent", "booked" => "Booking (deposit paid)"
@@ -13,7 +14,11 @@ class AdConversion < ApplicationRecord
 
   belongs_to :lead
 
-  validates :event, inclusion: { in: EVENTS }, uniqueness: { scope: :lead_id }
+  validates :delivery_status, inclusion: { in: DELIVERY_STATUSES }
+  validates :event, inclusion: { in: EVENTS }
+  validates :event, uniqueness: { scope: :lead_id }, unless: -> { event == "booked" }
+  validates :perfectbook_id, presence: true, uniqueness: true, if: -> { event == "booked" && new_record? }
+  belongs_to :booking, class_name: "PerfectBook::Booking", foreign_key: :perfectbook_id, primary_key: :perfectbook_id, optional: true
   validates :event_id, presence: true, uniqueness: true
   validates :meta_status, inclusion: { in: META_STATUSES }
   validates :occurred_at, presence: true
@@ -21,6 +26,10 @@ class AdConversion < ApplicationRecord
 
   scope :newest_first, -> { order(created_at: :desc, id: :desc) }
   scope :for_google, -> { where(google: true) }
+
+  def possibly_delivered?
+    %w[accepted unknown].include?(delivery_status)
+  end
 
   def label
     LABELS.fetch(event)
