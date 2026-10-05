@@ -513,7 +513,8 @@ Converted leads cannot be archived. The archived record presentation is
 described under [Clients](#clients).
 
 Conversion is one-way and manual. Convert to client matches an existing
-client by PerfectBook contact ID first, then normalized primary email.
+client by an explicit returning-inquiry link first, then PerfectBook contact
+ID, then normalized primary email.
 The confirmation names a matched client before attaching the lead's
 people (deduplicated by email), tags, notes, and activity to them. Existing
 client contact facts stay intact; conversion sets their pipeline stage to Won
@@ -564,34 +565,21 @@ duration. Only a `connected` call event counts as connected, not a completed
 task. Double saves with the same save UUID produce one event. Client calls
 explicitly select an inquiry; no unbound calls are counted as inquiry outcomes.
 
-| Answer | Stable code |
-|---|---|
-| A friend or family member | `personal_referral` |
-| Google or another search engine | `search` |
-| Facebook | `facebook` |
-| Instagram | `instagram` |
-| YouTube | `youtube` |
-| TikTok | `tiktok` |
-| Pinterest | `pinterest` |
-| A travel show or event | `event` |
-| A travel advisor or another business | `advisor_partner` |
-| Google Maps or Tripadvisor | `maps_reviews` |
-| An email from SherpaHolidays | `email_marketing` |
-| I already knew Sam, Gyalgin or SherpaHolidays | `existing_relationship` |
-| Somewhere else | `other` |
-| I don't remember | `unsure` |
+The [intake contract](docs/leads-intake.md#exact-optional-question-and-stable-answers)
+lists the shared answers and stable codes.
 
 Internal states are `answered`, `unsure`, `declined` (Declined to answer) and
 `not_asked` (Not asked yet). Arrival channels are `website_form`, `phone`,
 `email`, `social_dm`, `trade_show`, `in_person`, `other`; they are independent
 of discovery. Typed source/test/origin fields live on Lead, Client and Person;
-source changes use append-only ActivityEvents. A new conversion preserves the
-answer, confirmation, advisor and personal referrals; copied companions retain
+source changes use append-only ActivityEvents until retention expiry. A new
+conversion preserves the answer, confirmation, advisor and personal referrals; copied companions retain
 their own source and origin-person pointer. Returning inquiries keep their
 own source and explicitly link `existing_client_id`, without replacing the
 client's lifetime origin. A shared email is a clue requiring review, not proof
 that everyone is the same person. No person is created or contacted merely
 because someone named a referrer. Personal referrals cannot self-link or cycle.
+A person linked as a referrer or copied origin cannot be removed through the People form while that link exists.
 
 Customer testimony, first observed website touch, and last inquiry-session
 website touch are three separate facts. Versioned metadata holds `first_touch`,
@@ -616,11 +604,9 @@ or DOB enter this database; source details/referrer identities are not ad data.
 
 Shared future booking key: `crm_inquiry_ref` is the existing unique `SH-XXXX`
 lead reference. PerfectBook validates and owns that binding; one primary inquiry
-per booking, multiple bookings per inquiry. Its additive API fields are
-`first_received_at`, `first_received_on`, `first_received_precision`,
-`receipts_minor`, `refunds_minor`, `net_received_minor`, `traveler_count`,
-`cancelled_at`, `cash_events`, and `crm_inquiry_ref`. Binding/sync, monthly
-reporting and backfill are separate work. Existing manual/shopify booking source
+per booking, multiple bookings per inquiry. The future wire contract is in
+[the intake reference](docs/leads-intake.md#calls-booking-references-time-and-money).
+Binding/sync, monthly reporting and backfill are separate work. Existing manual/shopify booking source
 and financial fields retain their meaning. Months use America/Los_Angeles;
 wire timestamps have ISO 8601 offsets, date-only evidence is not made into exact
 times. Money is integer minor units with explicit currency (the agreed sibling
@@ -907,18 +893,19 @@ Weeks run Monday to Sunday, Pacific time.
 
 Definitions, in `WeeklyReport::Summary`:
 
-- **Inquiry**: a lead received in the week, not archived (tests and junk
-  are archived) and not tagged suspected spam.
+- **Inquiry**: a lead received in the week, excluding archives, explicit tests
+  and suspected spam.
 - **Qualified**: current AI fit strong or possible, and the captain (never an
   automation) moved the lead to Chatting or Quoted, dated by the first such move.
 - **Quote**: a lead's first captain move to Quoted or first sent quote,
-  whichever came first. Inquiry, qualified, and quote counts exclude archived
-  and suspected-spam leads across all sources; Paid total includes only Google
+  whichever came first. Inquiry, qualified, and quote counts exclude explicit
+  tests, archived and suspected-spam leads across all sources; Paid total includes only Google
   Ads and Meta Ads.
 - **Booked**: a mirrored PerfectBook booking whose deposit was first seen
   paid that week (`first_paid_at`; payment timing and historical backfill are
   defined in [Ad conversions](#ad-conversions)), unless
-  since cancelled, voided, or refunded. It counts toward the channel and
+  since cancelled, voided, or refunded, or its matched lead or client is
+  marked as a test. It counts toward the channel and
   campaign selected by the attribution rules below; travelers are its party
   size. Booked value
   sums the full booking total for USD bookings only, not the deposit amount;

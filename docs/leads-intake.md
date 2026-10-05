@@ -73,7 +73,11 @@ Source derivation: `google_ads` on `gclid`/`gbraid`/`wbraid`, or
 `utm_source=google` with a paid medium (`cpc`, `ppc`, `paid`); `meta_ads`
 on `facebook`/`instagram`/`meta` with a paid medium; `trade_show` on
 `utm_medium=event` (travel show booth links and QR codes); else `website_form`.
-`campaign_name` copies `utm_campaign`. The reference is `SH-XXXX`.
+`campaign_name` copies `utm_campaign`. With `acquisition`, this compatibility
+projection uses the eligible last-non-direct touch, falling back to the eligible
+last touch, with source and campaign from that complete snapshot. See the
+[source contract](#additive-browser-payloads) for permission and ordering rules.
+The reference is `SH-XXXX`.
 
 Referral: `attribution.referral_code` is optional. The storefront sends the
 advisor code from its `?ref=CODE` landing links here (six chars from
@@ -218,15 +222,19 @@ Each touch is a complete snapshot, never merged click-by-click. Allowed keys:
 URLs store host/path (path max 512), only allowlisted campaign queries,
 no fragments, credentials, arbitrary queries or referrer paths. Click IDs are
 separate columns of the snapshot, never retained inside URLs. Timestamps must
-be ISO 8601 and cannot be future-dated beyond five minutes. The CRM records
+be ISO 8601, no older than ten years and no more than five minutes in the future. The CRM records
 classifier version `crm-source-v1` and permission recording time itself.
 Normalized `source` is server-derived. Classifier v1 values are `google_ads`,
 `meta_ads`, `trade_show`, `google`, `facebook`, `instagram`, `youtube`, `tiktok`,
 `pinterest`, `search`, `email`, `referral`, `direct`, `unknown`. These observed
 codes are independent of the self-reported list. `fbclid` alone does not prove paid Meta.
 Paid source/campaign must come from the same snapshot. `first_touch` is immutable
-on details updates while retained; last touch can reflect a genuine direct
-return. Internal navigation is not new acquisition. No timestamp means unknown,
+on details updates while retained. Each latest-touch snapshot replaces an
+eligible stored snapshot only when its observation time is strictly newer;
+omitted, ineligible or older snapshots preserve the stored visit unless
+permission requires evidence to be scrubbed. Last touch
+can reflect a genuine direct return. Internal navigation is not new acquisition.
+No timestamp means unknown,
 not direct. Missing reasons: `legacy_missing`, `not_asked`, `declined_permission`,
 `no_detectable_referrer`, `unresolved_identity`, `unavailable`, `withdrawn`,
 `consent_granted_late`. Do not backdate a click when permission is granted late.
@@ -237,6 +245,14 @@ Touch persistence requires Shopify marketing processing permission and respects
 sale/sharing opt-out and withdrawal; there is no analytics-cookie workaround.
 Denied/unavailable/withdrawn or `opted_out: true` stores a missing reason instead
 of marketing evidence. Withdrawal through details removes existing evidence.
+Details rejects permission observations older than the stored observation with
+`422` and `fields["acquisition.permission"] = "stale"`. Restoring permission,
+enabling measurement/sharing or clearing opt-out requires observation times on
+both permissions and a strictly newer incoming observation. Restrictive changes
+can proceed without comparable observation times; server receipt time never
+substitutes for observation time. An identical confirmed source answer is a
+no-op and does not block a valid permission update; a changed confirmed answer
+returns `422` with `fields["source_answer"] = "confirmed"`.
 Server ad exports require explicit allowed state plus `measurement: true`,
 `sharing: true`, no opt-out, and no test/spam exclusion. Legacy records with
 no permission snapshot are withheld, not silently treated as consented.
@@ -282,18 +298,10 @@ remain compatibility behavior until the separate binding/report tasks ship.
 
 ### Retention and access
 
-Recommended bounded schedule: browser cookies 90 days (storefront task);
-detailed click IDs/URLs at most 180 days after inquiry; unbooked source history
-24 months after last substantive contact; booked-client discovery/relationship
-history 7 years after last booking, reviewed annually. The scheduled
-`SourceHistoryRetentionJob` enforces these bounds for source snapshots,
-source/referral events and call logs, including archived records. Converted
-clients without complete booking mirrors use the conservative seven-year
-horizon until authoritative binding is available. The job does not delete CRM
-contacts/correspondence or PerfectBook accounting/documents; whole-contact
-and backup expiry belong to the separate privacy policy/deletion review.
-De-identified source/month aggregates may be retained for long-term trends;
-monthly aggregates are later work. No arbitrary 20-year identifiable tracker.
+The [source retention policy](../README.md#source-history-and-calls) owns the
+retention schedule and scope. At expiry, source-bearing conversion metadata and
+returning-inquiry summaries are scrubbed while conversion events remain.
+Whole-contact deletion and backup expiry require the separate privacy review.
 
 Access stays within existing signed-in operator authentication. Public callers
 can only add optional testimony to their accepted submission under existing
