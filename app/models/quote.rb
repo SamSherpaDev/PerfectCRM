@@ -51,6 +51,17 @@ class Quote < ApplicationRecord
   validate :exactly_one_owner
   validate :totals_cover_deposit
 
+  def self.for_owner(record)
+    case record
+    when Client
+      where(client: record).or(where(lead_id: record.converted_leads.select(:id)))
+    when Lead
+      where(lead: record)
+    else
+      none
+    end
+  end
+
   scope :ordered, -> { order(created_at: :desc, id: :desc) }
   scope :for_tab, ->(tab) do
     case tab.to_s

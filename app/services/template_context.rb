@@ -22,7 +22,7 @@ class TemplateContext
 
   def self.resolved_context(resolved, booking)
     identity = resolved[:identity]
-    context = self.for(identity, booking: booking)
+    context = self.for(identity, booking: booking, quote_owner: resolved[:owner], recipient_email: resolved[:recipient_email])
     owner = resolved[:owner]
     if owner.is_a?(Lead) && resolved[:recipient_email].present? &&
         owner.email.to_s.strip.downcase == resolved[:recipient_email] && owner.trip_interest.present?
@@ -73,7 +73,7 @@ class TemplateContext
     { context: {}, selected_booking_id: nil, bookings: [], booking_contexts: {} }
   end
 
-  def self.for(record, booking: default_booking_for(record))
+  def self.for(record, booking: default_booking_for(record), quote_owner: record, recipient_email: record.try(:display_email) || record.try(:email))
     settings = Setting.current
     context = {
       "first_name" => first_name_for(record),
@@ -85,12 +85,14 @@ class TemplateContext
     }
     if booking
       context.merge!(booking_context(booking))
-    elsif record.is_a?(Client) || record.is_a?(Lead)
-      scope = record.is_a?(Client) ? Quote.where(client: record) : Quote.where(lead: record)
-      quote = scope.where(status: %w[sent viewed accepted]).where.not(terms_bundle: nil).ordered.first
-      if quote && !quote.expired? && (quote.status == "accepted" || quote.payment_schedule_current?)
-        context.merge!(quote_context(quote))
+    else
+      quote = Quote.for_owner(quote_owner).where(status: %w[sent viewed accepted]).where.not(terms_bundle: nil).ordered.detect do |candidate|
+        delivered_email = candidate.owner_email.to_s.strip.downcase
+        delivered_email = quote_owner.effective_recipient_email(delivered_email) if quote_owner.respond_to?(:effective_recipient_email)
+        delivered_email == recipient_email.to_s.strip.downcase && !candidate.expired? &&
+          (candidate.status == "accepted" || candidate.payment_schedule_current?)
       end
+      context.merge!(quote_context(quote)) if quote
     end
     context.compact_blank
   end

@@ -95,7 +95,7 @@ class QuotesController < ApplicationController
 
       @quote.assign_attributes(quote_params)
       catalog_changed = @quote.perfectbook_trip_id_changed? || @quote.perfectbook_departure_id_changed?
-      if (!catalog_changed || apply_catalog_snapshot(replace_description: true)) && @quote.save
+      if apply_catalog_snapshot(replace_description: catalog_changed) && @quote.save
         remember_inclusions
         if params[:send_now].present?
           send_after_update = true
@@ -181,8 +181,8 @@ class QuotesController < ApplicationController
     if trip
       @quote.trip_name = trip.name
       @quote.departure_label = departure && departure_label(departure)
-      @quote.departure_start_on = departure&.start_date
-      @quote.departure_end_on = departure&.end_date
+      @quote.departure_start_on = departure.start_date if departure&.start_date.present?
+      @quote.departure_end_on = departure.end_date if departure&.end_date.present?
     end
     @quote.lines.each do |line|
       next if line.marked_for_destruction? || !%w[trip departure].include?(line.kind)
@@ -192,8 +192,8 @@ class QuotesController < ApplicationController
       line.snapshot_trip_name = trip&.name
       line.perfectbook_departure_id = departure&.perfectbook_id
       line.snapshot_departure_label = @quote.departure_label
-      line.snapshot_start_on = departure&.start_date
-      line.snapshot_end_on = departure&.end_date
+      line.snapshot_start_on = trip ? @quote.departure_start_on : nil
+      line.snapshot_end_on = trip ? @quote.departure_end_on : nil
       if replace_description && trip && line.description == previous_catalog_description
         line.description = [ trip.name, @quote.departure_label ].compact.join(" - ")
       end

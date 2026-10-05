@@ -39,7 +39,7 @@ module Ai
       end
       lines << "Tags: #{record.tags.map(&:name).join(', ')}" if record.respond_to?(:tags) && record.tags.any?
       if record.is_a?(::Client) || record.is_a?(::Lead)
-        quotes = record.is_a?(::Client) ? ::Quote.where(client: record) : ::Quote.where(lead: record)
+        quotes = ::Quote.for_owner(record)
         quote = quotes.where(status: %w[sent viewed accepted]).where.not(terms_bundle: nil).ordered.first
         if quote
           lines << "Quote #{quote.reference}: #{quote.status}, terms #{quote.terms_bundle.fetch('terms_version')}, SHA-256 #{quote.terms_bundle_sha256}. These terms belong only to this quote, not another or historical booking."

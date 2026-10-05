@@ -5,8 +5,13 @@
   <% if quote.perfectbook_trip_id.blank? %>
     <%= form.label :trip_name, "Custom journey name", class: "label mt-3" %>
     <%= form.text_field :trip_name, class: "input" %>
+  <% end %>
+  <% departure = PerfectBook::Departure.find_by(perfectbook_id: quote.perfectbook_departure_id) if quote.perfectbook_departure_id.present? %>
+  <% if departure&.start_date.blank? %>
     <%= form.label :departure_start_on, "Trip start date", class: "label mt-3" %>
     <%= form.date_field :departure_start_on, class: "input" %>
+  <% end %>
+  <% if departure&.end_date.blank? %>
     <%= form.label :departure_end_on, "Trip end date", class: "label mt-3" %>
     <%= form.date_field :departure_end_on, class: "input" %>
   <% end %>
