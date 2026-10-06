@@ -48,7 +48,8 @@ class OutboundFollowupReviewTest < ActionDispatch::IntegrationTest
     assert_select "section[aria-label='Merged messages']", text: /Pemba: Maya trek \$111.00 MAYA/
     PerfectBook::Contact.create!(perfectbook_id: 102, name: "Pemba", email: "pemba@example.com", synced_at: Time.current)
     post merge_templates_path, params: { template_id: @template.id, departure_id: 701, recipients: "pemba@example.com" }
-    assert_select "section[aria-label='Merged messages']", text: /Missing: trip/
+    assert_select "section[aria-label='Merged messages']", text: /Pemba: Missing: trip/
+    assert_select "section[aria-label='Merged messages']", text: /Missing: balance due/
     assert_select ".hint", text: /Booking reference:/, count: 0
   end
 

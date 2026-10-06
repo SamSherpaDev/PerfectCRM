@@ -52,6 +52,7 @@ class TemplateContextTest < ActiveSupport::TestCase
     rendered = Template.new(subject: "Hi {{first_name}}", body: "{{trip}} owes {{balance_due}} (deposit {{deposit_due}}, docs {{missing_documents}})").rendered(context)
     assert_equal "Hi Maya", rendered[:subject]
     assert_equal "[missing: trip] owes [missing: balance_due] (deposit [missing: deposit_due], docs [missing: missing_documents])", rendered[:body]
+    assert_equal "[missing: nickname]", TemplateRenderer.render("{{nickname}}", context)
   end
 
   test "fills trip, dates, invoice, and reference from the booking" do

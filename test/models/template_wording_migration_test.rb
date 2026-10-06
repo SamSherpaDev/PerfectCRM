@@ -1,5 +1,6 @@
 require "test_helper"
 require_relative "../../db/migrate/20260926205306_refresh_default_template_wording"
+require_relative "../../db/migrate/20261006020537_refresh_default_first_reply"
 
 class TemplateWordingMigrationTest < ActiveSupport::TestCase
   test "untouched launch templates move to the new wording and edited ones stay" do
@@ -30,7 +31,8 @@ class TemplateWordingMigrationTest < ActiveSupport::TestCase
     RefreshDefaultTemplateWording::CHANGES.each do |name, _, _, new_subject, new_body|
       template = Template.find_by!(name: name)
       expected_subject = name == "Deposit nudge" ? "Payment for your {{trip}}" : new_subject
-      assert_equal [ expected_subject, TemplatePolicyRefresh.body(new_body) ], [ template.subject, template.body ]
+      expected_body = name == RefreshDefaultFirstReply::NAME ? RefreshDefaultFirstReply::NEW_BODY : TemplatePolicyRefresh.body(new_body)
+      assert_equal [ expected_subject, expected_body ], [ template.subject, template.body ]
       assert_no_match(/—/, "#{template.subject}\n#{template.body}")
       assert_no_match(/Sherpa Holidays/, template.body)
     end

@@ -31,7 +31,8 @@ class TaskReviewRegressionsTest < ActionDispatch::IntegrationTest
       else
         # Leads and clients prefill the record composer instead.
         assert_select "#suggested-message-heading", count: 0
-        assert_select "textarea#message_body", text: "Hi Tashi & friends, how was [missing: trip]?"
+        trip = model == Lead ? "Nepal trip" : "[missing: trip]"
+        assert_select "textarea#message_body", text: "Hi Tashi & friends, how was #{trip}?"
         assert_select "input#message_subject[value='Hello Tashi']"
       end
       assert_not task.reload.done?
