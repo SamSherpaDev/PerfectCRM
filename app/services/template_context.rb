@@ -4,7 +4,6 @@
 # Resolution policy: see README.md, "Replying".
 #
 # Unknown operational values stay absent so the renderer marks them missing.
-# Trip alone has a neutral Nepal fallback for leads and clients.
 class TemplateContext
   INACTIVE_BOOKING_STATUSES = %w[cancelled voided refunded].freeze
 
@@ -92,7 +91,7 @@ class TemplateContext
       context.merge!(quote_context(quote)) if quote
     end
     if quote_owner.is_a?(Lead) || quote_owner.is_a?(Client)
-      context["trip"] = context["trip"].presence || inquiry_trip_for(quote_owner, recipient_email) || "Nepal trip"
+      context["trip"] = context["trip"].presence || inquiry_trip_for(quote_owner, recipient_email)
     end
     context.compact_blank
   end
@@ -117,7 +116,7 @@ class TemplateContext
     [ inquiry.trip_interest, inquiry.trip_title ].filter_map do |value|
       trip = value.to_s.strip
       trip if trip.present? && !trip.casecmp?("Not sure yet")
-    end.first
+    end.first || "Nepal trip"
   end
 
   # Every mirrored booking this record could fill placeholders from, best

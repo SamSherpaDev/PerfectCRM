@@ -55,11 +55,26 @@ class InquiryTripRenderingTest < ActiveSupport::TestCase
     Lead.create!(name: "Other traveler", email: "other@example.test", source: "website_form",
       trip_title: "Other trip", converted_client: client, converted_at: Time.current, received_at: 1.hour.from_now)
     assert_equal @lead.trip_title, TemplateContext.for_reply(to: client.email, owner: client)[:context]["trip"]
-    assert_equal "Nepal trip", TemplateContext.for_reply(to: "stranger@example.test", owner: client)[:context]["trip"]
+    assert_nil TemplateContext.for_reply(to: "stranger@example.test", owner: client)[:context]["trip"]
 
     Lead.create!(name: client.name, email: client.email, source: "website_form", trip_title: "Not sure yet",
       converted_client: client, converted_at: Time.current, received_at: 2.hours.from_now)
     assert_equal "Nepal trip", TemplateContext.for_reply(to: client.email, owner: client)[:context]["trip"]
+  end
+
+  test "clients without a matching inquiry keep missing trips across rendering paths" do
+    client = Client.create!(name: "Maya Test", email: "client@example.test")
+    Lead.create!(name: "Other traveler", email: "other@example.test", trip_title: "Not sure yet",
+      converted_client: client, converted_at: Time.current)
+    contexts = [ TemplateContext.for(client),
+      TemplateContext.for_reply(to: client.email, owner: client)[:context],
+      TemplateContext.for_recipient(MergeBatch::Recipient.new(name: client.name, email: client.email)) ]
+    contexts.each do |context|
+      assert_nil context["trip"]
+      rendered = @template.rendered(context)
+      assert_equal "Planning your trip", rendered[:subject]
+      assert_includes rendered[:body], "[missing: trip]"
+    end
   end
 
   test "matching mirrored contacts and corrected addresses retain inquiry trip" do

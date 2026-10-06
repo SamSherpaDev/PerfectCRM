@@ -220,14 +220,15 @@ composing inquiry's manual trip interest, then its website trip title. Client
 sends use the latest matching converted inquiry (received time, then ID).
 The inquiry's nonblank email must match the effective recipient after
 correction, trimming and ignoring case, including with a mirrored contact;
-other travelers' interests are never borrowed. For leads and clients, absent
-trips and "Not sure yet" use the neutral phrase "Nepal trip" instead of a
-missing marker. Booking and eligible quote values keep precedence.
+other travelers' interests are never borrowed. A matching inquiry with a blank
+or "Not sure yet" trip uses the neutral phrase "Nepal trip". Without a matching
+inquiry or known trip, bodies keep `[missing: trip]`. Booking and eligible
+quote values keep precedence.
 If any subject placeholder is unknown or empty, the whole subject defaults
 to "Planning your trip". Subjects with all placeholder values stay personalized.
 In email bodies, unknown or empty placeholder values render `[missing: name]`,
 never blanks or an email substituted for an unknown name. Apart from the
-lead/client trip fallback above, the one optional placeholder is
+matching-inquiry trip fallback above, the one optional placeholder is
 `google_review_link` (`TemplateRenderer::OPTIONAL_PLACEHOLDERS`): it comes
 from Settings → Google reviews. Copy the write-review link from your Google
 Business Profile's "Ask for reviews", paste the full HTTPS URL, and press

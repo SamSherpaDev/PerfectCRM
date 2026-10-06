@@ -11,7 +11,7 @@ class TemplateContextTest < ActiveSupport::TestCase
       trip_name: "Removed trip", balance_due_minor: 185_000, currency: "USD", synced_at: Time.current,
       unavailable_at: Time.current)
     assert_nil TemplateContext.for(@client, booking: booking)["balance_due"]
-    assert_equal "Nepal trip", TemplateContext.for(@client, booking: booking)["trip"]
+    assert_nil TemplateContext.for(@client, booking: booking)["trip"]
     assert_raises(ActiveRecord::RecordNotFound) { TemplateContext.for_document_nudge(@client, booking) }
     booking.update!(unavailable_at: nil)
     assert_equal "$1,850.00", TemplateContext.for(@client, booking: booking)["balance_due"]
@@ -43,7 +43,7 @@ class TemplateContextTest < ActiveSupport::TestCase
 
   test "omits unknown and empty values so the renderer marks them missing" do
     context = TemplateContext.for(@client)
-    assert_equal "Nepal trip", context["trip"]
+    assert_nil context["trip"]
     assert_nil context["balance_due"]
     # deposit_due and missing_documents have no source yet: they stay
     # honest markers until a later task feeds them.
@@ -51,7 +51,7 @@ class TemplateContextTest < ActiveSupport::TestCase
     assert_nil context["missing_documents"]
     rendered = Template.new(subject: "Hi {{first_name}}", body: "{{trip}} owes {{balance_due}} (deposit {{deposit_due}}, docs {{missing_documents}})").rendered(context)
     assert_equal "Hi Maya", rendered[:subject]
-    assert_equal "Nepal trip owes [missing: balance_due] (deposit [missing: deposit_due], docs [missing: missing_documents])", rendered[:body]
+    assert_equal "[missing: trip] owes [missing: balance_due] (deposit [missing: deposit_due], docs [missing: missing_documents])", rendered[:body]
     assert_equal "[missing: nickname]", TemplateRenderer.render("{{nickname}}", context)
   end
 
@@ -106,11 +106,11 @@ class TemplateContextTest < ActiveSupport::TestCase
       source: "manual", trip_interest: "Langtang")
 
     assert_equal "Annapurna", TemplateContext.for_reply(to: lead.email, owner: lead)[:context]["trip"]
-    assert_equal "Nepal trip", TemplateContext.for_reply(to: other.email, owner: lead)[:context]["trip"]
+    assert_nil TemplateContext.for_reply(to: other.email, owner: lead)[:context]["trip"]
     assert_equal "Langtang", TemplateContext.for_reply(to: other.email, owner: other)[:context]["trip"]
-    assert_equal "Nepal trip", TemplateContext.for_reply(to: "stranger@example.com", owner: lead)[:context]["trip"]
+    assert_nil TemplateContext.for_reply(to: "stranger@example.com", owner: lead)[:context]["trip"]
     person = lead.people.create!(name: "Traveler", email: "traveler@example.com")
-    assert_equal "Nepal trip", TemplateContext.for_reply(to: person.email, owner: lead)[:context]["trip"]
+    assert_nil TemplateContext.for_reply(to: person.email, owner: lead)[:context]["trip"]
 
     lead.update!(perfectbook_contact_id: 7711)
     PerfectBook::Booking.create!(perfectbook_id: 7712, perfectbook_contact_id: 7711,
@@ -128,14 +128,14 @@ class TemplateContextTest < ActiveSupport::TestCase
     context = TemplateContext.for_reply(to: "  ANNAPURNA@example.com  ", owner: lead)[:context]
     assert_equal "Mirrored lead", context["full_name"]
     assert_equal "Annapurna", context["trip"]
-    assert_equal "Nepal trip", TemplateContext.for_reply(to: "other@example.com", owner: lead)[:context]["trip"]
-    assert_equal "Nepal trip", TemplateContext.for_reply(to: "", owner: lead)[:context]["trip"]
+    assert_nil TemplateContext.for_reply(to: "other@example.com", owner: lead)[:context]["trip"]
+    assert_nil TemplateContext.for_reply(to: "", owner: lead)[:context]["trip"]
 
     PerfectBook::Booking.create!(perfectbook_id: 8813, perfectbook_contact_id: 8811,
       trip_name: "Everest", synced_at: Time.current)
     assert_equal "Everest", TemplateContext.for_reply(to: lead.email, owner: lead)[:context]["trip"]
 
     lead.update!(email: nil)
-    assert_equal "Nepal trip", TemplateContext.for_reply(to: "", owner: lead)[:context]["trip"]
+    assert_nil TemplateContext.for_reply(to: "", owner: lead)[:context]["trip"]
   end
 end

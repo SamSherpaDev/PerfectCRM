@@ -55,8 +55,8 @@ class TemplateSubjectFallbackTest < ActionDispatch::IntegrationTest
     assert_equal "Hi Adventure, checking in about [missing: trip].", query["body"]
   end
 
-  test "document nudge falls back with and without a template when the lead booking has no trip" do
-    @lead.update!(perfectbook_contact_id: 7301)
+  test "document nudge falls back with and without a template when the client booking has no trip" do
+    @client = Client.create!(name: "Tashi Sherpa", email: "client@example.com", perfectbook_contact_id: 7301)
     booking = PerfectBook::Booking.create!(perfectbook_id: 7302, perfectbook_contact_id: 7301,
       ref: "BK-7302", synced_at: Time.current, missing_count: 1,
       documents_json: { "travelers" => [ { "id" => 1, "first_name" => "Tashi",
@@ -69,17 +69,17 @@ class TemplateSubjectFallbackTest < ActionDispatch::IntegrationTest
       documents.archive! unless with_template
       get document_nudge_path(booking_id: booking.id)
       assert_response :success
-      assert_select "input[name='subject'][value='Documents for Nepal trip']"
+      assert_select "input[name='subject'][value='Planning your trip']"
       assert_select "textarea[name='body']", text: /Tashi: visa/
-      assert_select "textarea[name='body']", text: /Nepal trip/ if with_template
+      assert_select "textarea[name='body']", text: /\[missing: trip\]/ if with_template
 
-      get lead_path(@lead, nudge_booking_id: booking.id)
+      get client_path(@client, nudge_booking_id: booking.id)
       assert_response :success
-      assert_select "input#message_subject[value='Documents for Nepal trip']"
+      assert_select "input#message_subject[value='Planning your trip']"
       assert_select "textarea#message_body", text: /Tashi: visa/
 
       booking.update!(trip_name: "Annapurna")
-      assert_equal "Documents for Annapurna", TemplateContext.for_document_nudge(@lead, booking)[:subject]
+      assert_equal "Documents for Annapurna", TemplateContext.for_document_nudge(@client, booking)[:subject]
       booking.update!(trip_name: nil)
     end
   end

@@ -48,7 +48,7 @@ class OutboundFollowupReviewTest < ActionDispatch::IntegrationTest
     assert_select "section[aria-label='Merged messages']", text: /Pemba: Maya trek \$111.00 MAYA/
     PerfectBook::Contact.create!(perfectbook_id: 102, name: "Pemba", email: "pemba@example.com", synced_at: Time.current)
     post merge_templates_path, params: { template_id: @template.id, departure_id: 701, recipients: "pemba@example.com" }
-    assert_select "section[aria-label='Merged messages']", text: /Pemba: Nepal trip/
+    assert_select "section[aria-label='Merged messages']", text: /Pemba: Missing: trip/
     assert_select "section[aria-label='Merged messages']", text: /Missing: balance due/
     assert_select ".hint", text: /Booking reference:/, count: 0
   end
@@ -115,7 +115,7 @@ class OutboundFollowupReviewTest < ActionDispatch::IntegrationTest
     context = response.parsed_body["context"]
     assert_empty response.parsed_body["bookings"]
     assert_nil context["invoice_number"]
-    assert_equal "Nepal trip", context["trip"]
+    assert_nil context["trip"]
     assert_nil context["full_name"]
     post use_template_path(@template, format: :json), params: { context: context }
     assert_response :success

@@ -79,7 +79,7 @@ class TemplateSubjectFallbackSystemTest < ApplicationSystemTestCase
   end
 
   test "document requests with and without a template fall back when booking trip is missing" do
-    @lead.update!(perfectbook_contact_id: 7301)
+    @client = Client.create!(name: "Tashi Sherpa", email: "client@example.com", perfectbook_contact_id: 7301)
     booking = PerfectBook::Booking.create!(perfectbook_id: 7302, perfectbook_contact_id: 7301,
       ref: "BK-7302", synced_at: Time.current, missing_count: 1,
       documents_json: { "travelers" => [ { "id" => 1, "first_name" => "Tashi",
@@ -90,12 +90,12 @@ class TemplateSubjectFallbackSystemTest < ApplicationSystemTestCase
     [ true, false ].each do |with_template|
       template.archive! unless with_template
       visit document_nudge_path(booking_id: booking.id)
-      assert_field "Subject", with: "Documents for Nepal trip"
+      assert_field "Subject", with: "Planning your trip"
       assert_includes find_field("Message").value, "Tashi: visa"
       capture("documents-#{with_template}")
       click_link "Open in reply box"
       open_details
-      assert_field "Subject", with: "Documents for Nepal trip"
+      assert_field "Subject", with: "Planning your trip"
       booking.update!(trip_name: "Annapurna")
       visit document_nudge_path(booking_id: booking.id)
       assert_field "Subject", with: "Documents for Annapurna"
