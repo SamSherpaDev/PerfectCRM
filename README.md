@@ -116,6 +116,11 @@ pre-rollout inventory, see [quote terms](docs/quote-terms.md#operational-templat
 Unknown financial amounts, accepted dates or terms versions must be completed
 before an outbound payment instruction can queue.
 
+The default First reply introduces our Sherpa family business and invites a
+short call before suggesting options. It lists no packages or prices. Its
+wording migration updates only rows whose name, subject, and body still
+exactly match the previous default; edited rows are skipped and logged.
+
 The default Review ask requests a Google review; ask every traveler,
 regardless of how the trip went, and never offer gifts or discounts for reviews.
 Review ask and Repeat-trip nudge also invite referrals from past travelers.
@@ -210,13 +215,19 @@ CRM record; the booking reference names that owner. CRM advisor relationships
 remain available independently of the recipient's identity. Replies default
 to the booking with the latest start date, preferring active bookings, and
 let you choose another; a group departure uses a booking for that departure.
-When the booking supplies no trip, the resolved lead owner's trip interest
-fills `trip` only if its nonblank email matches the actual recipient after
-trimming and ignoring case, including with a same-email mirrored contact.
+When neither a booking nor an eligible quote supplies a trip, `trip` uses the
+composing inquiry's manual trip interest, then its website trip title. Client
+sends use the latest matching converted inquiry (received time, then ID).
+The inquiry's nonblank email must match the effective recipient after
+correction, trimming and ignoring case, including with a mirrored contact;
+other travelers' interests are never borrowed. For leads and clients, absent
+trips and "Not sure yet" use the neutral phrase "Nepal trip" instead of a
+missing marker. Booking and eligible quote values keep precedence.
 If any subject placeholder is unknown or empty, the whole subject defaults
 to "Planning your trip". Subjects with all placeholder values stay personalized.
 In email bodies, unknown or empty placeholder values render `[missing: name]`,
-never blanks or an email substituted for an unknown name. The one exception is
+never blanks or an email substituted for an unknown name. Apart from the
+lead/client trip fallback above, the one optional placeholder is
 `google_review_link` (`TemplateRenderer::OPTIONAL_PLACEHOLDERS`): it comes
 from Settings → Google reviews. Copy the write-review link from your Google
 Business Profile's "Ask for reviews", paste the full HTTPS URL, and press

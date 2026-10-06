@@ -22,18 +22,19 @@ class TemplateSubjectFallbackSystemTest < ApplicationSystemTestCase
     visit lead_path(@lead)
     open_details
     click_button "Trip follow-up", match: :first
-    assert_field "Subject", with: "Planning your trip"
-    assert_field "Message", with: "Hi Tashi, checking in about [missing: trip]."
+    assert_field "Subject", with: "Hi Tashi, your Nepal trip"
+    assert_field "Message", with: "Hi Tashi, checking in about Nepal trip."
     capture("lead-fallback")
     click_button "Save draft"
     assert_text "Draft saved"
     visit lead_path(@lead)
     open_details
-    assert_field "Subject", with: "Planning your trip"
+    assert_field "Subject", with: "Hi Tashi, your Nepal trip"
     click_button "Send"
     assert_text "Sending your reply"
-    assert_equal "Planning your trip", Message.last.subject
-    assert_includes Message.last.text_body, "[missing: trip]"
+    assert_equal "Hi Tashi, your Nepal trip", Message.last.subject
+    assert_includes Message.last.text_body, "Nepal trip"
+    assert_not_includes Message.last.text_body, "[missing: trip]"
 
     @lead.update!(trip_interest: "Annapurna")
     visit lead_path(@lead, new_thread: 1)
@@ -63,8 +64,8 @@ class TemplateSubjectFallbackSystemTest < ApplicationSystemTestCase
     [ { nudge: 1 }, { task: task.id } ].each do |params|
       visit lead_path(@lead, **params.merge(template: @template.id))
       open_details
-      assert_field "Subject", with: "Planning your trip"
-      assert_field "Message", with: "Hi Tashi, checking in about [missing: trip]."
+      assert_field "Subject", with: "Hi Tashi, your Nepal trip"
+      assert_field "Message", with: "Hi Tashi, checking in about Nepal trip."
     end
     capture("task-nudge")
     organization = Organization.create!(name: "Adventure Co.", email: "advisor@example.com")
@@ -89,12 +90,12 @@ class TemplateSubjectFallbackSystemTest < ApplicationSystemTestCase
     [ true, false ].each do |with_template|
       template.archive! unless with_template
       visit document_nudge_path(booking_id: booking.id)
-      assert_field "Subject", with: "Planning your trip"
+      assert_field "Subject", with: "Documents for Nepal trip"
       assert_includes find_field("Message").value, "Tashi: visa"
       capture("documents-#{with_template}")
       click_link "Open in reply box"
       open_details
-      assert_field "Subject", with: "Planning your trip"
+      assert_field "Subject", with: "Documents for Nepal trip"
       booking.update!(trip_name: "Annapurna")
       visit document_nudge_path(booking_id: booking.id)
       assert_field "Subject", with: "Documents for Annapurna"
@@ -112,8 +113,8 @@ class TemplateSubjectFallbackSystemTest < ApplicationSystemTestCase
       assert_selector "input[name=q][value='Trip follow-up']"
       click_button "Insert"
     end
-    assert_field "Subject", with: "Planning your trip"
-    assert_field "Message", with: "Hi Tashi, checking in about [missing: trip]."
+    assert_field "Subject", with: "Hi Tashi, your Nepal trip"
+    assert_field "Message", with: "Hi Tashi, checking in about Nepal trip."
     capture("searched-picker-fallback")
   end
 

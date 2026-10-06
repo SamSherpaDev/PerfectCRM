@@ -3,9 +3,8 @@
 # Recipient and booking context for operational template rendering.
 # Resolution policy: see README.md, "Replying".
 #
-# Values that are unknown or empty are left OUT on purpose: the renderer
-# uses a friendly subject fallback and visible [missing: name] markers
-# in bodies instead of silent blanks.
+# Unknown operational values stay absent so the renderer marks them missing.
+# Trip alone has a neutral Nepal fallback for leads and clients.
 class TemplateContext
   INACTIVE_BOOKING_STATUSES = %w[cancelled voided refunded].freeze
 
@@ -24,10 +23,6 @@ class TemplateContext
     identity = resolved[:identity]
     context = self.for(identity, booking: booking, quote_owner: resolved[:owner], recipient_email: resolved[:recipient_email])
     owner = resolved[:owner]
-    if owner.is_a?(Lead) && resolved[:recipient_email].present? &&
-        owner.email.to_s.strip.downcase == resolved[:recipient_email] && owner.trip_interest.present?
-      context["trip"] ||= owner.trip_interest
-    end
     context["advisor_name"] = advisor_name_for(owner) if advisor_name_for(owner).present?
     context["booking_owner_name"] = owner.name if booking && resolved[:fallback] && owner
     context
@@ -96,7 +91,33 @@ class TemplateContext
       end
       context.merge!(quote_context(quote)) if quote
     end
+    if quote_owner.is_a?(Lead) || quote_owner.is_a?(Client)
+      context["trip"] = context["trip"].presence || inquiry_trip_for(quote_owner, recipient_email) || "Nepal trip"
+    end
     context.compact_blank
+  end
+
+  # An inquiry's trip belongs to its recipient, not every person on the owner.
+  # Converted inquiries retain their website fields on Lead, not on Client.
+  def self.inquiry_trip_for(owner, recipient_email)
+    email = recipient_email.to_s.strip.downcase
+    return if email.blank?
+
+    inquiries = if owner.is_a?(Lead)
+      [ owner ]
+    else
+      owner.converted_leads.order(Arel.sql("COALESCE(received_at, created_at) DESC"), id: :desc)
+    end
+    inquiry = inquiries.detect do |lead|
+      address = lead.email.to_s.strip.downcase
+      address.present? && owner.effective_recipient_email(address) == email
+    end
+    return unless inquiry
+
+    [ inquiry.trip_interest, inquiry.trip_title ].filter_map do |value|
+      trip = value.to_s.strip
+      trip if trip.present? && !trip.casecmp?("Not sure yet")
+    end.first
   end
 
   # Every mirrored booking this record could fill placeholders from, best
@@ -178,5 +199,5 @@ class TemplateContext
     currency.blank? || currency == "USD" ? "$#{amount}" : "#{currency} #{amount}"
   end
   private_class_method :first_name_for, :advisor_name_for, :booking_context,
-    :quote_context, :departure_dates_for, :money_for
+    :quote_context, :departure_dates_for, :money_for, :inquiry_trip_for
 end

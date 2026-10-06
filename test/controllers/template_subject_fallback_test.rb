@@ -11,13 +11,13 @@ class TemplateSubjectFallbackTest < ActionDispatch::IntegrationTest
       subject: "Your {{trip}}", body: "Hi {{first_name}}, checking in about {{trip}}.")
   end
 
-  test "template use gives a lead without a trip a friendly subject and keeps body markers" do
+  test "template use gives a lead without a trip a neutral Nepal phrase" do
     context = TemplateContext.for_reply(to: @lead.email, owner: @lead)[:context]
     post use_template_path(@template, format: :json), params: { context: context }
 
     assert_response :success
-    assert_equal "Planning your trip", response.parsed_body["subject"]
-    assert_equal "Hi Tashi, checking in about [missing: trip].", response.parsed_body["body"]
+    assert_equal "Your Nepal trip", response.parsed_body["subject"]
+    assert_equal "Hi Tashi, checking in about Nepal trip.", response.parsed_body["body"]
     assert_equal 0, @template.reload.usage_count
   end
 
@@ -38,8 +38,8 @@ class TemplateSubjectFallbackTest < ActionDispatch::IntegrationTest
     [ { nudge: 1 }, { task: task.id } ].each do |params|
       get lead_path(@lead), params: params.merge(template: @template.id)
       assert_response :success
-      assert_select "input#message_subject[value='Planning your trip']"
-      assert_select "textarea#message_body", text: "Hi Tashi, checking in about [missing: trip]."
+      assert_select "input#message_subject[value='Your Nepal trip']"
+      assert_select "textarea#message_body", text: "Hi Tashi, checking in about Nepal trip."
     end
   end
 
@@ -69,13 +69,13 @@ class TemplateSubjectFallbackTest < ActionDispatch::IntegrationTest
       documents.archive! unless with_template
       get document_nudge_path(booking_id: booking.id)
       assert_response :success
-      assert_select "input[name='subject'][value='Planning your trip']"
+      assert_select "input[name='subject'][value='Documents for Nepal trip']"
       assert_select "textarea[name='body']", text: /Tashi: visa/
-      assert_select "textarea[name='body']", text: /\[missing: trip\]/ if with_template
+      assert_select "textarea[name='body']", text: /Nepal trip/ if with_template
 
       get lead_path(@lead, nudge_booking_id: booking.id)
       assert_response :success
-      assert_select "input#message_subject[value='Planning your trip']"
+      assert_select "input#message_subject[value='Documents for Nepal trip']"
       assert_select "textarea#message_body", text: /Tashi: visa/
 
       booking.update!(trip_name: "Annapurna")
@@ -84,13 +84,13 @@ class TemplateSubjectFallbackTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "group merge uses a friendly subject for a lead without a trip and keeps body markers" do
+  test "group merge uses the neutral Nepal phrase for a lead without a trip" do
     batch = MergeBatch.build(template: @template, recipient_lines: "Tashi Sherpa <#{@lead.email}>",
       context_for: ->(recipient) { TemplateContext.for_recipient(recipient) })
 
     assert batch.complete?
-    assert_equal "Planning your trip", batch.messages.first.subject
-    assert_equal "Hi Tashi, checking in about [missing: trip].", batch.messages.first.body
+    assert_equal "Your Nepal trip", batch.messages.first.subject
+    assert_equal "Hi Tashi, checking in about Nepal trip.", batch.messages.first.body
   end
 
   test "lead trip interest still personalizes the subject and body" do
