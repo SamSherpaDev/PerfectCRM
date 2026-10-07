@@ -416,6 +416,15 @@ shellcheck -S warning deploy/*.sh test/deploy/*.sh
 bash test/deploy/test_deploy.sh
 ```
 
+Tests normally use NullStore. Solid Cache integration tests use a separate
+`storage/test_cache.sqlite3`, prepared from `db/cache_schema.rb` by Rails'
+`db:test:prepare` and parallel-worker schema setup, just like production's
+separate cache database. Cache expiry uses the test job adapter in the rate-limit
+tests, so no background expiry thread escapes a test. Development uses
+`storage/development.sqlite3`; do not point a dev server at the test database,
+run overlapping suites against the same test files, or delete/recreate SQLite
+files while another process is using them.
+
 ## Today and follow-ups
 
 Today (the root route) is the captain's morning screen: six tiles
