@@ -15,6 +15,7 @@ module Leads
           counts[:unparseable] += 1 if lead.phone.blank? && lead.phone_raw.present? && number.nil?
           if lead.phone.blank? && number
             lead.update_columns(phone: number)
+            lead.sync_fts!
             counts[:leads_updated] += 1
           end
           number = lead.phone.presence || number
@@ -29,6 +30,7 @@ module Leads
                 updates[:phone_raw] = raw if client.phone_raw.blank? && raw
                 if updates.any?
                   client.update_columns(updates)
+                  client.sync_fts!
                   counts[:clients_updated] += 1
                 end
               end
@@ -43,6 +45,7 @@ module Leads
               next if person.phone.present?
 
               person.update_columns(phone: number)
+              person.owner.sync_fts!
               counts[:people_updated] += 1
             end
           end

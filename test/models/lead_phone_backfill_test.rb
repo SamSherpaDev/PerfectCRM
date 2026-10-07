@@ -2,6 +2,32 @@ require "test_helper"
 require "rake"
 
 class LeadPhoneBackfillTest < ActiveSupport::TestCase
+  test "recovered phones refresh owner search without changing activity" do
+    lead = Lead.create!(name: "Recovered", email: "recovered@example.com", phone_raw: "4155550134")
+    client = lead.convert_to_client!
+    person_lead = Lead.create!(name: "Person recovery", email: "person@example.com", phone: "+14155550135")
+    lead_person = person_lead.people.create!(name: "Booker", email: person_lead.email)
+    person_client = person_lead.convert_to_client!
+    client_person = person_client.people.find_by!(email: person_lead.email)
+    person_client.update!(phone: "+14155550199")
+    owners = [ lead, client, person_lead, person_client ]
+    timestamps = owners.map { |owner| owner.reload.attributes.slice("updated_at", "last_activity_at") }
+
+    assert_not_includes Lead.search("5550134"), lead
+    assert_not_includes Client.search("5550134"), client
+    assert_not_includes Client.search("5550135"), person_client
+
+    Leads::PhoneBackfill.call
+
+    assert_includes Lead.search("5550134"), lead
+    assert_includes Client.search("5550134"), client
+    assert_includes Lead.search("5550135"), person_lead
+    assert_includes Client.search("5550135"), person_client
+    assert_equal "+14155550135", lead_person.reload.phone
+    assert_equal "+14155550135", client_person.reload.phone
+    assert_equal timestamps, owners.map { |owner| owner.reload.attributes.slice("updated_at", "last_activity_at") }
+  end
+
   test "backfill repairs encrypted blank phones on explicit contacts and is idempotent" do
     lead = Lead.create!(name: "Synthetic Booker", email: "booker@example.com", phone_raw: "(415) 555-0134")
     primary = lead.people.create!(name: "Synthetic Booker", email: lead.email)
