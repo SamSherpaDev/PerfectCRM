@@ -87,6 +87,86 @@ code was given; intake never rejects over it. A valid code is stored on the
 lead in normalized form; the original attribution remains in metadata.
 For display, conversion, and booking use, see [Leads](../README.md#leads).
 
+## Storefront field audit and phone recovery (2026-10-06)
+
+The PerfectBook **repository** owns the Shopify extension, but PerfectBook's
+Rails server is not an intake hop. `BK-app/shopify/src/inquiry-form.js`
+(`assemblePayload`, `postJson`) posts directly to the configured PerfectCRM
+intake URL. The full/compact Liquid blocks and shared source-question snippet
+live in `BK-app/shopify/extensions/inquiry-form/`. No BK-app changes are needed
+for this repair.
+
+| Field | Full form | Compact form | Transport / CRM storage |
+|---|---|---|---|
+| Name, email | Collected | Collected | `contact.name/email` → `Lead.name/email`; copied to new client |
+| Phone | Optional | **Not asked** | `contact.phone_raw` → encrypted `Lead.phone_raw` + normalized encrypted `phone`; both copied to new client |
+| Country | **Not asked** | **Not asked** | Normally absent, so `Lead.country` stays blank; optional API `contact.country` is retained |
+| Trip | Picker, hidden interest or preset | Current product | `trip.handle/title` → `Lead.trip_handle/trip_title` |
+| Party size | Optional post-send step (if enabled) | **Not asked** | Details `party.size` → `Lead.party_size` |
+| Travel month/year, unknown timing | Optional post-send step (if enabled) | **Not asked** | Details `trip.month/year/timing_unknown` → `Lead.travel_month/travel_year/timing_unknown` |
+| Budget | Optional post-send step (if enabled) | **Not asked** | Details `trip.budget_band` → `Lead.budget_band` |
+| Message | Optional | Optional question | `message` → `Lead.message` |
+| Contact consent | Consent text at submit | Same | Required `consent.contact=true`; `contact_at/text_version` → `Lead.consent_contact_at/consent_text_version` |
+| Optional source answer/detail | Post-send; no preselection | Same | Details `source_answer` → typed reported source/state/detail + append-only source-answer event |
+| Acquisition snapshots | Automatic, permission-gated | Same | `acquisition` → `Lead.metadata.acquisition` (permission, first/last/non-direct touches, submission page); intentional sanitization/scrubbing follows the source contract below |
+| Legacy attribution / advisor code | Automatic, permission-gated | Same | `attribution` → metadata; compatibility source/campaign + normalized referral code |
+| Page, locale, template, timing, placement, version | Automatic | Same | Page/timing/client → metadata; placement → typed column. Page template is now retained rather than dropped. |
+
+The gaps above are not transport loss: neither form asks country, the compact
+form asks no phone or trip-detail questions, and full-form details may be
+skipped or disabled. No new form fields were added. Consent to contact is not
+marketing permission. Source skip sends no answer; missing/denied acquisition
+permission intentionally stores unknown reasons, not click evidence.
+
+### Reproduction and regression
+
+Local browser checks used BK-app's full-form harness and its actual shipped
+extension asset, with only local intake routing substituted. A local proxy
+supplied the documented allowed storefront Origin to a test-environment CRM;
+no requests went to a production API. Submitting synthetic `4155550134`,
+`+1 415 555 0134`, and `(415) 555-0134` produced accepted inquiries with raw
+phone preserved in all three, but only the plus-prefixed input populated
+`phone` before this repair. The loss was in
+`Api::V1::Leads::IntakesController#build_lead`: its plus-only regex rejected
+national-format numbers; the Details view then omitted the Phone row entirely.
+The extension sent all three raw values correctly.
+
+Intake now accepts ten US digits, eleven digits starting with 1, and common
+spaces/dashes/dots/parentheses, using US only as the parsing default when no
+country is supplied. An explicit `+` international number continues to accept
+7–15 digits. This formats a number; it does not prove reachability or infer a
+visitor's residence. Other national-region formats remain raw rather than
+being guessed. Unparseable input is preserved exactly as received and shown
+on inquiry/client Details when normalized phone is absent. Existing phone and
+raw encryption is unchanged; clients now also encrypt their retained raw copy.
+Returning conversions fill only a blank client phone and do not replace an
+existing phone. Tests replay the extension contact payload across formats,
+follow both optional details/source saves, check encrypted conversion/display,
+and exercise repeatable recovery.
+
+### Existing-data recovery (after deploy)
+
+Run once after deploying/migrating, or safely repeat:
+
+```sh
+RAILS_ENV=production bin/rails leads:backfill_phones
+```
+
+The task prints **only numeric counts** as JSON: `leads_updated`,
+`clients_updated`, `people_updated`, `unparseable`. It never prints phone
+numbers, names, emails or record IDs. It scans existing encrypted raw values
+(including archived/converted inquiries), normalizes only blank inquiry phones,
+and repairs the explicitly linked converted client's blank phone/raw copy.
+A client's own raw copy takes precedence. Only people on the inquiry or its
+converted client whose email equals the inquiry's nonblank primary email can
+receive its number; companions and global email matches are never used. All
+present phones are preserved, raw values are never replaced, and repeating the
+task makes no further writes. `unparseable` counts still-unparseable blank
+inquiry phones on each run; client updates include preserving raw-only fallback
+when parsing fails. Locked, encryption-aware column writes deliberately bypass
+converted inquiries' read-only validation without generating notifications or
+sales activity. No production execution is part of this change.
+
 ## Details follow-up (optional step two)
 
 Posted after a successful send, with the same `submission_id`:

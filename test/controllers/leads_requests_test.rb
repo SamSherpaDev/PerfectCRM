@@ -79,6 +79,25 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     assert_select "textarea#note_body"
   end
 
+  test "inquiry and converted client show raw phone when parsing fails" do
+    lead = Lead.create!(name: "Synthetic", phone_raw: "ask for Alex at reception")
+    get lead_path(lead)
+    assert_response :success
+    assert_select "dt", text: "Phone"
+    assert_select "dd", text: "ask for Alex at reception"
+
+    client = lead.convert_to_client!
+    get client_path(client)
+    assert_response :success
+    assert_select "dt", text: "Phone"
+    assert_select "dd", text: "ask for Alex at reception"
+    client.update!(phone: "+14155550134")
+    get client_path(client)
+    assert_response :success
+    assert_select "dd", text: "+14155550134"
+    assert_select "dd", text: "ask for Alex at reception", count: 0
+  end
+
   test "show renders the referral code" do
     lead = Lead.create!(name: "Referred", source: "website_form", referral_code: "KQ7X2D")
     get lead_path(lead)

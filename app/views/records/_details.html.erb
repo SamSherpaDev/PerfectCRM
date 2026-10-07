@@ -87,10 +87,10 @@
         <dd><%= record.email %></dd>
       </div>
     <% end %>
-    <% if record.phone.present? %>
+    <% if record.display_phone.present? %>
       <div>
         <dt>Phone</dt>
-        <dd><%= record.phone %></dd>
+        <dd><%= record.display_phone %></dd>
       </div>
     <% end %>
     <% place = [ record.state, record.country ].compact_blank.join(", ") %>

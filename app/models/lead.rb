@@ -206,6 +206,7 @@ class Lead < ApplicationRecord
         name: name,
         email: email,
         phone: phone,
+        phone_raw: phone_raw,
         country: country,
         state: state,
         kind: kind,
@@ -217,6 +218,9 @@ class Lead < ApplicationRecord
         origin_lead: self, source_collection_method: "conversion",
         **source_copy_attributes.symbolize_keys
       )
+      if returning && client.phone.blank?
+        client.update!(phone: phone, phone_raw: client.phone_raw.presence || phone_raw)
+      end
       client.update!(ai_opt_out: true) if ai_opt_out?
       people.find_each do |person|
         next if person.email.present? && client.people.exists?(email: person.email)
@@ -280,6 +284,10 @@ class Lead < ApplicationRecord
       client.sync_fts!
       client
     end
+  end
+
+  def display_phone
+    phone.presence || phone_raw.presence
   end
 
   def display_email
