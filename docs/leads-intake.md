@@ -133,14 +133,15 @@ The extension sent all three raw values correctly.
 
 Intake now accepts ten US digits, eleven digits starting with 1, and common
 spaces/dashes/dots/parentheses, using US only as the parsing default when no
-country is supplied. An explicit `+` international number continues to accept
-7–15 digits. This formats a number; it does not prove reachability or infer a
-visitor's residence. Other national-region formats remain raw rather than
-being guessed. Unparseable input is preserved exactly as received and shown
-on inquiry/client Details when normalized phone is absent. Existing phone and
-raw encryption is unchanged; clients now also encrypt their retained raw copy.
-Returning conversions fill only a blank client phone and do not replace an
-existing phone. Tests replay the extension contact payload across formats,
+country is supplied (or it names the US). An explicit `+` international number
+accepts 7-15 digits with a nonzero first digit. This formats a number; it does
+not prove reachability or infer a visitor's residence. Other national-region
+formats remain raw rather than
+being guessed. Nonblank raw input is preserved exactly as received; blank or
+whitespace-only input stores no raw phone. Both inquiry and client phone/raw
+fields are encrypted. Details display and returning-conversion behavior are
+owned by [Clients](../README.md#clients) and [Leads](../README.md#leads).
+Tests replay the extension contact payload across formats,
 follow both optional details/source saves, check encrypted conversion/display,
 and exercise repeatable recovery.
 
@@ -165,7 +166,9 @@ task makes no further writes. `unparseable` counts still-unparseable blank
 inquiry phones on each run; client updates include preserving raw-only fallback
 when parsing fails. Locked, encryption-aware column writes deliberately bypass
 converted inquiries' read-only validation without generating notifications or
-sales activity. No production execution is part of this change.
+sales activity. Each repaired inquiry, client, or person's owner refreshes its
+existing search projection so recovered phone tails are searchable, without
+changing activity timestamps. No production execution is part of this change.
 
 ## Details follow-up (optional step two)
 
