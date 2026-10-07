@@ -168,7 +168,8 @@ module Api
           acquisition = payload["_acquisition"]
           attribution = ::Leads::Acquisition.legacy_attribution(payload["attribution"].is_a?(Hash) ? payload["attribution"] : {}, acquisition: acquisition)
           raw_page = payload["page"].is_a?(Hash) ? payload["page"] : {}
-          page = { "url" => ::Leads::Acquisition.safe_url(raw_page["url"]), "referrer" => ::Leads::Acquisition.host(raw_page["referrer"]), "locale" => raw_page["locale"].to_s.first(20) }
+          page = { "url" => ::Leads::Acquisition.safe_url(raw_page["url"]), "referrer" => ::Leads::Acquisition.host(raw_page["referrer"]),
+            "locale" => raw_page["locale"].to_s.first(20), "template" => raw_page["template"].to_s.first(120) }
           page.except!("url", "referrer") if acquisition && !::Leads::Acquisition.permitted?(acquisition)
           timing = payload["timing"].is_a?(Hash) ? payload["timing"] : {}
           client_info = payload["client"].is_a?(Hash) ? payload["client"] : {}
@@ -181,9 +182,9 @@ module Api
           )
           attribution = attribution.merge("relay" => caller_name) if caller_name != "website_form"
 
-          phone_raw = contact["phone_raw"].to_s.strip.presence
-          e164 = phone_raw.to_s.gsub(/[\s\-().]/, "")
-          e164 = nil unless e164.match?(/\A\+\d{7,15}\z/)
+          phone_raw = contact["phone_raw"].to_s.presence
+          country = contact["country"].to_s.strip.presence&.truncate(100)
+          e164 = ::Leads::Phone.normalize(phone_raw, country: country)
 
           placement = payload["placement"].to_s.strip.presence
           placement = nil unless ::Lead::PLACEMENTS.include?(placement)
@@ -193,6 +194,7 @@ module Api
             email: fields[:email],
             phone_raw: phone_raw,
             phone: e164,
+            country: country,
             referral_code: referral_code_from(attribution),
             trip_handle: trip["handle"].to_s.strip.presence&.truncate(120),
             trip_title: trip["title"].to_s.strip.presence&.truncate(160),

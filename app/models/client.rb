@@ -4,7 +4,11 @@ class Client < ApplicationRecord
   SOURCES = %w[website email instagram whatsapp referral repeat other google_ads meta_ads trade_show website_form manual].freeze
   PIPELINE_STAGES = %w[won post_trip].freeze
 
-  encrypts :phone
+  encrypts :phone, :phone_raw
+
+  def display_phone
+    phone.presence || phone_raw.presence
+  end
 
   belongs_to :referred_by_organization, class_name: "Organization", optional: true
   has_many :converted_leads, class_name: "Lead", foreign_key: :converted_client_id

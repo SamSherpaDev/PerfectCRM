@@ -105,6 +105,124 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     assert lead.metadata["ip_hash"].present?
   end
 
+  # Same contact payload the BK-app inquiry extension sends after a visitor
+  # fills the full form. Only the spelling of the optional phone changes.
+  {
+    "ten digits" => "4155550134",
+    "eleven digits" => "14155550134",
+    "spaces" => "415 555 0134",
+    "dashes" => "415-555-0134",
+    "dots" => "415.555.0134",
+    "parentheses" => "(415) 555-0134",
+    "plus US" => "+1 415 555 0134",
+    "international" => "+44 20 7946 0958"
+  }.each do |format, raw|
+    test "visitor phone survives intake and conversion: #{format}" do
+      post_intake intake_body("contact" => { "phone_raw" => raw })
+      assert_response :accepted
+      lead = Lead.find(response.parsed_body.fetch("id"))
+      expected = format == "international" ? "+442079460958" : "+14155550134"
+      assert_equal expected, lead.phone
+      assert_equal raw, lead.phone_raw
+      assert_equal expected, lead.display_phone
+      assert_nil lead.country # A parsing default is not evidence of residence.
+      client = lead.convert_to_client!
+      assert_equal expected, client.phone
+      assert_equal raw, client.phone_raw
+      assert_equal expected, client.display_phone
+      assert_not_includes client.attributes_before_type_cast["phone_raw"], raw
+    end
+  end
+
+  test "unparseable visitor phone is retained through conversion" do
+    raw = "  ask for Alex at reception  "
+    post_intake intake_body("contact" => { "phone_raw" => raw })
+    assert_response :accepted
+    lead = Lead.find(response.parsed_body.fetch("id"))
+    assert_nil lead.phone
+    assert_equal raw, lead.phone_raw
+    assert_equal raw, lead.display_phone
+    client = lead.convert_to_client!
+    assert_nil client.phone
+    assert_equal raw, client.display_phone
+  end
+
+  test "full form intake and both optional followups retain every collected answer" do
+    observed = 1.hour.ago.iso8601
+    touch = { "observed_at" => observed, "utm_source" => "google", "utm_medium" => "cpc", "utm_campaign" => "synthetic-nepal", "gclid" => "synthetic-click" }
+    acquisition = {
+      "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true, "observed_at" => observed },
+      "first_touch" => touch, "last_touch" => touch, "last_non_direct_touch" => touch,
+      "submission_page" => { "url" => "https://www.sherpaholidays.com/pages/contact" }
+    }
+    body = intake_body("contact" => { "phone_raw" => "415-555-0134" }, "acquisition" => acquisition,
+      "page" => { "template" => "page.contact", "locale" => "en-US" })
+    post_intake body
+    assert_response :accepted
+    lead = Lead.find(response.parsed_body.fetch("id"))
+    assert_equal body.dig("contact", "name"), lead.name
+    assert_equal body.dig("contact", "email"), lead.email
+    assert_equal "+14155550134", lead.phone
+    assert_equal body.dig("trip", "handle"), lead.trip_handle
+    assert_equal body.dig("trip", "title"), lead.trip_title
+    assert_equal body["message"], lead.message
+    assert_equal Time.iso8601(body.dig("consent", "contact_at")), lead.consent_contact_at
+    assert_equal body.dig("consent", "text_version"), lead.consent_text_version
+    assert_equal "page.contact", lead.metadata.dig("page", "template")
+    assert_equal "en-US", lead.metadata.dig("page", "locale")
+    %w[first_touch last_touch last_non_direct_touch].each do |key|
+      assert_equal "synthetic-click", lead.metadata.dig("acquisition", key, "gclid")
+      assert_equal "synthetic-nepal", lead.metadata.dig("acquisition", key, "utm_campaign")
+      assert_equal Time.iso8601(observed), Time.iso8601(lead.metadata.dig("acquisition", key, "observed_at"))
+    end
+    assert_equal true, lead.metadata.dig("acquisition", "permission", "measurement")
+    assert_equal "https://www.sherpaholidays.com/pages/contact", lead.metadata.dig("acquisition", "submission_page", "landing_url")
+    headers = { "CONTENT_TYPE" => "application/json", "Origin" => ORIGIN, "X-Sherpa-Site-Key" => @site_key }
+    post "/api/v1/leads/intake/details", headers: headers, params: JSON.generate({
+      schema: "sherpa.inquiry.details.v1", submission_id: body["submission_id"],
+      trip: { month: 4, year: 2027, timing_unknown: false, budget_band: "4000_7000" }, party: { size: 3 }
+    })
+    assert_response :ok
+    post "/api/v1/leads/intake/details", headers: headers, params: JSON.generate({
+      schema: "sherpa.inquiry.details.v1", submission_id: body["submission_id"], acquisition: acquisition,
+      source_answer: { code: "personal_referral", detail: "Synthetic friend", question_version: "how-heard-v1" }
+    })
+    assert_response :ok
+    lead.reload
+    assert_equal [ 4, 2027, false, 3, "4000_7000" ], [ lead.travel_month, lead.travel_year, lead.timing_unknown, lead.party_size, lead.budget_band ]
+    assert_equal "personal_referral", lead.reported_source_code
+    assert_equal "Synthetic friend", lead.reported_source_detail
+    assert_equal "answered", lead.source_answer_state
+  end
+
+  test "compact form payload does not invent uncollected contact or trip details" do
+    body = intake_body("placement" => "trip_page", "contact" => { "phone_raw" => "" })
+    post_intake body
+    assert_response :accepted
+    lead = Lead.find(response.parsed_body.fetch("id"))
+    assert_nil lead.phone
+    assert_nil lead.country
+    assert_nil lead.party_size
+    assert_nil lead.travel_month
+    assert_nil lead.travel_year
+    assert_nil lead.budget_band
+    assert_equal "trip_page", lead.placement
+    post "/api/v1/leads/intake/details", params: JSON.generate({ schema: "sherpa.inquiry.details.v1",
+      submission_id: body["submission_id"], source_answer: { code: "search", question_version: "how-heard-v1" } }),
+      headers: { "CONTENT_TYPE" => "application/json", "Origin" => ORIGIN, "X-Sherpa-Site-Key" => @site_key }
+    assert_response :ok
+    assert_equal "search", lead.reload.reported_source_code
+    assert_nil lead.party_size
+  end
+
+  test "country supplied by an API caller is retained without guessing a US phone" do
+    post_intake intake_body("contact" => { "phone_raw" => "020 7946 0958", "country" => "GB" })
+    assert_response :accepted
+    assert_equal "GB", Lead.last.country
+    assert_nil Lead.last.phone
+    assert_equal "020 7946 0958", Lead.last.display_phone
+  end
+
   test "bare domain origin is accepted" do
     post_intake intake_body, headers: { "Origin" => "https://sherpaholidays.com" }
     assert_response :accepted

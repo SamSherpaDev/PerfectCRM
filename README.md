@@ -492,6 +492,11 @@ with their own notes and timeline. On lead and client pages one Load
 older pager walks the whole timeline; organization pages keep separate
 Older notes and Older activity links.
 
+Lead and client Details show the normalized phone when present, otherwise
+the retained raw inquiry phone, even when it could not be parsed. Storefront
+phone parsing and existing-data recovery follow the
+[intake reference](docs/leads-intake.md#existing-data-recovery-after-deploy).
+
 Search covers names, emails, phone tails, tags, and note text over SQLite
 FTS5 with an email-substring fallback; no external service. Each row links
 to PerfectBook when `perfectbook_contact_id` is set, via
@@ -539,7 +544,9 @@ client by an explicit returning-inquiry link first, then PerfectBook contact
 ID, then normalized primary email.
 The confirmation names a matched client before attaching the lead's
 people (deduplicated by email), tags, notes, and activity to them. Existing
-client contact facts stay intact; conversion sets their pipeline stage to Won
+client contact facts stay intact except that a blank phone is filled from the
+inquiry, retaining the client's raw phone if present or copying the inquiry's
+raw phone otherwise. Conversion sets their pipeline stage to Won
 and preserves [AI opt-outs](#ai-assistance). Their timeline records Returned as a lead from
 the source, with the campaign in the event metadata. Multiple historical
 leads can link to the same client; conversion never merges two clients.
