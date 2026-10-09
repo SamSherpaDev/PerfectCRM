@@ -38,7 +38,7 @@ module Outbound
 
     def build
       @owner.reload if @owner&.persisted?
-      @draft = Draft.for_owner(@owner, conversation: @conversation) if @owner && !@group_send
+      @draft = Draft.for_owner(@owner, conversation: @conversation) if @owner && !@group_send && !@params[:automatic_first_reply]
       resolve_conversation
       message = @conversation ? @conversation.messages.build : Message.new
       message.submitted_draft_id = @draft.id if @draft&.persisted?

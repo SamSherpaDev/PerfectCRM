@@ -51,6 +51,7 @@ module Api
 
               lead.lead_notifications.create!(event: "email_copy")
               lead.lead_notifications.create!(event: "lead.created")
+              lead.lead_notifications.create!(event: "auto_first_reply", available_at: 2.minutes.from_now)
               true
             end
           rescue ActiveRecord::RecordNotUnique

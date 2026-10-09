@@ -171,6 +171,13 @@
     </div>
 
     <%= form_with model: @settings, url: settings_path, method: :patch, class: "mt-4 space-y-4" do |form| %>
+      <div class="setting">
+        <div class="k">
+          <%= form.label :auto_first_reply_enabled, "Automatic first reply", class: "font-medium text-sm" %>
+          <p class="hint">New website inquiries only, after two minutes. Sends the live First reply template once per email address. All other replies stay manual. Lead and client replies send an alert to info@sherpaholidays.com.</p>
+        </div>
+        <%= form.check_box :auto_first_reply_enabled, class: "checkbox" %>
+      </div>
       <p class="hint">One copy of every website inquiry goes to info@sherpaholidays.com, with Reply-To the visitor.</p>
       <div>
         <%= form.label :lead_webhook_url, "n8n webhook URL", class: "label" %>

@@ -75,7 +75,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
   # -- happy path ----------------------------------------------------------
 
   test "valid browser request creates one lead and answers 202" do
-    assert_enqueued_jobs 2, only: LeadNotificationJob do
+    assert_enqueued_jobs 3, only: LeadNotificationJob do
       post_intake intake_body
     end
     assert_response :accepted
@@ -103,6 +103,28 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
       lead.metadata["page"]["url"]
     assert_equal "inquiry-form@1.0.0", lead.metadata["client"]["version"]
     assert lead.metadata["ip_hash"].present?
+  end
+
+  test "website inquiry schedules only its first reply for two minutes later" do
+    Setting.current.update!(auto_first_reply_enabled_at: 1.hour.ago, sender_name: "Sam", email_signature: "Sam")
+    Template.create!(name: "First reply", purpose: :first_reply, body: "Hi {{first_name}}, let's arrange a call.", channel: "email")
+    travel_to Time.current.change(usec: 0) do
+      body = intake_body("contact" => { "email" => "synthetic@gmail.com" })
+      post_intake body
+      assert_response :accepted
+      lead = Lead.last
+      notification = lead.lead_notifications.find_by!(event: "auto_first_reply")
+      assert_equal 2.minutes.from_now, notification.available_at
+      assert_enqueued_with(job: LeadNotificationJob, args: [ notification.id ], at: 2.minutes.from_now)
+      assert_no_difference("Message.outbound.count") { LeadNotificationJob.perform_now(notification.id) }
+      travel 2.minutes
+      assert_difference("Message.outbound.count", 1) { LeadNotificationJob.perform_now(notification.id) }
+      assert_no_difference([ "Message.outbound.count", "LeadNotification.count" ]) do
+        post_intake body
+        LeadNotificationJob.perform_now(notification.id)
+      end
+      assert_response :ok
+    end
   end
 
   # Same contact payload the BK-app inquiry extension sends after a visitor
@@ -534,9 +556,9 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
       post_intake body
       assert_response :accepted
     end
-    assert_equal %w[email_copy lead.created], Lead.last.lead_notifications.order(:id).pluck(:event)
+    assert_equal %w[email_copy lead.created auto_first_reply], Lead.last.lead_notifications.order(:id).pluck(:event)
     assert_no_difference("LeadNotification.count") do
-      assert_enqueued_jobs 2, only: LeadNotificationJob do
+      assert_enqueued_jobs 3, only: LeadNotificationJob do
         post_intake body
         assert_response :ok
       end
@@ -560,7 +582,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     calls = 0
     Lead.stub(:find_by, ->(*args) { calls += 1; calls == 1 ? nil : lookup.call(*args) }) do
       assert_no_difference([ "Lead.count", "LeadNotification.count" ]) do
-        assert_enqueued_jobs 2, only: LeadNotificationJob do
+        assert_enqueued_jobs 3, only: LeadNotificationJob do
           post_intake body
         end
       end
@@ -583,7 +605,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     Lead.stub(:find_by, ->(*args) { calls += 1; calls == 1 ? nil : lookup.call(*args) }) do
       Lead.stub(:new, conflicting) do
         assert_no_difference([ "Lead.count", "LeadNotification.count" ]) do
-          assert_enqueued_jobs 2, only: LeadNotificationJob do
+          assert_enqueued_jobs 3, only: LeadNotificationJob do
             post_intake body
           end
         end

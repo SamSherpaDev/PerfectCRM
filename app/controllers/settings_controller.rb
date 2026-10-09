@@ -13,7 +13,7 @@ class SettingsController < ApplicationController
   def update
     @settings = Setting.current
     load_automation_log
-    if params.dig(:setting, :lead_webhook_url)
+    if params.dig(:setting, :lead_webhook_url) || params[:setting]&.key?(:auto_first_reply_enabled)
       return update_automations
     end
     setting_params = params[:setting] || {}
@@ -227,7 +227,10 @@ class SettingsController < ApplicationController
   end
 
   def update_automations
-    @settings.lead_webhook_url = params.dig(:setting, :lead_webhook_url).to_s.strip.presence
+    @settings.lead_webhook_url = params.dig(:setting, :lead_webhook_url).to_s.strip.presence if params[:setting].key?(:lead_webhook_url)
+    if params[:setting].key?(:auto_first_reply_enabled)
+      @settings.auto_first_reply_enabled = ActiveModel::Type::Boolean.new.cast(params.dig(:setting, :auto_first_reply_enabled))
+    end
     if @settings.save
       redirect_to edit_settings_path, notice: "Automations saved.", status: :see_other
     else

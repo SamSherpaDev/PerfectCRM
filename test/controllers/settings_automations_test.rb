@@ -20,6 +20,19 @@ class SettingsAutomationsTest < ActionDispatch::IntegrationTest
     assert_select "form[action=?]", rotate_relay_secret_settings_path
   end
 
+  test "first reply kill switch persists without moving its enable time" do
+    enabled_at = Setting.current.auto_first_reply_enabled_at
+    get edit_settings_path
+    assert Setting.current.auto_first_reply_enabled?
+    assert_select "input[type='checkbox'][name='setting[auto_first_reply_enabled]'][checked]"
+    patch settings_path, params: { setting: { auto_first_reply_enabled: "0" } }
+    assert_redirected_to edit_settings_path
+    assert_not Setting.current.reload.auto_first_reply_enabled?
+    patch settings_path, params: { setting: { auto_first_reply_enabled: "1" } }
+    assert Setting.current.reload.auto_first_reply_enabled?
+    assert_equal enabled_at, Setting.current.auto_first_reply_enabled_at
+  end
+
   test "saving one webhook URL persists it" do
     patch settings_path, params: { setting: { lead_webhook_url: "https://n8n.example.com/hook" } }
     assert_redirected_to edit_settings_path

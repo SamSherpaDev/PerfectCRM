@@ -9,7 +9,7 @@ module Mail
   class Ingester
     Parsed = Struct.new(:headers, :from_addresses, :to_addresses, :cc_addresses,
       :subject, :message_id, :in_reply_to, :references, :sent_at,
-      :text_body, :html_body, :attachments, :raw_size, keyword_init: true)
+      :text_body, :html_body, :attachments, :raw_size, :received_at, keyword_init: true)
 
     def self.ingest(parsed:, provider:, **kwargs)
       new.ingest(parsed: parsed, provider: provider, **kwargs)
@@ -39,7 +39,7 @@ module Mail
       [ ordinary, held, orphans ]
     end
 
-    def ingest(parsed:, provider:, prepared: nil)
+    def ingest(parsed:, provider:, prepared: nil, alert: false)
       provider = provider.transform_keys(&:to_sym)
       provider_message_id = provider[:message_id]&.to_s.presence
       thread_id = provider[:thread_id]&.to_s.presence
@@ -73,7 +73,9 @@ module Mail
           html_body: parsed.html_body.present? ? Sanitizer.clean(parsed.html_body) : nil,
           sent_at: parsed.sent_at || Time.current,
           raw_size: parsed.raw_size.to_i,
-          provider_labels: labels
+          provider_labels: labels,
+          inbound_received_at: parsed.received_at || parsed.sent_at || Time.current,
+          reply_alert_state: ("pending" if alert && ReplyAlerts.eligible?(parsed, provider))
         )
         attach_files(message, ordinary, held, uploaded)
         link_conversation(conversation, parsed)
@@ -83,6 +85,7 @@ module Mail
           last_message_at: conversation.messages.maximum(:sent_at)
         )
         conversation.refresh_counters!
+        transaction.after_commit { ReplyAlertJob.perform_later(message.id) } if message.reply_alert_state == "pending"
         { status: :stored, conversation: conversation, message: message }
       end
     end
@@ -128,7 +131,8 @@ module Mail
         headers: { "from" => from, "to" => to, "cc" => cc,
           "bcc" => Array(mail.bcc).map(&:downcase),
           "delivered-to" => mail.header.fields.select { |field| field.name.casecmp?("Delivered-To") }.map(&:value),
-          "x-original-to" => mail.header.fields.select { |field| field.name.casecmp?("X-Original-To") }.map(&:value) },
+          "x-original-to" => mail.header.fields.select { |field| field.name.casecmp?("X-Original-To") }.map(&:value) }.merge(
+            ReplyAlerts::HEADERS.to_h { |name| [ name, mail.header.fields.select { |field| field.name.casecmp?(name) }.map(&:value) ] }),
         from_addresses: from, to_addresses: to, cc_addresses: cc,
         subject: mail.subject.to_s.strip.presence,
         message_id: mail.message_id.to_s.presence,

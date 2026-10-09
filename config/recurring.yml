@@ -41,7 +41,7 @@ production:
     class: WeeklyReportJob
     schedule: every monday at 7am
   lead_notifications:
-    command: "LeadNotification.enqueue_pending"
+    command: "LeadNotification.enqueue_pending; ReplyAlertJob.enqueue_pending"
     schedule: every minute
   ad_conversions_export:
     class: AdConversions::ExportJob
