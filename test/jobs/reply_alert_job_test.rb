@@ -83,13 +83,30 @@ class ReplyAlertJobTest < ActiveSupport::TestCase
   end
 
   [ [ "Auto-Submitted", "auto-replied" ], [ "X-Autoreply", "yes" ],
-    [ "X-Autorespond", "yes" ], [ "X-Auto-Response-Suppress", "All" ],
+    [ "X-Autorespond", "yes" ],
     [ "X-MS-Exchange-Inbox-Rules-Loop", "mailbox" ], [ "Return-Path", "<>" ],
     [ "Content-Type", "multipart/report; report-type=delivery-status" ] ].each do |header|
     test "Graph suppresses #{header.first} automatic mail" do
       add_message(headers: [ header ])
       assert_no_enqueued_jobs(only: ReplyAlertJob) { Mail::SyncJob.new.perform(fetcher: @fetcher) }
       assert_nil Message.last.reply_alert_state
+    end
+  end
+
+  test "human replies requesting automatic response suppression still alert through Graph and MIME" do
+    %w[OOF None All].each do |value|
+      add_message(headers: [ [ "Auto-Submitted", "no" ], [ "X-Auto-Response-Suppress", value ] ])
+      assert_enqueued_jobs 1, only: ReplyAlertJob do
+        Mail::SyncJob.new.perform(fetcher: @fetcher)
+      end
+      assert_equal "pending", Message.last.reply_alert_state
+
+      raw = "From: #{@lead.email}\r\nTo: info@sherpaholidays.com\r\nSubject: Re: Trip\r\nAuto-Submitted: no\r\nX-Auto-Response-Suppress: #{value}\r\n\r\nCan we arrange a call?"
+      assert_enqueued_jobs 1, only: ReplyAlertJob do
+        result = Mail::Ingester.ingest(parsed: Mail::Ingester.parse_raw(raw),
+          provider: { message_id: SecureRandom.uuid }, alert: true)
+        assert_equal "pending", result[:message].reply_alert_state
+      end
     end
   end
 

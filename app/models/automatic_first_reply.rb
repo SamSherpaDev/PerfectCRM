@@ -15,7 +15,7 @@ class AutomaticFirstReply < ApplicationRecord
     return "our own domain" if domain == "sherpaholidays.com" || domain.end_with?(".sherpaholidays.com")
     reserved = %w[example.com example.org example.net example invalid test localhost]
     return "test address" if lead.is_test? || reserved.any? { |name| domain == name || domain.end_with?(".#{name}") }
-    return "spam or junk" if lead.spam_score.positive? || lead.suspected_spam? || lead.fit_reason.to_s.match?(/\b(?:spam|junk)\b/i)
+    return "spam or junk" if lead.spam_score.positive? || lead.suspected_spam?
     return "inactive inquiry" if lead.archived? || lead.converted? || lead.status == "lost"
     # Use the same identity/people resolution as inbound timelines, including
     # converted leads and addresses explicitly assigned to a client.

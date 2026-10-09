@@ -84,11 +84,20 @@ class AutomaticFirstReplyJobTest < ActiveSupport::TestCase
     assert_includes @lead.activity_events.where(kind: "automation").last.summary, "test address"
   end
 
-  test "Panda spam verdict and suspected-spam tag both block sending" do
-    @lead.update!(fit_reason: "Junk inquiry")
+  test "explicit spam score and suspected-spam tag both block sending" do
+    @lead.update!(spam_score: 10)
     assert_no_difference("Message.count") { AutomaticFirstReplyJob.perform_now(@lead.id) }
-    @lead.update!(fit_reason: nil, tag_list: Lead::SUSPECTED_SPAM_TAG)
+    @lead.update!(spam_score: 0, tag_list: Lead::SUSPECTED_SPAM_TAG)
     assert_no_difference("Message.count") { AutomaticFirstReplyJob.perform_now(@lead.id) }
+  end
+
+  test "fit explanations mentioning spam or junk allow preparation and delivery" do
+    @lead.update!(fit_score: 90, fit_band: "strong", fit_reason: "Genuine traveler, not spam")
+    assert_difference("Message.count", 1) { AutomaticFirstReplyJob.perform_now(@lead.id) }
+    message = AutomaticFirstReply.find_by!(lead: @lead).message
+    @lead.update!(fit_reason: "Check the junk folder for the itinerary")
+    assert_emails(1) { OutboundDeliveryJob.perform_now(message.id) }
+    assert message.reload.sent?
   end
 
   test "imported outbound cc contact blocks greeting" do
@@ -144,7 +153,7 @@ class AutomaticFirstReplyJobTest < ActiveSupport::TestCase
     assert_includes message.send_error, "setting is off"
     Setting.current.update!(auto_first_reply_enabled: true)
     message.update!(status: "queued")
-    @lead.update!(fit_reason: "Spam")
+    @lead.update!(spam_score: 10)
     assert_emails(0) { OutboundDeliveryJob.perform_now(message.id) }
     assert_includes message.reload.send_error, "spam or junk"
   end
