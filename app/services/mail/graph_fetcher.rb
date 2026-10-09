@@ -463,7 +463,7 @@ module Mail
         "bcc" => addresses_of(json["bccRecipients"]),
         "delivered-to" => header_values(json, "Delivered-To"),
         "x-original-to" => header_values(json, "X-Original-To")
-      }
+      }.merge(ReplyAlerts::HEADERS.to_h { |name| [ name, header_values(json, name) ] })
     end
 
     def parsed_from(client, json, headers)
@@ -484,6 +484,7 @@ module Mail
         in_reply_to: normalize_message_id(header_values(json, "In-Reply-To").first),
         references: normalize_references(header_values(json, "References")),
         sent_at: parse_time(json["sentDateTime"] || json["receivedDateTime"]),
+        received_at: parse_time(json["receivedDateTime"]),
         text_body: html ? nil : body["content"].to_s.presence,
         html_body: html ? body["content"].to_s.presence : nil,
         attachments: LazyAttachments.new { attachment_entries(client, message_id, attachments) },

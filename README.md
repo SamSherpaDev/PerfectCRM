@@ -167,8 +167,9 @@ On a phone, tap Reply or Resume reply to open the composer; Details holds
 recipients, subject, booking choice, and attachments. New message starts a
 separate conversation regardless of subject. Saved attachments accompany
 newly uploaded files; a successful delivery clears the submitted draft
-only if it has not been edited since submission. Nothing sends without the
-captain pressing Send.
+only if it has not been edited since submission. Except for the one automatic
+website-inquiry greeting described under [Leads](#leads), correspondence sends
+only when the captain presses Send.
 
 In Settings → Signature, edit Signature lines with your name first and save.
 The preview and outgoing HTML mail use the same layout, with the uploaded logo
@@ -588,6 +589,39 @@ and review machine events and delivery results. The website form and external
 n8n/Panda AI workflows are configured separately; see the
 [website intake contract](docs/leads-intake.md) for setup, delivery behavior,
 and the allowed automation actions.
+
+**Automatic first reply** is on by default after its migration, with one kill
+switch in Settings → Automations. About two minutes after a new website intake,
+CRM renders the current first active template in the **First reply** purpose
+using live recipient context and queues it as an ordinary outbound message on
+the lead's timeline. No other template or traveler flow sends automatically;
+lead status stays unchanged, and saved drafts/attachments are never consumed.
+Only inquiries created after the stored feature-enable time qualify. Existing
+inquiries, backfills and replays cannot acquire an automatic greeting.
+
+A permanent normalized-email reservation prevents another greeting, including
+duplicate submissions and job retries. Any previous outbound message (manual,
+imported, group, To/Cc/Bcc, or already queued) or existing client blocks it.
+Invalid addresses, our domain, reserved test domains, a positive spam score or
+the `suspected_spam` tag, inactive inquiries, unresolved placeholders, recipient
+confirmation gates and an off switch all skip with a reason in Automations
+activity. Fit scores, bands and explanatory verdict text do not classify spam.
+Eligibility, including the switch and spam state, is checked again before delivery.
+Automatic delivery gets one SMTP attempt: an uncertain or failed delivery is
+not retried automatically or by timeline Retry, to avoid duplicate greetings.
+Further correspondence must be composed and sent manually.
+
+**Reply alerts** go to info@sherpaholidays.com when live Mail::SyncJob imports
+new inbound mail from an existing lead/client or their person, matched by the
+same identity rules as timelines. Each alert includes the sender, received
+time, up to 300 characters of plain text and a direct conversation link, with
+no attachments. Unknown/organization senders, sent/self mail, automated/out-of-
+office messages and bounces never alert; history imports never alert. Alert
+mail is excluded by the existing self-mail filter, so it cannot create a
+conversation or loop. Provider-id reservations survive deletion/replay and
+claim before SMTP; uncertain alert deliveries are not retried. The recurring
+notification sweep recovers pending alerts whose enqueue was interrupted.
+Today already lists linked threads whose latest inbound needs an answer.
 
 ## Source history and calls
 

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_07_004234) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_09_083137) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -110,6 +110,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_004234) do
     t.index ["conversation_id"], name: "index_ai_calls_on_conversation_id"
     t.index ["created_at"], name: "index_ai_calls_on_created_at"
     t.index ["purpose"], name: "index_ai_calls_on_purpose"
+  end
+
+  create_table "automatic_first_replies", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "delivery_attempted_at"
+    t.string "email", null: false
+    t.integer "lead_id"
+    t.integer "message_id"
+    t.datetime "updated_at", null: false
+    t.index ["email"], name: "index_automatic_first_replies_on_email", unique: true
+    t.index ["lead_id"], name: "index_automatic_first_replies_on_lead_id"
+    t.index ["message_id"], name: "index_automatic_first_replies_on_message_id"
   end
 
   create_table "booking_inquiry_bindings", force: :cascade do |t|
@@ -446,12 +458,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_004234) do
     t.text "held_attachments", default: "[]", null: false
     t.text "html_body"
     t.string "in_reply_to"
+    t.datetime "inbound_received_at"
     t.string "message_id"
     t.text "provider_labels", default: "[]", null: false
     t.string "provider_message_id"
     t.integer "raw_size", default: 0, null: false
     t.datetime "read_at"
     t.text "references_text"
+    t.string "reply_alert_state"
     t.text "send_error"
     t.datetime "sent_at"
     t.string "status", default: "received", null: false
@@ -741,6 +755,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_004234) do
     t.index ["status"], name: "index_quotes_on_status"
   end
 
+  create_table "reply_alert_reservations", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "message_id"
+    t.string "provider_message_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["message_id"], name: "index_reply_alert_reservations_on_message_id"
+    t.index ["provider_message_id"], name: "index_reply_alert_reservations_on_provider_message_id", unique: true
+  end
+
   create_table "settings", force: :cascade do |t|
     t.integer "ad_booking_value_percent", default: 35, null: false
     t.datetime "ad_export_last_run_at"
@@ -753,6 +776,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_004234) do
     t.integer "ai_rate_limit_per_minute", default: 20, null: false
     t.text "ai_voice_guide", default: "", null: false
     t.string "appearance", default: "paper", null: false
+    t.boolean "auto_first_reply_enabled", default: true, null: false
+    t.datetime "auto_first_reply_enabled_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
     t.datetime "created_at", null: false
     t.boolean "digest_enabled", default: true, null: false
     t.text "email_signature", default: "", null: false
@@ -864,6 +889,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_004234) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "ad_conversions", "leads"
+  add_foreign_key "automatic_first_replies", "leads", on_delete: :nullify
+  add_foreign_key "automatic_first_replies", "messages", on_delete: :nullify
   add_foreign_key "booking_inquiry_bindings", "leads"
   add_foreign_key "clients", "clients", column: "referred_by_client_id"
   add_foreign_key "clients", "leads", column: "origin_lead_id"
@@ -895,6 +922,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_004234) do
   add_foreign_key "quotes", "clients"
   add_foreign_key "quotes", "leads"
   add_foreign_key "quotes", "quotes", column: "parent_id"
+  add_foreign_key "reply_alert_reservations", "messages", on_delete: :nullify
   add_foreign_key "taggings", "tags"
   add_foreign_key "tasks", "templates"
 

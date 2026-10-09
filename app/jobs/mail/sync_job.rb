@@ -31,7 +31,7 @@ class Mail::SyncJob < ApplicationJob
       # always advances instead of starving behind already-seen mail.
       break if stored >= limit
 
-      result = Mail::Ingester.ingest(parsed: item.parsed, provider: item.provider)
+      result = Mail::Ingester.ingest(parsed: item.parsed, provider: item.provider, alert: true)
       stored += 1 if result[:status] == :stored
     end
     ::Setting.current.update_columns(mailbox_last_sync_at: Time.current,
