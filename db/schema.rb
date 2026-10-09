@@ -248,7 +248,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_09_083137) do
     t.datetime "expires_at", null: false
     t.string "filename", null: false
     t.integer "message_id", null: false
-    t.string "status", default: "held", null: false
     t.datetime "updated_at", null: false
     t.index ["expires_at"], name: "index_document_holdings_on_expires_at"
     t.index ["message_id"], name: "index_document_holdings_on_message_id"
@@ -796,7 +795,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_09_083137) do
     t.text "meta_access_token"
     t.string "meta_dataset_id"
     t.boolean "meta_terms_accepted", default: false, null: false
-    t.datetime "ms_graph_connected_at"
     t.text "ms_graph_refresh_token"
     t.boolean "pipeline_digest", default: true, null: false
     t.datetime "relay_last_used_at"
