@@ -602,10 +602,11 @@ inquiries, backfills and replays cannot acquire an automatic greeting.
 A permanent normalized-email reservation prevents another greeting, including
 duplicate submissions and job retries. Any previous outbound message (manual,
 imported, group, To/Cc/Bcc, or already queued) or existing client blocks it.
-Invalid addresses, our domain, reserved test domains, suspected spam/junk,
-Panda spam/junk verdicts, inactive inquiries, unresolved placeholders, recipient
+Invalid addresses, our domain, reserved test domains, a positive spam score or
+the `suspected_spam` tag, inactive inquiries, unresolved placeholders, recipient
 confirmation gates and an off switch all skip with a reason in Automations
-activity. The switch and late spam verdict are checked again before delivery.
+activity. Fit scores, bands and explanatory verdict text do not classify spam.
+Eligibility, including the switch and spam state, is checked again before delivery.
 Automatic delivery gets one SMTP attempt: an uncertain or failed delivery is
 not retried automatically or by timeline Retry, to avoid duplicate greetings.
 Further correspondence must be composed and sent manually.

@@ -464,6 +464,9 @@ verdicts and repeated statuses leave stage timing unchanged.
 
 ## What happens after intake
 
+- **Traveler greeting.** New intakes schedule the automatic first reply;
+  eligibility, controls and delivery guarantees are owned by
+  [README, Leads](../README.md#leads).
 - **Email copy.** A background job mails the inquiry to
   `info@sherpaholidays.com`, Reply-To the visitor, From the app's `MAIL_FROM`
   (default `info@sherpaholidays.com`). Suspected spam prefixes
@@ -484,9 +487,11 @@ verdicts and repeated statuses leave stage timing unchanged.
 
 Notification intent is saved in `lead_notifications` in the same transaction
 as the inquiry or details update. Intake and details replays re-check pending
-rows. The outbox makes failed deliveries eligible for retry after five minutes.
+rows. The outbox makes failed notification jobs eligible for retry after five minutes.
 In production, a recurring minute-by-minute drain enqueues eligible rows in
 Solid Queue and recovers lost enqueues and expired delivery claims.
-Delivery is at least once: a crash after sending but before recording completion
-can resend a notification. Each webhook attempt remains in the delivery log.
+Email copies and webhooks have at-least-once delivery: a crash after sending
+but before recording completion can resend them. Automatic greetings retain
+the separate delivery guarantees linked above. Each webhook attempt remains
+in the delivery log.
 Rate-limit admission uses a primary-database transaction shared across workers.
