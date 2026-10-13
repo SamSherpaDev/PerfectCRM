@@ -49,6 +49,22 @@ class QuoteItinerariesRequestsTest < ActionDispatch::IntegrationTest
     assert_select "input[data-each][value='4200.00']"
   end
 
+  test "catalog preview accepts the builders CSRF token with forgery protection enabled" do
+    original_protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    QuoteCatalog.stub(:snapshot, @source) do
+      get new_quote_path(lead_id: @lead.id)
+      token = css_select("#quote-builder-form input[name='authenticity_token']").first["value"]
+      QuoteCatalog.stub(:products, []) do
+        post preview_quotes_path, params: { authenticity_token: token, lead_id: @lead.id, storefront: "1", trip_id: 42 }
+      end
+    end
+    assert_response :success
+    assert_select "textarea[name='quote[itinerary]']", text: @source["itinerary"]
+  ensure
+    ActionController::Base.allow_forgery_protection = original_protection
+  end
+
   test "the owners selected trip interest takes precedence over the website trip title" do
     @lead.update!(trip_interest: "Zebra trek")
     PerfectBook::Trip.create!(perfectbook_id: 44, name: "Zebra trek", active: true, synced_at: Time.current)

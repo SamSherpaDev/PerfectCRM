@@ -1,6 +1,6 @@
 <% content_for :title, "New quote · PerfectCRM" %>
 <div class="page">
-  <%= render layout: "shared/page_header", locals: { eyebrow: "Quote", title: "New quote", subtitle: "For #{@owner.name} · built from the PerfectBook catalog.", back: ["Quotes", quotes_path] } do %><% end %>
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Quote", title: "New quote", subtitle: "For #{@owner.name} · built from current trip details.", back: ["Quotes", quotes_path] } do %><% end %>
   <%= render "shared/flash" %>
   <% if @quote.errors.any? %>
     <div class="callout-danger callout" role="alert">
@@ -67,7 +67,7 @@
     </div>
   </section>
 
-  <%= form_with model: @quote, url: quotes_path, id: "quote-builder-form", data: { controller: "quote-builder", turbo: false }, class: "grid gap-6 lg:grid-cols-[3fr_2fr] lg:items-start" do |form| %>
+  <%= form_with model: @quote, url: quotes_path, id: "quote-builder-form", authenticity_token: form_authenticity_token, data: { controller: "quote-builder", turbo: false }, class: "grid gap-6 lg:grid-cols-[3fr_2fr] lg:items-start" do |form| %>
     <%= hidden_field_tag :client_id, params[:client_id] %>
     <%= hidden_field_tag :lead_id, params[:lead_id] %>
     <%= form.hidden_field :perfectbook_trip_id %>
