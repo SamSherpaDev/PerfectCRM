@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_13_202634) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_13_203613) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -718,6 +718,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_13_202634) do
     t.string "accepted_bundle_sha256"
     t.string "accepted_terms_version"
     t.date "balance_due_on"
+    t.json "catalog_snapshot"
     t.integer "client_id"
     t.datetime "created_at", null: false
     t.string "currency", default: "USD", null: false
@@ -728,6 +729,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_13_202634) do
     t.json "disclosure_details"
     t.text "included"
     t.text "intake_payload"
+    t.text "itinerary"
     t.string "journey_kind"
     t.integer "lead_id"
     t.text "local_operator"
@@ -739,6 +741,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_13_202634) do
     t.string "reference", null: false
     t.datetime "sent_at"
     t.string "sent_by_email"
+    t.string "shopify_product_id"
     t.string "status", default: "draft", null: false
     t.json "terms_bundle"
     t.string "terms_bundle_sha256"

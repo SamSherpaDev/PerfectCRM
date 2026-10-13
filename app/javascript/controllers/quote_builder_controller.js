@@ -3,7 +3,7 @@
 import { Controller } from "@hotwired/stimulus"
 
 export default class extends Controller {
-  static targets = ["rows", "template", "total", "count", "inclusionsEdited"]
+  static targets = ["rows", "template", "total", "count", "inclusionsEdited", "itineraryEdited"]
 
   connect() {
     this.recalc()
@@ -11,6 +11,18 @@ export default class extends Controller {
 
   editInclusions() {
     this.inclusionsEditedTarget.value = "1"
+  }
+
+  editItinerary() {
+    this.itineraryEditedTarget.value = "1"
+  }
+
+  changePartySize(event) {
+    this.rowsTarget.querySelectorAll("[data-line-row]:not(.hidden)").forEach((row) => {
+      const kind = row.querySelector("input[name$='[kind]']")?.value
+      if (["trip", "departure"].includes(kind)) row.querySelector("input[data-qty]").value = event.target.value
+    })
+    this.recalc()
   }
 
   editPrice(event) {

@@ -1,0 +1,17 @@
+<%# locals: (quote:) %>
+<% if (source = quote.catalog_snapshot).present? %>
+  <div class="mt-3 text-sm text-ink-2 space-y-1" role="note">
+    <% if source["price_minor"].present? %>
+      <p>Published trip price: <strong><%= "From " if source["price_from"] %><%= money_in(source["price_minor"], "USD") %> per person</strong>.</p>
+      <% if source["price_from"] %><p class="hint">A starting price. Confirm the price for these dates, guests and adjustments before sending.</p><% end %>
+      <% if source["price_note"].present? %><p class="hint"><%= source["price_note"] %></p><% end %>
+      <p class="hint"><%= source["price_source"] %><% if source["price_synced_at"] %> · synced <%= date_short(Time.iso8601(source["price_synced_at"])) %> at <%= time_24_12(Time.iso8601(source["price_synced_at"])) %><% end %>.</p>
+    <% elsif source["url"].present? %>
+      <p class="hint">No published full-trip price could be verified. Enter a confirmed price before sending.</p>
+    <% end %>
+    <% if source["url"].present? %>
+      <%= link_to "View published trip", source["url"], class: "link text-xs", target: "_blank", rel: "noopener" %>
+      <p class="hint">Itinerary and inclusions checked <%= date_short(Time.iso8601(source.fetch("checked_at"))) %> at <%= time_24_12(Time.iso8601(source.fetch("checked_at"))) %>. Your edits apply to this quote.</p>
+    <% end %>
+  </div>
+<% end %>

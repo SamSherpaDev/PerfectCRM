@@ -327,18 +327,30 @@ successful sync, the last error, and a Test connection button.
 
 ## Quotes
 
-Quotes are built from the mirrored trip catalog and sent as email plus a
+Quotes are built from the mirrored trip catalog or the published SherpaHolidays
+storefront and sent as email plus a
 Washi-styled PDF (`QuotePdf`, via `prawn`), always from
 `info@sherpaholidays.com` through the app's SMTP settings. The
-builder (`/quotes/new?client_id=` or `?lead_id=`) picks a trip, then a
-departure with seats from the latest PerfectBook sync. Prices stay the
-captain's to enter because PerfectBook exposes no catalog price, and prefill
-from the newest earlier
-sent or accepted quote by the same captain, preferring the same departure
-and falling back to the same trip (`Quote.last_unit_for_trip`). In the new
+builder (`/quotes/new?client_id=` or `?lead_id=`) starts with the inquiry's
+trip and group size when known. Pick a trip, then a departure with seats from
+the latest PerfectBook sync, or set flexible start and end dates. **Browse all
+published trips** also offers storefront trips with no PerfectBook mirror;
+selecting one never creates or modifies a mirror. `QuoteCatalog` reads the
+storefront's published full itinerary, inclusions and exclusions, and full-trip
+USD offers. Deposit variants are excluded. Storefront prices are labeled
+**From**, including private-journey occupancy caveats; a priced USD PerfectBook
+departure supplies an exact price instead. Product identifiers and handles are
+cached for five minutes; itinerary, inclusions and offers are fetched at selection
+and checked again before sending. If neither source has a price, an earlier quote
+may prefill it, explicitly labeled as an earlier quote (`Quote.last_unit_for_trip`),
+or the captain enters a verified price. In the new
 builder, changing the trip or departure preserves entered lines, edited
 descriptions and prices, and notes; untouched catalog labels and prefilled
-prices refresh for the selection. Enter prices and deposits without commas
+prices refresh for the selection. The itinerary keeps the published day ranges
+as written, without inventing daily arrangements. Edit it for the inquiry; it
+travels in both email parts, the PDF and the public quote. Changing Guests updates
+the trip line quantity while custom adjustment quantities stay independent.
+Enter prices and deposits without commas
 (for example, `1500.00`). Trip and departure
 lines snapshot catalog names and dates at build time, so later
 PerfectBook edits never rewrite history; custom lines cover permits,
@@ -347,10 +359,20 @@ single supplements, and extra nights. Revisions chain through
 start fresh. Only drafts can be edited, including their trip and departure.
 Drafts are private: the old public page says a newer quote is on its way,
 and links to the revision only once it has been sent. Accepted quotes
-cannot be revised. Inclusions are entered per quote; “Remember these
+cannot be revised. Draft PDFs are available for review. Published details are
+stored as a source snapshot on each quote; the builder signs it for form
+submission. Snapshots are retained through revisions and frozen with the
+delivered booking documents. If published details change or cannot
+be checked, sending keeps the quote as a draft. **Load current trip details** in
+the draft editor replaces the itinerary, inclusions and trip price for another
+review, preserving personal notes and custom adjustment lines. Nothing sends
+until the captain explicitly chooses **Send quote**; website intake, automatic
+first replies, their kill switch, and reply alerts are unchanged.
+Inclusions are entered per quote; “Remember these
 inclusions for this trip” saves CRM-owned preferences separately from the
-trip mirror. Remembered inclusions load on the initial trip selection when
-the field is untouched. New quotes default to two guests and a valid-until
+trip mirror. Remembered inclusions are a fallback when no live inclusions are
+available and the field is untouched. New quotes default to the inquiry's group
+size or two guests and a valid-until
 date 14 days from today. Drafts may omit these fields; sending requires a
 positive party size, at least one line, a recipient email, a valid-until
 date of today or later, and completed booking documents and payment schedule

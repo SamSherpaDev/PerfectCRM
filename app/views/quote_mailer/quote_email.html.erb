@@ -10,6 +10,12 @@
 
 <p><strong>Total <%= money_in(@quote.subtotal_minor, @quote.currency) %></strong><% if @quote.party_size %> for <%= pluralize(@quote.party_size, "guest") %><% end %><% if @quote.valid_until %> · valid until <%= date_short(@quote.valid_until) %><% end %>.</p>
 
+<%= render "quotes/published_price", quote: @quote %>
+<% if @quote.itinerary.present? %>
+  <h2>Day-by-day itinerary</h2>
+  <%= simple_format(@quote.itinerary) %>
+<% end %>
+
 <% if @quote.included.present? %>
   <p><strong>What is included</strong><br><%= simple_format(@quote.included) %></p>
 <% end %>

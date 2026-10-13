@@ -109,7 +109,9 @@ class QuoteTerms
       "client" => quote.owner_name, "email" => quote.owner_email,
       "master_terms" => master, "pre_payment_disclosure" => disclosure,
       "trip_differences" => quote.trip_differences,
-      "itinerary" => "#{quote.subject_label}\n#{quote.departure_start_on} to #{quote.departure_end_on}\n#{quote.included}\n#{quote.notes}\n#{details.fetch('services')}",
+      "itinerary" => [ quote.subject_label, "#{quote.departure_start_on} to #{quote.departure_end_on}",
+        quote.itinerary, quote.included, quote.notes, details.fetch("services") ].compact_blank.join("\n\n"),
+      "catalog_snapshot" => quote.catalog_snapshot,
       "security_evidence" => details.fetch("security_evidence")
     }
   end

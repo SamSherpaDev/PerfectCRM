@@ -1,0 +1,8 @@
+<%# locals: (form:, quote:) %>
+<section class="card card-pad" aria-labelledby="itinerary-heading">
+  <div class="card-header"><h2 class="card-title" id="itinerary-heading">Day-by-day itinerary</h2></div>
+  <%= card_caption "Tailor the route for this inquiry. The reviewed itinerary travels in the email and PDF." %>
+  <p class="hint">Published day ranges stay as written. Split them into individual days or adjust the plan after checking the arrangements.</p>
+  <%= form.label :itinerary, "Itinerary", class: "label mt-3" %>
+  <%= form.text_area :itinerary, rows: 14, class: "textarea", data: { action: "input->quote-builder#editItinerary" } %>
+</section>

@@ -1,4 +1,4 @@
-# A trip quote built from the mirrored PerfectBook catalog, sent as email
+# A trip quote built from PerfectBook or the published storefront, sent as email
 # plus PDF, and accepted by the client through an unguessable tap-to-accept
 # link (/q/:token). Money truth stays in PerfectBook: on accept the CRM only
 # stages an intake payload for the captain to post there (see
@@ -36,8 +36,8 @@ class Quote < ApplicationRecord
 
   BUNDLE_FIELDS = %w[terms_bundle terms_bundle_sha256 journey_kind local_operator disclosure_details trip_differences
     trip_name departure_label departure_start_on departure_end_on party_size deposit_minor balance_due_on
-    currency included notes client_id lead_id reference version valid_until accept_token
-    perfectbook_trip_id perfectbook_departure_id sent_at sent_by_email].freeze
+    currency included notes itinerary catalog_snapshot client_id lead_id reference version valid_until accept_token
+    perfectbook_trip_id perfectbook_departure_id shopify_product_id sent_at sent_by_email].freeze
 
   validates :reference, presence: true, uniqueness: true
   validates :accept_token, uniqueness: true
@@ -73,8 +73,7 @@ class Quote < ApplicationRecord
   scope :live, -> { where(status: %w[sent viewed]) }
   scope :expired, -> { live.where("valid_until IS NOT NULL AND valid_until < ?", Date.current) }
 
-  # Dollar display for the builder: PerfectBook has no catalog price, so the
-  # captain types dollars and the model keeps integer cents.
+  # Dollar display for the builder; the model keeps integer cents.
   def deposit_dollars
     deposit_minor.nil? ? @deposit_dollars_input : format("%.2f", deposit_minor / 100.0)
   end
@@ -110,6 +109,10 @@ class Quote < ApplicationRecord
 
   def subject_label
     trip_name.presence || "Custom SherpaHolidays trip"
+  end
+
+  def catalog_choice
+    perfectbook_trip_id.presence || ("shopify:#{shopify_product_id}" if shopify_product_id.present?)
   end
 
   # Money is integer minor units; lines own their totals (see QuoteLine).
@@ -247,6 +250,7 @@ class Quote < ApplicationRecord
       "party_size" => party_size, "total_minor" => subtotal_minor,
       "currency" => currency, "client" => owner_name, "email" => owner_email,
       "quote_reference" => reference, "crm_inquiry_ref" => lead&.reference,
+      "itinerary" => itinerary, "catalog_snapshot" => catalog_snapshot,
       "deposit_minor" => deposit_minor, "balance_due_minor" => remaining_balance_minor,
       "payment_now_minor" => payment_requested_minor,
       "paid_to_date_minor" => terms_bundle&.fetch("paid_to_date_minor"),
