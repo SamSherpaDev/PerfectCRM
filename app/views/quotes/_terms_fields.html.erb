@@ -2,7 +2,7 @@
 <section class="card card-pad" aria-labelledby="terms-heading">
   <div class="card-header"><h2 class="card-title" id="terms-heading">Booking documents</h2></div>
   <%= card_caption "#{QuoteTerms::VERSION}. Complete and verify the disclosure before sending. Drafts can stay incomplete." %>
-  <% if quote.perfectbook_trip_id.blank? %>
+  <% if quote.catalog_choice.blank? %>
     <%= form.label :trip_name, "Custom journey name", class: "label mt-3" %>
     <%= form.text_field :trip_name, class: "input" %>
   <% end %>

@@ -1,6 +1,6 @@
-# Quote builder and tracker. Quotes are built from the mirrored
-# PerfectBook catalog (never the API directly), sent as email plus PDF, and
-# accepted through the public tap-to-accept page.
+# Quote builder and tracker. Trip details come from the PerfectBook mirror
+# and the published SherpaHolidays storefront. Quotes are sent as email plus
+# PDF and accepted through the public tap-to-accept page.
 class QuotesController < ApplicationController
   before_action :set_quote, only: %i[show edit update send_quote duplicate revise terms_intake]
 
@@ -42,21 +42,33 @@ class QuotesController < ApplicationController
     return redirect_to quotes_path, alert: "Pick a client or lead first." unless @owner
 
     @trips = PerfectBook::Catalog.new.active_trips
-    @trip = @trips.find_by(perfectbook_id: params[:trip_id]) if params[:trip_id].present?
-    @departures = @trip ? PerfectBook::Catalog.new.departures_for_trip(@trip.perfectbook_id).limit(30) : []
+    @trip = find_catalog_trip(params[:trip_id]) if params[:trip_id].present?
+    if params[:trip_id].nil? && params[:quote].blank? && @owner.is_a?(Lead)
+      interests = [ @owner.trip_interest, @owner.trip_title ].compact_blank.map(&:downcase)
+      interests.each do |interest|
+        @trip = @trips.where("lower(name) = ?", interest).first
+        break if @trip
+      end
+      @trip ||= find_storefront_trip(handle: @owner.trip_handle) if @owner.trip_handle.present?
+    end
+    @departures = @trip&.perfectbook_id ? PerfectBook::Catalog.new.departures_for_trip(@trip.perfectbook_id).limit(30) : []
     submitted = params[:quote].present? ? quote_params : {}
     if @trip && submitted[:perfectbook_trip_id].blank? && submitted[:included].blank? && params[:included_edited] != "1"
       submitted = submitted.except(:included)
     end
     @quote = Quote.new({
       perfectbook_trip_id: @trip&.perfectbook_id,
+      shopify_product_id: (@trip.shopify_product_id if @trip && @trip.perfectbook_id.nil?),
       trip_name: @trip&.name,
-      party_size: 2,
+      party_size: (@owner.is_a?(Lead) ? @owner.party_size : nil).presence || 2,
       valid_until: Date.current + 14,
       included: QuoteTripPreference.find_by(perfectbook_trip_id: @trip&.perfectbook_id)&.included
     }.merge(submitted).merge(owner_params))
     @quote.perfectbook_trip_id = @trip&.perfectbook_id
+    @quote.shopify_product_id = @trip && @trip.perfectbook_id.nil? ? @trip.shopify_product_id : nil
     prefill_lines
+    load_trip_source(prefill: true)
+    load_trip_choices
     3.times { @quote.lines.build(quantity: 1) }
   end
 
@@ -65,7 +77,7 @@ class QuotesController < ApplicationController
     return redirect_to quotes_path, alert: "Pick a client or lead first." unless @owner
 
     @quote = Quote.new(quote_params.merge(owner_params))
-    if apply_catalog_snapshot && @quote.save
+    if restore_catalog_source && apply_catalog_snapshot && @quote.save
       remember_inclusions
       if params[:send_now].present?
         send_saved_quote
@@ -73,9 +85,7 @@ class QuotesController < ApplicationController
         redirect_to @quote, notice: "Quote saved as a draft."
       end
     else
-      @trips = PerfectBook::Catalog.new.active_trips
-      @trip = @trips.find_by(perfectbook_id: @quote.perfectbook_trip_id)
-      @departures = @trip ? PerfectBook::Catalog.new.departures_for_trip(@trip.perfectbook_id).limit(30) : []
+      load_catalog_options
       render :new, status: :unprocessable_entity
     end
   end
@@ -87,6 +97,16 @@ class QuotesController < ApplicationController
 
   def update
     send_after_update = false
+    if params[:load_trip_source].present?
+      candidate = @quote.dup
+      candidate.assign_attributes(quote_params.except(:lines_attributes))
+      begin
+        trip, departure = selected_catalog_records(candidate, live: true)
+        @reloaded_trip_source = QuoteCatalog.snapshot(trip: trip, departure: departure)
+      rescue QuoteCatalog::Unavailable => error
+        @catalog_warning = error.message
+      end
+    end
     @quote.with_lock do
       unless @quote.draft?
         redirect_to @quote, alert: "Only drafts can be edited. Make a revision instead."
@@ -94,10 +114,14 @@ class QuotesController < ApplicationController
       end
 
       @quote.assign_attributes(quote_params)
-      catalog_changed = @quote.perfectbook_trip_id_changed? || @quote.perfectbook_departure_id_changed?
-      if apply_catalog_snapshot(replace_description: catalog_changed) && @quote.save
+      catalog_changed = @quote.perfectbook_trip_id_changed? || @quote.perfectbook_departure_id_changed? || @quote.shopify_product_id_changed?
+      @quote.catalog_snapshot = nil if catalog_changed
+      source_loaded = params[:load_trip_source].present? ? load_trip_source(prefill: true, replace: true) : restore_catalog_source
+      if apply_catalog_snapshot(replace_description: catalog_changed) && source_loaded && @quote.save
         remember_inclusions
-        if params[:send_now].present?
+        if params[:load_trip_source].present?
+          redirect_to edit_quote_path(@quote), notice: "Current trip details loaded. Review the itinerary, inclusions and price."
+        elsif params[:send_now].present?
           send_after_update = true
         else
           redirect_to @quote, notice: "Quote saved."
@@ -128,6 +152,122 @@ class QuotesController < ApplicationController
 
   private
 
+  def find_storefront_trip(**options)
+    QuoteCatalog.storefront_trip(**options)
+  rescue QuoteCatalog::Unavailable => error
+    @catalog_warning = error.message
+    nil
+  end
+
+  def find_catalog_trip(choice)
+    if choice.to_s.start_with?("shopify:")
+      find_storefront_trip(product_id: choice.to_s.delete_prefix("shopify:"))
+    else
+      @trips.find_by(perfectbook_id: choice)
+    end
+  end
+
+  def load_trip_choices
+    @trip_choices = @trips.map { |trip| [ trip.name, trip.perfectbook_id ] }
+    return unless params[:storefront] == "1" || @quote.shopify_product_id.present?
+
+    if @quote.persisted? && @quote.shopify_product_id.present?
+      name = @quote.catalog_snapshot&.fetch("trip_name", nil).presence || @quote.trip_name
+      @trip_choices << [ name, @quote.catalog_choice ]
+    end
+    mirrored_products = @trips.map { |trip| trip.shopify_product_id.to_s.split("/").last }
+    QuoteCatalog.products.each do |product|
+      next if mirrored_products.include?(product.fetch("id").to_s) ||
+        @trip_choices.any? { |_, choice| choice == "shopify:#{product.fetch('id')}" }
+
+      @trip_choices << [ product.fetch("title"), "shopify:#{product.fetch('id')}" ]
+    end
+    @trip_choices.sort_by! { |name, _| name.downcase }
+  rescue QuoteCatalog::Unavailable => error
+    @catalog_warning = error.message
+  end
+
+  def selected_catalog_records(quote = @quote, live: false)
+    trip = if quote.perfectbook_trip_id.present?
+      PerfectBook::Trip.find_by(perfectbook_id: quote.perfectbook_trip_id)
+    elsif quote.shopify_product_id.present?
+      source = quote.catalog_snapshot
+      unchanged = quote.persisted? && !quote.shopify_product_id_changed? && !quote.perfectbook_trip_id_changed? && !quote.perfectbook_departure_id_changed?
+      sourced = source.present? && source["trip_id"] == quote.perfectbook_trip_id && source["departure_id"] == quote.perfectbook_departure_id && source["shopify_product_id"] == quote.shopify_product_id
+      if !live && (unchanged || (!quote.persisted? && sourced))
+        PerfectBook::Trip.new(name: source&.fetch("trip_name", nil).presence || quote.trip_name,
+          shopify_product_id: quote.shopify_product_id, active: true)
+      else
+        QuoteCatalog.storefront_trip(product_id: quote.shopify_product_id)
+      end
+    end
+    departure = PerfectBook::Departure.find_by(perfectbook_id: quote.perfectbook_departure_id)
+    departure = nil unless departure&.perfectbook_trip_id == trip&.perfectbook_id
+    [ trip, departure ]
+  end
+
+  def load_trip_source(prefill: false, replace: false)
+    if replace && @catalog_warning
+      @quote.errors.add(:base, @catalog_warning)
+      return false
+    end
+    trip, departure = selected_catalog_records(live: true)
+    @quote.catalog_snapshot = replace ? @reloaded_trip_source : QuoteCatalog.snapshot(trip: trip, departure: departure)
+    source = @quote.catalog_snapshot
+    return true unless prefill && (source || replace)
+    source ||= {}
+
+    if replace && trip && @quote.lines.none? { |line| !line.marked_for_destruction? && %w[trip departure].include?(line.kind) }
+      @quote.lines.build(kind: departure ? "departure" : "trip", description: trip.name,
+        quantity: @quote.party_size.presence || 2, price_edited: "0")
+    end
+
+    if replace || (source["included"].present? && params[:included_edited] != "1")
+      @quote.included = source["included"]
+    end
+    if replace || (source["itinerary"].present? && params[:itinerary_edited] != "1")
+      @quote.itinerary = source["itinerary"]
+    end
+    if replace || source["price_minor"].present?
+      @quote.lines.each do |line|
+        next unless !line.marked_for_destruction? && %w[trip departure].include?(line.kind) && (replace || line.price_edited == "0")
+
+        line.unit_minor = source["price_minor"].to_i
+        line.price_edited = "0"
+      end
+      @prefilled_unit = nil
+    end
+    true
+  rescue QuoteCatalog::Unavailable => error
+    @catalog_warning = error.message
+    if replace
+      @quote.errors.add(:base, error.message)
+      false
+    else
+      true
+    end
+  end
+
+  def restore_catalog_source
+    return true if params[:catalog_source_token].blank?
+
+    source = Rails.application.message_verifier(:quote_catalog).verified(params[:catalog_source_token], purpose: :quote_catalog)
+    unless source.is_a?(Hash)
+      @quote.errors.add(:base, "Trip source could not be verified. Load trip details again.")
+      return false
+    end
+    product_id = if @quote.perfectbook_trip_id.present?
+      PerfectBook::Trip.find_by(perfectbook_id: @quote.perfectbook_trip_id)&.shopify_product_id
+    else
+      @quote.shopify_product_id
+    end
+    product_id = product_id.to_s.split("/").last.presence
+    if source["trip_id"] == @quote.perfectbook_trip_id && source["departure_id"] == @quote.perfectbook_departure_id && source["shopify_product_id"] == product_id
+      @quote.catalog_snapshot = source
+    end
+    true
+  end
+
   def set_quote
     @quote = Quote.includes(:lines, :client, :lead).find(params[:id])
   end
@@ -153,7 +293,7 @@ class QuotesController < ApplicationController
   end
 
   def prefill_lines
-    departure = @departures.find_by(perfectbook_id: params[:departure_id]) if @trip && params[:departure_id].present?
+    departure = @departures.find_by(perfectbook_id: params[:departure_id]) if @trip&.perfectbook_id && params[:departure_id].present?
     @quote.perfectbook_departure_id = departure&.perfectbook_id
     if @trip && @quote.lines.none? { |line| %w[trip departure].include?(line.kind) }
       @quote.lines.build(kind: "trip", description: [ @trip.name, departure && departure_label(departure) ].compact.join(" - "),
@@ -169,9 +309,9 @@ class QuotesController < ApplicationController
   end
 
   def apply_catalog_snapshot(replace_description: false)
-    trip = PerfectBook::Trip.find_by(perfectbook_id: @quote.perfectbook_trip_id) if @quote.perfectbook_trip_id.present?
-    departure = PerfectBook::Departure.find_by(perfectbook_id: @quote.perfectbook_departure_id) if @quote.perfectbook_departure_id.present?
+    trip, departure = selected_catalog_records
     if (@quote.perfectbook_trip_id.present? && !trip) ||
+        (@quote.shopify_product_id.present? && !trip) ||
         (@quote.perfectbook_departure_id.present? && (!departure || departure.perfectbook_trip_id != trip&.perfectbook_id))
       @quote.errors.add(:base, "Choose a departure belonging to the selected trip.")
       return false
@@ -199,11 +339,22 @@ class QuotesController < ApplicationController
       end
     end
     true
+  rescue QuoteCatalog::Unavailable => error
+    @quote.errors.add(:base, error.message)
+    false
   end
 
   def load_catalog_options
     @trips = PerfectBook::Catalog.new.active_trips.or(PerfectBook::Trip.where(perfectbook_id: @quote.perfectbook_trip_id))
-    @departures = PerfectBook::Departure.order(:start_date)
+    @trip = find_catalog_trip(@quote.catalog_choice) if action_name == "create" && @quote.catalog_choice.present?
+    @departures = if action_name == "create"
+      @trip&.perfectbook_id ? PerfectBook::Catalog.new.departures_for_trip(@trip.perfectbook_id).limit(30) : []
+    elsif @quote.shopify_product_id.present?
+      []
+    else
+      PerfectBook::Departure.order(:start_date)
+    end
+    load_trip_choices
   end
 
   def remember_inclusions
@@ -241,13 +392,21 @@ class QuotesController < ApplicationController
   end
 
   def quote_params
-    params.require(:quote).permit(
+    attributes = params.require(:quote).permit(
       :party_size, :trip_name, :departure_label, :departure_start_on, :departure_end_on,
-      :perfectbook_trip_id, :perfectbook_departure_id, :notes, :included,
+      :perfectbook_trip_id, :perfectbook_departure_id, :shopify_product_id, :notes, :included, :itinerary,
       :deposit_dollars, :balance_due_on, :valid_until,
       :journey_kind, :local_operator, :trip_differences,
       disclosure_details: [ *QuoteTerms::FIELDS.keys, :fund_notice ],
       lines_attributes: %i[id kind description quantity unit_dollars price_edited _destroy]
     )
+    if attributes[:perfectbook_trip_id].to_s.start_with?("shopify:")
+      attributes[:shopify_product_id] = attributes[:perfectbook_trip_id].delete_prefix("shopify:")
+      attributes[:perfectbook_trip_id] = nil
+      attributes[:perfectbook_departure_id] = nil
+    elsif attributes.key?(:perfectbook_trip_id) && (attributes[:perfectbook_trip_id].present? || !attributes.key?(:shopify_product_id))
+      attributes[:shopify_product_id] = nil
+    end
+    attributes
   end
 end

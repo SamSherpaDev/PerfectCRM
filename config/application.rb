@@ -16,6 +16,11 @@ require "rails/test_unit/railtie"
 # you've limited to :test, :development, or :production.
 Bundler.require(*Rails.groups)
 
+# The app extends this gem's namespace. Load it before Zeitwerk so a
+# development reload preserves the gem's address parser and mail classes.
+require "mail"
+require_relative "../app/services/mail"
+
 module Perfectcrm
   class Application < Rails::Application
     # Initialize configuration defaults for originally generated Rails version.

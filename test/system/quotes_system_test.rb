@@ -727,6 +727,116 @@ class QuotesSystemTest < ApplicationSystemTestCase
     within("[aria-label='Merged messages']") { assert_text "Missing:" }
   end
 
+  test "reviewed storefront selection survives unavailable missing and mirrored products in the browser" do
+    client = Client.create!(name: "Synthetic traveler", email: "traveler@example.test")
+    source = { "trip_name" => "Reviewed private trek", "trip_id" => nil,
+      "departure_id" => nil, "shopify_product_id" => "789", "price_minor" => 150_000,
+      "itinerary" => "Day 1 | Reviewed arrival", "included" => "Reviewed guide" }
+    PerfectBook::Trip.create!(perfectbook_id: 999, name: "New mirror", active: true,
+      shopify_product_id: "789", synced_at: Time.current)
+    [ -> { raise QuoteCatalog::Unavailable, "Synthetic outage" }, -> { [] },
+      -> { [ { "id" => 789, "handle" => "private", "title" => "New published title" } ] } ].each_with_index do |products, index|
+      quote = Quote.create!(client: client, shopify_product_id: "789", trip_name: source["trip_name"],
+        catalog_snapshot: source, itinerary: source["itinerary"], included: source["included"],
+        party_size: 1, valid_until: Date.current + 14)
+      quote.lines.create!(kind: "trip", description: "Reviewed private trek", quantity: 1, unit_minor: 150_000)
+      quote.lines.create!(kind: "custom", description: "Extra night", quantity: 1, unit_minor: 4_000)
+      complete_quote_terms(quote, days: 180)
+      QuoteCatalog.stub(:products, products) do
+        QuoteCatalog.stub(:snapshot, ->(**) { flunk "Review must use the saved source" }) do
+          visit edit_quote_path(quote)
+          assert_select "Trip", selected: "Reviewed private trek"
+          assert_equal "shopify:789", find_field("Trip").value
+          assert_no_overflow("saved storefront choice #{index}")
+          fill_in "Note", with: "Reviewed personal note"
+          click_button "Save draft", match: :first
+          assert_text "Quote saved."
+          visit edit_quote_path(quote)
+          assert_select "Trip", selected: "Reviewed private trek"
+          click_button "Send quote", match: :first
+          assert_text "Quote sent"
+        end
+      end
+      assert_equal "sent", quote.reload.status
+      assert_equal "789", quote.shopify_product_id
+      assert_nil quote.perfectbook_trip_id
+      assert_equal source, quote.catalog_snapshot
+      assert_equal source, quote.terms_bundle["catalog_snapshot"]
+      assert_equal %w[custom trip], quote.lines.pluck(:kind).sort
+      assert_equal "Reviewed personal note", quote.notes
+      visit public_quote_path(quote.accept_token)
+      assert_text "Day 1 | Reviewed arrival"
+      assert_text "$1,540.00"
+      assert_no_text "From $1,500"
+      assert_no_overflow("reviewed itinerary delivered #{index}")
+    end
+  end
+
+  test "new storefront builder saves and sends reviewed content offline and explicit reload clears stale fields" do
+    client = Client.create!(name: "Synthetic traveler", email: "traveler@example.test")
+    source = { "trip_name" => "Private trek", "trip_id" => nil, "departure_id" => nil,
+      "shopify_product_id" => "789", "price_minor" => 150_000,
+      "itinerary" => "Day 1 | Source arrival", "included" => "Source guide" }
+    QuoteCatalog.stub(:products, [ { "id" => 789, "handle" => "private", "title" => "Private trek" } ]) do
+      QuoteCatalog.stub(:snapshot, source) do
+        visit new_quote_path(client_id: client.id, storefront: "1", trip_id: "shopify:789")
+      end
+    end
+    assert_field "Itinerary", with: source["itinerary"]
+    fill_in "Itinerary", with: "Day 1 | Owner tailored arrival"
+    fill_in "What is included", with: "Owner tailored guide"
+    fill_in "Note", with: "Personal welcome"
+    QuoteCatalog.stub(:products, -> { raise QuoteCatalog::Unavailable, "Synthetic outage" }) do
+      QuoteCatalog.stub(:snapshot, ->(**) { flunk "Saving reviewed source must stay offline" }) do
+        click_button "Save draft", match: :first
+        assert_text "Quote saved as a draft"
+      end
+    end
+    quote = Quote.order(:id).last
+    assert_equal "Day 1 | Owner tailored arrival", quote.itinerary
+    assert_equal source, quote.catalog_snapshot
+    complete_quote_terms(quote, days: 180)
+    QuoteCatalog.stub(:products, [ { "id" => 789, "handle" => "private", "title" => "Private trek" } ]) do
+      QuoteCatalog.stub(:snapshot, source) do
+        visit new_quote_path(client_id: client.id, storefront: "1", trip_id: "shopify:789")
+      end
+    end
+    fields = quote.attributes.slice("journey_kind", "local_operator", "departure_start_on", "departure_end_on",
+      "trip_differences", "balance_due_on")
+    fields["deposit_dollars"] = quote.deposit_dollars
+    fields.each { |name, value| page.execute_script("document.getElementsByName(arguments[0])[0].value = arguments[1]", "quote[#{name}]", value.to_s) }
+    quote.disclosure_details.each do |name, value|
+      page.execute_script("document.getElementsByName(arguments[0])[0].value = arguments[1]", "quote[disclosure_details][#{name}]", value)
+    end
+    fill_in "Itinerary", with: "Day 1 | Owner reviewed offline send"
+    assert_no_overflow("reviewed new storefront builder")
+    QuoteCatalog.stub(:products, -> { raise QuoteCatalog::Unavailable, "Synthetic outage" }) do
+      QuoteCatalog.stub(:snapshot, ->(**) { flunk "New form sending must stay offline" }) do
+        click_button "Send quote", match: :first
+        assert_text "Quote sent"
+      end
+    end
+    sent_quote = Quote.order(:id).last
+    assert_equal "sent", sent_quote.status
+    assert_equal source, sent_quote.catalog_snapshot
+    assert_equal "Day 1 | Owner reviewed offline send", sent_quote.itinerary
+    quote.lines.create!(kind: "custom", description: "Extra night", quantity: 1, unit_minor: 4_000)
+    quote.update!(deposit_minor: 0)
+    QuoteCatalog.stub(:products, [ { "id" => 789, "handle" => "private", "title" => "Private trek" } ]) do
+      QuoteCatalog.stub(:snapshot, source.except("price_minor", "itinerary", "included")) do
+        visit edit_quote_path(quote)
+        accept_confirm { click_button "Load current trip details" }
+        assert_text "Current trip details loaded"
+        assert_no_overflow("explicit reload without replacement fields")
+      end
+    end
+    assert_equal 0, quote.reload.lines.find_by!(kind: "trip").unit_minor
+    assert_equal "", quote.itinerary.to_s
+    assert_equal "", quote.included.to_s
+    assert_equal 4_000, quote.lines.find_by!(kind: "custom").unit_minor
+    assert_equal "Personal welcome", quote.notes
+  end
+
   private
 
   def assert_no_overflow(context)

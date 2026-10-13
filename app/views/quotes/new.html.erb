@@ -1,6 +1,6 @@
 <% content_for :title, "New quote · PerfectCRM" %>
 <div class="page">
-  <%= render layout: "shared/page_header", locals: { eyebrow: "Quote", title: "New quote", subtitle: "For #{@owner.name} · built from the PerfectBook catalog.", back: ["Quotes", quotes_path] } do %><% end %>
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Quote", title: "New quote", subtitle: "For #{@owner.name} · built from current trip details.", back: ["Quotes", quotes_path] } do %><% end %>
   <%= render "shared/flash" %>
   <% if @quote.errors.any? %>
     <div class="callout-danger callout" role="alert">
@@ -17,14 +17,18 @@
     <div class="card-header">
       <h2 class="card-title" id="trip-heading">Trip and departure</h2>
     </div>
-    <%= card_caption "Pick the trip, then the departure. Seats are live from PerfectBook; prices stay yours to enter." %>
+    <%= card_caption "Pick the trip and dates. Load the published itinerary, inclusions and price, then tailor the quote." %>
+    <% if @catalog_warning %><p class="callout callout-warning" role="status"><%= @catalog_warning %></p><% end %>
     <div id="catalog-picker" class="mt-2 space-y-4">
       <div>
         <%= label_tag :trip_id, "Trip", class: "label" %>
-        <%= select_tag :trip_id, options_from_collection_for_select(@trips, :perfectbook_id, :name, @trip&.perfectbook_id),
+        <%= select_tag :trip_id, options_for_select(@trip_choices, @quote.catalog_choice),
           include_blank: "Choose a trip…", class: "select", form: "quote-builder-form",
           onchange: "document.querySelectorAll('[name=departure_id]').forEach(input => input.checked = false); this.form.requestSubmit(document.getElementById('quote-catalog-refresh'))" %>
       </div>
+      <% unless params[:storefront] == "1" %>
+        <%= button_tag "Browse all published trips", name: "storefront", value: "1", form: "quote-builder-form", formaction: preview_quotes_path, formnovalidate: true, class: "btn btn-secondary btn-sm" %>
+      <% end %>
       <% if @trip %>
         <% if @departures.any? %>
           <fieldset>
@@ -50,27 +54,33 @@
                 </label>
               <% end %>
             </div>
-            <p class="hint mt-2">PerfectBook lists no catalog price, so the price boxes below stay yours. Only your previously sent quotes can supply a price.</p>
+            <p class="hint mt-2">Departure prices use the PerfectBook mirror when available. Flexible dates use the published starting price.</p>
           </fieldset>
         <% else %>
           <div class="empty-inline">
             <%= sketch :enso, class: "enso" %>
             <p class="text-sm text-ink">No upcoming departures.</p>
-            <p class="text-xs muted">Build the quote with custom lines below instead.</p>
+            <p class="text-xs muted">Set flexible trip dates below and review availability before sending.</p>
           </div>
         <% end %>
       <% end %>
     </div>
   </section>
 
-  <%= form_with model: @quote, url: quotes_path, id: "quote-builder-form", data: { controller: "quote-builder", turbo: false }, class: "grid gap-6 lg:grid-cols-[3fr_2fr] lg:items-start" do |form| %>
+  <%= form_with model: @quote, url: quotes_path, id: "quote-builder-form", authenticity_token: form_authenticity_token, data: { controller: "quote-builder", turbo: false }, class: "grid gap-6 lg:grid-cols-[3fr_2fr] lg:items-start" do |form| %>
     <%= hidden_field_tag :client_id, params[:client_id] %>
     <%= hidden_field_tag :lead_id, params[:lead_id] %>
     <%= form.hidden_field :perfectbook_trip_id %>
     <%= form.hidden_field :perfectbook_departure_id %>
-    <%= form.hidden_field :trip_name if @quote.perfectbook_trip_id.present? %>
+    <%= form.hidden_field :shopify_product_id %>
+    <%= form.hidden_field :trip_name if @quote.catalog_choice.present? %>
+    <%= hidden_field_tag :storefront, "1" if params[:storefront] == "1" %>
     <%= form.hidden_field :departure_label %>
     <%= hidden_field_tag :included_edited, params[:included_edited] == "1" ? "1" : "0", data: { quote_builder_target: "inclusionsEdited" } %>
+    <%= hidden_field_tag :itinerary_edited, params[:itinerary_edited] == "1" ? "1" : "0", data: { quote_builder_target: "itineraryEdited" } %>
+    <% if @quote.catalog_snapshot.present? %>
+      <%= hidden_field_tag :catalog_source_token, Rails.application.message_verifier(:quote_catalog).generate(@quote.catalog_snapshot, purpose: :quote_catalog) %>
+    <% end %>
 
     <div class="space-y-6">
       <section class="card card-pad" aria-labelledby="lines-heading">
@@ -80,6 +90,7 @@
         </div>
         <%= card_caption "Trip and departure lines snapshot the catalog; custom lines cover permits, single supplements, and extra nights." %>
         <% unless @prefilled_unit.nil? %><p class="hint">Prefilled from your last quote. Edit the price as needed.</p><% end %>
+        <%= render "catalog_source", quote: @quote %>
         <p class="hint">Enter prices and deposits without commas, for example 1500.00.</p>
         <div class="space-y-3" data-quote-builder-target="rows">
           <%= form.fields_for :lines do |line_form| %>
@@ -93,6 +104,7 @@
         </template>
       </section>
 
+      <%= render "itinerary_fields", form: form, quote: @quote %>
       <%= render "terms_fields", form: form, quote: @quote %>
       <section class="card card-pad" aria-labelledby="note-heading">
         <div class="card-header">
@@ -103,10 +115,12 @@
         <%= form.text_area :notes, rows: 3, class: "textarea", placeholder: "I held two seats on the May 4 departure for you…" %>
         <%= form.label :included, "What is included", class: "label mt-4" %>
         <%= form.text_area :included, rows: 3, class: "textarea", data: { action: "input->quote-builder#editInclusions" } %>
-        <label class="mt-3 flex items-center gap-2 text-sm">
-          <%= check_box_tag :remember_inclusions, "1", params[:remember_inclusions] == "1" %>
-          Remember these inclusions for this trip
-        </label>
+        <% if @quote.perfectbook_trip_id.present? %>
+          <label class="mt-3 flex items-center gap-2 text-sm">
+            <%= check_box_tag :remember_inclusions, "1", params[:remember_inclusions] == "1" %>
+            Remember these inclusions for this trip
+          </label>
+        <% end %>
       </section>
     </div>
 
@@ -119,7 +133,7 @@
         <dl class="mt-2 space-y-3 text-sm">
           <div class="flex items-center justify-between gap-3">
             <dt class="muted">Guests</dt>
-            <dd><%= form.number_field :party_size, min: 1, class: "input w-24 text-right", data: { party_size: true, action: "input->quote-builder#recalc" } %>
+            <dd><%= form.number_field :party_size, min: 1, class: "input w-24 text-right", data: { party_size: true, action: "input->quote-builder#changePartySize" } %>
               <% @quote.errors.full_messages_for(:party_size).each do |message| %>
                 <p class="mt-1 text-xs text-danger" role="alert"><%= message %></p>
               <% end %>

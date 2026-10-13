@@ -69,6 +69,12 @@
       <% end %>
     </div>
 
+    <% if @quote.itinerary.present? %>
+      <div class="mt-6">
+        <h3 class="label">Day-by-day itinerary</h3>
+        <p class="mt-1 text-sm text-ink-2 whitespace-pre-line break-words"><%= @quote.itinerary %></p>
+      </div>
+    <% end %>
     <% if @quote.included.present? %>
       <div class="mt-6">
         <h3 class="label">What is included</h3>

@@ -7,6 +7,10 @@ Here is your quote <%= @quote.reference %> for <%= @quote.subject_label %><% if 
 <% end %>
 
 Total <%= money_in(@quote.subtotal_minor, @quote.currency) %><% if @quote.party_size %> for <%= pluralize(@quote.party_size, "guest") %><% end %><% if @quote.valid_until %> · valid until <%= date_short(@quote.valid_until) %><% end %>.
+<% if @quote.itinerary.present? %>
+Day-by-day itinerary
+<%= @quote.itinerary %>
+<% end %>
 <% if @quote.included.present? %>
 What is included
 <%= @quote.included %>

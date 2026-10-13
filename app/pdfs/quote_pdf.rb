@@ -47,6 +47,12 @@ class QuotePdf
     accept_block(pdf)
     pdf.move_down 18
     footer(pdf)
+    if @quote.terms_bundle.blank? && @quote.itinerary.present?
+      pdf.start_new_page
+      pdf.text "Day-by-day itinerary", size: 16
+      pdf.move_down 8
+      pdf.text @quote.itinerary, size: 10, leading: 3
+    end
     if @quote.terms_bundle.present?
       %w[master_terms pre_payment_disclosure trip_differences itinerary].each do |name|
         pdf.start_new_page
@@ -69,6 +75,10 @@ class QuotePdf
   def title_block(pdf)
     pdf.text "Quote #{@quote.reference}", size: 24
     pdf.move_down 4
+    if @quote.draft?
+      pdf.text "Draft for review - not yet sent.", size: 10
+      pdf.move_down 4
+    end
     pdf.fill_color MUTED
     pdf.text "Prepared for #{@quote.owner_name}", size: 11
     pdf.move_down 2
@@ -127,6 +137,9 @@ class QuotePdf
   end
 
   def accept_block(pdf)
+    if @quote.draft?
+      return
+    end
     if @quote.terms_bundle.present?
       pdf.text "Booking terms #{@quote.terms_bundle.fetch('terms_version')}", size: 10
       pdf.text "You cancel 45 days or fewer before departure: Cancellation charge: 100% of the total trip price. No refund.", size: 10
