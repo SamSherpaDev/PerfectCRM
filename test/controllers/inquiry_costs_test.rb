@@ -49,6 +49,45 @@ class InquiryCostsTest < ActionDispatch::IntegrationTest
     assert_select "section[aria-label='Ads by day'] p", text: /No paid ad data/
   end
 
+  [ "missing", "ambiguous" ].each do |campaign_state|
+    test "multi-day report preserves ads with #{campaign_state} campaigns as unknown" do
+      sign_in
+      AdSpend::SOURCES.each do |source|
+        if campaign_state == "ambiguous"
+          [ "123", "999" ].each do |id|
+            DailyAdSpend.record!(spent_on: Date.new(2026, 10, 13), source: source,
+              campaign_id: id, campaign_name: "Shared name", currency: "USD", amount_minor: 1000)
+          end
+        end
+        Lead.create!(name: "Synthetic unresolved campaign", source: source, capture_channel: "website_form",
+          received_at: Time.zone.local(2026, 10, 13, 10),
+          campaign_name: campaign_state == "ambiguous" ? "Shared name" : nil,
+          metadata: { "attribution" => { "ad_id" => "456" } })
+      end
+
+      get inquiry_costs_path
+      assert_response :success
+      campaigns = css_select("section[aria-label='Campaigns by day'] tbody tr")
+      assert_select "section[aria-label='Ads by day'] tbody tr", count: 14 do |rows|
+        rows.each do |row|
+          cells = row.css("td").map { |cell| cell.text.strip }
+          assert_equal "Unknown", cells[2]
+          assert_equal "Ad 456", cells[3]
+          assert_equal "Unknown", cells[4]
+          assert_equal "Unknown", cells[6]
+          assert_equal row.at_css("time")["datetime"] == "2026-10-13" ? "1" : "0", cells[5]
+          day = row.at_css("time")["datetime"]
+          parent = campaigns.find do |campaign|
+            campaign.at_css("time")["datetime"] == day &&
+              campaign.css("td")[1].text.strip == cells[1] && campaign.css("td")[2].text.strip == "Unknown"
+          end
+          assert parent, "Missing unresolved campaign parent for #{cells[1]} on #{day}"
+          assert_equal "Unknown", parent.css("td")[3].text.strip
+        end
+      end
+    end
+  end
+
   test "invalid date and shape returns a helpful bounded report" do
     sign_in
     [ { start_date: "2026-09-01", end_date: "2026-10-13" }, { start_date: "2026-10-14" },

@@ -114,7 +114,10 @@ module InquiryCosts
       ad_keys = ads.keys.map { |_, source, key, ad_id| [ source, key, ad_id ] }.select { |_, _, id| id }.uniq
       (start_date..end_date).each do |day|
         campaign_keys.each { |source, key| campaigns[[ day, source, key ]] ||= new_row(day, source, key) }
-        ad_keys.each { |source, key, id| ads[[ day, source, key, id ]] ||= new_row(day, source, key, nil, id) }
+        ad_keys.each do |source, key, id|
+          campaigns[[ day, source, key ]] ||= new_row(day, source, key)
+          ads[[ day, source, key, id ]] ||= new_row(day, source, key, nil, id)
+        end
       end
 
       currencies = spends.group_by { |spend| [ spend.source, "id:#{spend.campaign_id}", spend.ad_id.presence ] }
