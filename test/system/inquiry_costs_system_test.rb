@@ -56,7 +56,7 @@ class InquiryCostsSystemTest < ApplicationSystemTestCase
     evidence("exact-costs-phone")
     assert page.evaluate_script("document.documentElement.scrollWidth <= window.innerWidth"), "Page overflows phone viewport"
     page.driver.browser.manage.window.resize_to(1400, 900)
-    [false, true].each do |ambiguous|
+    [ false, true ].each do |ambiguous|
       DailyAdSpend.delete_all
       Lead.delete_all
       AdSpend::SOURCES.each do |source|
@@ -102,11 +102,11 @@ class InquiryCostsSystemTest < ApplicationSystemTestCase
       transcript << "HTTP #{response.code}: #{response.body}"
       response
     end
-    assert_equal "401", send_rows.call([row], "wrong").code
-    assert_equal "201", send_rows.call([row, row.merge(ad_id: "live-456", amount_minor: 2000)], ENV["CHANNEL_CHECKS_TOKEN"]).code
-    assert_equal "201", send_rows.call([row.merge(ad_id: "live-456", amount_minor: 1500)], ENV["CHANNEL_CHECKS_TOKEN"]).code
+    assert_equal "401", send_rows.call([ row ], "wrong").code
+    assert_equal "201", send_rows.call([ row, row.merge(ad_id: "live-456", amount_minor: 2000) ], ENV["CHANNEL_CHECKS_TOKEN"]).code
+    assert_equal "201", send_rows.call([ row.merge(ad_id: "live-456", amount_minor: 1500) ], ENV["CHANNEL_CHECKS_TOKEN"]).code
     assert_equal 1500, DailyAdSpend.find_by!(ad_id: "live-456").amount_minor
-    assert_equal "422", send_rows.call([row.merge(amount_minor: 9000), row.merge(ad_id: "bad", amount_minor: -1)], ENV["CHANNEL_CHECKS_TOKEN"]).code
+    assert_equal "422", send_rows.call([ row.merge(amount_minor: 9000), row.merge(ad_id: "bad", amount_minor: -1) ], ENV["CHANNEL_CHECKS_TOKEN"]).code
     assert_equal 3000, DailyAdSpend.find_by!(campaign_id: "live-123", ad_id: "").amount_minor
     if ENV["INQUIRY_EVIDENCE_DIR"]
       File.write(File.join(ENV.fetch("INQUIRY_EVIDENCE_DIR"), "spend-api.txt"), transcript.join("\n"))
@@ -114,5 +114,4 @@ class InquiryCostsSystemTest < ApplicationSystemTestCase
   ensure
     ENV["CHANNEL_CHECKS_TOKEN"] = old_token
   end
-
 end
