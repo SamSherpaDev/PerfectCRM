@@ -30,7 +30,7 @@ class QuoteCatalog
   def snapshot(trip:, departure: nil)
     return nil unless trip
 
-    result = { "trip_id" => trip.perfectbook_id, "departure_id" => departure&.perfectbook_id,
+    result = { "trip_name" => trip.name, "trip_id" => trip.perfectbook_id, "departure_id" => departure&.perfectbook_id,
       "shopify_product_id" => trip.shopify_product_id.to_s.split("/").last.presence }
     if trip.shopify_product_id.present?
       product_id = trip.shopify_product_id.to_s.split("/").last

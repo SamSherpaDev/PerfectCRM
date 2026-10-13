@@ -4,7 +4,7 @@ require "net/http"
 class QuoteCatalogTest < ActiveSupport::TestCase
   setup do
     Rails.cache.delete("quote-catalog/product-handles")
-    @trip = PerfectBook::Trip.new(perfectbook_id: 42, shopify_product_id: "gid://shopify/Product/123")
+    @trip = PerfectBook::Trip.new(name: "Example trip", perfectbook_id: 42, shopify_product_id: "gid://shopify/Product/123")
     @html = <<~HTML
       <script type="application/ld+json">
         {"@graph":[{"@type":"TouristTrip","offers":[
@@ -27,6 +27,7 @@ class QuoteCatalogTest < ActiveSupport::TestCase
   test "published full-trip offers exclude deposits and foreign currencies and retain day ranges" do
     requests = []
     source = with_storefront(requests) { QuoteCatalog.snapshot(trip: @trip) }
+    assert_equal "Example trip", source["trip_name"]
     assert_equal 397_500, source["price_minor"]
     assert_equal true, source["price_from"]
     assert_equal "Days 1 to 3 | Kathmandu\n\nMeet your guide.\n\nDay 4 | Walk to the lodge.", source["itinerary"]

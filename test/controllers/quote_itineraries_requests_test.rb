@@ -10,7 +10,7 @@ class QuoteItinerariesRequestsTest < ActionDispatch::IntegrationTest
     sign_in
     @lead = Lead.create!(name: "Synthetic traveler", email: "traveler@example.test", party_size: 3, trip_title: "Example trek")
     @trip = PerfectBook::Trip.create!(perfectbook_id: 42, name: "Example trek", active: true, shopify_product_id: "123", synced_at: Time.current)
-    @source = { "trip_id" => 42, "shopify_product_id" => "123", "departure_id" => nil, "price_minor" => 397_500, "price_from" => true,
+    @source = { "trip_name" => "Example trek", "trip_id" => 42, "shopify_product_id" => "123", "departure_id" => nil, "price_minor" => 397_500, "price_from" => true,
       "price_source" => "SherpaHolidays storefront", "url" => "https://www.sherpaholidays.com/products/example",
       "checked_at" => Time.current.iso8601, "included" => "Guide and lodges. Flights excluded.",
       "itinerary" => "Day 1 | Kathmandu\nMeet your guide.\n\nDay 2 | Walk to the lodge." }
@@ -76,7 +76,7 @@ class QuoteItinerariesRequestsTest < ActionDispatch::IntegrationTest
   test "published trips without a PerfectBook mirror can be selected saved and edited with flexible dates" do
     products = [ { "id" => 123, "handle" => "example", "title" => "Example trek" },
       { "id" => 789, "handle" => "private", "title" => "Private journey" } ]
-    source = @source.merge("trip_id" => nil, "shopify_product_id" => "789")
+    source = @source.merge("trip_name" => "Private journey", "trip_id" => nil, "shopify_product_id" => "789")
     QuoteCatalog.stub(:products, products) do
       QuoteCatalog.stub(:snapshot, source) do
         get new_quote_path(lead_id: @lead.id, storefront: "1", trip_id: "shopify:789")
@@ -227,6 +227,99 @@ class QuoteItinerariesRequestsTest < ActionDispatch::IntegrationTest
     assert_not_includes response.body, "Published trip price"
     assert_not_includes response.body, "From $3,975.00 per person"
     assert_includes response.body, "$11,965.00"
+  end
+
+  test "explicit reload clears absent source fields across storefront mirror and custom selections" do
+    other_trip = PerfectBook::Trip.create!(perfectbook_id: 99, name: "Other trek", active: true, synced_at: Time.current)
+    storefront_trip = PerfectBook::Trip.create!(perfectbook_id: 100, name: "Request-only trek", active: true,
+      shopify_product_id: "789", synced_at: Time.current)
+    [ [ storefront_trip, @source.except("price_minor") ], [ other_trip, { "price_minor" => 210_000 } ],
+      [ other_trip, nil ] ].each do |selected_trip, replacement|
+      quote = sourced_quote
+      quote.update!(included: "Previous trip inclusions", deposit_minor: 0)
+      quote.lines.create!(kind: "departure", description: "Previous departure", quantity: 1, unit_minor: 123_000)
+      source = replacement&.merge("trip_id" => selected_trip.perfectbook_id, "shopify_product_id" => selected_trip.shopify_product_id)
+      QuoteCatalog.stub(:snapshot, source) do
+        patch quote_path(quote), params: { load_trip_source: "1", quote: { perfectbook_trip_id: selected_trip.perfectbook_id } }
+      end
+      assert_redirected_to edit_quote_path(quote)
+      quote.reload
+      source ? assert_equal(source, quote.catalog_snapshot) : assert_nil(quote.catalog_snapshot)
+      assert_equal source.to_h["included"].to_s, quote.included.to_s
+      assert_equal source.to_h["itinerary"].to_s, quote.itinerary.to_s
+      quote.lines.where(kind: "trip").each { |line| assert_equal source.to_h["price_minor"].to_i, line.unit_minor }
+      assert_equal 2, quote.lines.where(kind: "trip").count
+      assert_equal 4_000, quote.lines.find_by!(kind: "custom").unit_minor
+      assert_equal "Owner note", quote.notes
+    end
+    quote = sourced_quote
+    quote.update!(deposit_minor: 0)
+    patch quote_path(quote), params: { load_trip_source: "1", quote: { perfectbook_trip_id: "" } }
+    assert_redirected_to edit_quote_path(quote)
+    assert_nil quote.reload.catalog_snapshot
+    assert_nil quote.itinerary
+    assert_nil quote.included
+    assert_equal 0, quote.lines.find_by!(description: "Example trek").unit_minor
+    assert_equal 4_000, quote.lines.find_by!(description: "Extra night").unit_minor
+    assert_equal "Owner note", quote.notes
+  end
+
+  test "edit and send uses the saved storefront selection during outage or product removal" do
+    [ -> { raise QuoteCatalog::Unavailable, "Storefront unavailable" }, -> { [] } ].each do |products|
+      quote = sourced_quote
+      source = @source.merge("trip_id" => nil)
+      quote.update!(perfectbook_trip_id: nil, shopify_product_id: "123", catalog_snapshot: source)
+      QuoteCatalog.stub(:products, [ { "id" => 123, "handle" => "example", "title" => "Example trek" } ]) do
+        get edit_quote_path(quote)
+      end
+      assert_response :success
+      token = css_select("input[name='catalog_source_token']").first["value"]
+      QuoteCatalog.stub(:products, products) do
+        QuoteCatalog.stub(:snapshot, ->(**) { flunk "Sending must not reload the source" }) do
+          assert_enqueued_emails(1) do
+            patch quote_path(quote), params: { send_now: "1", catalog_source_token: token,
+              quote: { perfectbook_trip_id: "shopify:123", notes: "Reviewed personal note" } }
+          end
+        end
+      end
+      assert_redirected_to quote_path(quote)
+      assert_equal "sent", quote.reload.status
+      assert_equal source, quote.terms_bundle["catalog_snapshot"]
+      assert_equal "Reviewed personal note", quote.notes
+    end
+  end
+
+  test "new form save and send uses signed storefront details during outage or product removal" do
+    [ -> { raise QuoteCatalog::Unavailable, "Storefront unavailable" }, -> { [] } ].each do |products|
+      source = @source.merge("trip_id" => nil)
+      QuoteCatalog.stub(:products, [ { "id" => 123, "handle" => "example", "title" => "Example trek" } ]) do
+        QuoteCatalog.stub(:snapshot, source) do
+          get new_quote_path(lead_id: @lead.id, storefront: "1", trip_id: "shopify:123")
+        end
+      end
+      assert_response :success
+      token = css_select("input[name='catalog_source_token']").first["value"]
+      trip_name = css_select("input[name='quote[trip_name]']").first["value"]
+      template = sourced_quote
+      attributes = template.attributes.slice("party_size", "valid_until", "departure_start_on", "departure_end_on",
+        "journey_kind", "local_operator", "trip_differences", "disclosure_details", "balance_due_on", "included")
+      attributes.merge!("perfectbook_trip_id" => "", "shopify_product_id" => "123", "trip_name" => trip_name,
+        "itinerary" => "Owner-reviewed itinerary", "deposit_dollars" => "12600.00",
+        "lines_attributes" => { "0" => { "kind" => "trip", "description" => trip_name, "quantity" => 3, "unit_dollars" => "4200" } })
+      QuoteCatalog.stub(:products, products) do
+        QuoteCatalog.stub(:snapshot, ->(**) { flunk "Sending must not reload the source" }) do
+          assert_enqueued_emails(1) do
+            post quotes_path, params: { lead_id: @lead.id, send_now: "1", catalog_source_token: token, quote: attributes }
+          end
+        end
+      end
+      quote = Quote.order(:id).last
+      assert_redirected_to quote_path(quote)
+      assert_equal "sent", quote.status
+      assert_equal source, quote.terms_bundle["catalog_snapshot"]
+      assert_equal "Owner-reviewed itinerary", quote.itinerary
+      assert_equal 420_000, quote.lines.first.unit_minor
+    end
   end
 
   private

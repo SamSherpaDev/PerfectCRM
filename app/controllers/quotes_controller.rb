@@ -77,7 +77,7 @@ class QuotesController < ApplicationController
     return redirect_to quotes_path, alert: "Pick a client or lead first." unless @owner
 
     @quote = Quote.new(quote_params.merge(owner_params))
-    if apply_catalog_snapshot && restore_catalog_source && @quote.save
+    if restore_catalog_source && apply_catalog_snapshot && @quote.save
       remember_inclusions
       if params[:send_now].present?
         send_saved_quote
@@ -101,7 +101,7 @@ class QuotesController < ApplicationController
       candidate = @quote.dup
       candidate.assign_attributes(quote_params.except(:lines_attributes))
       begin
-        trip, departure = selected_catalog_records(candidate)
+        trip, departure = selected_catalog_records(candidate, live: true)
         @reloaded_trip_source = QuoteCatalog.snapshot(trip: trip, departure: departure)
       rescue QuoteCatalog::Unavailable => error
         @catalog_warning = error.message
@@ -182,11 +182,19 @@ class QuotesController < ApplicationController
     @catalog_warning = error.message
   end
 
-  def selected_catalog_records(quote = @quote)
+  def selected_catalog_records(quote = @quote, live: false)
     trip = if quote.perfectbook_trip_id.present?
       PerfectBook::Trip.find_by(perfectbook_id: quote.perfectbook_trip_id)
     elsif quote.shopify_product_id.present?
-      QuoteCatalog.storefront_trip(product_id: quote.shopify_product_id)
+      source = quote.catalog_snapshot
+      unchanged = quote.persisted? && !quote.shopify_product_id_changed? && !quote.perfectbook_trip_id_changed? && !quote.perfectbook_departure_id_changed?
+      sourced = source.present? && source["trip_id"] == quote.perfectbook_trip_id && source["departure_id"] == quote.perfectbook_departure_id && source["shopify_product_id"] == quote.shopify_product_id
+      if !live && (unchanged || (!quote.persisted? && sourced))
+        PerfectBook::Trip.new(name: source&.fetch("trip_name", nil).presence || quote.trip_name,
+          shopify_product_id: quote.shopify_product_id, active: true)
+      else
+        QuoteCatalog.storefront_trip(product_id: quote.shopify_product_id)
+      end
     end
     departure = PerfectBook::Departure.find_by(perfectbook_id: quote.perfectbook_departure_id)
     departure = nil unless departure&.perfectbook_trip_id == trip&.perfectbook_id
@@ -198,27 +206,28 @@ class QuotesController < ApplicationController
       @quote.errors.add(:base, @catalog_warning)
       return false
     end
-    trip, departure = selected_catalog_records
+    trip, departure = selected_catalog_records(live: true)
     @quote.catalog_snapshot = replace ? @reloaded_trip_source : QuoteCatalog.snapshot(trip: trip, departure: departure)
     source = @quote.catalog_snapshot
-    return true unless source && prefill
+    return true unless prefill && (source || replace)
+    source ||= {}
 
-    if replace && @quote.lines.none? { |line| !line.marked_for_destruction? && %w[trip departure].include?(line.kind) }
+    if replace && trip && @quote.lines.none? { |line| !line.marked_for_destruction? && %w[trip departure].include?(line.kind) }
       @quote.lines.build(kind: departure ? "departure" : "trip", description: trip.name,
         quantity: @quote.party_size.presence || 2, price_edited: "0")
     end
 
-    if source["included"].present? && (replace || params[:included_edited] != "1")
+    if replace || (source["included"].present? && params[:included_edited] != "1")
       @quote.included = source["included"]
     end
-    if source["itinerary"].present? && (replace || params[:itinerary_edited] != "1")
+    if replace || (source["itinerary"].present? && params[:itinerary_edited] != "1")
       @quote.itinerary = source["itinerary"]
     end
-    if source["price_minor"].present?
+    if replace || source["price_minor"].present?
       @quote.lines.each do |line|
         next unless !line.marked_for_destruction? && %w[trip departure].include?(line.kind) && (replace || line.price_edited == "0")
 
-        line.unit_minor = source["price_minor"]
+        line.unit_minor = source["price_minor"].to_i
         line.price_edited = "0"
       end
       @prefilled_unit = nil
@@ -242,15 +251,16 @@ class QuotesController < ApplicationController
       @quote.errors.add(:base, "Trip source could not be verified. Load trip details again.")
       return false
     end
-    trip, = selected_catalog_records
-    product_id = trip&.shopify_product_id.to_s.split("/").last.presence
+    product_id = if @quote.perfectbook_trip_id.present?
+      PerfectBook::Trip.find_by(perfectbook_id: @quote.perfectbook_trip_id)&.shopify_product_id
+    else
+      @quote.shopify_product_id
+    end
+    product_id = product_id.to_s.split("/").last.presence
     if source["trip_id"] == @quote.perfectbook_trip_id && source["departure_id"] == @quote.perfectbook_departure_id && source["shopify_product_id"] == product_id
       @quote.catalog_snapshot = source
     end
     true
-  rescue QuoteCatalog::Unavailable => error
-    @quote.errors.add(:base, error.message)
-    false
   end
 
   def set_quote

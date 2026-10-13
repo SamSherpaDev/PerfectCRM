@@ -363,8 +363,7 @@ and links to the revision only once it has been sent. Accepted quotes
 cannot be revised. Draft PDFs are available for review. Published details are
 stored as a source snapshot on each quote; the builder signs it for form
 submission. Snapshots are retained through revisions and frozen with the
-delivered booking documents. If published details change or cannot
-be checked, sending keeps the quote as a draft. **Load current trip details** in
+delivered booking documents. **Load current trip details** in
 the draft editor replaces the itinerary, inclusions and trip price for another
 review, preserving personal notes and custom adjustment lines. Nothing sends
 until the captain explicitly chooses **Send quote**; website intake, automatic
