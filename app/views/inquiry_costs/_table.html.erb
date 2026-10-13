@@ -1,0 +1,28 @@
+<%# locals: (title:, caption:, rows:, level:) %>
+<section class="card mb-6" aria-label="<%= title %>">
+  <div class="card-header"><h2 class="card-title"><%= title %></h2></div>
+  <%= card_caption caption %>
+  <% if rows.empty? %>
+    <p class="px-6 pb-6 text-sm muted">No <%= level == :ad ? "paid ad" : "paid campaign" %> data for these days.</p>
+  <% else %>
+    <div class="table-wrap inquiry-cost-table" role="region" aria-label="<%= title %> details" tabindex="0">
+      <table class="table table-compact">
+        <thead><tr><th scope="col">Day</th><th scope="col">Source</th><% unless level == :day %><th scope="col">Campaign</th><% end %><% if level == :ad %><th scope="col">Ad</th><% end %><th scope="col" class="num">Spend</th><th scope="col" class="num">Genuine inquiries</th><th scope="col" class="num">Cost per inquiry</th><th scope="col" class="num">Spam excluded</th></tr></thead>
+        <tbody>
+          <% rows.each do |row| %>
+            <tr>
+              <td class="whitespace-nowrap"><time datetime="<%= row.day.iso8601 %>"><%= row.day.strftime('%b %-d, %Y') %></time></td>
+              <td class="whitespace-nowrap"><%= row.source_label %></td>
+              <% unless level == :day %><td class="inquiry-cost-name"><%= row.campaign.presence || (row.campaign_key&.start_with?("id:") ? "Campaign #{row.campaign_key.delete_prefix('id:')}" : "Unknown") %><% if row.campaign_key&.start_with?("id:") %><span class="hint block">ID <%= row.campaign_key.delete_prefix("id:") %></span><% end %></td><% end %>
+              <% if level == :ad %><td class="inquiry-cost-name"><%= row.ad.presence || (row.ad_id ? "Ad #{row.ad_id}" : "Unknown") %><% if row.ad.present? %><span class="hint block">ID <%= row.ad_id %></span><% end %></td><% end %>
+              <td class="num"><%= inquiry_cost_money(row.spend) %></td>
+              <td class="num"><%= inquiry_cost_count(row) %></td>
+              <td class="num"><%= inquiry_cost_money(row.cost_per_inquiry) %></td>
+              <td class="num"><%= number_with_delimiter(row.excluded) %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% end %>
+</section>

@@ -11,5 +11,5 @@ Rails.application.config.filter_parameters += [
   # Microsoft callbacks, and an unredeemed one must not sit in the logs.
   /\Acode\z/,
   # Hide channel check payloads, including campaign names in weekly spend.
-  :snapshot, /\Aspend\z/
+  :snapshot, /\Aspends?\z/
 ]

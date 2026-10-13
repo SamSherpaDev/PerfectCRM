@@ -1034,6 +1034,12 @@ in [Today and follow-ups](#today-and-follow-ups); combining them is pending.
 
 ## Weekly ads report
 
+For a daily website-only spend comparison, open **Channels > Cost per inquiry**.
+It shows daily source, campaign, and ad aggregates, excludes marked suspected
+spam, and leaves missing spend or attribution unknown. Exact daily campaign
+totals and optional ad breakdowns use the existing token-authenticated daily
+spend API; see [the request and report rules](docs/channel-checks.md#daily-spend-request).
+
 Every Monday at 7am Pacific (schedule in
 [`config/recurring.yml`](config/recurring.yml)) the captain gets last
 week's numbers that decide the ads: inquiries, qualified leads, quotes, and

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_09_083137) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_13_202634) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -224,6 +224,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_09_083137) do
   end
 
   create_table "daily_ad_spends", force: :cascade do |t|
+    t.string "ad_id", default: "", null: false
+    t.string "ad_name"
     t.integer "amount_minor", null: false
     t.string "campaign_id", null: false
     t.string "campaign_name", null: false
@@ -232,7 +234,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_09_083137) do
     t.string "source", null: false
     t.date "spent_on", null: false
     t.datetime "updated_at", null: false
-    t.index ["spent_on", "source", "campaign_id", "currency"], name: "index_daily_ad_spends_identity", unique: true
+    t.index ["spent_on", "source", "campaign_id", "ad_id", "currency"], name: "index_daily_ad_spends_identity", unique: true
   end
 
   create_table "demo_records", force: :cascade do |t|

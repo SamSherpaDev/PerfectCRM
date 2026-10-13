@@ -182,18 +182,83 @@ conversion-link repair are described in [source reporting](source-reporting.md).
 {"spends":[{"spent_on":"2026-10-01","source":"google_ads","campaign_id":"123456","campaign_name":"EBC","currency":"USD","amount_minor":1800}]}
 ```
 
-One to 100 rows, max 64 KiB; only these six keys. Date is an exact Pacific
+One to 100 rows, max 64 KiB; these six required keys, plus optional `ad_id`
+and `ad_name` for an ad breakdown. Date is an exact `YYYY-MM-DD` Pacific
 calendar day in the last two years, strictly before today. Source is
 `google_ads` or `meta_ads`; campaign ID/name max 160 characters; currency is a
 three-letter uppercase code; amount is a nonnegative integer in minor units.
 Every campaign/day includes explicit zero rows when genuinely zero. Stable
-campaign ID, not name, is identity. Upsert replaces the same date/source/ID/
-currency amount atomically; renamed campaigns do not split paid history.
+campaign ID, not name, is identity. Upsert replaces the same date/source/
+campaign ID/ad ID/currency amount atomically; renamed campaigns and ads do not
+split history. Omit both ad fields for a campaign total. For ad rows, `ad_id`
+must be a nonblank string up to 200 characters; `ad_name` is optional, at most
+200 characters, and requires `ad_id`. A campaign total and its ad rows are
+independent amounts, never added together. Post the total even when also posting
+ad detail; the report cannot assume that the supplied ads cover a whole campaign.
 Returns `201 {"entries":N}`; malformed data is rejected atomically.
 
-Monthly costs require every day through the report cutoff in each supplied
+For example, post a campaign total and one ad's part of that total:
+
+```json
+{
+  "spends": [
+    {"spent_on":"2026-10-13","source":"meta_ads","campaign_id":"123456","campaign_name":"Nepal trips","currency":"USD","amount_minor":1800},
+    {"spent_on":"2026-10-13","source":"meta_ads","campaign_id":"123456","campaign_name":"Nepal trips","ad_id":"789012","ad_name":"Everest video","currency":"USD","amount_minor":1200}
+  ]
+}
+```
+
+Monthly costs use campaign totals only and require every day through the report cutoff in each supplied
 campaign currency. Missing days stay unavailable. No weekly proration, FX,
 budget-as-spend or summing daily totals on top of weekly entries. Weekly reports
 continue to use the existing weekly spend contract. The external channel check
 must be updated separately to post exact daily rows; CRM does not fetch ad
 platform spend or acquire tokens itself.
+
+## Cost per inquiry page
+
+Open **Channels > Cost per inquiry** (`/channels/cost-per-inquiry`). Signed-in
+access uses the same rules as Channels. The default is the last seven complete
+Pacific days; the date selector accepts up to 31 complete days within the last
+two years. The page shows only aggregate counts and campaign/ad labels and IDs.
+It never renders contact names, emails, phones, messages, inquiry references,
+click IDs, or raw metadata. No live ad API or production write is part of the page.
+
+Website inquiries are `capture_channel=website_form`, plus legacy records with
+no capture channel and either the `website_form:` external reference prefix or
+the `website_form` source. Paid leads without website evidence do not count.
+The received timestamp (creation timestamp only when missing) selects the
+Pacific day, including daylight saving changes. Each Lead counts once; copies
+on Clients are not counted. Lost, archived, and converted inquiries remain in
+history. Test leads and leads linked to test clients are omitted. The existing
+`suspected_spam` tag excludes suspected spam from genuine counts and shows it
+separately. A weak fit, lost status, or spam score alone is not a spam marking.
+Here, genuine means not marked suspected spam, not independently verified.
+
+Attribution uses the eligible, permission-allowed `last_non_direct_touch`
+snapshot in `metadata.acquisition`; source, campaign, and ad come from that
+same snapshot. Missing or denied snapshots stay unknown, never borrow first
+touch or self-reported discovery. Legacy website records use their stored paid
+source and `metadata.attribution`, with `campaign_name` as a fallback name.
+Stable `campaign_id` is preferred. A name matches posted spend only if it
+identifies exactly one campaign ID for that source in the selected period.
+Ambiguous names stay in the unknown campaign bucket. Only an explicit `ad_id`
+identifies an ad within its campaign; `utm_content`, click IDs, and creative
+names alone are not treated as ad IDs. Other identifiable website sources are
+shown together; missing source has its own bucket.
+
+Daily source spend sums campaign totals only. A campaign or ad seen in the
+selected period needs an exact spend row for each selected day and each supplied
+currency, including zero-spend days. Missing spend stays **Unknown**; ad-only
+rows never replace missing campaign totals. No weekly proration or currency
+conversion. Amounts are minor units with two decimals, as in the existing spend
+contract. Cost per inquiry divides exact spend by genuine inquiries and is
+unknown with zero inquiries. Unknown-source inquiries make paid-source counts
+uncertain; unknown-campaign inquiries make that source's known campaign counts
+uncertain; missing ad IDs make that campaign's known ad counts uncertain. Those
+rows show **Unknown**, matched counts, and unassigned counts, and withhold the
+ratio. Unassigned counts overlap across potentially affected rows and must not
+be added. The website summary is the exact genuine total.
+
+This compares spend and inquiries received on the same day. It is not a click
+cohort or a platform conversion count; earlier visits can produce later inquiries.

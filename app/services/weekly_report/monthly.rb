@@ -310,7 +310,7 @@ module WeeklyReport
         end
       end
       if view == "paid"
-        spends = DailyAdSpend.where(spent_on: month..end_date).order(:spent_on, :id).to_a
+        spends = DailyAdSpend.campaign_totals.where(spent_on: month..end_date).order(:spent_on, :id).to_a
         # Identity is stable campaign ID, not a mutable name. Collapse labels.
         grouped = index.values.group_by { |row| [ row.source, row.campaign_id || "name:#{row.campaign}" ] }
         index = grouped.transform_values { |list| merge_rows(list) }
