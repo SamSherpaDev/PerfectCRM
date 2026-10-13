@@ -30,8 +30,8 @@ deposit quote crossing into the 90-day full-payment window needs a fresh quote
 before acceptance; the delivered documents are not silently revised.
 
 `terms_bundle` freezes the delivered master (only its operator placeholder is
-filled), completed disclosure, itinerary, differences, versions and quote
-reference. The disclosure is projected from the released form: booking fields
+filled), completed disclosure, itinerary, catalog source snapshot, differences,
+versions and quote reference. The disclosure is projected from the released form: booking fields
 are populated, the unselected fund branch is removed, and paper receipt blanks
 are replaced by electronic quote-acceptance information. The separate activity
 release is not falsely described as attached to this quote bundle. SHA-256 is over the

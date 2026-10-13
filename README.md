@@ -342,7 +342,9 @@ USD offers. Deposit variants are excluded. Builder storefront pricing hints are 
 departure supplies an exact price instead. Product identifiers and handles are
 cached for five minutes; itinerary, inclusions and offers are fetched at selection
 and saved with the draft. Sending uses the owner-reviewed draft without requiring
-the storefront to be available or unchanged. If neither source has a price, an earlier quote
+the storefront to be available or unchanged. The editor retains a saved storefront
+selection even if its product disappears or gains a PerfectBook mirror.
+If neither source has a price, an earlier quote
 may prefill it, explicitly labeled as an earlier quote (`Quote.last_unit_for_trip`),
 or the captain enters a verified price. In the new
 builder, changing the trip or departure preserves entered lines, edited
@@ -362,10 +364,13 @@ Drafts are private: the old public page says a newer quote is on its way,
 and links to the revision only once it has been sent. Accepted quotes
 cannot be revised. Draft PDFs are available for review. Published details are
 stored as a source snapshot on each quote; the builder signs it for form
-submission. Snapshots are retained through revisions and frozen with the
-delivered booking documents. **Load current trip details** in
+submission. Snapshots are retained through revisions; delivered preservation
+follows [quote terms](docs/quote-terms.md#before-sending). **Load current trip details** in
 the draft editor replaces the itinerary, inclusions and trip price for another
-review, preserving personal notes and custom adjustment lines. Nothing sends
+review, preserving personal notes and custom adjustment lines. An absent itinerary
+or inclusions clears that previous field; a missing price resets the trip price
+to zero for the captain to enter. An unavailable source leaves the
+draft unchanged and shows a warning. Nothing sends
 until the captain explicitly chooses **Send quote**; website intake, automatic
 first replies, their kill switch, and reply alerts are unchanged.
 Inclusions are entered per quote; “Remember these
