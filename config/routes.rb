@@ -95,6 +95,7 @@ Rails.application.routes.draw do
   end
   resources :group_sends, only: %i[create show]
   get "channels", to: "channels#index"
+  get "channels/cost-per-inquiry", to: "inquiry_costs#index", as: :inquiry_costs
   get "pipeline", to: "pipeline#show"
   patch "pipeline/move", to: "pipeline#move", as: :pipeline_move
   get "document-nudge/:booking_id", to: "templates#document_nudge", as: :document_nudge

@@ -1,0 +1,40 @@
+<% content_for :title, "Cost per inquiry · PerfectCRM" %>
+<div class="page channels-page inquiry-cost-page">
+  <%= render "shared/page_header", eyebrow: "SherpaHolidays", title: "Cost per inquiry", subtitle: "Daily ad spend alongside genuine website inquiries.", back: ["Channels", channels_path] %>
+
+  <% if @error %><p class="callout-warning mb-5" role="alert"><%= @error %></p><% end %>
+  <%= form_with url: inquiry_costs_path, method: :get, class: "inquiry-cost-filter", data: { turbo: false } do |form| %>
+    <div><%= form.label :start_date, "From", class: "label" %><%= form.date_field :start_date, value: @report.start_date, min: Date.current - 2.years, max: Date.yesterday, class: "input", required: true %></div>
+    <div><%= form.label :end_date, "Through", class: "label" %><%= form.date_field :end_date, value: @report.end_date, min: Date.current - 2.years, max: Date.yesterday, class: "input", required: true %></div>
+    <%= form.submit "View report", class: "btn-secondary" %>
+    <p class="hint">Up to 31 complete days. Pacific time.</p>
+  <% end %>
+
+  <% facts = @report.totals %>
+  <section class="card mb-6" aria-labelledby="inquiry-counts-heading">
+    <div class="card-header"><h2 class="card-title" id="inquiry-counts-heading">Website inquiries</h2></div>
+    <%= card_caption "#{@report.start_date.strftime('%b %-d, %Y')} to #{@report.end_date.strftime('%b %-d, %Y')}, Pacific time. Counts come from PerfectCRM." %>
+    <dl class="inquiry-cost-facts">
+      <div><dt>Genuine inquiries</dt><dd><%= number_with_delimiter(facts[:inquiries]) %></dd></div>
+      <div><dt>Suspected spam excluded</dt><dd><%= number_with_delimiter(facts[:excluded]) %></dd></div>
+      <div><dt>Source unknown</dt><dd><%= number_with_delimiter(facts[:unknown_source]) %></dd></div>
+      <div><dt>Paid inquiries without a campaign</dt><dd><%= number_with_delimiter(facts[:unknown_campaign]) %></dd></div>
+      <div><dt>Paid inquiries without an ad</dt><dd><%= number_with_delimiter(facts[:unknown_ad]) %></dd></div>
+    </dl>
+    <div class="card-foot channel-note"><p>Genuine means not marked suspected spam. Test records and inquiries linked to test clients are left out. Lost, archived, and converted inquiries still count on the day received.</p></div>
+  </section>
+
+  <%= render "table", title: "By day", caption: "Google Ads and Meta ads use campaign totals. Other website sources have no ad spend assigned.", rows: @report.daily_rows, level: :day %>
+  <%= render "table", title: "Campaigns by day", caption: "Campaign IDs keep renamed campaigns together. A name matches spend only when it identifies one campaign.", rows: @report.campaign_rows, level: :campaign %>
+  <%= render "table", title: "Ads by day", caption: "Ads match only recorded ad IDs within their campaign. Ad detail is shown separately from campaign totals.", rows: @report.ad_rows, level: :ad %>
+
+  <section class="card" aria-labelledby="inquiry-cost-rules-heading">
+    <div class="card-header"><h2 class="card-title" id="inquiry-cost-rules-heading">Reading this report</h2></div>
+    <div class="px-6 pb-6 text-sm space-y-3">
+      <p>Spend uses exact daily amounts posted by the channels manager. Weekly spend is never divided into daily amounts. Each campaign and ad shown needs a spend row for each selected day, including an explicit zero when nothing was spent.</p>
+      <p>Unknown means a spend row or attribution is missing. When an inquiry could belong to a shown source, campaign, or ad, its inquiry count and cost remain unknown; the matched and unassigned counts show the gap. With no genuine inquiries, cost per inquiry is also unknown.</p>
+      <p>Attribution uses the last recorded non-direct visit. Older website inquiries use their stored source and campaign data. An ad ID is required for ad attribution; a click ID or creative name alone does not identify an ad.</p>
+      <p>Currencies stay separate. This is a same-day comparison of spend and inquiries, so an inquiry from an earlier ad visit still counts on the day it arrived. No personal details appear in this report.</p>
+    </div>
+  </section>
+</div>

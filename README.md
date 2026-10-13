@@ -97,6 +97,12 @@ Check ingestion and the fixed privacy-safe action text are in
 [the API contract](docs/channel-checks.md); bearer setup is in
 [operations](docs/operations.md#channel-checks).
 
+For a daily website-only spend comparison, open **Channels > Cost per inquiry**.
+It shows daily source, campaign, and ad aggregates, excludes marked suspected
+spam, and leaves missing spend or attribution unknown. Exact daily campaign
+totals and optional ad breakdowns use the existing token-authenticated daily
+spend API; see [the request and report rules](docs/channel-checks.md#daily-spend-request).
+
 ## Templates
 
 Templates are the messages the captain sends over and over (first reply,

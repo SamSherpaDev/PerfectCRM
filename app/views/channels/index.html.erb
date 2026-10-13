@@ -1,6 +1,8 @@
 <% content_for :title, "Channels · PerfectCRM" %>
 <div class="page channels-page">
-  <%= render "shared/page_header", eyebrow: "SherpaHolidays", title: "Channels", subtitle: "Your regular channel checks, with open items first." %>
+  <%= render layout: "shared/page_header", locals: { eyebrow: "SherpaHolidays", title: "Channels", subtitle: "Your regular channel checks, with open items first." } do %>
+    <%= link_to "Cost per inquiry", inquiry_costs_path, class: "btn-secondary" %>
+  <% end %>
 
   <section class="card" aria-labelledby="channel-checks-heading">
     <div class="card-header">

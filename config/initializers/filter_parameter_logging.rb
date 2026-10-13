@@ -10,6 +10,6 @@ Rails.application.config.filter_parameters += [
   # OAuth authorization codes arrive as query parameters on the Google and
   # Microsoft callbacks, and an unredeemed one must not sit in the logs.
   /\Acode\z/,
-  # Hide channel check payloads, including campaign names in weekly spend.
-  :snapshot, /\Aspend\z/
+  # Hide channel check payloads, including campaign and ad names in spend requests.
+  :snapshot, /\Aspends?\z/
 ]
