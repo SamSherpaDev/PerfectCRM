@@ -264,28 +264,40 @@ class QuoteItinerariesRequestsTest < ActionDispatch::IntegrationTest
     assert_equal "Owner note", quote.notes
   end
 
-  test "edit and send uses the saved storefront selection during outage or product removal" do
-    [ -> { raise QuoteCatalog::Unavailable, "Storefront unavailable" }, -> { [] } ].each do |products|
-      quote = sourced_quote
-      source = @source.merge("trip_id" => nil)
-      quote.update!(perfectbook_trip_id: nil, shopify_product_id: "123", catalog_snapshot: source)
-      QuoteCatalog.stub(:products, [ { "id" => 123, "handle" => "example", "title" => "Example trek" } ]) do
-        get edit_quote_path(quote)
-      end
-      assert_response :success
-      token = css_select("input[name='catalog_source_token']").first["value"]
-      QuoteCatalog.stub(:products, products) do
-        QuoteCatalog.stub(:snapshot, ->(**) { flunk "Sending must not reload the source" }) do
-          assert_enqueued_emails(1) do
-            patch quote_path(quote), params: { send_now: "1", catalog_source_token: token,
-              quote: { perfectbook_trip_id: "shopify:123", notes: "Reviewed personal note" } }
+  test "rendered edit selection survives outage removal and mirror exclusion when saving and sending" do
+    available = [ { "id" => 123, "handle" => "example", "title" => "Changed published name" } ]
+    [ -> { raise QuoteCatalog::Unavailable, "Storefront unavailable" }, -> { [] }, -> { available } ].each do |products|
+      [ false, true ].each do |send_now|
+        quote = sourced_quote
+        source = @source.merge("trip_id" => nil)
+        quote.update!(perfectbook_trip_id: nil, shopify_product_id: "123", catalog_snapshot: source)
+        QuoteCatalog.stub(:products, products) do
+          QuoteCatalog.stub(:snapshot, ->(**) { flunk "Editing and sending must not reload the source" }) do
+            get edit_quote_path(quote)
+            assert_response :success
+            assert_select "select[name='quote[perfectbook_trip_id]'] option[value='shopify:123']", count: 1
+            selected = css_select("select[name='quote[perfectbook_trip_id]'] option[selected]").first
+            assert_equal "shopify:123", selected["value"]
+            assert_equal source["trip_name"], selected.text
+            departure = css_select("select[name='quote[perfectbook_departure_id]'] option[selected]").first
+            token = css_select("input[name='catalog_source_token']").first["value"]
+            submission = { catalog_source_token: token, quote: {
+              perfectbook_trip_id: selected["value"], perfectbook_departure_id: departure&.[]("value").to_s,
+              notes: "Reviewed personal note" } }
+            submission[:send_now] = "1" if send_now
+            assert_enqueued_emails(send_now ? 1 : 0) { patch quote_path(quote), params: submission }
           end
         end
+        assert_redirected_to quote_path(quote)
+        assert_equal send_now ? "sent" : "draft", quote.reload.status
+        assert_equal "123", quote.shopify_product_id
+        assert_nil quote.perfectbook_trip_id
+        assert_equal source, quote.catalog_snapshot
+        assert_equal "trip", quote.lines.find_by!(description: "Example trek").kind
+        assert_equal "custom", quote.lines.find_by!(description: "Extra night").kind
+        assert_equal "Reviewed personal note", quote.notes
+        assert_equal source, quote.terms_bundle["catalog_snapshot"] if send_now
       end
-      assert_redirected_to quote_path(quote)
-      assert_equal "sent", quote.reload.status
-      assert_equal source, quote.terms_bundle["catalog_snapshot"]
-      assert_equal "Reviewed personal note", quote.notes
     end
   end
 

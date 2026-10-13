@@ -171,9 +171,14 @@ class QuotesController < ApplicationController
     @trip_choices = @trips.map { |trip| [ trip.name, trip.perfectbook_id ] }
     return unless params[:storefront] == "1" || @quote.shopify_product_id.present?
 
+    if @quote.persisted? && @quote.shopify_product_id.present?
+      name = @quote.catalog_snapshot&.fetch("trip_name", nil).presence || @quote.trip_name
+      @trip_choices << [ name, @quote.catalog_choice ]
+    end
     mirrored_products = @trips.map { |trip| trip.shopify_product_id.to_s.split("/").last }
     QuoteCatalog.products.each do |product|
-      next if mirrored_products.include?(product.fetch("id").to_s)
+      next if mirrored_products.include?(product.fetch("id").to_s) ||
+        @trip_choices.any? { |_, choice| choice == "shopify:#{product.fetch('id')}" }
 
       @trip_choices << [ product.fetch("title"), "shopify:#{product.fetch('id')}" ]
     end
@@ -341,7 +346,7 @@ class QuotesController < ApplicationController
 
   def load_catalog_options
     @trips = PerfectBook::Catalog.new.active_trips.or(PerfectBook::Trip.where(perfectbook_id: @quote.perfectbook_trip_id))
-    @trip = find_catalog_trip(@quote.catalog_choice) if @quote.catalog_choice.present?
+    @trip = find_catalog_trip(@quote.catalog_choice) if action_name == "create" && @quote.catalog_choice.present?
     @departures = if action_name == "create"
       @trip&.perfectbook_id ? PerfectBook::Catalog.new.departures_for_trip(@trip.perfectbook_id).limit(30) : []
     elsif @quote.shopify_product_id.present?
