@@ -52,6 +52,7 @@ class RecipientCorrectionSystemTest < ApplicationSystemTestCase
     fill_in "Subject", with: "Unfinished draft"
     fill_in "message_body", with: "Words to keep"
     click_button "Save draft"
+    assert_selector "#draft-status", text: "Draft saved"
     [ lead_path(lead), inbox_thread_path(original.conversation) ].each do |path|
       visit path
       envelope
@@ -67,7 +68,14 @@ class RecipientCorrectionSystemTest < ApplicationSystemTestCase
     capture("malformed-draft-editable")
     fill_in "To", with: "Alice <alice@example.test>"
     click_button "Send", exact: true
-    assert_text "Sending your reply"
+    # The recipient-context fetch can overwrite the redirect's session flash.
+    # Wait for the repaired reply itself, which persists in the timeline.
+    assert_current_path lead_path(lead)
+    within(".timeline li[id^='message-']", text: "Unfinished draft") do
+      assert_text "to alice@example.test"
+      assert_text "Words to keep"
+      assert_text "Queued"
+    end
     assert_equal count + 1, Message.count
     assert_equal "alice@example.test", Message.order(:id).last.to_addrs
   end
