@@ -1,5 +1,0 @@
-<%# locals: (quote:) %>
-<% if (source = quote.catalog_snapshot).present? && source["price_minor"].present? %>
-  <p>Published trip price: <%= "From " if source["price_from"] %><%= money_in(source["price_minor"], "USD") %> per person. The quote total includes the reviewed arrangements and adjustments for your group.</p>
-  <% if source["price_note"].present? %><p><%= source["price_note"] %></p><% end %>
-<% end %>

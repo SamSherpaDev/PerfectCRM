@@ -41,12 +41,6 @@ class QuotePdf
     lines_table(pdf)
     pdf.move_down 12
     totals(pdf)
-    if (source = @quote.catalog_snapshot).present? && source["price_minor"].present?
-      pdf.move_down 8
-      pdf.text "Published trip price: #{source['price_from'] ? 'From ' : ''}#{money(source['price_minor'])} per person. " \
-        "The quote total includes the reviewed arrangements and adjustments for your group.", size: 9, leading: 3
-      pdf.text source["price_note"], size: 9, leading: 3 if source["price_note"].present?
-    end
     pdf.move_down 14
     notes_block(pdf)
     pdf.move_down 10

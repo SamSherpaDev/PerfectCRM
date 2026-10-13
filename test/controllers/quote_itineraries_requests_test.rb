@@ -142,18 +142,9 @@ class QuoteItinerariesRequestsTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Trip source could not be verified"
   end
 
-  test "sending rechecks published details and requires loading and reviewing changed source" do
+  test "loading current details replaces source fields and preserves personal adjustments" do
     quote = sourced_quote
     new_source = @source.merge("price_minor" => 410_000, "itinerary" => "Day 1 | Updated route", "included" => "Updated inclusions")
-    assert_no_enqueued_emails do
-      QuoteCatalog.stub(:snapshot, new_source) { post send_quote_quote_path(quote) }
-    end
-    assert_response :unprocessable_entity
-    assert_includes response.body, "Trip details or prices have changed"
-    assert_equal "draft", quote.reload.status
-    assert_equal @source, quote.catalog_snapshot
-    assert_equal "Owner note", quote.notes
-
     assert_no_enqueued_emails do
       QuoteCatalog.stub(:snapshot, new_source) do
         patch quote_path(quote), params: { load_trip_source: "1", quote: { notes: "Owner note" } }
@@ -181,30 +172,43 @@ class QuoteItinerariesRequestsTest < ActionDispatch::IntegrationTest
     assert_equal "draft", revision.status
   end
 
-  test "storefront outage preserves a draft and sends no email" do
+  test "sending uses the reviewed draft when storefront details change" do
     quote = sourced_quote
-    unavailable = ->(**) { raise QuoteCatalog::Unavailable, "Storefront unavailable" }
-    assert_no_enqueued_emails do
-      QuoteCatalog.stub(:snapshot, unavailable) { post send_quote_quote_path(quote) }
+    changed = @source.merge("price_minor" => 410_000, "itinerary" => "Changed route")
+    QuoteCatalog.stub(:snapshot, changed) do
+      assert_enqueued_emails(1) { post send_quote_quote_path(quote) }
     end
-    assert_response :unprocessable_entity
-    assert_includes response.body, "Storefront unavailable"
-    assert_equal "draft", quote.reload.status
+    assert_redirected_to quote_path(quote)
+    assert_equal "sent", quote.reload.status
+    assert_equal @source, quote.catalog_snapshot
+    assert_equal @source, quote.terms_bundle["catalog_snapshot"]
+    assert_equal @source["itinerary"], quote.itinerary
   end
 
-  test "a priced mirror departure requires its current snapshot even without a Shopify link" do
+  test "sending needs no storefront access including for trips without a mirror" do
+    quote = sourced_quote
+    quote.update!(perfectbook_trip_id: nil, shopify_product_id: "123")
+    unavailable = ->(*, **) { flunk "Sending must not access the storefront" }
+    QuoteCatalog.stub(:snapshot, unavailable) do
+      QuoteCatalog.stub(:products, unavailable) do
+        assert_enqueued_emails(1) { post send_quote_quote_path(quote) }
+      end
+    end
+    assert_redirected_to quote_path(quote)
+    assert_equal "sent", quote.reload.status
+    assert_equal @source, quote.terms_bundle["catalog_snapshot"]
+  end
+
+  test "a priced mirror departure can send without a current snapshot" do
     @trip.update!(shopify_product_id: nil)
     departure = PerfectBook::Departure.create!(perfectbook_id: 43, perfectbook_trip_id: 42,
       start_date: Date.current + 30, end_date: Date.current + 40, currency: "USD", price_per_person_minor: 410_000, synced_at: Time.current)
     quote = sourced_quote
     quote.update!(catalog_snapshot: nil, perfectbook_departure_id: departure.perfectbook_id)
-    assert_no_enqueued_emails { post send_quote_quote_path(quote) }
-    assert_response :unprocessable_entity
-    assert_equal "draft", quote.reload.status
-    patch quote_path(quote), params: { load_trip_source: "1", quote: { notes: "Owner note" } }
-    assert_redirected_to edit_quote_path(quote)
-    assert_equal false, quote.reload.catalog_snapshot["price_from"]
-    assert_equal 410_000, quote.lines.find_by!(kind: "departure").unit_minor
+    assert_enqueued_emails(1) { post send_quote_quote_path(quote) }
+    assert_redirected_to quote_path(quote)
+    assert_equal "sent", quote.reload.status
+    assert_nil quote.catalog_snapshot
   end
 
   test "delivered itinerary and source cannot be changed and public page shows reviewed content" do
@@ -220,7 +224,9 @@ class QuoteItinerariesRequestsTest < ActionDispatch::IntegrationTest
     assert_equal original_itinerary, quote.itinerary
     get public_quote_path(quote.accept_token)
     assert_includes response.body, "Day 2 | Walk to the lodge."
-    assert_includes response.body, "From $3,975.00 per person"
+    assert_not_includes response.body, "Published trip price"
+    assert_not_includes response.body, "From $3,975.00 per person"
+    assert_includes response.body, "$11,965.00"
   end
 
   private

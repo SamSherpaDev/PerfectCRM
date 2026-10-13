@@ -337,11 +337,12 @@ the latest PerfectBook sync, or set flexible start and end dates. **Browse all
 published trips** also offers storefront trips with no PerfectBook mirror;
 selecting one never creates or modifies a mirror. `QuoteCatalog` reads the
 storefront's published full itinerary, inclusions and exclusions, and full-trip
-USD offers. Deposit variants are excluded. Storefront prices are labeled
+USD offers. Deposit variants are excluded. Builder storefront pricing hints are labeled
 **From**, including private-journey occupancy caveats; a priced USD PerfectBook
 departure supplies an exact price instead. Product identifiers and handles are
 cached for five minutes; itinerary, inclusions and offers are fetched at selection
-and checked again before sending. If neither source has a price, an earlier quote
+and saved with the draft. Sending uses the owner-reviewed draft without requiring
+the storefront to be available or unchanged. If neither source has a price, an earlier quote
 may prefill it, explicitly labeled as an earlier quote (`Quote.last_unit_for_trip`),
 or the captain enters a verified price. In the new
 builder, changing the trip or departure preserves entered lines, edited

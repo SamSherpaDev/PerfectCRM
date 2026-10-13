@@ -53,21 +53,24 @@ class QuoteMailerTest < ActionMailer::TestCase
     assert_includes mail.text_part.decoded, "Sam Sherpa"
   end
 
-  test "reviewed itinerary and published starting price appear in both email parts and readable PDF" do
+  test "reviewed itinerary and tailored price appear without a benchmark in email and PDF" do
     @quote.update!(itinerary: "Day 1 | Kathmandu\nMeet your guide.\n\nDay 2 | A tailored walk.",
       catalog_snapshot: { "price_minor" => 397_500, "price_from" => true,
         "price_note" => "Based on two travelers sharing a room." })
     mail = QuoteMailer.quote_email(@quote)
     [ mail.text_part.decoded, mail.html_part.decoded ].each do |body|
       assert_includes body, "Day 2 | A tailored walk."
-      assert_includes body, "From $3,975.00 per person"
-      assert_includes body, "Based on two travelers sharing a room."
+      assert_not_includes body, "$3,975.00"
+      assert_includes body, "$3,000.00"
+      assert_not_includes body, "Based on two travelers sharing a room."
     end
     require "pdf/reader"
     pages = PDF::Reader.new(StringIO.new(mail.attachments.first.decoded)).pages
     text = pages.map(&:text).join("\n")
     assert_includes text, "Day 2 | A tailored walk."
-    assert_includes text, "From $3,975.00 per person"
+    assert_not_includes text, "$3,975.00"
+    assert_not_includes text, "Based on two travelers sharing a room."
+    assert_includes text, "$3,000.00"
     assert_includes pages.first.text, "Draft for review - not yet sent."
   end
 

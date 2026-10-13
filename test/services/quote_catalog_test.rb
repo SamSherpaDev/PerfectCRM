@@ -78,15 +78,6 @@ class QuoteCatalogTest < ActiveSupport::TestCase
     end
   end
 
-  test "offer comparison ignores fetch time and detects changed content or price" do
-    source = with_storefront { QuoteCatalog.snapshot(trip: @trip) }
-    assert QuoteCatalog.same_offer?(source, source.merge("checked_at" => 1.hour.from_now.iso8601))
-    %w[price_minor included itinerary departure_id].each do |field|
-      assert_not QuoteCatalog.same_offer?(source, source.merge(field => "changed"))
-    end
-    assert_not QuoteCatalog.same_offer?(source, nil)
-  end
-
   private
 
   def with_storefront(requests = [])

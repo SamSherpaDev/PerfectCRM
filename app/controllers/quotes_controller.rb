@@ -253,15 +253,6 @@ class QuotesController < ApplicationController
     false
   end
 
-  def catalog_current_for_delivery?(current_source)
-    trip, = selected_catalog_records
-    return true unless @quote.catalog_snapshot.present? || current_source.present? || trip&.shopify_product_id.present?
-    return true if @quote.catalog_snapshot.present? && QuoteCatalog.same_offer?(@quote.catalog_snapshot, current_source)
-
-    @quote.errors.add(:base, "Trip details or prices have changed, or have not been loaded. Load current trip details and review before sending.")
-    false
-  end
-
   def set_quote
     @quote = Quote.includes(:lines, :client, :lead).find(params[:id])
   end
@@ -367,13 +358,7 @@ class QuotesController < ApplicationController
   end
 
   def send_saved_quote
-    trip, departure = selected_catalog_records
-    current_source = QuoteCatalog.snapshot(trip: trip, departure: departure)
     @quote.with_lock(requires_new: true) do
-      unless catalog_current_for_delivery?(current_source)
-        load_catalog_options
-        return render :edit, status: :unprocessable_entity
-      end
       unless @quote.deliver!
         if @quote.draft? && @quote.errors.any?
           load_catalog_options
@@ -386,10 +371,6 @@ class QuotesController < ApplicationController
       raise ActiveJob::EnqueueError, "Quote email was not queued" unless job
     end
     redirect_to @quote, notice: "Quote sent with PDF and accept link."
-  rescue QuoteCatalog::Unavailable => error
-    @quote.errors.add(:base, "#{error.message} Review current trip details before sending.")
-    load_catalog_options
-    render :edit, status: :unprocessable_entity
   rescue ActiveJob::EnqueueError, SolidQueue::Job::EnqueueError => error
     Rails.logger.error("Quote #{@quote.reference} email enqueue failed: #{error.class}")
     redirect_to @quote, alert: "Quote saved as a draft. The email could not be queued. Please try sending again."

@@ -6,7 +6,6 @@ class QuoteCatalog
   class Unavailable < StandardError; end
 
   STOREFRONT = "https://www.sherpaholidays.com".freeze
-  COMPARISON_FIELDS = %w[trip_id shopify_product_id departure_id price_minor price_from price_source price_note included itinerary url].freeze
 
   def self.products
     Rails.cache.fetch("quote-catalog/product-handles", expires_in: 5.minutes) do
@@ -73,10 +72,6 @@ class QuoteCatalog
     result if result["url"].present? || result["price_minor"].present?
   rescue JSON::ParserError, KeyError, ArgumentError => error
     raise Unavailable, "The published trip details could not be read (#{error.class})."
-  end
-
-  def self.same_offer?(left, right)
-    left&.slice(*COMPARISON_FIELDS) == right&.slice(*COMPARISON_FIELDS)
   end
 
   private
