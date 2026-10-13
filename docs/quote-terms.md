@@ -50,6 +50,7 @@ release and payment-compliance checks remain PerfectBook's responsibility.
 
 No automatic booking is created. The staff intake download and acceptance-notice
 attachment contain JSON with `quote_reference`, trip/dates/party, USD total,
+the tailored `itinerary` and saved `catalog_snapshot`,
 `deposit_minor` (the master deposit target), `paid_to_date_minor`,
 `payment_now_minor`, `balance_due_minor`, `balance_due_on`, `accepted_at`,
 `accepted_terms_version`, `accepted_bundle_sha256`, and the complete
