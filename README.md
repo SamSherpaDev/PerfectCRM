@@ -612,6 +612,13 @@ Fit labels and bar colors use the supplied fit band; the CRM does not
 derive a band from the numeric score. Edit lets you enter these fields
 manually and add another person in the blank People fields.
 
+Lead Details show "Not scored yet" while both AI fit score and band are blank.
+Use the Strong/Possible/Weak buttons under "Set your fit" to record your own
+judgment; the selected choice stays visible and can be changed. Archived and
+converted leads stay read-only. This judgment is separate from AI fit and does
+not change the lead's stage; its reporting meaning is defined under
+[Monthly source reports](#monthly-source-reports-and-reviewed-backfill).
+
 Website inquiries now arrive directly in Leads. Open a lead to read its
 facts in Details and its inquiry as the oldest entry on the timeline,
 including a placeholder when a website submission has no message. Manual
@@ -821,12 +828,6 @@ Inquiry review **Q-fit** is your separately audited `owner_fit_at_inquiry`
 judgment (Strong/Possible), with no reply required. **Platform-qualified** stays
 current strong/possible fit plus your stage move. An AI score is never silently
 substituted for your review count. Unreviewed fit is shown in completeness.
-Lead details show "Not scored yet" until an AI verdict arrives. Use the
-Strong/Possible/Weak buttons under "Set your fit" to record your own judgment;
-the selected choice stays visible and can be changed. Archived and converted
-leads stay read-only. The Monday report places "Your fit" beside "Qual" for
-each source/campaign and total, counting Strong/Possible judgments among that
-week's inquiries without changing Qualified or cost per qualified inquiry.
 Cohorts use inquiry dates and mature 30/60/90/180-day denominators; immature
 inquiries show as pending. Cohort bookings and their eventual value/net cash
 exclude bookings whose first receipt precedes the inquiry. Timestamped receipts
@@ -1089,6 +1090,9 @@ Definitions, in `WeeklyReport::Summary`:
   and suspected spam.
 - **Qualified**: current AI fit strong or possible, and the captain (never an
   automation) moved the lead to Chatting or Quoted, dated by the first such move.
+- **Your fit**: inquiry review [Q-fit](#monthly-source-reports-and-reviewed-backfill)
+  among the week's eligible inquiries, shown beside Qual for each source/campaign
+  and total. It does not change Qualified or cost per qualified inquiry.
 - **Quote**: a lead's first captain move to Quoted or first sent quote,
   whichever came first. Inquiry, qualified, and quote counts exclude explicit
   tests, archived and suspected-spam leads across all sources; Paid total includes only Google
