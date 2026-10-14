@@ -145,7 +145,8 @@ class TemplateSubjectFallbackSystemTest < ApplicationSystemTestCase
     visit merge_templates_path
     select "First reply to a new inquiry", from: "Template"
     fill_in "Recipients", with: "Tashi Sherpa <tashi@example.com>"
-    click_button "Preview merge"
+    tolerate_submit_navigation { click_button "Preview merge" }
+    tolerate_navigation_assertion { assert_selector "[aria-label='Merged messages']" }
     within("[aria-label='Merged messages']") do
       assert_text "Planning your 18-Day Everest Base Camp Premium Trek"
       assert_text "Would you be open to a short call?"
@@ -176,7 +177,8 @@ class TemplateSubjectFallbackSystemTest < ApplicationSystemTestCase
     visit merge_templates_path
     select "First reply to a new inquiry", from: "Template"
     fill_in "Recipients", with: "Unknown Traveler <unknown@example.test>"
-    click_button "Preview merge"
+    tolerate_submit_navigation { click_button "Preview merge" }
+    tolerate_navigation_assertion { assert_selector "[aria-label='Merged messages']" }
     within("[aria-label='Merged messages']") do
       assert_text "Missing: trip"
       assert_no_text "Nepal trip"

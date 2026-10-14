@@ -3,8 +3,8 @@
 # Released sources stay in their version directory. Never edit a released
 # version; a new release gets a new directory. Quotes store the delivered bytes.
 class QuoteTerms
-  VERSION = "SH-TC-2026-10-04".freeze
-  DISCLOSURE_VERSION = "SH-DISC-2026-10-04".freeze
+  VERSION = "SH-TC-2026-10-14".freeze
+  DISCLOSURE_VERSION = "SH-DISC-2026-10-14".freeze
   ROOT = Rails.root.join("config/booking_terms", VERSION)
   BOND_EXPIRES_ON = Date.new(2027, 3, 7)
   FIELDS = {

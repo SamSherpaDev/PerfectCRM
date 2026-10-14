@@ -37,7 +37,7 @@ class TemplateRenderer
     "deposit_due" => "$500.00",
     "payment_due_on" => "at booking",
     "balance_due_on" => "February 3, 2027",
-    "terms_version" => "SH-TC-2026-10-04",
+    "terms_version" => "SH-TC-2026-10-14",
     "invoice_number" => "SH-2027-0142",
     "payment_reference" => "SH-0142-MAYA",
     "missing_documents" => "passport copy, insurance certificate",
