@@ -36,6 +36,20 @@ class Message < ApplicationRecord
 
   scope :inbound, -> { where(direction: "in") }
   scope :outbound, -> { where(direction: "out") }
+  scope :automatic_replies, -> {
+    outbound.where(id: AutomaticFirstReply.where.not(message_id: nil).select(:message_id))
+  }
+  # Inquiry replies include threads moved to a converted client. The permanent
+  # automatic greeting reservation, rather than template or body, identifies automation.
+  scope :personal_replies, -> {
+    outbound.where(conversation_id: Conversation.inquiry_linked.select(:id))
+      .where.not(id: automatic_replies.select(:id))
+  }
+  # Preserve ordinary inbox behavior for threads unrelated to inquiries.
+  scope :waiting_replies, -> {
+    outbound.where.not(conversation_id: Conversation.inquiry_linked.select(:id))
+      .or(personal_replies.where(status: %w[sent received]))
+  }
   scope :unread, -> { where(direction: "in", read_at: nil) }
   scope :oldest_first, -> { order(sent_at: :asc, id: :asc) }
 

@@ -73,9 +73,13 @@ module WeeklyReportHelper
   end
 
   def report_speed_line(summary)
-    line = "Speed: median first reply #{report_hours(summary.median_first_reply_hours)}"
+    line = "Personal replies: #{summary.personal_reply_count} | median first reply #{report_hours(summary.median_first_reply_hours)}"
     waiting = summary.waiting.size
     "#{line} | #{report_count(waiting, 'inquiry', 'inquiries')} waiting over 24 h"
+  end
+
+  def report_automatic_speed_line(summary)
+    "Automatic first replies: #{summary.automatic_reply_count} | median #{report_hours(summary.median_automatic_reply_hours)}"
   end
 
   def report_lead_name(lead)

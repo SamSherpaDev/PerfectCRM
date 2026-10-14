@@ -14,7 +14,7 @@ module Today
     def initialize(today: Date.current)
       @today = today
     end
-    # Inbound threads newer than the last outbound.
+    # Threads still needing a personal response (automatic greetings do not clear them).
     def waiting_on_you
       waiting_threads.count
     end

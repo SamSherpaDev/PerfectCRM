@@ -53,6 +53,7 @@
   </p>
 
   <p style="margin:14px 0 0;"><%= report_speed_line(summary) %></p>
+  <p style="margin:4px 0 0;"><%= report_automatic_speed_line(summary) %></p>
   <% if summary.waiting.any? %>
     <ul style="margin:4px 0 0;padding-left:18px;">
       <% summary.waiting.each do |lead| %>

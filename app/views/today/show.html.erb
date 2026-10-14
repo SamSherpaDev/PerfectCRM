@@ -42,19 +42,19 @@
     <div class="card-header">
       <h2 class="card-title" id="replies-heading">Replies waiting</h2>
     </div>
-    <%= card_caption "Threads where the client wrote last. Answer these first." %>
+    <%= card_caption "Threads awaiting your reply or call. Automatic greetings stay here." %>
     <% replies = @summary.replies_waiting %>
     <% if replies.any? %>
       <ul class="rowlist">
         <% replies.each do |conversation| %>
-          <% last = conversation.messages.first %>
+          <% last = conversation.messages.find(&:inbound?) %>
           <li class="<%= "unread" if conversation.unread_count.to_i > 0 %>">
             <div class="who">
               <%= link_to conversation.linkable_name || conversation.display_subject, inbox_thread_path(conversation), class: "n link" %>
               <span class="s"><%= last&.preview_text(120) %></span>
             </div>
             <div class="meta">
-              <span><%= conversation.last_message_at ? time_ago_in_words(conversation.last_message_at) + " ago" : "" %></span>
+              <span><%= last&.sent_at ? time_ago_in_words(last.sent_at) + " ago" : "" %></span>
               <% if conversation.unread_count.to_i > 0 %>
                 <%= badge "Unread", :brand, dot: true %>
               <% end %>

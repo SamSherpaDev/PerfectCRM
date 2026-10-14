@@ -23,6 +23,10 @@ class Conversation < ApplicationRecord
 
   scope :ordered, -> { order(Arel.sql("COALESCE(conversations.last_message_at, conversations.updated_at) DESC, conversations.id DESC")) }
   scope :linked, -> { where.not(linkable_type: nil) }
+  scope :inquiry_linked, -> {
+    where(linkable_type: "Lead").or(where(linkable_type: "Client",
+      linkable_id: Lead.where.not(converted_client_id: nil).select(:converted_client_id)))
+  }
   scope :triage, -> { where(linkable_type: nil, ignored: false) }
   scope :sensitive_documents, -> {
     where(id: joins(messages: { files_attachments: :blob })
@@ -32,12 +36,14 @@ class Conversation < ApplicationRecord
   scope :needs_triage, -> { triage.or(sensitive_documents).or(held_documents) }
   scope :ignored_scope, -> { where(ignored: true) }
 
-  # Reading a thread does not resolve waiting: only a later outbound message does.
+  # Reading and automatic greetings do not resolve inquiry waiting. A successful
+  # personal reply or a logged call after the inbound message does.
   # An equal inbound/outbound timestamp remains in the waiting-on-you bucket.
   scope :waiting_on_you, -> {
     joins(:messages)
       .where(messages: { direction: "in" })
-      .where("messages.sent_at >= COALESCE((SELECT MAX(m2.sent_at) FROM messages m2 WHERE m2.conversation_id = conversations.id AND m2.direction = 'out'), '1970-01-01')")
+      .where("messages.sent_at >= COALESCE((SELECT MAX(m2.sent_at) FROM messages m2 WHERE m2.conversation_id = conversations.id AND m2.id IN (#{Message.waiting_replies.select(:id).to_sql})), '1970-01-01')")
+      .where("NOT EXISTS (SELECT 1 FROM activity_events calls WHERE conversations.linkable_type = 'Lead' AND calls.subject_type = 'Lead' AND calls.subject_id = conversations.linkable_id AND calls.kind = 'call' AND calls.occurred_at > messages.sent_at)")
       .distinct
   }
   scope :waiting_on_them, -> {
@@ -61,11 +67,7 @@ class Conversation < ApplicationRecord
   end
 
   def waiting_on_you?
-    last_in = messages.where(direction: "in").maximum(:sent_at)
-    return false if last_in.nil?
-
-    last_out = messages.where(direction: "out").maximum(:sent_at)
-    last_out.nil? || last_in > last_out
+    self.class.waiting_on_you.where(id: id).exists?
   end
 
   def mark_read!

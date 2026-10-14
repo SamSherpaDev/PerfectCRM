@@ -142,17 +142,19 @@ module WeeklyReport
     end
 
     def median_first_reply_hours
-      hours = week_inquiries.filter_map do |lead|
-        replied = first_reply_at(lead)
-        next if replied.nil?
+      median_hours(reply_hours)
+    end
 
-        [ (replied - inquired_at(lead)) / 1.hour, 0 ].max
-      end.sort
-      return nil if hours.empty?
+    def personal_reply_count
+      reply_hours.size
+    end
 
-      mid = hours.length / 2
-      median = hours.length.odd? ? hours[mid] : (hours[mid - 1] + hours[mid]) / 2.0
-      median.round(1)
+    def automatic_reply_count
+      reply_hours(automatic: true).size
+    end
+
+    def median_automatic_reply_hours
+      median_hours(reply_hours(automatic: true), precision: 3)
     end
 
     def unanswered_in_week
@@ -417,9 +419,28 @@ module WeeklyReport
         "No trip named"
     end
 
-    def first_reply_at(lead)
+    def reply_hours(automatic: false)
+      @reply_hours ||= {}
+      @reply_hours[automatic] ||= week_inquiries.filter_map do |lead|
+        replied = first_reply_at(lead, automatic: automatic)
+        next if replied.nil?
+
+        [ (replied - inquired_at(lead)) / 1.hour, 0 ].max
+      end.sort
+    end
+
+    def median_hours(hours, precision: 1)
+      return nil if hours.empty?
+
+      mid = hours.length / 2
+      median = hours.length.odd? ? hours[mid] : (hours[mid - 1] + hours[mid]) / 2.0
+      median.round(precision)
+    end
+
+    def first_reply_at(lead, automatic: false)
       @first_replies ||= {}
-      return @first_replies[lead.id] if @first_replies.key?(lead.id)
+      key = [ lead.id, automatic ]
+      return @first_replies[key] if @first_replies.key?(key)
 
       since = inquired_at(lead)
       owners = [ [ "Lead", lead.id ] ]
@@ -427,7 +448,8 @@ module WeeklyReport
       conversation_ids = owners.flat_map do |type, id|
         Conversation.where(linkable_type: type, linkable_id: id).pluck(:id)
       end
-      @first_replies[lead.id] = Message.outbound.where(conversation_id: conversation_ids, status: %w[sent received])
+      replies = automatic ? Message.automatic_replies : Message.personal_replies
+      @first_replies[key] = replies.where(conversation_id: conversation_ids, status: %w[sent received])
         .where("sent_at >= ?", since).minimum(:sent_at)
     end
 
