@@ -57,6 +57,27 @@ class WeeklyReportMailerTest < ActionMailer::TestCase
     assert_equal [ "reports@example.com" ], mail.to
     assert_includes mail.text_part.body.decoded, "Spend not entered for this week yet."
   end
+
+  test "both mail formats separate personal and automatic speed" do
+    lead = Lead.create!(name: "Demo inquiry", source: "website_form", received_at: Time.zone.local(2026, 9, 15, 10))
+    thread = Conversation.create!(linkable: lead, subject: "Trip")
+    automatic = thread.messages.create!(direction: "out", status: "sent", subject: "Trip",
+      to_addrs: "demo@example.com", text_body: "Welcome", sent_at: lead.received_at + 1.minute)
+    AutomaticFirstReply.create!(lead: lead, message: automatic, email: "demo@example.com")
+    mail = WeeklyReportMailer.weekly
+    [ mail.text_part, mail.html_part ].each do |part|
+      assert_includes part.body.decoded, "Personal replies: 0 | median first reply no replies yet | 1 inquiry waiting over 24 h"
+      assert_includes part.body.decoded, "Automatic first replies: 1 | median 1 min"
+    end
+
+    thread.messages.create!(direction: "out", status: "sent", subject: "Trip",
+      to_addrs: "demo@example.com", text_body: "Let's talk", sent_at: lead.received_at + 3.hours)
+    mail = WeeklyReportMailer.weekly
+    [ mail.text_part, mail.html_part ].each do |part|
+      assert_includes part.body.decoded, "Personal replies: 1 | median first reply 3 h | 0 inquiries waiting over 24 h"
+      assert_includes part.body.decoded, "Automatic first replies: 1 | median 1 min"
+    end
+  end
   test "booked values flags and missing campaign spend render in both formats without ROAS" do
     lead = Lead.create!(name: "Booker", source: "meta_ads", campaign_name: "social",
       perfectbook_contact_id: 42, received_at: Time.zone.local(2026, 9, 15))

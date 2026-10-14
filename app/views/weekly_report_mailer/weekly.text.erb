@@ -13,6 +13,7 @@ Next review: <%= @summary.next_review.strftime('%b %-d, %Y') %>
 <% end %><% @summary.periods.each do |period| %><%= report_period_line(period) %>
 <% end %>
 <%= report_speed_line(@summary) %>
+<%= report_automatic_speed_line(@summary) %>
 <% @summary.waiting.each do |lead| %>- <%= report_lead_name(lead) %>: <%= lead_url(lead) %>
 <% end %><% if @summary.trips.any? %>
 Trips this week:

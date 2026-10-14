@@ -188,6 +188,76 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
     assert_equal [ waiting ], summary.waiting
     assert_equal 2, summary.unanswered_in_week
   end
+
+  test "personal speed and waiting exclude automatic greetings and report them separately" do
+    automatic_only = inquiry("Automatic only")
+    answered = inquiry("Personal after automatic")
+    manual_only = inquiry("Manual only")
+    [ [ automatic_only, 15.minutes ], [ answered, 45.minutes ] ].each do |lead, delay|
+      thread = Conversation.create!(linkable: lead, subject: "Trip")
+      message = thread.messages.create!(direction: "out", status: "sent", subject: "Trip",
+        to_addrs: "#{lead.id}@example.com", text_body: "Welcome", sent_at: lead.received_at + delay)
+      AutomaticFirstReply.create!(lead: lead, message: message, email: "#{lead.id}@example.com")
+    end
+    [ [ answered, 2.hours ], [ manual_only, 4.hours ] ].each do |lead, delay|
+      thread = Conversation.where(linkable: lead).first || Conversation.create!(linkable: lead, subject: "Trip")
+      thread.messages.create!(direction: "out", status: "received", subject: "Trip",
+        to_addrs: "#{lead.id}@example.com", text_body: "Personal reply", sent_at: lead.received_at + delay)
+    end
+    # Permanent reservations can outlive their message; NULL must not exclude all replies.
+    AutomaticFirstReply.create!(email: "removed@example.com")
+    Conversation.where(linkable: automatic_only).first.messages.create!(direction: "out", status: "failed",
+      subject: "Trip", to_addrs: "failed@example.com", text_body: "Failed", sent_at: automatic_only.received_at + 1.hour)
+    Conversation.where(linkable: manual_only).first.messages.create!(direction: "out", status: "sent",
+      subject: "Earlier trip", to_addrs: "old@example.com", text_body: "Previous contact", sent_at: manual_only.received_at - 1.day)
+
+    summary = WeeklyReport::Summary.new(week_start: WEEK)
+    assert_equal 2, summary.personal_reply_count
+    assert_equal 3.0, summary.median_first_reply_hours
+    assert_equal 2, summary.automatic_reply_count
+    assert_equal 0.5, summary.median_automatic_reply_hours
+    assert_equal 1, summary.unanswered_in_week
+    assert_equal [ automatic_only ], summary.waiting
+  end
+
+  test "automatic-only converted threads still have no personal reply" do
+    lead = inquiry("Converted automatic only")
+    thread = Conversation.create!(linkable: lead, subject: "Trip")
+    automatic = thread.messages.create!(direction: "out", status: "sent", subject: "Trip",
+      to_addrs: "converted@example.com", text_body: "Welcome", sent_at: lead.received_at + 1.minute)
+    AutomaticFirstReply.create!(lead: lead, message: automatic, email: "converted@example.com")
+    lead.convert_to_client!
+    summary = WeeklyReport::Summary.new(week_start: WEEK)
+    assert_nil summary.median_first_reply_hours
+    assert_equal 0, summary.personal_reply_count
+    assert_equal 1, summary.automatic_reply_count
+    assert_empty summary.waiting
+  end
+
+  test "automatic reply metrics stay attributed to their inquiry after shared client conversion" do
+    older = inquiry("Before automation", at: Time.zone.local(2026, 9, 15, 8))
+    greeted = inquiry("After automation", at: Time.zone.local(2026, 9, 15, 10))
+    thread = Conversation.create!(linkable: greeted, subject: "Trip")
+    message = thread.messages.create!(direction: "out", status: "sent", subject: "Trip",
+      to_addrs: "greeted@example.com", text_body: "Welcome", sent_at: greeted.received_at + 15.minutes)
+    AutomaticFirstReply.create!(lead: greeted, message: message, email: "greeted@example.com")
+
+    summary = WeeklyReport::Summary.new(week_start: WEEK)
+    assert_equal 1, summary.automatic_reply_count
+    assert_equal 0.25, summary.median_automatic_reply_hours
+
+    client = older.convert_to_client!
+    greeted.update!(existing_client: client)
+    assert_equal client, greeted.convert_to_client!(expected_client_id: client.id)
+    assert_equal client, thread.reload.linkable
+
+    summary = WeeklyReport::Summary.new(week_start: WEEK)
+    assert_equal 1, summary.automatic_reply_count
+    assert_equal 0.25, summary.median_automatic_reply_hours
+    assert_equal 0, summary.personal_reply_count
+    assert_equal 2, summary.unanswered_in_week
+  end
+
   test "notes and stage changes are not replies and old unanswered inquiries remain visible" do
     lead = inquiry("Details submitted")
     Note.create!(notable: lead, body: "Visitor filled in details")

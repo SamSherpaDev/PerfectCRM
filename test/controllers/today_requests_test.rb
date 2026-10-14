@@ -36,6 +36,85 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     assert_equal "1", stat_value("Active clients")
   end
 
+  test "automatic-only inquiry shows the unanswered inbound preview until a call is logged" do
+    lead = Lead.create!(name: "Demo inquiry", email: "demo@example.com")
+    thread = Conversation.create!(linkable: lead, subject: "Trip")
+    thread.messages.create!(direction: "in", status: "received", subject: "Trip",
+      text_body: "Can we plan a trip?", sent_at: 2.days.ago)
+    automatic = thread.messages.create!(direction: "out", status: "sent", subject: "Trip",
+      to_addrs: lead.email, text_body: "Automatic welcome", sent_at: 2.days.ago + 1.minute)
+    AutomaticFirstReply.create!(lead: lead, message: automatic, email: lead.email)
+    get root_path
+    assert_response :success
+    assert_equal "1", stat_value("Waiting on you")
+    assert_select "section[aria-labelledby='replies-heading']" do
+      assert_select "li", text: /Can we plan a trip\?/
+      assert_select "li", text: /Automatic welcome/, count: 0
+    end
+
+    post lead_calls_path(lead), params: { save_key: "demo-call-1", occurred_at: 1.day.ago.iso8601,
+      outcome: "no_answer", direction: "outbound" }
+    assert_redirected_to lead_path(lead)
+    get root_path
+    assert_equal "0", stat_value("Waiting on you")
+    assert_select "a[href=?]", inbox_thread_path(thread), count: 0
+  end
+
+  test "converted inquiries stay resolved by calls and wait again for new inbound" do
+    lead = Lead.create!(name: "Converted inquiry", email: "converted@example.com")
+    thread = Conversation.create!(linkable: lead, subject: "Converted trip")
+    inbound = thread.messages.create!(direction: "in", status: "received",
+      text_body: "Plan a trip", sent_at: 3.days.ago)
+    automatic = thread.messages.create!(direction: "out", status: "sent", subject: "Trip",
+      to_addrs: lead.email, text_body: "Welcome", sent_at: 3.days.ago + 1.minute)
+    AutomaticFirstReply.create!(lead: lead, message: automatic, email: lead.email)
+    post lead_calls_path(lead), params: { save_key: "conversion-call-1", occurred_at: 2.days.ago.iso8601,
+      outcome: "connected", direction: "outbound" }
+    post convert_lead_path(lead), params: { expected_client_id: "new" }
+    client = lead.reload.converted_client
+    assert_redirected_to client_path(client)
+    assert_equal client, thread.reload.linkable
+    assert_not thread.waiting_on_you?
+    get root_path
+    assert_equal "0", stat_value("Waiting on you")
+
+    inbound.update!(sent_at: 1.day.ago)
+    assert thread.waiting_on_you?
+    get root_path
+    assert_equal "1", stat_value("Waiting on you")
+
+    other = Lead.create!(name: "Another inquiry", email: "another@example.com", existing_client: client)
+    other_thread = Conversation.create!(linkable: other, subject: "Another trip")
+    other_thread.messages.create!(direction: "in", status: "received",
+      text_body: "A different trip", sent_at: 1.day.ago)
+    other_automatic = other_thread.messages.create!(direction: "out", status: "sent", subject: "Another trip",
+      to_addrs: other.email, text_body: "Welcome again", sent_at: 1.day.ago + 1.minute)
+    AutomaticFirstReply.create!(lead: other, message: other_automatic, email: other.email)
+    post convert_lead_path(other), params: { expected_client_id: client.id }
+    assert_redirected_to client_path(client)
+    assert_equal client, other_thread.reload.linkable
+    assert other_thread.waiting_on_you?
+    get root_path
+    assert_equal "2", stat_value("Waiting on you")
+
+    post client_calls_path(client), params: { inquiry_id: other.id, save_key: "other-inquiry-call",
+      occurred_at: 1.hour.ago.iso8601, outcome: "connected", direction: "outbound" }
+    assert_redirected_to client_path(client)
+    assert thread.waiting_on_you?
+    assert_not other_thread.waiting_on_you?
+    get root_path
+    assert_equal "1", stat_value("Waiting on you")
+    assert_select "a[href=?]", inbox_thread_path(thread)
+    assert_select "a[href=?]", inbox_thread_path(other_thread), count: 0
+    post client_calls_path(client), params: { inquiry_id: lead.id, save_key: "conversion-call-2",
+      occurred_at: 1.hour.ago.iso8601, outcome: "voicemail", direction: "inbound" }
+    assert_redirected_to client_path(client)
+    assert_not thread.waiting_on_you?
+    get root_path
+    assert_equal "0", stat_value("Waiting on you")
+    assert_select "a[href=?]", inbox_thread_path(thread), count: 0
+  end
+
   test "today lists follow-ups with one-tap complete and nudge" do
     template = Template.create!(name: "Deposit nudge", body: "Hi", purpose: "deposit_nudge")
     task = @client.tasks.create!(title: "Nudge Maya", due_on: Date.current, template: template)
