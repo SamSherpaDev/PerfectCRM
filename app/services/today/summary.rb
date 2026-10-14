@@ -11,8 +11,9 @@ module Today
     DEPARTING_WITHIN = 14.days
     RETURNED_WITHIN = 7.days
 
-    def initialize(today: Date.current)
+    def initialize(now: Time.current, today: now.to_date)
       @today = today
+      @now = now
     end
     # Threads still needing a personal response (automatic greetings do not clear them).
     def waiting_on_you
@@ -28,9 +29,26 @@ module Today
       Quote.live.where.not(id: Quote.expired.select(:id)).count
     end
 
-    # Leads still sitting in the New stage, nobody has worked them yet.
+    # New stage alone does not establish whether an inquiry has been worked.
     def new_leads
       Lead.by_status("new").count
+    end
+
+    # One full weekday without a successful personal reply or logged call.
+    # Keep this separate from replies owed: it includes inquiries with no email
+    # thread, and handling an inquiry once removes it even if more mail arrives.
+    def not_yet_called
+      since_inquiry = "COALESCE(leads.received_at, leads.created_at)"
+      replied = Message.personal_replies.where(status: %w[sent received])
+        .joins(:conversation).where(conversations: { linkable_type: "Lead" })
+        .where("conversations.linkable_id = leads.id AND messages.sent_at >= #{since_inquiry}")
+      called = ActivityEvent.where(subject_type: "Lead", kind: "call")
+        .where("activity_events.subject_id = leads.id AND occurred_at >= #{since_inquiry}")
+
+      Lead.by_status("new").where("#{since_inquiry} < ?", one_business_day_ago)
+        .where("NOT EXISTS (#{replied.select(:id).to_sql})")
+        .where("NOT EXISTS (#{called.select(:id).to_sql})")
+        .order(Arel.sql("#{since_inquiry} ASC, leads.id ASC"))
     end
 
     # Clients on the books: everything that is not archived.
@@ -68,6 +86,15 @@ module Today
     end
 
     private
+
+    def one_business_day_ago
+      as_of = @now
+      # Freeze elapsed business time at Saturday midnight throughout the weekend.
+      as_of = as_of.beginning_of_week(:monday) + 5.days if as_of.saturday? || as_of.sunday?
+      cutoff = as_of - 1.day
+      cutoff -= 1.day while cutoff.saturday? || cutoff.sunday?
+      cutoff
+    end
 
     def waiting_threads
       Conversation.where(ignored: false).ordered.preload(:linkable, :messages)

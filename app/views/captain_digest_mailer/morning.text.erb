@@ -12,6 +12,7 @@ Today (<%= @summary.followups_due.count %>):
 <% end %><% else %>- No follow-ups due today.
 <% end %>
 Replies waiting: <%= @summary.waiting_on_you %>.
+Not yet called: <%= @summary.not_yet_called.count %>.
 <% if @summary.departing_soon.any? %>
 Departing soon:
 <% @summary.departing_soon.each do |booking| %>- <%= booking.trip_name %> · <%= booking.start_date.strftime("%-b %-d") %> (<%= booking.party_size %> travelers)

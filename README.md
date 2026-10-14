@@ -463,7 +463,7 @@ files while another process is using them.
 
 Today (the root route) is the captain's morning screen: six tiles
 (Waiting on you, Follow-ups due, Quotes out, Overdue, New leads, Active
-clients), then Replies waiting, Follow-ups as one-tap check rows,
+clients), then Not yet called, Replies waiting, Follow-ups as one-tap check rows,
 Departing soon (trips leaving in the next 14 days), and Back from the
 mountains (returned in the last 7 days). Returned bookings linked to a
 local record offer Create review ask. Waiting on you counts linked threads
@@ -478,6 +478,13 @@ Replies waiting lists the newest five with reply links,
 Quotes out counts live sent and viewed quotes whose valid-until has not
 passed, New leads counts leads still in the New stage, and Active clients
 counts clients that are not archived.
+
+Not yet called lists active, unconverted inquiries still at New, oldest
+receipt first (creation time if no receipt is recorded), once more than one
+business day has passed with no successful personal reply or logged call since
+receipt. Automatic greetings and queued, sending, or failed personal email do
+not clear it; any logged call outcome does. Business time runs Monday to Friday
+in the Pacific timezone, pausing over the weekend. Every row opens the inquiry.
 
 Tasks belong to clients, leads, or organizations. Today lists overdue tasks
 and those due through the next 7 days, using the Pacific date. Tap the
@@ -518,8 +525,9 @@ the empty mapping currently proposes no tasks.
 
 The production 7am Pacific digest (`TodayDigestJob` + `CaptainDigestMailer`,
 same schedule file) emails today's follow-ups, overdue items, replies
-waiting, and departures. Task links open their records, and Open Today
-opens the morning screen. It goes to the first allowlisted address.
+waiting, the Not yet called count, and departures. Task links open their
+records, and Open Today opens the morning screen. It goes to the first
+allowlisted address.
 Settings → Morning digest toggles it; it is enabled by default.
 
 ## Clients
