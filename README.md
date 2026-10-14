@@ -394,7 +394,10 @@ Each quote carries an unguessable tap-to-accept link (`/q/:token`, no
 sign-in). Public views are rate-limited and logged through `QuoteView`.
 After `valid_until`, the page remains readable but acceptance is disabled.
 Clients read the delivered booking documents and confirm acceptance on the
-public page. Document preservation, payment-schedule expiry, historical quote
+public page. Preview **If things go wrong** in the builder's Booking documents
+section and walk through it on each quote call; see the
+[summary page reference](docs/quote-terms.md#if-things-go-wrong) for delivery and historical-quote behavior.
+Document preservation, payment-schedule expiry, historical quote
 compatibility and acceptance evidence are defined in [quote terms](docs/quote-terms.md).
 Accepting queues an email to the captain at
 `info@`, writes the timeline, and stages an intake payload on the quote
