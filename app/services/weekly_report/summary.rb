@@ -448,7 +448,11 @@ module WeeklyReport
       conversation_ids = owners.flat_map do |type, id|
         Conversation.where(linkable_type: type, linkable_id: id).pluck(:id)
       end
-      replies = automatic ? Message.automatic_replies : Message.personal_replies
+      replies = if automatic
+        Message.automatic_replies.where(id: AutomaticFirstReply.where(lead_id: lead.id).select(:message_id))
+      else
+        Message.personal_replies
+      end
       @first_replies[key] = replies.where(conversation_id: conversation_ids, status: %w[sent received])
         .where("sent_at >= ?", since).minimum(:sent_at)
     end

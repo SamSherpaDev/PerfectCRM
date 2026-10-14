@@ -210,6 +210,30 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
     assert_empty summary.waiting
   end
 
+  test "automatic reply metrics stay attributed to their inquiry after shared client conversion" do
+    older = inquiry("Before automation", at: Time.zone.local(2026, 9, 15, 8))
+    greeted = inquiry("After automation", at: Time.zone.local(2026, 9, 15, 10))
+    thread = Conversation.create!(linkable: greeted, subject: "Trip")
+    message = thread.messages.create!(direction: "out", status: "sent", subject: "Trip",
+      to_addrs: "greeted@example.com", text_body: "Welcome", sent_at: greeted.received_at + 15.minutes)
+    AutomaticFirstReply.create!(lead: greeted, message: message, email: "greeted@example.com")
+
+    summary = WeeklyReport::Summary.new(week_start: WEEK)
+    assert_equal 1, summary.automatic_reply_count
+    assert_equal 0.25, summary.median_automatic_reply_hours
+
+    client = older.convert_to_client!
+    greeted.update!(existing_client: client)
+    assert_equal client, greeted.convert_to_client!(expected_client_id: client.id)
+    assert_equal client, thread.reload.linkable
+
+    summary = WeeklyReport::Summary.new(week_start: WEEK)
+    assert_equal 1, summary.automatic_reply_count
+    assert_equal 0.25, summary.median_automatic_reply_hours
+    assert_equal 0, summary.personal_reply_count
+    assert_equal 2, summary.unanswered_in_week
+  end
+
   test "notes and stage changes are not replies and old unanswered inquiries remain visible" do
     lead = inquiry("Details submitted")
     Note.create!(notable: lead, body: "Visitor filled in details")
