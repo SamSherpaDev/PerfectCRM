@@ -48,7 +48,7 @@ class QuoteTermsTest < ActiveSupport::TestCase
     assert_equal bundle, details["terms_bundle"]
     assert_equal 50_000, details["deposit_minor"]
     assert_equal @quote.accepted_at.iso8601, details["accepted_at"]
-    assert_includes @quote.perfectbook_intake_url, "terms_version=SH-TC-2026-10-04"
+    assert_includes @quote.perfectbook_intake_url, "terms_version=SH-TC-2026-10-14"
     assert_not @quote.update(accepted_bundle_sha256: "changed")
   end
 

@@ -36,14 +36,55 @@ class QuoteTermsRequestsTest < ActionDispatch::IntegrationTest
     get public_quote_documents_path(@quote.accept_token)
     assert_response :success
     assert_equal @quote.terms_bundle, response.parsed_body
+    assert_equal "SH-TC-2026-10-14", response.parsed_body["terms_version"]
+    assert_equal "SH-DISC-2026-10-14", response.parsed_body["disclosure_version"]
+    delay_promise = "If weather delays your Lukla flight and you need to wait, we cover up to 2 extra nights while you wait, and more when the situation calls for it. Nights you choose to add, or a helicopter you choose instead of waiting, are your cost, quoted before anything is booked."
+    %w[master_terms pre_payment_disclosure].each do |name|
+      assert_includes response.parsed_body.fetch(name), delay_promise
+      assert_not_includes response.parsed_body.fetch(name), "SherpaHolidays pays for the extra nights"
+    end
     email = QuoteMailer.quote_email(@quote)
     %w[master_terms pre_payment_disclosure trip_differences itinerary].each do |name|
       assert_equal @quote.terms_bundle.fetch(name), email.attachments["#{@quote.reference}-#{name}.txt"].decoded
     end
     pdf_text = PDF::Reader.new(StringIO.new(email.attachments["quote-#{@quote.reference}.pdf"].decoded)).pages.map(&:text).join
     assert_includes pdf_text, QuoteTerms::VERSION
+    assert_includes pdf_text.gsub(/\s+/, " "), delay_promise
     assert_includes pdf_text, "45 days or fewer"
     assert_includes pdf_text, "Westfield National Insurance Company"
+  end
+
+  test "October 4 delivered documents keep their bytes and version through acceptance" do
+    # Model a previously issued bundle, including its completed disclosure.
+    bundle = @quote.terms_bundle.deep_dup
+    bundle["terms_version"] = "SH-TC-2026-10-04"
+    bundle["disclosure_version"] = "SH-DISC-2026-10-04"
+    bundle["master_terms"] = Rails.root.join("config/booking_terms/SH-TC-2026-10-04/master-terms.md").read
+      .sub("[verified operator legal name]", @quote.local_operator)
+    bundle["pre_payment_disclosure"] = bundle.fetch("pre_payment_disclosure")
+      .sub("SH-DISC-2026-10-14", "SH-DISC-2026-10-04")
+      .sub("SH-TC-2026-10-14", "SH-TC-2026-10-04")
+      .sub("we cover up to 2 extra nights while you wait, and more when the situation calls for it",
+        "SherpaHolidays pays for the extra nights")
+    bytes = JSON.generate(bundle)
+    sha256 = Digest::SHA256.hexdigest(bytes)
+    @quote.update_columns(terms_bundle: bundle, terms_bundle_sha256: sha256)
+
+    get public_quote_documents_path(@quote.accept_token)
+    assert_response :success
+    assert_equal bytes, JSON.generate(response.parsed_body)
+    email = QuoteMailer.quote_email(@quote.reload)
+    %w[master_terms pre_payment_disclosure].each do |name|
+      assert_equal bundle.fetch(name), email.attachments["#{@quote.reference}-#{name}.txt"].decoded
+    end
+    post accept_public_quote_path(@quote.accept_token), params: { terms_accepted: "1", bundle_sha256: sha256 }
+    assert_equal "accepted", @quote.reload.status
+    assert_equal "SH-TC-2026-10-04", @quote.accepted_terms_version
+    assert_equal sha256, @quote.accepted_bundle_sha256
+    assert_equal bundle, @quote.intake_details["terms_bundle"]
+    get public_quote_documents_path(@quote.accept_token)
+    assert_response :success
+    assert_equal bytes, JSON.generate(response.parsed_body)
   end
 
   test "manual intake export contains accepted version bytes amounts and timestamp" do

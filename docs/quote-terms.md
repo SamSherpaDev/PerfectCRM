@@ -1,8 +1,13 @@
 # Quote booking documents
 
 New quote delivery uses `QuoteTerms` and the released files in
-`config/booking_terms/SH-TC-2026-10-04/`. Never edit a released source or its
+`config/booking_terms/SH-TC-2026-10-14/`. Never edit a released source or its
 clause-refresh mapping. A later policy gets a new version directory.
+The October 14, 2026 release caps Lukla weather-delay coverage at up to two
+extra nights, with more when the situation calls for it. New deliveries use
+SH-TC-2026-10-14 and SH-DISC-2026-10-14; previously delivered or accepted
+bundles retain their original versions and bytes. The October 4 template
+rollout in `TemplatePolicyRefresh` stays pinned to its original release.
 
 ## Before sending
 
