@@ -29,7 +29,7 @@ module Today
       Quote.live.where.not(id: Quote.expired.select(:id)).count
     end
 
-    # Leads still sitting in the New stage, nobody has worked them yet.
+    # New stage alone does not establish whether an inquiry has been worked.
     def new_leads
       Lead.by_status("new").count
     end

@@ -484,8 +484,7 @@ receipt first (creation time if no receipt is recorded), once more than one
 business day has passed with no successful personal reply or logged call since
 receipt. Automatic greetings and queued, sending, or failed personal email do
 not clear it; any logged call outcome does. Business time runs Monday to Friday
-in the Pacific timezone, pausing over the weekend. Every row opens the inquiry,
-and the morning digest includes the same count.
+in the Pacific timezone, pausing over the weekend. Every row opens the inquiry.
 
 Tasks belong to clients, leads, or organizations. Today lists overdue tasks
 and those due through the next 7 days, using the Pacific date. Tap the
@@ -526,8 +525,9 @@ the empty mapping currently proposes no tasks.
 
 The production 7am Pacific digest (`TodayDigestJob` + `CaptainDigestMailer`,
 same schedule file) emails today's follow-ups, overdue items, replies
-waiting, and departures. Task links open their records, and Open Today
-opens the morning screen. It goes to the first allowlisted address.
+waiting, the Not yet called count, and departures. Task links open their
+records, and Open Today opens the morning screen. It goes to the first
+allowlisted address.
 Settings → Morning digest toggles it; it is enabled by default.
 
 ## Clients
