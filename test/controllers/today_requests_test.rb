@@ -60,6 +60,42 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     assert_select "a[href=?]", inbox_thread_path(thread), count: 0
   end
 
+  test "converted inquiries stay resolved by calls and wait again for new inbound" do
+    lead = Lead.create!(name: "Converted inquiry", email: "converted@example.com")
+    thread = Conversation.create!(linkable: lead, subject: "Converted trip")
+    inbound = thread.messages.create!(direction: "in", status: "received",
+      text_body: "Plan a trip", sent_at: 3.days.ago)
+    automatic = thread.messages.create!(direction: "out", status: "sent", subject: "Trip",
+      to_addrs: lead.email, text_body: "Welcome", sent_at: 3.days.ago + 1.minute)
+    AutomaticFirstReply.create!(lead: lead, message: automatic, email: lead.email)
+    post lead_calls_path(lead), params: { save_key: "conversion-call-1", occurred_at: 2.days.ago.iso8601,
+      outcome: "connected", direction: "outbound" }
+    post convert_lead_path(lead), params: { expected_client_id: "new" }
+    client = lead.reload.converted_client
+    assert_redirected_to client_path(client)
+    assert_equal client, thread.reload.linkable
+    assert_not thread.waiting_on_you?
+    get root_path
+    assert_equal "0", stat_value("Waiting on you")
+
+    inbound.update!(sent_at: 1.day.ago)
+    assert thread.waiting_on_you?
+    get root_path
+    assert_equal "1", stat_value("Waiting on you")
+
+    other = Lead.create!(name: "Unrelated inquiry")
+    CallLog.record!(other, key: "unrelated-call-1", occurred_at: 1.hour.ago,
+      outcome: "connected", direction: "outbound")
+    assert thread.waiting_on_you?
+    post client_calls_path(client), params: { inquiry_id: lead.id, save_key: "conversion-call-2",
+      occurred_at: 1.hour.ago.iso8601, outcome: "voicemail", direction: "inbound" }
+    assert_redirected_to client_path(client)
+    assert_not thread.waiting_on_you?
+    get root_path
+    assert_equal "0", stat_value("Waiting on you")
+    assert_select "a[href=?]", inbox_thread_path(thread), count: 0
+  end
+
   test "today lists follow-ups with one-tap complete and nudge" do
     template = Template.create!(name: "Deposit nudge", body: "Hi", purpose: "deposit_nudge")
     task = @client.tasks.create!(title: "Nudge Maya", due_on: Date.current, template: template)
