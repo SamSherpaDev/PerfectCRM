@@ -216,8 +216,10 @@ class TemplatesTest < ApplicationSystemTestCase
     select "Group greeting", from: "Template"
     fill_in "Recipients", with: "Maya Gurung <maya@example.com>\nPemba Sherpa <pemba@example.com>"
     before_deliveries = ActionMailer::Base.deliveries.size
-    click_button "Preview merge"
-    assert_selector "[aria-label='Merged messages'] h2", text: "2 messages ready"
+    tolerate_submit_navigation { click_button "Preview merge" }
+    tolerate_navigation_assertion do
+      assert_selector "[aria-label='Merged messages'] h2", text: "2 messages ready"
+    end
     assert_text "Dear Maya Gurung, welcome aboard."
     assert_text "Dear Pemba Sherpa, welcome aboard."
     assert_text "Nothing sent"
@@ -228,9 +230,11 @@ class TemplatesTest < ApplicationSystemTestCase
     find("[aria-label='Merged messages']").scroll_to(:top)
     capture_evidence("merge-mobile")
     fill_in "Recipients", with: ""
-    click_button "Preview merge"
+    tolerate_submit_navigation { click_button "Preview merge" }
     # Wait for the response's flash instead of reading the outgoing document.
-    assert_selector "[role='status']", text: "Add at least one recipient email."
+    tolerate_navigation_assertion do
+      assert_selector "[role='status']", text: "Add at least one recipient email."
+    end
     assert_text "0 messages ready"
   end
 

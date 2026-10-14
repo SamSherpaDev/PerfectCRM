@@ -710,7 +710,8 @@ class QuotesSystemTest < ApplicationSystemTestCase
     visit merge_templates_path
     select "Synthetic payment", from: "Template"
     fill_in "Recipients", with: "Traveler <traveler@example.com>"
-    click_button "Preview merge"
+    tolerate_submit_navigation { click_button "Preview merge" }
+    tolerate_navigation_assertion { assert_selector "[aria-label='Merged messages']" }
     within("[aria-label='Merged messages']") do
       assert_text "$500.00"
       assert_text QuoteTerms::VERSION
@@ -723,7 +724,8 @@ class QuotesSystemTest < ApplicationSystemTestCase
     visit merge_templates_path
     select "Synthetic payment", from: "Template"
     fill_in "Recipients", with: "Other <other@example.com>"
-    click_button "Preview merge"
+    tolerate_submit_navigation { click_button "Preview merge" }
+    tolerate_navigation_assertion { assert_selector "[aria-label='Merged messages']" }
     within("[aria-label='Merged messages']") { assert_text "Missing:" }
   end
 

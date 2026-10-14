@@ -167,7 +167,10 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     visit merge_templates_path
     select "Quick hello", from: "Template"
     fill_in "Recipients", with: "Maya <family@example.com>\nwrong@@example.com\na@example.com, b@example.com"
-    click_button "Preview merge"
+    tolerate_submit_navigation { click_button "Preview merge" }
+    tolerate_navigation_assertion do
+      assert_selector "[aria-label='Recipient problems']", text: "wrong@@example.com"
+    end
     within("[aria-label='Recipient problems']") do
       assert_text "Line 2:"
       assert_text "Line 3:"
@@ -177,14 +180,14 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     assert_equal 0, GroupSend.count
     capture_outbound_evidence("group-invalid-mobile")
     fill_in "Recipients", with: "Maya <family@example.com>\nPemba <family@example.com>\nstranger@example.com"
-    click_button "Preview merge"
+    tolerate_submit_navigation { click_button "Preview merge" }
+    tolerate_navigation_assertion { assert_text "Hello Pemba" }
     assert_text "Hello Maya"
-    assert_text "Hello Pemba"
     assert_text "Missing: first name"
     assert_text "Missing: trip"
-    click_button "Send 3 personal emails"
+    tolerate_submit_navigation { click_button "Send 3 personal emails" }
+    tolerate_navigation_assertion { assert_selector "h1", text: "Send summary" }
     assert_current_path %r{/group_sends/\d+}
-    assert_selector "h1", text: "Send summary"
     assert_equal 3, Message.count
     assert_equal [ "Hi Maya", "Hi Pemba", "Planning your trip" ], Message.order(:id).pluck(:subject)
     capture_outbound_evidence("group-summary-mobile")
@@ -246,15 +249,17 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     sign_in_browser
     page.current_window.resize_to(390, 844)
     visit merge_templates_path
-    select "Annapurna · May 2027", from: "Departure travelers"
+    tolerate_submit_navigation { select "Annapurna · May 2027", from: "Departure travelers" }
     # The selection submits a full-page form. Wait for the result before
     # inspecting fields that also exist in the document being replaced.
-    assert_selector "[aria-label='Merged messages']", visible: :all
+    tolerate_navigation_assertion do
+      assert_selector "[aria-label='Merged messages']", text: "Hello Maya, thinking of Annapurna!"
+    end
     assert_field "Recipients", with: "Maya Gurung <maya@example.com>"
     assert_text "Hello Maya, thinking of Annapurna!"
     capture_outbound_evidence("departure-merge-mobile")
-    click_button "Send 1 personal emails"
-    assert_selector "h1", text: "Send summary"
+    tolerate_submit_navigation { click_button "Send 1 personal emails" }
+    tolerate_navigation_assertion { assert_selector "h1", text: "Send summary" }
     assert_equal "Hello Maya, thinking of Annapurna!", Message.last.text_body
     assert_equal @client, Message.last.owner
   end
