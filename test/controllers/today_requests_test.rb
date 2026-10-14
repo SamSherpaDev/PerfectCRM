@@ -36,6 +36,31 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     assert_equal "1", stat_value("Active clients")
   end
 
+  test "not yet called links every older inquiry oldest first and clears after a logged call" do
+    travel_to Time.zone.local(2026, 10, 14, 12) do
+      newer = Lead.create!(name: "Newer inquiry", received_at: 3.days.ago)
+      older = Lead.create!(name: "Older inquiry", received_at: 5.days.ago)
+      get root_path
+      assert_response :success
+      assert_select "section[aria-labelledby='not-yet-called-heading']" do
+        assert_select "a", count: 2 do |links|
+          assert_equal [ "Older inquiry", "Newer inquiry" ], links.map(&:text)
+        end
+        assert_select "a[href=?]", lead_path(older)
+        assert_select "a[href=?]", lead_path(newer)
+      end
+
+      post lead_calls_path(older), params: { save_key: "first-contact-call", occurred_at: 1.hour.ago.iso8601,
+        outcome: "voicemail", direction: "outbound" }
+      assert_redirected_to lead_path(older)
+      get root_path
+      assert_select "section[aria-labelledby='not-yet-called-heading']" do
+        assert_select "a", count: 1
+        assert_select "a[href=?]", lead_path(newer)
+      end
+    end
+  end
+
   test "automatic-only inquiry shows the unanswered inbound preview until a call is logged" do
     lead = Lead.create!(name: "Demo inquiry", email: "demo@example.com")
     thread = Conversation.create!(linkable: lead, subject: "Trip")
@@ -171,6 +196,7 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "p", text: /Nothing owed this week/
     assert_select "p", text: /No replies waiting/
+    assert_select "p", text: "No inquiries waiting for first contact."
   end
 
   private

@@ -38,6 +38,36 @@
     </div>
   </section>
 
+  <section class="card card-pad" aria-labelledby="not-yet-called-heading">
+    <div class="card-header">
+      <h2 class="card-title" id="not-yet-called-heading">Not yet called</h2>
+      <%= badge @summary.not_yet_called.count, :neutral %>
+    </div>
+    <%= card_caption "New inquiries over one business day old, with no personal reply or logged call. Oldest first; Monday to Friday." %>
+    <% inquiries = @summary.not_yet_called %>
+    <% if inquiries.any? %>
+      <ul class="rowlist">
+        <% inquiries.each do |lead| %>
+          <li>
+            <div class="who">
+              <%= link_to lead.name, lead_path(lead), class: "n link" %>
+              <span class="s"><%= lead.trip_interest.presence || "Trip inquiry" %></span>
+            </div>
+            <div class="meta">
+              <span>Received <%= date_short((lead.received_at || lead.created_at).to_date) %></span>
+            </div>
+          </li>
+        <% end %>
+      </ul>
+    <% else %>
+      <div class="empty-inline">
+        <%= sketch :enso, class: "enso" %>
+        <p class="text-sm text-ink">No inquiries waiting for first contact.</p>
+        <p class="text-xs muted">Older new inquiries will appear here until you reply or log a call.</p>
+      </div>
+    <% end %>
+  </section>
+
   <section class="card card-pad" aria-labelledby="replies-heading">
     <div class="card-header">
       <h2 class="card-title" id="replies-heading">Replies waiting</h2>

@@ -33,6 +33,21 @@ class CaptainDigestMailerTest < ActionMailer::TestCase
     body = CaptainDigestMailer.morning.body.encoded
     assert_includes body, "Nothing overdue"
     assert_includes body, "No follow-ups due today"
+    assert_includes body, "Not yet called: 0."
+  end
+
+  test "morning includes the full not yet called count and links to Today" do
+    travel_to Time.zone.local(2026, 10, 14, 7) do
+      7.times { |i| Lead.create!(name: "Inquiry #{i}", received_at: 3.days.ago) }
+      Lead.create!(name: "Recent inquiry", received_at: 1.hour.ago)
+      called = Lead.create!(name: "Called inquiry", received_at: 3.days.ago)
+      CallLog.record!(called, key: "digest-call-1", occurred_at: 1.day.ago,
+        outcome: "connected", direction: "outbound")
+
+      body = CaptainDigestMailer.morning.body.encoded
+      assert_includes body, "Not yet called: 7."
+      assert_includes body, Rails.application.routes.url_helpers.root_url(host: "example.com")
+    end
   end
 
   test "digest job sends when enabled and stays quiet when off" do
