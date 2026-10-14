@@ -470,8 +470,10 @@ local record offer Create review ask. Waiting on you counts linked threads
 where the client wrote last (same rule as the Inbox tab; unknown senders
 wait in triage). Inquiry threads ignore automatic first replies and failed
 personal email; they stay waiting until a successful personal reply or a
-logged call after the latest inbound message. Any logged call outcome counts
-as handling the inquiry; a new inbound message after the call queues it again.
+logged call after the latest inbound message. The call must belong to the
+linked lead or, after conversion, the inquiry whose automatic greeting is in
+that thread. Any logged call outcome counts as handling the inquiry; a new
+inbound message after the call queues it again.
 Replies waiting lists the newest five with reply links,
 Quotes out counts live sent and viewed quotes whose valid-until has not
 passed, New leads counts leads still in the New stage, and Active clients
@@ -1075,8 +1077,8 @@ Every Monday at 7am Pacific (schedule in
 [`config/recurring.yml`](config/recurring.yml)) the captain gets last
 week's numbers that decide the ads: inquiries, qualified leads, quotes, and
 bookings by channel and campaign, with spend, cost per inquiry, and cost per
-qualified inquiry. Month and year to date, the travelers goal pace, median
-first reply and leads waiting over 24 hours, trips, landing placement,
+qualified inquiry. Month and year to date, the travelers goal pace, reply
+metrics defined below, trips, landing placement,
 inquiries with trip, month, and party size filled, suspected spam held
 back, and how often the AI fit matched the captain's own calls follow.
 Weeks run Monday to Sunday, Pacific time.
@@ -1107,10 +1109,12 @@ Personal reply speed uses only sent or received outbound email in the lead's or
 converted client's conversations, excluding messages recorded in
 `automatic_first_replies`. The report shows personal reply count and median,
 and automatic first reply count and median on a separate line, for inquiries
-received that week. Notes, visitor details, calls, stage changes, and conversion
-are not email replies. Open inquiries without a successful personal email stay
-listed after 24 hours until emailed or closed. Waiting is a live list even in past-week
-previews; historical reports are recomputed from current records, not saved
+received that week. Automatic replies are attributed to their reserved inquiry,
+including after conversion to a shared client. Notes, visitor details, calls,
+stage changes, and conversion are not email replies. Open inquiries without a
+successful personal email stay listed after 24 hours until emailed, lost,
+converted, or archived. Waiting is a live list even in past-week previews;
+historical reports are recomputed from current records, not saved
 snapshots. Every trip is listed; unknown timing does not count as a filled
 month. AI agreement uses the latest owner move to Chatting, Quoted, or Lost,
 or conversion, within the 28 days ending on the report week's Sunday. A latest
