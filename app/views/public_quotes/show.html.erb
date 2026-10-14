@@ -88,6 +88,8 @@
       </div>
     <% end %>
 
+    <%= render "quotes/if_things_go_wrong", quote: @quote, section_class: "mt-6 border-t border-rule-2 pt-4" %>
+
     <% if @quote.terms_bundle.present? %>
       <section class="mt-6 border-t border-rule-2 pt-4" aria-labelledby="booking-terms-heading">
         <h2 id="booking-terms-heading" class="font-display text-xl text-ink">Your booking terms</h2>

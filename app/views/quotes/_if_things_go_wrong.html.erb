@@ -1,0 +1,7 @@
+<%# locals: (quote:, section_class: "card card-pad") %>
+<% if quote.if_things_go_wrong.present? %>
+  <section class="<%= section_class %>" aria-labelledby="if-things-go-wrong-heading">
+    <h2 id="if-things-go-wrong-heading" class="font-display text-2xl text-ink">If things go wrong</h2>
+    <div class="text-ink-2"><%= booking_document_html(quote.if_things_go_wrong) %></div>
+  </section>
+<% end %>

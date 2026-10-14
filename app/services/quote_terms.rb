@@ -29,6 +29,10 @@ class QuoteTerms
     ROOT.join("#{name}.md").read
   end
 
+  def self.if_things_go_wrong
+    Rails.root.join("config/quote_documents/if-things-go-wrong.md").read
+  end
+
   def self.excerpt(name)
     source("replacement-library").split("## #{name}\n", 2).last.split("\n## ", 2).first.strip
   end
@@ -108,6 +112,7 @@ class QuoteTerms
       "delivered_at" => Time.current.iso8601,
       "client" => quote.owner_name, "email" => quote.owner_email,
       "master_terms" => master, "pre_payment_disclosure" => disclosure,
+      "if_things_go_wrong" => if_things_go_wrong,
       "trip_differences" => quote.trip_differences,
       "itinerary" => [ quote.subject_label, "#{quote.departure_start_on} to #{quote.departure_end_on}",
         quote.itinerary, quote.included, quote.notes, details.fetch("services") ].compact_blank.join("\n\n"),

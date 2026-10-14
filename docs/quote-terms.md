@@ -63,6 +63,22 @@ Historical sent/accepted quotes are never backfilled. Their existing acceptance
 path remains available and exports a null new-version bundle. Never label a
 historical acceptance SH-TC-2026-10-04 without actual new acceptance.
 
+## If things go wrong
+
+Every new quote includes this summary as a dedicated PDF page, on the public
+accept page, and in the staff preview. The builder has no per-quote section
+switches. Its single editable source is
+`config/quote_documents/if-things-go-wrong.md`; it is separate from the immutable
+released terms. In particular, keep the owner-approved Lukla wording there.
+The summary covers weather-delay nights, scheduled departures with no minimum
+group size, the conditions promise, and early-cancellation deposit credit.
+It retains the timing, price and refund qualifications of sections 3-7.
+
+Delivery snapshots the summary in `terms_bundle["if_things_go_wrong"]`, covered
+by the bundle hash and JSON download. Later source changes affect drafts and
+new sends only. Historical bundles without this page stay unchanged; duplicate
+or revise a quote to deliver the current documents.
+
 ## Operational templates and rollout
 
 Before deploying the clause migration, firstmate should run the read-only

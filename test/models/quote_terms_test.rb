@@ -1,4 +1,5 @@
 require "test_helper"
+require "pdf/reader"
 require_relative "../support/quote_terms_test_helper"
 
 class QuoteTermsTest < ActiveSupport::TestCase
@@ -120,5 +121,44 @@ class QuoteTermsTest < ActiveSupport::TestCase
     assert @quote.accept!
     assert_nil @quote.reload.terms_bundle
     assert_nil @quote.accepted_terms_version
+  end
+
+  test "every draft PDF includes the complete summary on its own page" do
+    pdf = PDF::Reader.new(StringIO.new(QuotePdf.new(@quote, accept_url: "https://example.test/q/demo").render))
+    assert_equal 2, pdf.page_count
+    text = pdf.pages.second.text.gsub(/\s+/, " ")
+    assert_includes text, "If things go wrong"
+    assert_includes text, "we cover up to 2 extra nights while you wait, and more when the situation calls for it."
+    assert_includes text, "Scheduled departures have no minimum group size."
+    assert_includes text, "within 60 days of departure"
+    assert_includes text, "at least 90 days before your trip starts"
+    assert_includes text, "They do not change your terms or refunds required by law."
+    assert_no_match(/guarantee/i, text)
+  end
+
+  test "delivery freezes the summary across public documents PDF and later standard text changes" do
+    complete_quote_terms(@quote, days: 180)
+    assert @quote.deliver!
+    delivered = @quote.reload.if_things_go_wrong
+    assert_equal QuoteTerms.if_things_go_wrong, delivered
+    assert_equal delivered, @quote.terms_bundle.fetch("if_things_go_wrong")
+    QuoteTerms.stub(:if_things_go_wrong, "Changed future wording") do
+      assert_equal delivered, @quote.if_things_go_wrong
+      pdf = PDF::Reader.new(StringIO.new(QuotePdf.new(@quote, accept_url: "https://example.test/q/demo").render))
+      assert_includes pdf.pages.second.text, "If things go wrong"
+      assert_not_includes pdf.pages.map(&:text).join, "Changed future wording"
+      assert_equal "Changed future wording", @quote.duplicate!.if_things_go_wrong
+    end
+  end
+
+  test "historical delivered bundles are not backfilled with a new summary" do
+    complete_quote_terms(@quote, days: 180)
+    historical = QuoteTerms.bundle(@quote).except("if_things_go_wrong")
+    @quote.update!(status: "sent", sent_at: Time.current, terms_bundle: historical,
+      terms_bundle_sha256: Digest::SHA256.hexdigest(JSON.generate(historical)))
+    assert_nil @quote.reload.if_things_go_wrong
+    pdf = PDF::Reader.new(StringIO.new(QuotePdf.new(@quote, accept_url: "https://example.test/q/demo").render))
+    assert_not_includes pdf.pages.map(&:text).join, "If things go wrong"
+    assert_equal historical, @quote.reload.terms_bundle
   end
 end
