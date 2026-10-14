@@ -83,10 +83,29 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     get root_path
     assert_equal "1", stat_value("Waiting on you")
 
-    other = Lead.create!(name: "Unrelated inquiry")
-    CallLog.record!(other, key: "unrelated-call-1", occurred_at: 1.hour.ago,
-      outcome: "connected", direction: "outbound")
+    other = Lead.create!(name: "Another inquiry", email: "another@example.com", existing_client: client)
+    other_thread = Conversation.create!(linkable: other, subject: "Another trip")
+    other_thread.messages.create!(direction: "in", status: "received",
+      text_body: "A different trip", sent_at: 1.day.ago)
+    other_automatic = other_thread.messages.create!(direction: "out", status: "sent", subject: "Another trip",
+      to_addrs: other.email, text_body: "Welcome again", sent_at: 1.day.ago + 1.minute)
+    AutomaticFirstReply.create!(lead: other, message: other_automatic, email: other.email)
+    post convert_lead_path(other), params: { expected_client_id: client.id }
+    assert_redirected_to client_path(client)
+    assert_equal client, other_thread.reload.linkable
+    assert other_thread.waiting_on_you?
+    get root_path
+    assert_equal "2", stat_value("Waiting on you")
+
+    post client_calls_path(client), params: { inquiry_id: other.id, save_key: "other-inquiry-call",
+      occurred_at: 1.hour.ago.iso8601, outcome: "connected", direction: "outbound" }
+    assert_redirected_to client_path(client)
     assert thread.waiting_on_you?
+    assert_not other_thread.waiting_on_you?
+    get root_path
+    assert_equal "1", stat_value("Waiting on you")
+    assert_select "a[href=?]", inbox_thread_path(thread)
+    assert_select "a[href=?]", inbox_thread_path(other_thread), count: 0
     post client_calls_path(client), params: { inquiry_id: lead.id, save_key: "conversion-call-2",
       occurred_at: 1.hour.ago.iso8601, outcome: "voicemail", direction: "inbound" }
     assert_redirected_to client_path(client)
