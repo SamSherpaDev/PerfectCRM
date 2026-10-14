@@ -32,6 +32,27 @@ class QuoteTermsRequestsTest < ActionDispatch::IntegrationTest
     assert_equal @quote.terms_bundle_sha256, @quote.accepted_bundle_sha256
   end
 
+  test "public summary and download use the delivered wording while builder previews current text" do
+    delivered = @quote.terms_bundle.fetch("if_things_go_wrong")
+    QuoteTerms.stub(:if_things_go_wrong, "Future summary wording") do
+      get public_quote_path(@quote.accept_token)
+      assert_select "section[aria-labelledby='if-things-go-wrong-heading']" do
+        assert_select "h2", "If things go wrong"
+        assert_select "h3", count: 4
+        assert_select "p", text: /we cover up to 2 extra nights while you wait/
+      end
+      assert_not_includes response.body, "Future summary wording"
+      get public_quote_documents_path(@quote.accept_token)
+      assert_equal delivered, JSON.parse(response.body).fetch("if_things_go_wrong")
+      sign_in
+      draft = @quote.duplicate!
+      get edit_quote_path(draft)
+      assert_response :success
+      assert_select "details summary", "Preview If things go wrong"
+      assert_select "section[aria-labelledby='if-things-go-wrong-heading'] p", "Future summary wording"
+    end
+  end
+
   test "documents download mail and PDF contain the same immutable texts" do
     get public_quote_documents_path(@quote.accept_token)
     assert_response :success

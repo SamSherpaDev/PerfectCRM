@@ -47,6 +47,9 @@ class QuotePdf
     accept_block(pdf)
     pdf.move_down 18
     footer(pdf)
+    if @quote.if_things_go_wrong.present?
+      if_things_go_wrong(pdf)
+    end
     if @quote.terms_bundle.blank? && @quote.itinerary.present?
       pdf.start_new_page
       pdf.text "Day-by-day itinerary", size: 16
@@ -60,6 +63,25 @@ class QuotePdf
         pdf.move_down 8
         pdf.text @quote.terms_bundle.fetch(name), size: 9, leading: 3
       end
+    end
+  end
+
+  def if_things_go_wrong(pdf)
+    pdf.start_new_page
+    header(pdf)
+    pdf.stroke_color RULE
+    pdf.stroke_horizontal_rule
+    pdf.move_down 18
+    pdf.text "If things go wrong", size: 24
+    pdf.move_down 8
+    @quote.if_things_go_wrong.split(/\n\s*\n/).each do |block|
+      if block.start_with?("## ")
+        pdf.move_down 6
+        pdf.text block.delete_prefix("## ").strip, size: 11, style: :bold
+      else
+        pdf.text block.strip, size: 10, leading: 3
+      end
+      pdf.move_down 7
     end
   end
 

@@ -128,6 +128,8 @@
     </section>
   <% end %>
 
+  <%= render "if_things_go_wrong", quote: @quote %>
+
   <% if @quote.terms_bundle.present? %>
     <section class="card card-pad">
       <h2 class="card-title">Delivered booking documents</h2>

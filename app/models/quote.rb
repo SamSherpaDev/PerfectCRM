@@ -107,6 +107,12 @@ class Quote < ApplicationRecord
     terms_bundle.present? ? terms_bundle.fetch("email") : owner&.display_email
   end
 
+  # Delivered documents keep their original wording, including older bundles
+  # that predate this page. Every new draft previews the current standard text.
+  def if_things_go_wrong
+    draft? ? QuoteTerms.if_things_go_wrong : terms_bundle&.dig("if_things_go_wrong")
+  end
+
   def subject_label
     trip_name.presence || "Custom SherpaHolidays trip"
   end
