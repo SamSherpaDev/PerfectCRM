@@ -3,8 +3,9 @@
 New quote delivery uses `QuoteTerms` and the released files in
 `config/booking_terms/SH-TC-2026-10-14/`. Never edit a released source or its
 clause-refresh mapping. A later policy gets a new version directory.
-The October 14, 2026 release caps Lukla weather-delay coverage at up to two
-extra nights, with more when the situation calls for it. New deliveries use
+The Lukla weather-delay promise is defined in
+[the released master terms, section 7](../config/booking_terms/SH-TC-2026-10-14/master-terms.md#7-changes-flights-and-extra-nights).
+New deliveries use
 SH-TC-2026-10-14 and SH-DISC-2026-10-14; previously delivered or accepted
 bundles retain their original versions and bytes. The October 4 template
 rollout in `TemplatePolicyRefresh` stays pinned to its original release.
@@ -64,9 +65,11 @@ The booking-page URL passes reference/version/hash only; it cannot carry the
 complete documents. PerfectBook must preserve the accepted bundle and perform
 its own pre-collection disclosure, signer, schedule and payment gates.
 
-Historical sent/accepted quotes are never backfilled. Their existing acceptance
-path remains available and exports a null new-version bundle. Never label a
-historical acceptance SH-TC-2026-10-04 without actual new acceptance.
+Historical sent/accepted quotes are never backfilled. Quotes delivered before
+document bundles were introduced retain their existing acceptance path and
+export a null bundle and accepted terms version. Quotes with a delivered bundle
+retain that bundle and record its version on acceptance. Never assign a newer
+terms version to a historical acceptance without actual new acceptance.
 
 ## Operational templates and rollout
 
