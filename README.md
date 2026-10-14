@@ -821,6 +821,12 @@ Inquiry review **Q-fit** is your separately audited `owner_fit_at_inquiry`
 judgment (Strong/Possible), with no reply required. **Platform-qualified** stays
 current strong/possible fit plus your stage move. An AI score is never silently
 substituted for your review count. Unreviewed fit is shown in completeness.
+Lead details show "Not scored yet" until an AI verdict arrives. Use the
+Strong/Possible/Weak buttons under "Set your fit" to record your own judgment;
+the selected choice stays visible and can be changed. Archived and converted
+leads stay read-only. The Monday report places "Your fit" beside "Qual" for
+each source/campaign and total, counting Strong/Possible judgments among that
+week's inquiries without changing Qualified or cost per qualified inquiry.
 Cohorts use inquiry dates and mature 30/60/90/180-day denominators; immature
 inquiries show as pending. Cohort bookings and their eventual value/net cash
 exclude bookings whose first receipt precedes the inquiry. Timestamped receipts

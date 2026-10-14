@@ -96,7 +96,7 @@
         <%= form.select :owner_fit_at_inquiry, [["Not reviewed", ""]] + Lead::FIT_BANDS.map { |band| [band.humanize, band] }, {}, class: "select" %>
         <p class="hint">Q-fit for review thresholds. No reply required. Separate from Panda AI and platform qualification.</p>
         <%= form.label :fit_band, "Fit band", class: "label mt-3" %>
-        <%= form.select :fit_band, [ [ "Scoring…", "" ] ] + Lead::FIT_BANDS.map { |band| [ band.humanize, band ] }, {}, class: "select" %>
+        <%= form.select :fit_band, [ [ "Not scored yet", "" ] ] + Lead::FIT_BANDS.map { |band| [ band.humanize, band ] }, {}, class: "select" %>
       </div>
       <div class="sm:col-span-2">
         <%= form.label :fit_reason, "Fit reason", class: "label" %>

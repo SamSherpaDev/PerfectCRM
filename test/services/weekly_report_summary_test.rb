@@ -26,6 +26,30 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
     assert_equal "Sep 28-Oct 4", WeeklyReport::Summary.week_label(Date.new(2026, 9, 30))
   end
 
+  test "owner fit counts the week's eligible inquiries separately from qualification by source and campaign" do
+    inquiry("Owner strong", campaign: "EBC", owner_fit_at_inquiry: "strong")
+    inquiry("Owner possible", source: "meta_ads", owner_fit_at_inquiry: "possible", fit_band: "weak")
+    inquiry("Owner weak", owner_fit_at_inquiry: "weak", fit_band: "strong")
+    ai_only = inquiry("AI only", campaign: "EBC", fit_band: "strong")
+    move(ai_only, "chatting", at: Time.zone.local(2026, 9, 16))
+    inquiry("Unpaid owner fit", source: "referral", owner_fit_at_inquiry: "possible")
+    inquiry("Before week", at: Time.zone.local(2026, 9, 13, 23, 59), owner_fit_at_inquiry: "strong")
+    inquiry("After week", at: Time.zone.local(2026, 9, 21), owner_fit_at_inquiry: "strong")
+    inquiry("Test fit", is_test: true, owner_fit_at_inquiry: "strong")
+    inquiry("Spam fit", tag_list: Lead::SUSPECTED_SPAM_TAG, owner_fit_at_inquiry: "strong")
+    inquiry("Archived fit", owner_fit_at_inquiry: "strong").archive!
+    AdSpend.record!(week_start: WEEK, source: "google_ads", campaign_name: "EBC", amount_dollars: "100")
+
+    summary = WeeklyReport::Summary.new(week_start: WEEK)
+    google = row(summary, "Google EBC")
+    assert_equal [ 1, 1, 10_000 ], [ google.qualified, google.q_fit, google.cost_per_qualified ]
+    assert_equal 1, summary.channel_total("meta_ads").q_fit
+    assert_equal 2, summary.paid_total.q_fit
+    assert_equal 3, summary.total.q_fit
+    assert_equal 3, summary.q_fit
+    assert_equal 1, summary.total.qualified
+  end
+
   test "counts inquiries and qualified leads by channel and campaign with cost per inquiry" do
     strong = inquiry("Strong", campaign: "ebc_search", fit_band: "strong")
     inquiry("Weak", campaign: "ebc_search", fit_band: "weak")

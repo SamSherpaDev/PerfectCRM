@@ -21,10 +21,10 @@ class WeeklyReportMailerTest < ActionMailer::TestCase
     assert_equal "SherpaHolidays ads, Sep 14-20: 1 inquiry, 0 qualified, 0 booked", mail.subject
     text = mail.text_part.body.decoded
     assert_includes text, "Goal: 10 travelers by Dec 31, 2026. So far 0. Need 0.7 a week for 15 weeks."
-    assert_includes text, "Google ebc_search: $126 spend | 1 inq | 0 qual | 0 quoted | 0 booked | $126/inq"
+    assert_includes text, "Google ebc_search: $126 spend | 1 inq | 0 qual | 0 your fit | 0 quoted | 0 booked | $126/inq"
     assert_includes text, "Meta: - spend | 0 inq"
     assert_includes text, "Paid total: $126 spend | 1 inq"
-    assert_includes text, "All sources: 1 inq | 0 qual | 0 quoted | 0 booked\n"
+    assert_includes text, "All sources: 1 inq | 0 qual | 0 your fit | 0 quoted | 0 booked\n"
     assert_includes text, "Everest Base Camp: 1 inq, 0 qual, 0 booked"
     assert_includes text, "Came in from: trip page 1"
     assert_includes text, "1 inquiry waiting over 24 h"
@@ -33,6 +33,21 @@ class WeeklyReportMailerTest < ActionMailer::TestCase
     assert_includes html, "SherpaHolidays ads, week of Sep 14-20"
     assert_includes html, "Google ebc_search"
     [ text, html, mail.subject ].each { |part| assert_not_includes part, "\u2014" }
+  end
+
+  test "Monday report displays owner fit beside unchanged qualified counts in both formats" do
+    Lead.create!(name: "Owner reviewed", source: "google_ads", owner_fit_at_inquiry: "possible",
+      received_at: Time.zone.local(2026, 9, 15))
+    mail = WeeklyReportMailer.weekly
+    assert_includes mail.subject, "0 qualified"
+    assert_includes mail.text_part.body.decoded, "1 inq | 0 qual | 1 your fit"
+    html = Nokogiri::HTML(mail.html_part.body.decoded)
+    assert_equal [ "Qual", "Your fit" ], html.css("thead th").map(&:text)[3, 2]
+    google = html.css("tbody tr").find { |tr| tr.css("td").first.text.include?("Google") }
+    assert_equal [ "0", "1" ], google.css("td").map(&:text)[3, 2]
+    [ mail.text_part, mail.html_part ].each do |part|
+      assert_includes part.body.decoded, "your Strong or Possible judgment for inquiries received this week, no reply required"
+    end
   end
 
   test "asks for spend when the week has none and honors a saved recipient" do

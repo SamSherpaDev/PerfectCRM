@@ -23,11 +23,11 @@ module WeeklyReportHelper
     "#{hours.round(hours < 10 ? 1 : 0).to_s.delete_suffix('.0')} h"
   end
 
-  # "Google EBC: $126 spend | 3 inq | 1 qual | 0 quoted | 0 booked | $42/inq | $126/qual"
+  # "Google EBC: $126 spend | 3 inq | 1 qual | 2 your fit | 0 quoted | 0 booked | $42/inq | $126/qual"
   def report_row_line(row, label: row.label, costs: true)
     parts = []
     parts << "#{report_money(row.spend_minor)} spend" if costs
-    parts << "#{row.inquiries} inq" << "#{row.qualified} qual" << "#{row.quoted} quoted" << "#{row.booked} booked"
+    parts << "#{row.inquiries} inq" << "#{row.qualified} qual" << "#{row.q_fit} your fit" << "#{row.quoted} quoted" << "#{row.booked} booked"
     parts << "#{report_money(row.booked_value_minor)} booked value" if row.booked.positive?
     if costs
       parts << "#{report_money(row.cost_per_inquiry)}/inq"

@@ -303,4 +303,56 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     assert_select ".fit-word", text: /Strong fit/
     assert_select ".bar-good", count: 1
   end
+
+  test "unscored inquiry offers audited owner fit choices without setting AI fit or stage" do
+    lead = Lead.create!(name: "Unscored inquiry")
+    get lead_path(lead)
+    assert_select ".fit-word", text: "Not scored yet"
+    assert_select "#owner-fit-heading", text: "Set your fit"
+    assert_select "button[name='lead[owner_fit_at_inquiry]']", count: 3
+
+    Lead::FIT_BANDS.each do |band|
+      patch lead_path(lead), params: { lead: { owner_fit_at_inquiry: band } }
+      assert_redirected_to lead_path(lead)
+      lead.reload
+      assert_equal band, lead.owner_fit_at_inquiry
+      assert_equal "CAPTAIN@gmail.com", lead.owner_fit_recorded_by
+      assert_not_nil lead.owner_fit_recorded_at
+      assert_equal band, lead.activity_events.where(kind: "inquiry_fit").order(:id).last.metadata["fit"]
+      assert_nil lead.fit_band
+      assert_nil lead.fit_score
+      assert_equal "new", lead.status
+      follow_redirect!
+      assert_select ".fit-word", text: "Not scored yet"
+      assert_select "#owner-fit-heading", text: "Your fit at inquiry: #{band.humanize}"
+      assert_select "button[value='#{band}'][aria-pressed='true']", count: 1
+    end
+  end
+
+  test "owner fit preserves an existing AI verdict" do
+    lead = Lead.create!(name: "Scored inquiry", fit_band: "strong", fit_score: 84, fit_reason: "Good trip match")
+    patch lead_path(lead), params: { lead: { owner_fit_at_inquiry: "weak" } }
+    follow_redirect!
+    assert_select ".fit-word", text: /Strong fit/
+    assert_select ".fit-word .num", text: "84"
+    assert_select ".fit-why", text: "Good trip match"
+    assert_select "#owner-fit-heading", text: "Your fit at inquiry: Weak"
+    assert_equal [ "strong", 84, "Good trip match" ], lead.reload.attributes.values_at("fit_band", "fit_score", "fit_reason")
+  end
+
+  test "archived and converted inquiries show owner fit without editable choices" do
+    archived = Lead.create!(name: "Archived inquiry", owner_fit_at_inquiry: "possible")
+    archived.archive!
+    converted = Lead.create!(name: "Converted inquiry", owner_fit_at_inquiry: "possible")
+    converted.convert_to_client!
+
+    [ archived, converted ].each do |lead|
+      get lead_path(lead)
+      assert_select "#owner-fit-heading", text: "Your fit at inquiry: Possible"
+      assert_select "button[name='lead[owner_fit_at_inquiry]']", count: 0
+      patch lead_path(lead), params: { lead: { owner_fit_at_inquiry: "strong" } }
+      assert_redirected_to lead_path(lead)
+      assert_equal "possible", lead.reload.owner_fit_at_inquiry
+    end
+  end
 end

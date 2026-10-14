@@ -17,7 +17,7 @@ module WeeklyReport
     AGREEMENT_WINDOW = 28.days
     TRAVELERS_GOALS = { 2026 => 10, 2027 => 100 }.freeze
 
-    Row = Struct.new(:source, :campaign, :spend_minor, :inquiries, :qualified, :quoted, :booked,
+    Row = Struct.new(:source, :campaign, :spend_minor, :inquiries, :qualified, :q_fit, :quoted, :booked,
       :booked_value_minor, keyword_init: true) do
       def label
         base = source ? SOURCE_LABELS.fetch(source, source.humanize) : UNLINKED_LABEL
@@ -66,7 +66,7 @@ module WeeklyReport
     end
 
     def q_fit
-      week_inquiries.count { |lead| QUALIFIED_FITS.include?(lead.owner_fit_at_inquiry) }
+      total.q_fit
     end
 
     def range
@@ -274,14 +274,18 @@ module WeeklyReport
       row_for = lambda do |source, campaign|
         name = campaign.to_s.strip.presence
         rows[[ source, name ]] ||= Row.new(source: source, campaign: name, spend_minor: nil,
-          inquiries: 0, qualified: 0, quoted: 0, booked: 0, booked_value_minor: 0)
+          inquiries: 0, qualified: 0, q_fit: 0, quoted: 0, booked: 0, booked_value_minor: 0)
       end
       PAID_SOURCES.each { |source| row_for.call(source, nil) }
       spends.each do |spend|
         row = row_for.call(spend.source, spend.campaign_name)
         row.spend_minor = row.spend_minor.to_i + spend.amount_minor
       end
-      inquiries_in(window).each { |lead| row_for.call(lead.source, lead.campaign_name).inquiries += 1 }
+      inquiries_in(window).each do |lead|
+        row = row_for.call(lead.source, lead.campaign_name)
+        row.inquiries += 1
+        row.q_fit += 1 if QUALIFIED_FITS.include?(lead.owner_fit_at_inquiry)
+      end
       qualified_in(window).each { |lead| row_for.call(lead.source, lead.campaign_name).qualified += 1 }
       quoted_in(window).each { |lead| row_for.call(lead.source, lead.campaign_name).quoted += 1 }
       deposits_in(window).each do |booking|
@@ -317,7 +321,7 @@ module WeeklyReport
     def sum_rows(list)
       spend = list.map(&:spend_minor).compact
       Row.new(source: nil, campaign: nil, spend_minor: spend.empty? || list.any? { |row| missing_spend?(row) } ? nil : spend.sum,
-        inquiries: list.sum(&:inquiries), qualified: list.sum(&:qualified), quoted: list.sum(&:quoted),
+        inquiries: list.sum(&:inquiries), qualified: list.sum(&:qualified), q_fit: list.sum(&:q_fit), quoted: list.sum(&:quoted),
         booked: list.sum(&:booked), booked_value_minor: list.sum(&:booked_value_minor))
     end
 

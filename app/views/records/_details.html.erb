@@ -15,16 +15,31 @@
   <% unless read_only %><%= render "records/call", record: record %><% end %>
 
   <% if lead %>
-    <div class="fit-head">
-      <% if record.fit_score.present? || record.fit_band.present? %>
-        <p class="fit-word"><%= record.fit_band.present? ? "#{record.fit_band.humanize} fit" : "Fit" %><% if record.fit_score.present? %><span class="num"> <%= record.fit_score %></span><% end %></p>
-        <span class="bar <%= lead_fit_bar_class(record.fit_band) %>" aria-hidden="true"><span class="bar-fill" style="width: <%= record.fit_score.to_i %>%"></span></span>
-        <% if record.fit_reason.present? %><p class="fit-why"><%= record.fit_reason %></p><% end %>
-      <% else %>
-        <p class="fit-word flex items-center gap-2"><%= orb(:shaping, label: "Scoring this ask") %>Scoring</p>
-        <p class="fit-why">Panda AI reads the ask and scores the fit within a few minutes.</p>
-      <% end %>
-    </div>
+    <%= turbo_frame_tag dom_id(record, :fit) do %>
+      <div class="fit-head">
+        <% if record.fit_score.present? || record.fit_band.present? %>
+          <p class="fit-word"><%= record.fit_band.present? ? "#{record.fit_band.humanize} fit" : "Fit" %><% if record.fit_score.present? %><span class="num"> <%= record.fit_score %></span><% end %></p>
+          <span class="bar <%= lead_fit_bar_class(record.fit_band) %>" aria-hidden="true"><span class="bar-fill" style="width: <%= record.fit_score.to_i %>%"></span></span>
+          <% if record.fit_reason.present? %><p class="fit-why"><%= record.fit_reason %></p><% end %>
+        <% else %>
+          <p class="fit-word">Not scored yet</p>
+          <p class="fit-why">No Panda AI verdict has arrived.</p>
+        <% end %>
+        <div class="mt-4" role="group" aria-labelledby="owner-fit-heading">
+          <p class="label" id="owner-fit-heading"><%= record.owner_fit_at_inquiry.present? || read_only ? "Your fit at inquiry: #{record.owner_fit_at_inquiry.presence&.humanize || 'Not reviewed'}" : "Set your fit" %></p>
+          <% unless read_only %>
+            <%= form_with url: lead_path(record), method: :patch, class: "fit-choices" do %>
+              <% Lead::FIT_BANDS.each do |band| %>
+                <%= button_tag band.humanize, name: "lead[owner_fit_at_inquiry]", value: band,
+                  class: "btn btn-sm #{record.owner_fit_at_inquiry == band ? 'btn-primary' : 'btn-secondary'}",
+                  aria: { pressed: record.owner_fit_at_inquiry == band } %>
+              <% end %>
+            <% end %>
+          <% end %>
+          <p class="hint mt-2">Your judgment, separate from Panda AI. No reply required.</p>
+        </div>
+      </div>
+    <% end %>
   <% end %>
 
   <dl class="facts facts-col mt-4">

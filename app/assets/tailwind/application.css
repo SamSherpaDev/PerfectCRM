@@ -2377,6 +2377,16 @@
   line-height: 1.45;
   color: var(--pb-ink-3);
 }
+.fit-choices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+.fit-choices .btn {
+  padding-inline: 6px;
+  font-size: 12px;
+}
 .facts-col {
   grid-template-columns: minmax(0, 1fr);
   gap: 12px 0;
