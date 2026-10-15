@@ -91,6 +91,7 @@ class Lead < ApplicationRecord
     flagged = Tagging.joins(:tag).where(taggable_type: "Lead", tags: { name: SUSPECTED_SPAM_TAG }).select(:taggable_id)
     where.not(spam_marked_at: nil).or(where(id: flagged))
   }
+  scope :potential, -> { active.where(converted_client_id: nil).where.not(potential_marked_at: nil).where.not(id: spam.select(:id)) }
   scope :open, -> { active.where(converted_client_id: nil).where.not(status: "lost") }
   scope :lost, -> { active.where(status: "lost").where(converted_client_id: nil) }
   scope :converted, -> { where.not(converted_client_id: nil) }
@@ -156,10 +157,35 @@ class Lead < ApplicationRecord
     spam_marked_at.present? || tags.any? { |tag| tag.name == SUSPECTED_SPAM_TAG }
   end
 
+  def potential?
+    potential_marked_at.present? && !archived? && !converted? && !suspected_spam?
+  end
+
+  def mark_potential!
+    with_lock do
+      if archived? || converted? || suspected_spam?
+        errors.add(:base, "Only active, non-spam leads can be marked Potential")
+        raise ActiveRecord::RecordInvalid, self
+      end
+      update!(potential_marked_at: potential_marked_at || Time.current)
+    end
+  end
+
+  def unmark_potential!
+    with_lock do
+      if archived? || converted?
+        errors.add(:base, "Only active leads can be changed")
+        raise ActiveRecord::RecordInvalid, self
+      end
+      update!(potential_marked_at: nil)
+    end
+  end
+
   def mark_as_spam!
     with_lock do
       reject_converted_spam_review!
       tags << Tag.find_or_create_by!(name: SUSPECTED_SPAM_TAG) unless tags.exists?(name: SUSPECTED_SPAM_TAG)
+      self.potential_marked_at = nil
       self.spam_marked_at ||= Time.current
       archive!
       record_spam_review!("spam", "Marked as spam and archived")

@@ -2,11 +2,11 @@ class LeadsController < ApplicationController
   include ReplyBox
   include RecordPage
 
-  before_action :set_lead, only: %i[show edit update convert refresh_bookings archive unarchive mark_as_spam not_spam]
+  before_action :set_lead, only: %i[show edit update convert refresh_bookings archive unarchive mark_as_spam not_spam mark_potential unmark_potential]
   before_action :block_converted_edit, only: %i[edit update]
   before_action :block_archived_edit, only: %i[edit update]
 
-  TABS = %w[new chatting quoted nudged lost converted archived missing_source].freeze
+  TABS = %w[potential new chatting quoted nudged lost converted archived missing_source].freeze
 
   def index
     @tab = TABS.include?(params[:tab]) ? params[:tab] : "new"
@@ -14,6 +14,7 @@ class LeadsController < ApplicationController
     @sort = %w[activity name newest fit].include?(params[:sort]) ? params[:sort] : "activity"
 
     @counts = {
+      "potential" => Lead.potential.count,
       "new" => Lead.by_status("new").count,
       "chatting" => Lead.by_status("chatting").count,
       "quoted" => Lead.by_status("quoted").count,
@@ -23,7 +24,9 @@ class LeadsController < ApplicationController
       "archived" => Lead.archived.count
     }
 
-    base = if @tab == "converted"
+    base = if @tab == "potential"
+      Lead.potential
+    elsif @tab == "converted"
       Lead.converted
     elsif @tab == "archived"
       Lead.archived
@@ -126,6 +129,20 @@ class LeadsController < ApplicationController
     redirect_to @lead, notice: "Marked as not spam. Lead is active again."
   rescue ActiveRecord::RecordInvalid => e
     redirect_to @lead, alert: e.record.errors.full_messages.to_sentence.presence || "Could not clear spam."
+  end
+
+  def mark_potential
+    @lead.mark_potential!
+    redirect_back fallback_location: lead_path(@lead), notice: "Marked as Potential. Find it in the Potential tab."
+  rescue ActiveRecord::RecordInvalid => e
+    redirect_to @lead, alert: e.record.errors.full_messages.to_sentence
+  end
+
+  def unmark_potential
+    @lead.unmark_potential!
+    redirect_back fallback_location: lead_path(@lead), notice: "Removed from Potential."
+  rescue ActiveRecord::RecordInvalid => e
+    redirect_to @lead, alert: e.record.errors.full_messages.to_sentence
   end
 
   def refresh_bookings

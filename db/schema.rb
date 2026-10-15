@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_15_154340) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_15_192650) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -377,6 +377,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_15_154340) do
     t.string "phone"
     t.string "phone_raw"
     t.string "placement"
+    t.datetime "potential_marked_at"
     t.datetime "received_at"
     t.string "reference"
     t.string "referral_code"
