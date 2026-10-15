@@ -64,6 +64,10 @@ class QuoteTermsRequestsTest < ActionDispatch::IntegrationTest
       assert_includes response.parsed_body.fetch(name), delay_promise
       assert_not_includes response.parsed_body.fetch(name), "SherpaHolidays pays for the extra nights"
     end
+    master = response.parsed_body.fetch("master_terms")
+    assert_includes master, "An inquiry starts a conversation, not a booking. We reply within one business day. Before you pay,"
+    assert_includes master, "Please contact us promptly with questions about your booking or a charge. We reply within one business day. We provide a substantive response to a written complaint within 14 business days. Contacting us"
+    assert_not_includes master, "within 24 hours"
     email = QuoteMailer.quote_email(@quote)
     %w[master_terms pre_payment_disclosure trip_differences itinerary].each do |name|
       assert_equal @quote.terms_bundle.fetch(name), email.attachments["#{@quote.reference}-#{name}.txt"].decoded

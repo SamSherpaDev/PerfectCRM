@@ -85,7 +85,7 @@ California law requires certain sellers of travel to have a trust account or bon
 
 ## DISPUTES
 
-Please contact us promptly with questions about your booking or a charge. We reply within 24 hours, including weekends, and provide a substantive response to a written complaint within 14 business days. Contacting us does not limit your right to contact your card issuer or meet its deadlines.
+Please contact us promptly with questions about your booking or a charge. We reply within one business day. We provide a substantive response to a written complaint within 14 business days. Contacting us does not limit your right to contact your card issuer or meet its deadlines.
 
 California law governs these terms. We first try in good faith to resolve a dispute in writing. Subject to mandatory jurisdiction and consumer rights, proceedings are brought in the state courts in Santa Clara County, California, or the federal court serving that county. These terms do not impose binding arbitration or waive a right that cannot lawfully be waived. If a provision is unenforceable, the remaining provisions continue to apply to the extent permitted by law.
 

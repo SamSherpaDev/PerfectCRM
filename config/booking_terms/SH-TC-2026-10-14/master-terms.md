@@ -23,7 +23,7 @@ The traveler-cancellation table does not remove our conditions promise, rights u
 
 ## 1. Before you book
 
-An inquiry starts a conversation, not a booking. We reply within 24 hours, including weekends. Before you pay, we provide your itinerary, price, payment schedule, these terms, any trip-specific differences and the applicable California pre-payment disclosure in writing.
+An inquiry starts a conversation, not a booking. We reply within one business day. Before you pay, we provide your itinerary, price, payment schedule, these terms, any trip-specific differences and the applicable California pre-payment disclosure in writing.
 
 Your booking documents are these dated terms and your written booking confirmation, including its itinerary, price and any clearly identified trip-specific differences you accepted before payment. The confirmation supplies your trip details. A trip-specific difference changes these terms only where it identifies the affected provision and was disclosed and accepted before payment. An invoice, later email, supplier form or revised website cannot remove a right you already have. Later changes require your written agreement and remain subject to applicable law. The separate participant risk release addresses activity risks, not payment or refund rights.
 
@@ -119,6 +119,6 @@ California law requires certain sellers of travel to have a trust account or bon
 
 ## 13. Questions and disputes
 
-Please contact us promptly with questions about your booking or a charge. We reply within 24 hours, including weekends, and provide a substantive response to a written complaint within 14 business days. Contacting us does not limit your right to contact your card issuer or meet its deadlines.
+Please contact us promptly with questions about your booking or a charge. We reply within one business day. We provide a substantive response to a written complaint within 14 business days. Contacting us does not limit your right to contact your card issuer or meet its deadlines.
 
 California law governs these terms. We first try in good faith to resolve a dispute in writing. Subject to mandatory jurisdiction and consumer rights, proceedings are brought in the state courts in Santa Clara County, California, or the federal court serving that county. These terms do not impose binding arbitration or waive a right that cannot lawfully be waived. If a provision is unenforceable, the remaining provisions continue to apply to the extent permitted by law.

@@ -3,6 +3,11 @@
 New quote delivery uses `QuoteTerms` and the released files in
 `config/booking_terms/SH-TC-2026-10-14/`. Never edit a released source or its
 clause-refresh mapping. A later policy gets a new version directory.
+The owner-approved exception is the October 14 reply-promise correction in
+SH-TC-2026-10-14: new deliveries read the corrected source under the same
+version. The promise is defined in
+[the master terms, section 1](../config/booking_terms/SH-TC-2026-10-14/master-terms.md#1-before-you-book).
+Already delivered bundles remain unchanged.
 The Lukla weather-delay promise is defined in
 [the released master terms, section 7](../config/booking_terms/SH-TC-2026-10-14/master-terms.md#7-changes-flights-and-extra-nights).
 New deliveries use
