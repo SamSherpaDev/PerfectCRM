@@ -581,8 +581,8 @@ A lead carries source (`google_ads`, `meta_ads`, `trade_show`, `website_form`,
 `email`, `referral`, `manual`), campaign, `external_ref` for n8n idempotency, an optional
 advisor `referral_code` from the storefront `?ref=` links, Panda
 AI fit (`fit_score`, `fit_band`, `fit_reason`), and status (`new`,
-`chatting`, `quoted`, `nudged`, `lost`). Tabs are New, Chatting, Quoted,
-Nudged, Lost, Converted, Archived, and Potential. A PerfectBook contact ID can recur
+`chatting`, `quoted`, `nudged`, `lost`). Tabs are Potential, New, Chatting,
+Quoted, Nudged, Lost, Converted, and Archived. A PerfectBook contact ID can recur
 across lost or converted inquiries, but only one open lead (unconverted,
 not lost, not archived) can hold it. The same email address may hold several
 open inquiries at once. Storefront submission and replay behavior follows the
@@ -593,7 +593,8 @@ Mark Potential on an inquiry or lead row to remember who you want to follow up
 with. The Potential tab gathers marked leads across stages; they also stay in
 their stage tabs so the pipeline remains intact. Remove Potential clears the
 reminder without changing fit or stage. Archived and converted leads stay out
-of Potential. Mark as spam clears the reminder, and Not spam does not restore
+of Potential. Restoring an ordinarily archived lead restores its Potential
+reminder. Mark as spam clears the reminder, and Not spam does not restore
 it; suspected spam cannot be marked Potential.
 
 More → Delete lead archives it after one confirmation naming the lead; the
