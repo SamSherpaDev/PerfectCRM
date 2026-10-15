@@ -23,6 +23,45 @@ class InboxRequestsTest < ActionDispatch::IntegrationTest
     assert_select "a", text: /Everest/
   end
 
+  test "spam archive removes threads from inbox queues and restoration returns them" do
+    lead = Lead.create!(name: "Spam inquiry")
+    thread = Conversation.create!(linkable: lead, subject: "Spam thread")
+    thread.messages.create!(direction: "in", sent_at: 1.hour.ago, text_body: "Hello")
+    replied = Conversation.create!(linkable: lead, subject: "Replied spam thread")
+    replied.messages.create!(direction: "out", status: "sent", sent_at: Time.current,
+      to_addrs: "traveler@example.test", subject: "Replied spam thread", text_body: "Reply")
+
+    get inbox_path(tab: "waiting")
+    assert_select "a[href=?]", inbox_thread_path(thread), count: 1
+    assert_includes Conversation.waiting_on_them, replied
+
+    patch mark_as_spam_lead_path(lead)
+    assert_redirected_to leads_path(tab: "archived")
+    [ "waiting", "waiting_them", "all" ].each do |tab|
+      get inbox_path(tab: tab)
+      assert_response :success
+      assert_select "a[href=?]", inbox_thread_path(thread), count: 0
+      assert_select "a[href=?]", inbox_thread_path(replied), count: 0
+      [ [ "waiting", "Waiting on you" ], [ "waiting_them", "Waiting on them" ], [ "all", "All" ] ].each do |key, label|
+        assert_select "nav.tabs a[href=?]", inbox_path(tab: key), text: /#{label}.*0/m
+      end
+    end
+    [ thread, replied ].each do |conversation|
+      assert_not_includes Conversation.waiting_on_you, conversation
+      assert_not_includes Conversation.waiting_on_them, conversation
+    end
+
+    patch not_spam_lead_path(lead)
+    assert_redirected_to lead_path(lead)
+    get inbox_path(tab: "waiting")
+    assert_select "a[href=?]", inbox_thread_path(thread), count: 1
+    get inbox_path(tab: "waiting_them")
+    assert_select "a[href=?]", inbox_thread_path(replied), count: 1
+    assert_select "a[href=?]", inbox_thread_path(thread), count: 0
+    assert_includes Conversation.waiting_on_you, thread
+    assert_includes Conversation.waiting_on_them, replied
+  end
+
   test "triage tab shows suggested clients" do
     conversation = Conversation.create!(subject: "New ask", last_message_at: Time.current)
     conversation.messages.create!(direction: "in", from_address: "newbie@example.com",
