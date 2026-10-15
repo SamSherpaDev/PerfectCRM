@@ -27,7 +27,6 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
       assert_link lead.name
       assert_no_link general.name
       page.execute_script("arguments[0].scrollIntoView({block: 'center'})", find_link(lead.name)) if width == 390
-      page.save_screenshot("/home/sam/.no-mistakes/evidence/01M50GQNPSJJMSBNWH4MRD77N3/potential-#{width}.png")
       assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, width
       visit leads_path(tab: "chatting")
       within("li", text: lead.name) { assert_button "Remove Potential" }
