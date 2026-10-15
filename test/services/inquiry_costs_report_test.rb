@@ -55,6 +55,15 @@ class InquiryCostsReportTest < ActiveSupport::TestCase
     assert_equal [ 3, 1 ], [ result.campaign_rows.sole.inquiries, result.campaign_rows.sole.excluded ]
   end
 
+  test "owner spam stays excluded even if tags are edited and not spam counts it again" do
+    lead = inquiry
+    lead.mark_as_spam!
+    lead.update!(tag_list: "")
+    assert_equal [ 0, 1 ], report.totals.values_at(:inquiries, :excluded)
+    lead.mark_not_spam!
+    assert_equal [ 1, 0 ], report.totals.values_at(:inquiries, :excluded)
+  end
+
   test "Pacific received day including DST and created fallback determines counts" do
     @day = Date.new(2026, 11, 1)
     travel_to Time.zone.local(2026, 11, 3, 10)

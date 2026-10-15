@@ -599,6 +599,17 @@ Restore is refused while an open lead holds its PerfectBook contact ID.
 Converted leads cannot be archived. The archived record presentation is
 described under [Clients](#clients).
 
+Mark as spam on an inquiry or lead row records your verdict, adds the existing
+`suspected_spam` tag, and archives it in one tap. It leaves active leads,
+Today's replies and follow-ups, and Not yet called. Find it in Archived;
+Not spam clears your verdict and the tag and restores its previous stage.
+Automatically flagged inquiries show Looks like spam with Mark as spam and
+Not spam choices. These actions preserve the automatic spam score, fit,
+messages, and history; the timeline records who reviewed it. Confirmed spam
+stays excluded from cost-per-inquiry, Monday and monthly reports, and ad
+conversions even if its tag is later edited. Monday's held-back spam count
+includes archived spam.
+
 Conversion is one-way and manual. Convert to client matches an existing
 client by an explicit returning-inquiry link first, then PerfectBook contact
 ID, then normalized primary email.

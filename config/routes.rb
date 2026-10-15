@@ -60,6 +60,8 @@ Rails.application.routes.draw do
       post :convert
       patch :archive
       patch :unarchive
+      patch :mark_as_spam
+      patch :not_spam
       post :refresh_bookings
     end
     resources :notes, only: %i[create]

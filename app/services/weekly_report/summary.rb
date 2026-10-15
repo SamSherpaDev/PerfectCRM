@@ -194,7 +194,7 @@ module WeeklyReport
     end
 
     def suspected_spam_count
-      Lead.active.where(id: spam_lead_ids)
+      Lead.where(id: spam_lead_ids)
         .where("COALESCE(received_at, leads.created_at) BETWEEN ? AND ?", range.first, range.last).count
     end
 
@@ -342,8 +342,7 @@ module WeeklyReport
     end
 
     def spam_lead_ids
-      @spam_lead_ids ||= Tagging.joins(:tag)
-        .where(taggable_type: "Lead", tags: { name: Lead::SUSPECTED_SPAM_TAG }).pluck(:taggable_id)
+      @spam_lead_ids ||= Lead.spam.pluck(:id)
     end
 
     def week_inquiries

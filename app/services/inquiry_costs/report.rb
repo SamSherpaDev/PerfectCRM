@@ -61,8 +61,7 @@ module InquiryCosts
       spends = DailyAdSpend.where(spent_on: start_date..end_date).order(:spent_on, :id).to_a
       # The page receives aggregate rows; this query omits contact columns.
       inquiries = website_inquiries.pluck(:received_at, :created_at, :source, :campaign_name, :metadata, :id)
-      spam_ids = Tagging.joins(:tag).where(taggable_type: "Lead", tags: { name: Lead::SUSPECTED_SPAM_TAG })
-        .where(taggable_id: website_inquiries.select(:id)).pluck(:taggable_id).to_set
+      spam_ids = website_inquiries.spam.pluck(:id).to_set
       campaign_names = spends.group_by { |spend| [ spend.source, spend.campaign_name ] }
         .transform_values { |entries| entries.map(&:campaign_id).uniq }
       campaigns, ads = {}, {}

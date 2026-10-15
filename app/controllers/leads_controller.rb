@@ -2,7 +2,7 @@ class LeadsController < ApplicationController
   include ReplyBox
   include RecordPage
 
-  before_action :set_lead, only: %i[show edit update convert refresh_bookings archive unarchive]
+  before_action :set_lead, only: %i[show edit update convert refresh_bookings archive unarchive mark_as_spam not_spam]
   before_action :block_converted_edit, only: %i[edit update]
   before_action :block_archived_edit, only: %i[edit update]
 
@@ -112,6 +112,20 @@ class LeadsController < ApplicationController
     redirect_to @lead, notice: "Lead restored."
   rescue ActiveRecord::RecordInvalid => e
     redirect_to @lead, alert: e.record.errors.full_messages.to_sentence.presence || "Could not restore."
+  end
+
+  def mark_as_spam
+    @lead.mark_as_spam!
+    redirect_to leads_path(tab: "archived"), notice: "Marked as spam and archived. Choose Not spam to restore."
+  rescue ActiveRecord::RecordInvalid => e
+    redirect_to @lead, alert: e.record.errors.full_messages.to_sentence.presence || "Could not mark as spam."
+  end
+
+  def not_spam
+    @lead.mark_not_spam!
+    redirect_to @lead, notice: "Marked as not spam. Lead is active again."
+  rescue ActiveRecord::RecordInvalid => e
+    redirect_to @lead, alert: e.record.errors.full_messages.to_sentence.presence || "Could not clear spam."
   end
 
   def refresh_bookings

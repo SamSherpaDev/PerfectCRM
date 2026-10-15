@@ -1,6 +1,50 @@
 require "test_helper"
 
 class TodaySummaryTest < ActiveSupport::TestCase
+  test "quotes for archived spam stop counting while client quotes stay visible" do
+    lead = inquiry("Quoted spam", 5.days.ago)
+    quote = Quote.create!(lead: lead, status: "sent", sent_at: 1.day.ago, valid_until: Date.tomorrow)
+    client = Client.create!(name: "Real traveler")
+    Quote.create!(client: client, status: "viewed", sent_at: 1.day.ago, valid_until: Date.tomorrow)
+    assert_equal 2, Today::Summary.new.quotes_out
+    lead.mark_as_spam!
+    assert_equal 1, Today::Summary.new.quotes_out
+    assert_equal "sent", quote.reload.status
+    lead.mark_not_spam!
+    assert_equal 2, Today::Summary.new.quotes_out
+  end
+
+  test "spam archive removes inquiry replies and tasks from Today and restoration brings them back" do
+    lead = inquiry("Spam demo", 5.days.ago)
+    thread = lead.conversations.create!(subject: "Spam inquiry")
+    thread.messages.create!(direction: "in", status: "received", sent_at: 2.days.ago,
+      from_address: lead.email, text_body: "Demo spam")
+    task = lead.tasks.create!(title: "Review inquiry", due_on: Date.current)
+    overdue = lead.tasks.create!(title: "Old inquiry task", due_on: Date.yesterday)
+    summary = Today::Summary.new
+    assert_includes summary.not_yet_called, lead
+    assert_includes summary.replies_waiting, thread
+    assert_includes summary.followups_due, task
+    waiting_count = summary.waiting_on_you
+
+    lead.mark_as_spam!
+    summary = Today::Summary.new
+    assert_not_includes summary.not_yet_called, lead
+    assert_not_includes summary.replies_waiting, thread
+    assert_equal waiting_count - 1, summary.waiting_on_you
+    assert_not_includes summary.followups_due, task
+    assert_not_includes summary.overdue, overdue
+    assert_not_includes summary.followups, task
+    assert_nil task.reload.done_at
+
+    lead.mark_not_spam!
+    summary = Today::Summary.new
+    assert_includes summary.not_yet_called, lead
+    assert_includes summary.replies_waiting, thread
+    assert_includes summary.followups_due, task
+    assert_includes summary.overdue, overdue
+  end
+
   test "not yet called lists new inquiries oldest first and ignores automatic and failed replies" do
     travel_to Time.zone.local(2026, 10, 14, 12) do
       oldest = inquiry("Oldest", 6.days.ago)

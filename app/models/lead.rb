@@ -87,6 +87,10 @@ class Lead < ApplicationRecord
 
   scope :active, -> { where(archived_at: nil) }
   scope :archived, -> { where.not(archived_at: nil) }
+  scope :spam, -> {
+    flagged = Tagging.joins(:tag).where(taggable_type: "Lead", tags: { name: SUSPECTED_SPAM_TAG }).select(:taggable_id)
+    where.not(spam_marked_at: nil).or(where(id: flagged))
+  }
   scope :open, -> { active.where(converted_client_id: nil).where.not(status: "lost") }
   scope :lost, -> { active.where(status: "lost").where(converted_client_id: nil) }
   scope :converted, -> { where.not(converted_client_id: nil) }
@@ -149,7 +153,26 @@ class Lead < ApplicationRecord
   end
 
   def suspected_spam?
-    tags.any? { |tag| tag.name == SUSPECTED_SPAM_TAG }
+    spam_marked_at.present? || tags.any? { |tag| tag.name == SUSPECTED_SPAM_TAG }
+  end
+
+  def mark_as_spam!
+    with_lock do
+      reject_converted_spam_review!
+      tags << Tag.find_or_create_by!(name: SUSPECTED_SPAM_TAG) unless tags.exists?(name: SUSPECTED_SPAM_TAG)
+      self.spam_marked_at ||= Time.current
+      archive!
+      record_spam_review!("spam", "Marked as spam and archived")
+    end
+  end
+
+  def mark_not_spam!
+    with_lock do
+      reject_converted_spam_review!
+      tags.delete(tags.where(name: SUSPECTED_SPAM_TAG).to_a)
+      update!(spam_marked_at: nil, archived_at: nil)
+      record_spam_review!("not_spam", "Marked as not spam")
+    end
   end
 
   def converted?
@@ -171,7 +194,13 @@ class Lead < ApplicationRecord
   end
 
   def unarchive!
-    update!(archived_at: nil)
+    with_lock do
+      if suspected_spam?
+        mark_not_spam!
+      else
+        update!(archived_at: nil)
+      end
+    end
   end
 
   def readonly_after_convert?
@@ -368,6 +397,18 @@ class Lead < ApplicationRecord
   end
 
   private
+
+  def reject_converted_spam_review!
+    return unless converted?
+
+    errors.add(:base, "Converted leads stay read-only")
+    raise ActiveRecord::RecordInvalid, self
+  end
+
+  def record_spam_review!(verdict, summary)
+    activity_events.create!(kind: "spam_review", summary: summary, occurred_at: Time.current,
+      metadata: { "verdict" => verdict, "actor" => Current.user_email.presence || "manual" })
+  end
 
   def lost_reason_required_when_lost
     return unless status == "lost" && converted_client_id.nil?
