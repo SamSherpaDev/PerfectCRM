@@ -15,7 +15,7 @@ class LeadSpamSystemTest < ApplicationSystemTestCase
   end
 
   test "owner archives spam from list and record and restores intact at desktop and phone widths" do
-    [1400, 390].each do |width|
+    [ 1400, 390 ].each do |width|
       page.current_window.resize_to(width, 900)
       lead = Lead.create!(name: "Spam review #{width}", message: "Original inquiry", tag_list: "trekking")
       lead.notes.create!(body: "Preserved history")
@@ -61,7 +61,7 @@ class LeadSpamSystemTest < ApplicationSystemTestCase
       assert_not lead.reload.archived?
       assert_not lead.suspected_spam?
       assert_equal "Original inquiry", lead.message
-      assert_equal ["trekking"], lead.tags.pluck(:name)
+      assert_equal [ "trekking" ], lead.tags.pluck(:name)
       assert_equal "Preserved history", lead.notes.last.body
       visit inbox_path(tab: "waiting")
       assert_link thread.subject
