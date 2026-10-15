@@ -41,8 +41,6 @@ class LeadSpamSystemTest < ApplicationSystemTestCase
       assert lead.reload.archived?
       assert lead.spam_marked_at
       assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, width
-      find("li", text: lead.name).scroll_to(:center)
-      page.save_screenshot("/home/sam/.no-mistakes/evidence/01M504CM9P5RVT101WFY2SDT55/archive-#{width}.png")
       visit leads_path
       assert_no_link lead.name
       %w[waiting waiting_them all].each do |tab|
@@ -78,7 +76,6 @@ class LeadSpamSystemTest < ApplicationSystemTestCase
     lead = Lead.create!(name: "False positive", spam_score: 75, tag_list: "suspected_spam, trekking")
     visit lead_path(lead)
     assert_text "Looks like spam"
-    page.save_screenshot("/home/sam/.no-mistakes/evidence/01M504CM9P5RVT101WFY2SDT55/suspected-spam.png")
     within("section[aria-label='Spam review']") { click_button "Not spam" }
     assert_text "Marked as not spam"
     assert_no_selector "section[aria-label='Spam review']"

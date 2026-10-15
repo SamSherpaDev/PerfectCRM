@@ -6,8 +6,9 @@ class NotYetCalledSystemTest < ApplicationSystemTestCase
 
   EVIDENCE = ENV["NOT_YET_CALLED_EVIDENCE"]
 
+  # Chrome uses the real clock for cookie expiry, so travel to future weekdays.
   test "captain sees untouched inquiries and clears one by logging a call" do
-    travel_to Time.zone.local(2026, 10, 14, 12) do
+    travel_to Date.current.next_occurring(:wednesday).in_time_zone.change(hour: 12) do
       oldest = inquiry("Oldest inquiry", 6.days.ago)
       automatic = inquiry("Automatic greeting only", 5.days.ago)
       greeting = reply(automatic, "sent")
@@ -49,10 +50,10 @@ class NotYetCalledSystemTest < ApplicationSystemTestCase
   end
 
   test "weekends and exact business day boundary do not prematurely flag inquiries" do
-    travel_to Time.zone.local(2026, 10, 17, 12) do
-      inquiry("Thursday overdue", Time.zone.local(2026, 10, 15, 23, 59, 59))
-      inquiry("Friday boundary", Time.zone.local(2026, 10, 16, 12))
-      inquiry("Friday afternoon", Time.zone.local(2026, 10, 16, 15))
+    travel_to Date.current.next_occurring(:saturday).in_time_zone.change(hour: 12) do
+      inquiry("Thursday overdue", 2.days.ago.change(hour: 23, min: 59, sec: 59))
+      inquiry("Friday boundary", 1.day.ago)
+      inquiry("Friday afternoon", 1.day.ago.change(hour: 15))
       browser_sign_in
       assert_equal [ "Thursday overdue" ], inquiry_links
       travel 1.day
