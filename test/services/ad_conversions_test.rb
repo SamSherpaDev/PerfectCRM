@@ -94,6 +94,17 @@ class AdConversionsTest < ActiveSupport::TestCase
     [ archived, spam, unfit ].each { |lead| assert_empty AdConversions.record!(lead.reload, now: @now) }
   end
 
+  test "owner spam verdict excludes ad conversions even without the tag" do
+    lead = ad_lead
+    lead.mark_as_spam!
+    lead.update!(tag_list: "")
+    assert AdConversions.excluded?(lead.reload)
+    assert_empty AdConversions.record!(lead, now: @now)
+    lead.mark_not_spam!
+    assert_not AdConversions.excluded?(lead.reload)
+    assert_not_empty AdConversions.record!(lead, now: @now)
+  end
+
   test "the lead event reuses the submission id and waits for Meta only" do
     lead = ad_lead
     rows = AdConversions.record!(lead, now: @now)

@@ -5,5 +5,26 @@
     <%= render "records/header_actions", record: @lead %>
   <% end %>
   <%= render "shared/flash" %>
+  <% if @lead.suspected_spam? && !@lead.converted? %>
+    <section class="card card-pad mb-5" aria-label="Spam review">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <% if @lead.spam_marked_at.present? %>
+          <p class="text-sm muted">Marked as spam and archived. Choose Not spam to restore this inquiry.</p>
+        <% elsif @lead.archived? %>
+          <p class="text-sm muted">Looks like spam. Confirm your verdict, or choose Not spam to restore this inquiry.</p>
+        <% else %>
+          <p class="text-sm muted">Looks like spam. Confirm to archive, or keep this inquiry as a real lead.</p>
+        <% end %>
+        <% if @lead.spam_marked_at.nil? %>
+          <div class="flex flex-wrap gap-2">
+            <%= button_to "Mark as spam", mark_as_spam_lead_path(@lead), method: :patch, class: "btn-secondary btn btn-sm" %>
+            <% unless @lead.archived? %>
+              <%= button_to "Not spam", not_spam_lead_path(@lead), method: :patch, class: "btn-secondary btn btn-sm" %>
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+    </section>
+  <% end %>
   <%= render "records/record", record: @lead, read_only: read_only %>
 </div>

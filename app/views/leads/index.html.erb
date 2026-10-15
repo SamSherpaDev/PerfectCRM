@@ -56,18 +56,27 @@
                 <% end %>
                 <%= status_badge(lead.converted? ? "converted" : lead.status) %>
                 <% lead.tags.each do |tag| %>
-                  <%= badge tag.name, :brand %>
+                  <%= badge(tag.name == Lead::SUSPECTED_SPAM_TAG ? (lead.spam_marked_at.present? ? "Spam" : "Looks like spam") : tag.name, :brand) %>
                 <% end %>
               </div>
             </div>
             <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs muted sm:justify-end">
               <% if @tab == "archived" %>
                 <span>Archived <%= date_short(lead.archived_at) %></span>
-                <%= button_to "Restore", unarchive_lead_path(lead), method: :patch, class: "btn-secondary btn btn-sm" %>
+                <% if lead.suspected_spam? %>
+                  <%= button_to "Not spam", not_spam_lead_path(lead), method: :patch, class: "btn-secondary btn btn-sm" %>
+                <% else %>
+                  <%= button_to "Restore", unarchive_lead_path(lead), method: :patch, class: "btn-secondary btn btn-sm" %>
+                <% end %>
               <% else %>
                 <span>Active <%= date_short(lead.last_activity) %></span>
                 <% if lead.converted_client %>
                   <%= link_to "Open client", client_path(lead.converted_client), class: "link-quiet" %>
+                <% else %>
+                  <%= button_to "Mark as spam", mark_as_spam_lead_path(lead), method: :patch, class: "btn-secondary btn btn-sm" %>
+                  <% if lead.suspected_spam? %>
+                    <%= button_to "Not spam", not_spam_lead_path(lead), method: :patch, class: "btn-secondary btn btn-sm" %>
+                  <% end %>
                 <% end %>
               <% end %>
             </div>

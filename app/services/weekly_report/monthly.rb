@@ -42,7 +42,7 @@ module WeeklyReport
       tests = Client.where(is_test: true).select(:id)
       test_inquiries = Lead.where(converted_client_id: tests).or(Lead.where(existing_client_id: tests)).select(:id)
       Lead.all.where(is_test: false).where.not(id: test_inquiries)
-        .where.not(id: Tagging.joins(:tag).where(taggable_type: "Lead", tags: { name: Lead::SUSPECTED_SPAM_TAG }).select(:taggable_id))
+        .where.not(id: Lead.spam.select(:id))
     end
 
     def rows

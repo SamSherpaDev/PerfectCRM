@@ -22,6 +22,9 @@ class Conversation < ApplicationRecord
   validates :ai_triage, inclusion: { in: %w[new_inquiry returning_client operator vendor_or_spam other], allow_nil: true }
 
   scope :ordered, -> { order(Arel.sql("COALESCE(conversations.last_message_at, conversations.updated_at) DESC, conversations.id DESC")) }
+  scope :excluding_archived_leads, -> {
+    where.not(id: Conversation.where(linkable_type: "Lead", linkable_id: Lead.archived.select(:id)).select(:id))
+  }
   scope :linked, -> { where.not(linkable_type: nil) }
   scope :inquiry_linked, -> {
     where(linkable_type: "Lead").or(where(linkable_type: "Client",
@@ -40,14 +43,14 @@ class Conversation < ApplicationRecord
   # personal reply or a logged call after the inbound message does.
   # An equal inbound/outbound timestamp remains in the waiting-on-you bucket.
   scope :waiting_on_you, -> {
-    joins(:messages)
+    excluding_archived_leads.joins(:messages)
       .where(messages: { direction: "in" })
       .where("messages.sent_at >= COALESCE((SELECT MAX(m2.sent_at) FROM messages m2 WHERE m2.conversation_id = conversations.id AND m2.id IN (#{Message.waiting_replies.select(:id).to_sql})), '1970-01-01')")
       .where("NOT EXISTS (SELECT 1 FROM activity_events calls WHERE calls.subject_type = 'Lead' AND calls.subject_id IN (SELECT leads.id FROM leads WHERE (conversations.linkable_type = 'Lead' AND leads.id = conversations.linkable_id) OR (conversations.linkable_type = 'Client' AND leads.converted_client_id = conversations.linkable_id AND EXISTS (SELECT 1 FROM automatic_first_replies greetings INNER JOIN messages greeting_messages ON greeting_messages.id = greetings.message_id WHERE greetings.lead_id = leads.id AND greeting_messages.conversation_id = conversations.id))) AND calls.kind = 'call' AND calls.occurred_at > messages.sent_at)")
       .distinct
   }
   scope :waiting_on_them, -> {
-    where.not(id: waiting_on_you.select(:id)).where.not(id: triage.select(:id))
+    excluding_archived_leads.where.not(id: waiting_on_you.select(:id)).where.not(id: triage.select(:id))
   }
 
   def linked?

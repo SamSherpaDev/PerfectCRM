@@ -4,7 +4,7 @@ class InboxController < ApplicationController
 
   def index
     @tab = TABS.include?(params[:tab].to_s) ? params[:tab].to_s : "waiting"
-    base = Conversation.where(ignored: false).ordered.includes(:linkable)
+    base = Conversation.excluding_archived_leads.where(ignored: false).ordered.includes(:linkable)
     waiting = base.merge(Conversation.waiting_on_you).linked
     @waiting_count = waiting.count
     @waiting_them_count = base.where.not(id: Conversation.waiting_on_you.select(:id))

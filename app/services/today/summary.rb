@@ -26,7 +26,8 @@ module Today
 
     # Sent or viewed quotes whose valid-until has not passed.
     def quotes_out
-      Quote.live.where.not(id: Quote.expired.select(:id)).count
+      Quote.live.where.not(id: Quote.expired.select(:id))
+        .where.not(id: Quote.where(lead_id: Lead.archived.select(:id)).select(:id)).count
     end
 
     # New stage alone does not establish whether an inquiry has been worked.

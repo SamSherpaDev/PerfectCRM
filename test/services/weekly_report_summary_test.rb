@@ -26,6 +26,22 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
     assert_equal "Sep 28-Oct 4", WeeklyReport::Summary.week_label(Date.new(2026, 9, 30))
   end
 
+  test "owner spam is held back in Monday and monthly reports until restored" do
+    lead = inquiry("Owner confirmed spam")
+    lead.mark_as_spam!
+    lead.update!(tag_list: "")
+    summary = WeeklyReport::Summary.new(week_start: WEEK)
+    assert_equal 0, summary.total.inquiries
+    assert_equal 1, summary.suspected_spam_count
+    assert_not_includes WeeklyReport::Monthly.new.eligible_leads, lead
+
+    lead.mark_not_spam!
+    summary = WeeklyReport::Summary.new(week_start: WEEK)
+    assert_equal 1, summary.total.inquiries
+    assert_equal 0, summary.suspected_spam_count
+    assert_includes WeeklyReport::Monthly.new.eligible_leads, lead
+  end
+
   test "owner fit counts the week's eligible inquiries separately from qualification by source and campaign" do
     inquiry("Owner strong", campaign: "EBC", owner_fit_at_inquiry: "strong")
     inquiry("Owner possible", source: "meta_ads", owner_fit_at_inquiry: "possible", fit_band: "weak")

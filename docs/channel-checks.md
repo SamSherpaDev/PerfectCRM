@@ -230,9 +230,9 @@ the `website_form` source. Paid leads without website evidence do not count.
 The received timestamp (creation timestamp only when missing) selects the
 Pacific day, including daylight saving changes. Each Lead counts once; copies
 on Clients are not counted. Lost, archived, and converted inquiries remain in
-history. Test leads and leads linked to test clients are omitted. The existing
-`suspected_spam` tag excludes suspected spam from genuine counts and shows it
-separately. A weak fit, lost status, or spam score alone is not a spam marking.
+history. Test leads and leads linked to test clients are omitted. Spam, as
+defined under [Leads](../README.md#leads), is excluded from genuine counts and
+shown separately. A weak fit, lost status, or spam score alone is not a spam marking.
 Here, genuine means not marked suspected spam, not independently verified.
 
 Attribution uses the eligible, permission-allowed `last_non_direct_touch`

@@ -40,7 +40,7 @@ module SourceBackfill
       "open" => Lead.where(converted_client_id: nil).count,
       "placements" => Lead.group(:placement).count.transform_keys { |key| key || "(missing)" },
       "channels" => Lead.group(:capture_channel).count.transform_keys { |key| key || "(missing)" },
-      "spam" => Tagging.joins(:tag).where(taggable_type: "Lead", tags: { name: Lead::SUSPECTED_SPAM_TAG }).count,
+      "spam" => Lead.spam.count,
       "legacy_attribution" => Lead.where("json_type(metadata, '$.attribution') = 'object'").count,
       "acquisition_snapshots" => Lead.where("json_type(metadata, '$.acquisition') = 'object'").count,
       "shared_email_groups_for_review" => Lead.where.not(email: [ nil, "" ]).group(:email).having("COUNT(*) > 1").count.size,

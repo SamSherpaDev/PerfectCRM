@@ -8,6 +8,67 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     sign_in
   end
 
+  test "spam action archives the inquiry and archived Not spam restores it" do
+    lead = Lead.create!(name: "Spam inquiry")
+    get lead_path(lead)
+    assert_select "form[action='#{mark_as_spam_lead_path(lead)}'] button", text: "Mark as spam"
+    patch mark_as_spam_lead_path(lead)
+    assert_redirected_to leads_path(tab: "archived")
+    assert lead.reload.archived?
+    assert lead.spam_marked_at.present?
+    get leads_path
+    assert_select "a", text: lead.name, count: 0
+    get leads_path(tab: "archived")
+    assert_select "a", text: lead.name
+    assert_select "form[action='#{not_spam_lead_path(lead)}'] button", text: "Not spam"
+    get lead_path(lead)
+    assert_select "section[aria-label='Spam review']", text: /Marked as spam and archived/
+    assert_select "form[action='#{not_spam_lead_path(lead)}'] button", text: "Not spam"
+    patch not_spam_lead_path(lead)
+    assert_redirected_to lead_path(lead)
+    assert_not lead.reload.archived?
+    assert_not lead.suspected_spam?
+    get leads_path
+    assert_select "a", text: lead.name
+  end
+
+  test "automatic flags offer confirm or not spam without changing scoring" do
+    lead = Lead.create!(name: "Flagged inquiry", spam_score: 75, tag_list: Lead::SUSPECTED_SPAM_TAG)
+    get lead_path(lead)
+    assert_select "section[aria-label='Spam review']", text: /Looks like spam/
+    assert_select "form[action='#{mark_as_spam_lead_path(lead)}'] button", text: "Mark as spam"
+    assert_select "form[action='#{not_spam_lead_path(lead)}'] button", text: "Not spam"
+    patch not_spam_lead_path(lead)
+    assert_not lead.reload.suspected_spam?
+    assert_not lead.archived?
+    assert_equal 75, lead.spam_score
+    get lead_path(lead)
+    assert_select "section[aria-label='Spam review']", count: 0
+  end
+
+  test "converted inquiry spam endpoints preserve the client and inquiry" do
+    lead = Lead.create!(name: "Converted inquiry")
+    client = lead.convert_to_client!
+    [ mark_as_spam_lead_path(lead), not_spam_lead_path(lead) ].each do |path|
+      patch path
+      assert_redirected_to lead_path(lead)
+      assert_not lead.reload.archived?
+      assert_nil lead.spam_marked_at
+      assert_equal client, lead.converted_client
+    end
+  end
+
+  test "an archived automatic flag can still be confirmed or cleared" do
+    lead = Lead.create!(name: "Archived flag", tag_list: Lead::SUSPECTED_SPAM_TAG, archived_at: Time.current)
+    get lead_path(lead)
+    assert_select "section[aria-label='Spam review']", text: /Confirm your verdict/
+    assert_select "form[action='#{mark_as_spam_lead_path(lead)}'] button", text: "Mark as spam"
+    assert_select "form[action='#{not_spam_lead_path(lead)}'] button", text: "Not spam"
+    patch mark_as_spam_lead_path(lead)
+    assert lead.reload.spam_marked_at.present?
+    assert lead.archived?
+  end
+
   test "manual forms and requests cannot assign referral codes" do
     get new_lead_path
     assert_response :success
