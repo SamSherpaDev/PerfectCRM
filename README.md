@@ -545,8 +545,9 @@ unless an explicit link targets another panel. Use New client to create a
 record, and Edit to update facts or add another
 person in the blank People fields. Archive lives in the More menu and
 moves a client to the Archived tab, where Restore makes it active again.
-Archived client and lead pages keep their history readable, with Restore
-as the sole header action and editing controls, composer, and Upcoming hidden.
+Archived client and lead pages keep their history readable, with editing
+controls, composer, and Upcoming hidden. Restore is the sole header action
+except for the spam review described under [Leads](#leads).
 The Organizations tab holds advisors, operators, and other companies,
 with their own notes and timeline. On lead and client pages one Load
 older pager walks the whole timeline; organization pages keep separate
@@ -601,7 +602,7 @@ described under [Clients](#clients).
 
 Mark as spam on an inquiry or lead row records your verdict, adds the existing
 `suspected_spam` tag, and archives it in one tap. It leaves active leads,
-Today's replies and follow-ups, and Not yet called. Find it in Archived;
+Inbox, Today's replies and follow-ups, and Not yet called. Find it in Archived;
 Not spam clears your verdict and the tag and restores its previous stage.
 Automatically flagged inquiries show Looks like spam with Mark as spam and
 Not spam choices. These actions preserve the automatic spam score, fit,
