@@ -1,0 +1,8 @@
+<%# locals: (lead:) %>
+<% if !lead.archived? && !lead.converted? && !lead.suspected_spam? %>
+  <% if lead.potential? %>
+    <%= button_to "Remove Potential", unmark_potential_lead_path(lead), method: :patch, class: "btn-secondary btn btn-sm", aria: { label: "Remove Potential", pressed: true } %>
+  <% else %>
+    <%= button_to "Mark Potential", mark_potential_lead_path(lead), method: :patch, class: "btn-secondary btn btn-sm", aria: { label: "Mark Potential", pressed: false } %>
+  <% end %>
+<% end %>

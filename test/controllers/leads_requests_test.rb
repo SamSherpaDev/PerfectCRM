@@ -8,6 +8,47 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     sign_in
   end
 
+  test "Potential actions keep stage membership and filter search and counts" do
+    lead = Lead.create!(name: "Potential traveler", status: "chatting")
+    other = Lead.create!(name: "General traveler")
+    get lead_path(lead)
+    assert_select "button", text: "Mark Potential"
+    patch mark_potential_lead_path(lead)
+    assert_redirected_to lead_path(lead)
+    assert lead.reload.potential?
+    get leads_path(tab: "potential")
+    assert_select "nav.tabs a", text: /Potential.*1/
+    assert_select "a", text: lead.name
+    assert_select "a", text: other.name, count: 0
+    assert_select "button[aria-pressed=true]", text: "Remove Potential"
+    get leads_path(tab: "chatting")
+    assert_select "a", text: lead.name
+    get leads_path(tab: "potential", q: "General")
+    assert_select "a", text: lead.name, count: 0
+    get leads_path(tab: "potential", q: "Potential", sort: "name")
+    assert_select "a", text: lead.name
+    patch unmark_potential_lead_path(lead), headers: { "HTTP_REFERER" => leads_url(tab: "potential") }
+    assert_redirected_to leads_path(tab: "potential")
+    follow_redirect!
+    assert_select ".empty", text: /No potential leads yet/
+    assert_not lead.reload.potential?
+    assert_equal "chatting", lead.status
+  end
+
+  test "Potential endpoints refuse archived converted and suspected spam inquiries" do
+    archived = Lead.create!(name: "Archived", archived_at: Time.current)
+    converted = Lead.create!(name: "Converted")
+    converted.convert_to_client!
+    flagged = Lead.create!(name: "Flagged", tag_list: Lead::SUSPECTED_SPAM_TAG)
+    [ archived, converted, flagged ].each do |lead|
+      get lead_path(lead)
+      assert_select "button", text: "Mark Potential", count: 0
+      patch mark_potential_lead_path(lead)
+      assert_redirected_to lead_path(lead)
+      assert_nil lead.reload.potential_marked_at
+    end
+  end
+
   test "spam action archives the inquiry and archived Not spam restores it" do
     lead = Lead.create!(name: "Spam inquiry")
     get lead_path(lead)
