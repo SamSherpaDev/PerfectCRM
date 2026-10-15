@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-# Released sources stay in their version directory. Never edit a released
-# version; a new release gets a new directory. Quotes store the delivered bytes.
+# Release policy and the approved source-correction exception: docs/quote-terms.md.
+# Quotes store the delivered bytes.
 class QuoteTerms
   VERSION = "SH-TC-2026-10-14".freeze
   DISCLOSURE_VERSION = "SH-DISC-2026-10-14".freeze
