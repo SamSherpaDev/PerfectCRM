@@ -46,6 +46,66 @@ class SpendStatusTest < ActiveSupport::TestCase
     assert_not_includes daily_spend_status_line(legacy), "Last posted"
   end
 
+  test "ad-only posts establish receipt history without campaign coverage" do
+    row = spend(ad_id: "ad-1", amount: 123)
+    result = statuses(from: row.spent_on).first
+    assert_equal row.last_posted_at, result.receipt.last_posted_at
+    assert_not result.receipt.never_received?
+    assert_equal [ 0, 1, 1, 1 ], [ result.received, result.required, result.ad_received, result.ad_required ]
+    assert_nil result.first_date
+    assert_nil result.last_date
+    assert_nil result.through
+    line = daily_spend_status_line(result)
+    assert_includes line, "incomplete"
+    assert_includes line, "Last posted"
+    assert_not_includes line, "Never received"
+  end
+
+  test "later identical ad repost advances source receipt without changing campaign coverage" do
+    campaign = spend(amount: 100)
+    ad = spend(ad_id: "ad-1", amount: 75)
+    travel 1.hour
+    repost = spend(ad_id: "ad-1", amount: 75)
+    result = statuses(from: campaign.spent_on).first
+    assert_equal ad.id, repost.id
+    assert_equal Time.current, result.receipt.last_posted_at
+    assert_equal campaign.spent_on, repost.spent_on
+    assert_equal 75, repost.amount_minor
+    assert result.complete?
+    assert_equal [ 1, 1 ], [ result.received, result.required ]
+    assert_equal campaign.spent_on, result.through
+    assert_includes daily_spend_status_line(result), "Last posted Oct 15, 2026 at 11:00 PDT"
+  end
+
+  test "no completed days retains ad-only posted and legacy receipt history" do
+    row = spend(ad_id: "ad-1")
+    travel_to Time.zone.local(2026, 11, 1, 0, 1)
+    result = statuses(from: Date.current, through: Date.yesterday).first
+    assert result.no_completed_days?
+    assert_equal row.last_posted_at, result.receipt.last_posted_at
+    assert_includes daily_spend_status_line(result), "Last posted Oct 15"
+    row.update_columns(last_posted_at: nil)
+    legacy = statuses(from: Date.current, through: Date.yesterday).first
+    assert_not legacy.receipt.never_received?
+    assert_includes daily_spend_status_line(legacy), "receipt time unavailable"
+  end
+
+  test "never-covered campaigns do not suppress known stale campaigns" do
+    spend(day: Date.new(2026, 10, 11), id: "behind")
+    Lead.create!(name: "Missing campaign inquiry", source: "google_ads", capture_channel: "website_form",
+      campaign_name: "Never covered", received_at: Date.new(2026, 10, 14).in_time_zone)
+    result = statuses.first
+    assert_nil result.through
+    assert result.stale
+    assert_equal [ 1, 28, 27 ], [ result.received, result.required, result.missing ]
+    line = daily_spend_status_line(result)
+    assert_includes line, "At least one campaign has no covered day"
+    assert_includes line, "Stale: over 2 Pacific days behind cutoff"
+    monthly = WeeklyReport::Monthly.new(view: "paid").spend_statuses.first
+    assert_nil monthly.through
+    assert monthly.stale
+  end
+
   test "explicit zeros count but a missing middle day never becomes zero" do
     [ 12, 14 ].each { |day| spend(day: Date.new(2026, 10, day)) }
     result = statuses(from: Date.new(2026, 10, 12)).first

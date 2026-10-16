@@ -43,8 +43,8 @@ module SpendStatus
       complete_dates = campaigns.values.map { |list| list.select(&:spend).map(&:day).max }
       through = complete_dates.min if complete_dates.any? && complete_dates.none?(&:nil?)
       source_ads = ads.select { |row| row.source == source && row.campaign_key && row.ad_id }
-      scope = DailyAdSpend.campaign_totals.where(source: source, spent_on: ..report.end_date)
-      selected = scope.where(spent_on: report.start_date..report.end_date)
+      scope = DailyAdSpend.where(source: source, spent_on: ..report.end_date)
+      selected = scope.campaign_totals.where(spent_on: report.start_date..report.end_date)
       # Historical periods use their own cutoff, so a complete old month
       # does not become stale simply because the report was opened today.
       cutoff = [ as_of.in_time_zone("America/Los_Angeles").to_date, report.end_date + 1 ].min
@@ -52,7 +52,7 @@ module SpendStatus
         receipt: receipt(scope), received: entries.count { |row| row.spend },
         required: campaigns.size * ((report.end_date - report.start_date).to_i + 1),
         first_date: selected.minimum(:spent_on), last_date: selected.maximum(:spent_on),
-        through: through, stale: through.present? && through < cutoff - 2,
+        through: through, stale: complete_dates.compact.any? { |day| day < cutoff - 2 },
         ad_received: source_ads.count { |row| row.spend }, ad_required: source_ads.size)
     end
   end
@@ -61,7 +61,7 @@ module SpendStatus
     if end_date < start_date
       return AdSpend::SOURCES.map do |source|
         Daily.new(source: source, start_date: start_date, end_date: end_date,
-          receipt: receipt(DailyAdSpend.campaign_totals.where(source: source)),
+          receipt: receipt(DailyAdSpend.where(source: source)),
           received: 0, required: 0, stale: false, ad_received: 0, ad_required: 0)
       end
     end
