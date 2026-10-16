@@ -43,7 +43,7 @@ module SpendStatus
       complete_dates = campaigns.values.map { |list| list.select(&:spend).map(&:day).max }
       through = complete_dates.min if complete_dates.any? && complete_dates.none?(&:nil?)
       source_ads = ads.select { |row| row.source == source && row.campaign_key && row.ad_id }
-      scope = DailyAdSpend.where(source: source, spent_on: ..report.end_date)
+      scope = DailyAdSpend.where(source: source)
       selected = scope.campaign_totals.where(spent_on: report.start_date..report.end_date)
       # Historical periods use their own cutoff, so a complete old month
       # does not become stale simply because the report was opened today.
@@ -72,7 +72,7 @@ module SpendStatus
 
   def weekly(summary)
     AdSpend::SOURCES.map do |source|
-      scope = AdSpend.where(source: source, week_start: ..summary.week_start)
+      scope = AdSpend.where(source: source)
       entries = scope.for_week(summary.week_start)
       missing = summary.rows.select do |row|
         row.source == source && row.spend_minor.nil? &&
@@ -80,7 +80,7 @@ module SpendStatus
       end
       Weekly.new(source: source, week_start: summary.week_start, receipt: receipt(scope),
         received: entries.count, required: entries.count + missing.size,
-        latest_week: scope.maximum(:week_start), missing_campaigns: missing.map { |row| row.campaign.presence || "Unknown campaign" })
+        latest_week: scope.where(week_start: ..summary.week_start).maximum(:week_start), missing_campaigns: missing.map { |row| row.campaign.presence || "Unknown campaign" })
     end
   end
 end

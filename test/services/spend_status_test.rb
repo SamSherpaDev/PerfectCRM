@@ -106,6 +106,61 @@ class SpendStatusTest < ActiveSupport::TestCase
     assert monthly.stale
   end
 
+  test "historical daily reports show source receipts without importing later coverage" do
+    row = spend
+    result = statuses(from: Date.new(2026, 9, 1), through: Date.new(2026, 9, 30)).first
+    assert_equal row.last_posted_at, result.receipt.last_posted_at
+    assert_not result.receipt.never_received?
+    assert_not result.complete?
+    assert_equal [ 0, 0 ], [ result.received, result.required ]
+    assert_nil result.first_date
+    assert_nil result.last_date
+    assert_nil result.through
+    assert_not result.stale
+    assert_includes daily_spend_status_line(result), "Last posted Oct 15"
+    assert statuses(from: Date.new(2026, 9, 1), through: Date.new(2026, 9, 30)).last.receipt.never_received?
+  end
+
+  test "historical weekly reports retain selected coverage and represented weeks with source receipts" do
+    old_week = Date.new(2026, 9, 7)
+    AdSpend.record!(week_start: old_week, source: "google_ads", campaign_name: "Old", amount_dollars: "10")
+    travel 1.hour
+    row = AdSpend.record!(week_start: Date.new(2026, 10, 12), source: "google_ads",
+      campaign_name: "New", amount_dollars: "20")
+    summary = WeeklyReport::Summary.new(week_start: Date.new(2026, 9, 14))
+    result = summary.spend_statuses.first
+    assert_equal row.last_posted_at, result.receipt.last_posted_at
+    assert_equal old_week, result.latest_week
+    assert_equal [ 0, 0 ], [ result.received, result.required ]
+    assert_not result.complete?
+    assert_includes weekly_spend_status_line(result), "Last posted Oct 15, 2026 at 11:00 PDT"
+    assert summary.spend_statuses.last.receipt.never_received?
+    earlier = WeeklyReport::Summary.new(week_start: Date.new(2026, 9, 1)).spend_statuses.first
+    assert_nil earlier.latest_week
+    assert_equal row.last_posted_at, earlier.receipt.last_posted_at
+    covered = WeeklyReport::Summary.new(week_start: old_week).spend_statuses.first
+    assert covered.complete?
+    assert_equal 1, covered.received
+    assert_equal row.last_posted_at, covered.receipt.last_posted_at
+  end
+
+  test "historical reports show source-wide legacy change times honestly for each feed" do
+    daily = DailyAdSpend.create!(spent_on: Date.new(2026, 10, 14), source: "google_ads",
+      campaign_id: "123", campaign_name: "Nepal", currency: "USD", amount_minor: 0)
+    weekly = AdSpend.create!(week_start: Date.new(2026, 10, 12), source: "google_ads",
+      campaign_name: "Nepal", amount_minor: 0)
+    daily_status = statuses(from: Date.new(2026, 9, 1), through: Date.new(2026, 9, 30)).first
+    weekly_status = WeeklyReport::Summary.new(week_start: Date.new(2026, 9, 14)).spend_statuses.first
+    assert_equal daily.updated_at, daily_status.receipt.last_changed_at
+    assert_equal weekly.updated_at, weekly_status.receipt.last_changed_at
+    [ daily_spend_status_line(daily_status), weekly_spend_status_line(weekly_status) ].each do |line|
+      assert_includes line, "Last changed Oct 15"
+      assert_includes line, "receipt time unavailable"
+      assert_not_includes line, "Never received"
+      assert_not_includes line, "Last posted"
+    end
+  end
+
   test "explicit zeros count but a missing middle day never becomes zero" do
     [ 12, 14 ].each { |day| spend(day: Date.new(2026, 10, day)) }
     result = statuses(from: Date.new(2026, 10, 12)).first
