@@ -53,9 +53,9 @@ are not repeated here. This file covers only what differs for the CRM.
    repo goes private, log the box in once with a token that has
    `read:packages` before pulling:
    `echo <token> | docker login ghcr.io -u <github-username> --password-stdin`.
-6. **Healthchecks.** Create one healthchecks.io check for the nightly backup;
-   put its ping URL in `HEALTHCHECKS_URL` where the cron job reads it, and
-   add a free uptime check on `https://perfectcrm.sherpaholidays.com/up`.
+6. **Healthchecks.** Follow [Nightly backup](#nightly-backup) for backup
+   monitoring and add a free uptime check on
+   `https://perfectcrm.sherpaholidays.com/up`.
 7. **Restore drill.** Run `./restore-drill.sh` once before trusting backups
    (section "Restore drill" below), then quarterly.
 8. **Record secrets.** Every value from the secrets inventory is in the
@@ -175,23 +175,49 @@ All from `/opt/apps/perfectcrm` on the box.
   `DELETE FROM schema_migrations` before or after deploy. The stale
   `202609190323` row is harmless and may be removed.
 - **Health.** `https://perfectcrm.sherpaholidays.com/up` (uptime check)
-  plus the healthchecks.io nightly-backup ping (backup check).
+  and [Nightly backup](#nightly-backup) for backup monitoring.
 
 ## Nightly backup
 
 Second-line backup behind Litestream: `deploy/nightly-backup.sh` takes a
 `sqlite3 .backup` of the primary and queue databases (the disposable cache is
-excluded), gzips, and `rclone`s to the backup bucket under `nightly/`, prunes
-older than 30 days, and pings healthchecks.
-Cron on the VPS (root):
+excluded), gzips, and `rclone`s to the backup bucket under
+`nightly/perfectcrm/`, prunes older than 30 days, and optionally pings
+healthchecks. If `HEALTHCHECKS_URL` is unset or empty, it logs a warning to
+stderr and still backs up. When set,
+the ping uses `curl --fail`, so an HTTP error fails the job.
+
+Root's rclone configuration (`/root/.config/rclone/rclone.conf`, mode 600)
+has a separate S3 remote for each app: `perfectcrm-backups` and
+`perfectbook-backups`, using each app's existing backup-bucket credentials
+from `.env.litestream`. Both use `provider=Cloudflare` and
+`no_check_bucket=true` for R2 object-scoped credentials, as described in
+[Cloudflare's rclone guide](https://developers.cloudflare.com/r2/examples/rclone/).
+These credentials stay on the VPS.
+
+Both apps currently use the `perfectbook-backups` bucket. PerfectCRM writes
+`nightly/perfectcrm/production-YYYY-MM-DD.sqlite3.gz` and
+`nightly/perfectcrm/production_queue-YYYY-MM-DD.sqlite3.gz` (UTC dates).
+PerfectBook uses `nightly/perfectbook/` so matching database names and dates
+cannot overwrite the other app's backups. Each script prunes only its own
+prefix after 30 days.
+
+Root cron runs PerfectBook at 03:00 and PerfectCRM at 03:15 in server time
+(`America/Los_Angeles`). PerfectCRM's entry is:
 
 ```cron
-0 3 * * * /opt/apps/perfectcrm/nightly-backup.sh
+15 3 * * * /bin/bash -c 'set -ae; . /opt/apps/perfectcrm/.env.nightly-backup; exec /opt/apps/perfectcrm/nightly-backup.sh' >> /var/log/perfectcrm-nightly-backup.log 2>&1
 ```
 
-Requires `BACKUP_RCLONE_REMOTE` (an rclone S3 remote for the backup bucket),
-`LITESTREAM_BUCKET`, and `HEALTHCHECKS_URL` in the cron environment. Run from
-`/opt/apps/perfectcrm`.
+The root-owned, mode-600 `/opt/apps/perfectcrm/.env.nightly-backup` supplies
+`BACKUP_RCLONE_REMOTE=perfectcrm-backups`, `LITESTREAM_BUCKET`, and
+`IMAGE_TAG=latest` (the deployment's current image tag). `HEALTHCHECKS_URL`
+stays unset because the owner chose not to configure backup alerts. If that
+choice changes, its optional ping URL belongs in this environment file.
+Check `/var/log/perfectcrm-nightly-backup.log` as root for backup results
+and the expected warning about the missing ping. PerfectBook uses its
+own `.env.nightly-backup`, remote, and `/var/log/perfectbook-nightly-backup.log`
+with the same cron command shape. The scripts change into their app directory.
 
 ## Restore drill
 

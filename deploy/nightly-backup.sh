@@ -7,7 +7,6 @@ cd "$(dirname "$0")"
 
 : "${BACKUP_RCLONE_REMOTE:?Set BACKUP_RCLONE_REMOTE to the rclone S3 remote}"
 : "${LITESTREAM_BUCKET:?Set LITESTREAM_BUCKET}"
-: "${HEALTHCHECKS_URL:?Set HEALTHCHECKS_URL}"
 
 IMAGE="ghcr.io/samsherpadev/perfectcrm:${IMAGE_TAG:-latest}"
 STAMP="$(date -u +%Y-%m-%d)"
@@ -22,10 +21,14 @@ for DB in production.sqlite3 production_queue.sqlite3; do
     "$IMAGE" sqlite3 "/rails/storage/$DB" ".backup '/out/$NAME-$STAMP.sqlite3'"
   gzip -f "$TMPDIR/$NAME-$STAMP.sqlite3"
   rclone copyto "$TMPDIR/$NAME-$STAMP.sqlite3.gz" \
-    "$BACKUP_RCLONE_REMOTE:$LITESTREAM_BUCKET/nightly/$NAME-$STAMP.sqlite3.gz"
+    "$BACKUP_RCLONE_REMOTE:$LITESTREAM_BUCKET/nightly/perfectcrm/$NAME-$STAMP.sqlite3.gz"
 done
 
 # Retain 30 days of nightlies.
-rclone delete --min-age 30d "$BACKUP_RCLONE_REMOTE:$LITESTREAM_BUCKET/nightly/"
+rclone delete --min-age 30d "$BACKUP_RCLONE_REMOTE:$LITESTREAM_BUCKET/nightly/perfectcrm/"
 
-curl --fail --silent --show-error --max-time 30 "$HEALTHCHECKS_URL"
+if [ -n "${HEALTHCHECKS_URL:-}" ]; then
+  curl --fail --silent --show-error --max-time 30 "$HEALTHCHECKS_URL"
+else
+  printf '%s\n' 'WARNING: HEALTHCHECKS_URL is unset; backup completed without a healthchecks ping.' >&2
+fi
