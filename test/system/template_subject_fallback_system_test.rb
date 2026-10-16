@@ -244,9 +244,10 @@ class TemplateSubjectFallbackSystemTest < ApplicationSystemTestCase
     assert_includes body, "Hi Tashi,"
     assert_includes body, "help you plan your #{trip}"
     assert_includes body, "Sherpa family business"
-    assert_includes body, "March 2026"
+    assert_not_includes body, "in March 2026"
     assert_includes body, "Would you be open to a short call?"
     assert_includes body, "After we talk"
+    assert_match(/Best,\s*\z/, body)
     assert_no_match(/\[missing:|Not sure yet|\$|prices|packages/i, body)
   end
 
