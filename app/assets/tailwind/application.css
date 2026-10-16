@@ -2921,6 +2921,8 @@
 .inquiry-cost-table { box-shadow: none; border-radius: 0; }
 .inquiry-cost-table:focus-visible { outline: 2px solid var(--pb-seal); outline-offset: -2px; }
 .inquiry-cost-name { min-width: 160px; max-width: 260px; overflow-wrap: anywhere; }
+.spend-status { margin-top: 12px; color: var(--pb-ink-3); font-size: 12.5px; line-height: 1.6; overflow-wrap: anywhere; }
+.spend-status p + p { margin-top: 8px; }
 @media (max-width: 749px) {
   .inquiry-cost-filter > div { flex: 1 1 140px; }
   .inquiry-cost-filter .input { width: 100%; font-size: 16px; }

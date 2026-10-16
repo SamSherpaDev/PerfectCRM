@@ -10,6 +10,11 @@
     <p class="hint">Up to 31 complete days. Pacific time.</p>
   <% end %>
 
+  <section class="card card-pad mb-6" aria-label="Spend coverage">
+    <h2 class="card-title">Spend coverage</h2>
+    <%= render "shared/spend_status", daily: @report.spend_statuses, limitation: true %>
+  </section>
+
   <% facts = @report.totals %>
   <section class="card mb-6" aria-labelledby="inquiry-counts-heading">
     <div class="card-header"><h2 class="card-title" id="inquiry-counts-heading">Website inquiries</h2></div>

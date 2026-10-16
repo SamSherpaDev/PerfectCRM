@@ -77,6 +77,15 @@ module WeeklyReport
       @rows ||= build_rows(range, spends: AdSpend.for_week(week_start))
     end
 
+    def spend_statuses
+      @spend_statuses ||= SpendStatus.weekly(self)
+    end
+
+    def daily_spend_statuses
+      @daily_spend_statuses ||= SpendStatus.daily_period(start_date: week_start,
+        end_date: [ week_end, today - 1 ].min)
+    end
+
     # Channel totals use the same missing-spend rules as the email report.
     # nil means the CRM does not attribute inquiries to this channel yet.
     def channel_total(source)

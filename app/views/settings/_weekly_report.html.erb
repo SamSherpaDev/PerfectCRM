@@ -21,6 +21,8 @@
 
   <div class="mt-6">
     <h3 class="card-title">Ad spend</h3>
+    <%= render "shared/spend_status", weekly: WeeklyReport::Summary.new(week_start: spend_weeks.first).spend_statuses %>
+    <p class="hint mt-3">Saving a correction replaces the amount and records a new posting time for the selected spend week. Its spend dates stay in that week.</p>
     <%= card_caption "Type each week's spend from Google Ads and Meta. Enter each campaign separately, matching the ad link's campaign name exactly, including capitalization." %>
     <%= form_with model: AdSpend.new, url: settings_ad_spends_path, class: "mt-3 grid gap-3 sm:grid-cols-2" do |form| %>
       <div>
@@ -51,6 +53,7 @@
             <div class="min-w-0 flex-1">
               <p class="text-sm text-ink"><%= WeeklyReport::Summary::Row.new(source: spend.source, campaign: spend.campaign_name.presence).label %> · <%= report_money(spend.amount_minor) %></p>
               <p class="text-xs muted">Week of <%= WeeklyReport::Summary.week_label(spend.week_start) %></p>
+              <p class="text-xs muted"><%= spend_receipt_line(SpendStatus::Receipt.new(last_posted_at: spend.last_posted_at, last_changed_at: spend.updated_at)) %></p>
             </div>
             <%= button_to "Remove", settings_ad_spend_path(spend), method: :delete, class: "btn-ghost btn btn-sm", form: { data: { turbo_confirm: "Remove this spend entry?" } } %>
           </li>

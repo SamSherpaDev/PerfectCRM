@@ -58,6 +58,11 @@ module WeeklyReport
       end
     end
 
+    def spend_statuses
+      @spend_statuses ||= SpendStatus.daily_period(start_date: month, end_date: end_date,
+        additional_campaigns: rows, as_of: as_of)
+    end
+
     def totals
       { inquiries: rows.sum(&:inquiries), unique_people: inquiry_identities.compact.uniq.size,
         unresolved_identities: inquiry_identities.count(nil), connected_calls: rows.sum(&:connected_calls),

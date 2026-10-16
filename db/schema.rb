@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_15_192650) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_16_034536) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -87,6 +87,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_15_192650) do
     t.integer "amount_minor", null: false
     t.string "campaign_name", default: "", null: false
     t.datetime "created_at", null: false
+    t.datetime "last_posted_at"
     t.string "source", null: false
     t.datetime "updated_at", null: false
     t.date "week_start", null: false
@@ -231,6 +232,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_15_192650) do
     t.string "campaign_name", null: false
     t.datetime "created_at", null: false
     t.string "currency", default: "USD", null: false
+    t.datetime "last_posted_at"
     t.string "source", null: false
     t.date "spent_on", null: false
     t.datetime "updated_at", null: false

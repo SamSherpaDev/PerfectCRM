@@ -4,6 +4,7 @@
 class WeeklyReportMailer < ApplicationMailer
   default from: "PerfectCRM <info@sherpaholidays.com>"
   helper WeeklyReportHelper
+  helper SpendStatusHelper
 
   def weekly(week_start: WeeklyReport::Summary.last_complete_week, to: Setting.current.weekly_report_to)
     @summary = WeeklyReport::Summary.new(week_start: week_start)

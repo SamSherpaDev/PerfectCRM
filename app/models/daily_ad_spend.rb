@@ -17,7 +17,7 @@ class DailyAdSpend < ApplicationRecord
   def self.record!(spent_on:, source:, campaign_id:, campaign_name:, currency:, amount_minor:, ad_id: "", ad_name: nil)
     entry = find_or_initialize_by(spent_on: spent_on, source: source, campaign_id: campaign_id.to_s.strip,
       ad_id: ad_id.to_s.strip, currency: currency)
-    entry.update!(campaign_name: campaign_name, amount_minor: amount_minor, ad_name: ad_name)
+    entry.update!(campaign_name: campaign_name, amount_minor: amount_minor, ad_name: ad_name, last_posted_at: Time.current)
     entry
   end
 end

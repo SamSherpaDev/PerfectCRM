@@ -15,6 +15,25 @@ class ApiV1ChannelSpendsTest < ActionDispatch::IntegrationTest
     { campaign_name: "Nepal Search", amount_dollars: "126.50" }.merge(overrides)
   end
 
+  test "identical accepted repost advances receipt time and failed batch rolls it back" do
+    submit
+    assert_response :created
+    entry = AdSpend.sole
+    assert_equal Time.current, entry.last_posted_at
+    original_week = entry.week_start
+    travel 1.hour
+    submit
+    assert_response :created
+    assert_equal Time.current, entry.reload.last_posted_at
+    receipt = entry.last_posted_at
+    travel 1.hour
+    submit payload(campaigns: [ campaign(amount_dollars: "1"), campaign(campaign_name: " ") ])
+    assert_response :unprocessable_entity
+    assert_equal receipt, entry.reload.last_posted_at
+    assert_equal 12650, entry.amount_minor
+    assert_equal original_week, entry.week_start
+  end
+
   def payload(**overrides)
     { spend: { channel: "google_ads", week_start: "2026-09-21",
       campaigns: [ campaign ] }.merge(overrides) }

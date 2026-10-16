@@ -1,0 +1,10 @@
+<%# locals: (daily: [], weekly: [], links: false, limitation: false) %>
+<div class="spend-status">
+  <% weekly.each do |status| %>
+    <p><%= weekly_spend_status_line(status) %> <% if links && !status.complete? %><%= link_to "Review week", settings_weekly_report_path(week: status.week_start.iso8601), class: "link-quiet" %><% end %></p>
+  <% end %>
+  <% daily.each do |status| %>
+    <p><%= daily_spend_status_line(status) %> <% if links && !status.complete? && !status.no_completed_days? %><%= link_to "Review missing days", inquiry_costs_path(start_date: status.start_date.iso8601, end_date: status.end_date.iso8601), class: "link-quiet" %><% end %></p>
+  <% end %>
+  <% if limitation %><p><%= SpendStatus::LIMITATION %></p><% end %>
+</div>

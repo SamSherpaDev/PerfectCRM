@@ -40,6 +40,12 @@
       <% end %>
     </tbody>
   </table>
+  <div style="margin:10px 0;font-size:12px;line-height:1.5;color:#5c574f;overflow-wrap:anywhere;">
+    <% summary.spend_statuses.each do |status| %><p style="margin:6px 0;"><%= weekly_spend_status_line(status) %></p><% end %>
+    <p style="margin:6px 0;">Daily feed context, separate from weekly costs:</p>
+    <% summary.daily_spend_statuses.each do |status| %><p style="margin:6px 0;"><%= daily_spend_status_line(status) %></p><% end %>
+    <p style="margin:6px 0;"><%= SpendStatus::LIMITATION %> Daily posts do not fill weekly spend.</p>
+  </div>
   <% if summary.paid_total.booked.positive? %>
     <p style="margin:8px 0 0;">Paid cost per booking <%= report_money(summary.paid_total.cost_per_booking) %>, ROAS <%= summary.roas ? "#{summary.roas}x" : "-" %>.</p>
   <% end %>

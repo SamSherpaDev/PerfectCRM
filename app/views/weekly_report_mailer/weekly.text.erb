@@ -4,6 +4,12 @@ SherpaHolidays ads, week of <%= @summary.week_label %>
 <% @summary.rows.each do |row| %><%= report_row_line(row) %>
 <% end %><%= report_row_line(@summary.paid_total, label: "Paid total") %>
 <%= report_row_line(@summary.total, label: "All sources", costs: false) %>
+<% @summary.spend_statuses.each do |status| %><%= weekly_spend_status_line(status) %>
+<% end %>
+Daily feed context, separate from weekly costs:
+<% @summary.daily_spend_statuses.each do |status| %><%= daily_spend_status_line(status) %>
+<% end %><%= SpendStatus::LIMITATION %> Daily posts do not fill weekly spend.
+
 <% if @summary.paid_total.booked.positive? %>ROAS <%= @summary.roas ? "#{@summary.roas}x" : "-" %>
 <% end %><% unless @summary.spend_entered? %><%= report_missing_spend_line(@summary) %> Add it on Settings: <%= edit_settings_url(anchor: "weekly-report-heading") %>
 <% end %>
