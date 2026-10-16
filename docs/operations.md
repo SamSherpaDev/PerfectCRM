@@ -53,10 +53,9 @@ are not repeated here. This file covers only what differs for the CRM.
    repo goes private, log the box in once with a token that has
    `read:packages` before pulling:
    `echo <token> | docker login ghcr.io -u <github-username> --password-stdin`.
-6. **Healthchecks.** Backup alerts are not configured by owner choice.
-   `HEALTHCHECKS_URL` stays unset; nightly backups still run and log a warning.
-   Check `/var/log/perfectcrm-nightly-backup.log` as root for backup results.
-   The app uptime endpoint is `https://perfectcrm.sherpaholidays.com/up`.
+6. **Healthchecks.** Follow [Nightly backup](#nightly-backup) for backup
+   monitoring and add a free uptime check on
+   `https://perfectcrm.sherpaholidays.com/up`.
 7. **Restore drill.** Run `./restore-drill.sh` once before trusting backups
    (section "Restore drill" below), then quarterly.
 8. **Record secrets.** Every value from the secrets inventory is in the
@@ -176,7 +175,7 @@ All from `/opt/apps/perfectcrm` on the box.
   `DELETE FROM schema_migrations` before or after deploy. The stale
   `202609190323` row is harmless and may be removed.
 - **Health.** `https://perfectcrm.sherpaholidays.com/up` (uptime check)
-  plus the optional healthchecks.io nightly-backup ping (backup check).
+  and [Nightly backup](#nightly-backup) for backup monitoring.
 
 ## Nightly backup
 
@@ -184,8 +183,8 @@ Second-line backup behind Litestream: `deploy/nightly-backup.sh` takes a
 `sqlite3 .backup` of the primary and queue databases (the disposable cache is
 excluded), gzips, and `rclone`s to the backup bucket under
 `nightly/perfectcrm/`, prunes older than 30 days, and optionally pings
-healthchecks. If `HEALTHCHECKS_URL`
-is unset or empty, it logs a warning to stderr and still backs up. When set,
+healthchecks. If `HEALTHCHECKS_URL` is unset or empty, it logs a warning to
+stderr and still backs up. When set,
 the ping uses `curl --fail`, so an HTTP error fails the job.
 
 Root's rclone configuration (`/root/.config/rclone/rclone.conf`, mode 600)
