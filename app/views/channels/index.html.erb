@@ -46,11 +46,14 @@
             <div><dt>Reviews</dt><dd><%= channel_reviews(snapshot) %></dd></div>
             <div><dt>Followers</dt><dd><%= snapshot&.follower_count.nil? ? "Not checked" : number_with_delimiter(snapshot.follower_count) %></dd></div>
           </dl>
+          <% if metrics %>
+            <%= render "shared/spend_status", weekly: @summary.spend_statuses.select { |status| status.source == key }, daily: @daily_spend_statuses.select { |status| status.source == key }, links: true %>
+          <% end %>
         </li>
       <% end %>
     </ul>
     <div class="card-foot channel-note">
-      <p>Checks arrive automatically from the channels manager. Organic inquiries count direct channel contacts, such as messages; these channels carry no ad spend. For ads, missing spend or no inquiries leaves cost per inquiry unavailable.</p>
+      <p>Checks arrive automatically from the channels manager. Organic inquiries count direct channel contacts, such as messages; these channels carry no ad spend. For ads, missing spend or no inquiries leaves cost per inquiry unavailable. Daily posts do not fill weekly spend. <%= SpendStatus::LIMITATION %></p>
     </div>
   </section>
 </div>

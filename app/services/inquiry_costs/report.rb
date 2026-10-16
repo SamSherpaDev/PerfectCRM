@@ -20,10 +20,10 @@ module InquiryCosts
 
     attr_reader :start_date, :end_date
 
-    def initialize(start_date: Date.yesterday - 6, end_date: Date.yesterday)
+    def initialize(start_date: Date.yesterday - 6, end_date: Date.yesterday, as_of: Date.current)
       @start_date, @end_date = start_date, end_date
       unless start_date <= end_date && (end_date - start_date).to_i < MAX_DAYS &&
-          start_date >= Date.current - 2.years && end_date < Date.current
+          start_date >= as_of - 2.years && end_date < as_of
         raise ArgumentError, "Choose up to 31 complete days within the last two years."
       end
     end
@@ -46,6 +46,10 @@ module InquiryCosts
     def totals
       build
       @totals
+    end
+
+    def spend_statuses
+      @spend_statuses ||= SpendStatus.daily(report: self)
     end
 
     private

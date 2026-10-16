@@ -9,6 +9,28 @@ class ApiV1DailyChannelSpendsTest < ActionDispatch::IntegrationTest
 
   teardown { ENV["CHANNEL_CHECKS_TOKEN"] = @old_token }
 
+  test "identical accepted repost advances receipt time and failed batches leave it unchanged" do
+    submit
+    assert_response :created
+    entry = DailyAdSpend.sole
+    assert_equal Time.current, entry.last_posted_at
+    original_day = entry.spent_on
+    travel 1.hour
+    submit
+    assert_response :created
+    assert_equal Time.current, entry.reload.last_posted_at
+    receipt = entry.last_posted_at
+    travel 1.hour
+    submit [ row(amount_minor: 1000), row(campaign_id: "bad", amount_minor: -1) ]
+    assert_response :unprocessable_entity
+    assert_equal receipt, entry.reload.last_posted_at
+    assert_equal 1500, entry.amount_minor
+    assert_equal original_day, entry.spent_on
+    submit token: "Bearer wrong"
+    assert_response :unauthorized
+    assert_equal receipt, entry.reload.last_posted_at
+  end
+
   def row(**attributes)
     { spent_on: "2026-10-13", source: "google_ads", campaign_id: "123", campaign_name: "Nepal",
       currency: "USD", amount_minor: 1500 }.merge(attributes)

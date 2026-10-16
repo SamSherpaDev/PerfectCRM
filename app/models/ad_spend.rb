@@ -24,6 +24,7 @@ class AdSpend < ApplicationRecord
     week = week_start.to_date.beginning_of_week(:monday)
     entry = find_or_initialize_by(week_start: week, source: source.to_s, campaign_name: campaign_name.to_s.strip)
     entry.amount_dollars = amount_dollars
+    entry.last_posted_at = Time.current
     entry.save!
     entry
   end

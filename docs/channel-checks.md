@@ -215,6 +215,31 @@ continue to use the existing weekly spend contract. The external channel check
 must be updated separately to post exact daily rows; CRM does not fetch ad
 platform spend or acquire tokens itself.
 
+Both spend endpoints record `last_posted_at` on each successfully saved entry,
+including an identical repost. A rejected request or rolled-back batch leaves
+receipt times unchanged. Settings corrections use the same weekly write path.
+The nullable field is not backfilled: older rows show their explicitly labeled
+last change time and "receipt time unavailable". These timestamps describe
+receipt, not the spend day/week, and do not come from channel-check times.
+
+Spend status on Channels, the weekly screen and both Monday email formats,
+monthly paid-source reporting, and cost per inquiry separates receipt time,
+spend dates and selected-period coverage. Daily coverage reuses the inquiry-cost
+reader's stable campaign identities and complete currency sets. Every observed
+campaign requires every selected day, including factual zeros before its first
+nonzero day; absence is never assumed to mean zero. Missing campaign-days are
+shown per source. Ad-day gaps are separate and never fill campaign totals.
+Campaigns absent from both inquiries and spend in the selected period cannot
+be discovered by this check. Unknown attribution still withholds cost ratios.
+
+Daily spend is stale when the least-current required campaign's latest covered
+date is more than two Pacific calendar days behind the report's as-of date.
+Missing yesterday can be incomplete without being stale. Historical periods
+use their own cutoff (the day after the selected last spend day); complete old
+months do not turn stale with age. A newly posted backfill keeps its original
+spend dates. Weekly coverage remains independent: fresh daily data never fills
+a missing weekly entry. Weekly amounts remain USD; daily currencies stay separate.
+
 ## Cost per inquiry page
 
 Open **Channels > Cost per inquiry** (`/channels/cost-per-inquiry`). Signed-in
