@@ -215,25 +215,34 @@ continue to use the existing weekly spend contract. The external channel check
 must be updated separately to post exact daily rows; CRM does not fetch ad
 platform spend or acquire tokens itself.
 
+## Spend status
+
 Both spend endpoints record `last_posted_at` on each successfully saved entry,
 including an identical repost. A rejected request or rolled-back batch leaves
 receipt times unchanged. Settings corrections use the same weekly write path.
 The nullable field is not backfilled: older rows show their explicitly labeled
 last change time and "receipt time unavailable". These timestamps describe
 receipt, not the spend day/week, and do not come from channel-check times.
+Source receipt history includes all stored entries, regardless of the selected
+report period, including daily ad-detail posts. Coverage and represented dates
+remain limited to the selected period; the latest weekly spend week is limited
+to the selected week or earlier.
 
 Spend status on Channels, the weekly screen and both Monday email formats,
 monthly paid-source reporting, and cost per inquiry separates receipt time,
 spend dates and selected-period coverage. Daily coverage reuses the inquiry-cost
-reader's stable campaign identities and complete currency sets. Every observed
-campaign requires every selected day, including factual zeros before its first
-nonzero day; absence is never assumed to mean zero. Missing campaign-days are
-shown per source. Ad-day gaps are separate and never fill campaign totals.
+reader's [identity and completeness rules](#cost-per-inquiry-page), including
+unambiguous name-to-ID matching for additional monthly campaigns. Missing
+campaign-days are shown per source. Ad-day gaps are separate and never fill
+campaign totals.
 Campaigns absent from both inquiries and spend in the selected period cannot
 be discovered by this check. Unknown attribution still withholds cost ratios.
 
-Daily spend is stale when the least-current required campaign's latest covered
-date is more than two Pacific calendar days behind the report's as-of date.
+Daily spend is stale when any required campaign with a covered day has its
+latest covered date more than two Pacific calendar days behind the cutoff.
+The source shows the oldest of those latest dates only when every required
+campaign has a covered day; otherwise it flags a campaign with no covered day.
+That missing-campaign state does not suppress warnings for known stale campaigns.
 Missing yesterday can be incomplete without being stale. Historical periods
 use their own cutoff (the day after the selected last spend day); complete old
 months do not turn stale with age. A newly posted backfill keeps its original

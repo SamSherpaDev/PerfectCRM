@@ -1185,13 +1185,9 @@ week's per-campaign USD spend from Google Ads and Meta and post both channels
 before the Monday 7am Pacific email. Until that check posts, spend is entered
 in Settings as before.
 Paid-cost screens and both Monday email formats show spend receipt time, the
-dates represented, and selected-period coverage separately. Daily coverage
-lists missing campaign-days by source; fresh daily posts do not fill weekly
-spend. Older entries show "receipt time unavailable" with a labeled last-change
-fallback. Daily dates more than two Pacific calendar days behind the report
-cutoff are stale; missing rows remain incomplete even before that threshold.
-Historical reports use their own cutoff. Campaigns absent from both inquiries
-and spend cannot be detected. See [spend status rules](docs/channel-checks.md#daily-spend-request).
+dates represented, and selected-period coverage separately. Use **Review week**
+or **Review missing days** on a paid Channels card to inspect gaps. See
+[spend status rules and limitations](docs/channel-checks.md#spend-status).
 Settings supports entry and corrections for one of the last eight complete
 weeks, per channel and required campaign name, matching the lead's campaign
 exactly, including capitalization (surrounding whitespace is ignored).
