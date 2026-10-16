@@ -40,15 +40,17 @@ class FirstReplyMigrationTest < ActiveSupport::TestCase
     assert_equal RefreshDefaultFirstReply::OLD_BODY, @template.reload.body
   end
 
-  test "seed matches migration and is warm call-first copy without prices or unverified claims" do
+  test "seed reflects approved edits and is warm call-first copy without prices or unverified claims" do
     @template.destroy!
     Object.send(:remove_const, :TEMPLATES) if Object.const_defined?(:TEMPLATES)
     load Rails.root.join("db/seeds/templates.rb")
     seeded = Template.find_by!(name: RefreshDefaultFirstReply::NAME)
     assert_equal RefreshDefaultFirstReply::SUBJECT, seeded.subject
-    assert_equal RefreshDefaultFirstReply::NEW_BODY, seeded.body
+    expected_body = RefreshDefaultFirstReply::NEW_BODY.sub(" in March 2026", "").delete_suffix("\n{{my_name}}")
+    assert_equal expected_body, seeded.body
     assert_includes seeded.body, "Sherpa family business"
-    assert_includes seeded.body, "March 2026"
+    assert_not_includes seeded.body, "in March 2026"
+    assert_match(/Best,\z/, seeded.body)
     assert_includes seeded.body, "Would you be open to a short call?"
     assert_includes seeded.body, "After we talk"
     assert_includes 120..200, seeded.body.split.size

@@ -31,7 +31,11 @@ class TemplateWordingMigrationTest < ActiveSupport::TestCase
     RefreshDefaultTemplateWording::CHANGES.each do |name, _, _, new_subject, new_body|
       template = Template.find_by!(name: name)
       expected_subject = name == "Deposit nudge" ? "Payment for your {{trip}}" : new_subject
-      expected_body = name == RefreshDefaultFirstReply::NAME ? RefreshDefaultFirstReply::NEW_BODY : TemplatePolicyRefresh.body(new_body)
+      expected_body = if name == RefreshDefaultFirstReply::NAME
+        RefreshDefaultFirstReply::NEW_BODY.sub(" in March 2026", "").delete_suffix("\n{{my_name}}")
+      else
+        TemplatePolicyRefresh.body(new_body)
+      end
       assert_equal [ expected_subject, expected_body ], [ template.subject, template.body ]
       assert_no_match(/—/, "#{template.subject}\n#{template.body}")
       assert_no_match(/Sherpa Holidays/, template.body)
