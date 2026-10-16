@@ -260,6 +260,44 @@ class SpendStatusTest < ActiveSupport::TestCase
     assert_equal Date.new(2026, 9, 30), result.through
   end
 
+  test "monthly coverage resolves unambiguous campaign names including former names" do
+    (1..14).each do |day|
+      spend(day: Date.new(2026, 10, day), name: day < 8 ? "Nepal" : "Renamed")
+    end
+    [ "Nepal", "Renamed" ].each do |name|
+      Lead.create!(name: "Name-only inquiry", source: "google_ads", capture_channel: "website_form",
+        received_at: Date.new(2026, 10, 14).in_time_zone,
+        metadata: { "acquisition" => { "permission" => { "state" => "allowed" }, "last_non_direct_touch" => {
+          "observed_at" => "2026-10-12T20:00:00Z", "source" => "google_ads", "utm_campaign" => name } } })
+    end
+    monthly = WeeklyReport::Monthly.new(view: "paid")
+    result = monthly.spend_statuses.first
+    assert_equal [ 14, 14, 0 ], [ result.received, result.required, result.missing ]
+    assert result.complete?
+    assert_equal Date.new(2026, 10, 14), result.through
+    assert_equal 2, monthly.rows.sum(&:inquiries)
+    assert monthly.rows.select { |row| row.campaign_id.nil? }.all? { |row| row.spend.nil? }
+  end
+
+  test "monthly coverage leaves shared campaign names unresolved" do
+    (1..14).each do |day|
+      [ "123", "456" ].each { |id| spend(day: Date.new(2026, 10, day), id: id) }
+    end
+    Lead.create!(name: "Ambiguous inquiry", source: "google_ads", capture_channel: "website_form",
+      received_at: Date.new(2026, 10, 14).in_time_zone,
+      metadata: { "acquisition" => { "permission" => { "state" => "allowed" }, "last_non_direct_touch" => {
+        "observed_at" => "2026-10-12T20:00:00Z", "source" => "google_ads", "utm_campaign" => "Nepal" } } })
+    monthly = WeeklyReport::Monthly.new(view: "paid")
+    result = monthly.spend_statuses.first
+    assert_equal [ 28, 28, 0 ], [ result.received, result.required, result.missing ]
+    assert result.complete?
+    assert_equal Date.new(2026, 10, 14), result.through
+    report = InquiryCosts::Report.new(start_date: Date.new(2026, 10, 1), end_date: Date.new(2026, 10, 14))
+    assert_equal 1, report.totals[:unknown_campaign]
+    assert report.campaign_rows.select { |row| row.inquiries.positive? }.all? { |row| row.campaign_key.nil? && row.cost_per_inquiry.nil? }
+    assert monthly.source_rows.all? { |row| row.spend.nil? }
+  end
+
   test "monthly activity outside website inquiries also requires campaign spend" do
     spend
     Lead.create!(name: "Synthetic phone inquiry", source: "google_ads", capture_channel: "phone",

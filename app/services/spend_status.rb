@@ -37,7 +37,7 @@ module SpendStatus
       entries = rows.select { |row| row.source == source && row.campaign_key }
       campaigns = entries.group_by(&:campaign_key)
       additional_campaigns.select { |row| row.source == source }.each do |row|
-        key = row.campaign_id ? "id:#{row.campaign_id}" : ("name:#{row.campaign}" if row.campaign.present?)
+        key = report.campaign_key(source: source, id: row.campaign_id, name: row.campaign.presence)
         campaigns[key] ||= [] if key
       end
       complete_dates = campaigns.values.map { |list| list.select(&:spend).map(&:day).max }

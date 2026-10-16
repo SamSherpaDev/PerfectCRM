@@ -52,6 +52,15 @@ module InquiryCosts
       @spend_statuses ||= SpendStatus.daily(report: self)
     end
 
+    def campaign_key(source:, id:, name:)
+      build unless @campaign_names
+      matches = @campaign_names[[ source, name ]] || []
+      return nil if id.nil? && matches.size > 1
+
+      id ||= matches.sole if matches.size == 1
+      id ? "id:#{id}" : ("name:#{name}" if name)
+    end
+
     private
 
     def new_row(day, source, key = nil, campaign = nil, ad_id = nil, ad = nil)
@@ -66,7 +75,7 @@ module InquiryCosts
       # The page receives aggregate rows; this query omits contact columns.
       inquiries = website_inquiries.pluck(:received_at, :created_at, :source, :campaign_name, :metadata, :id)
       spam_ids = website_inquiries.spam.pluck(:id).to_set
-      campaign_names = spends.group_by { |spend| [ spend.source, spend.campaign_name ] }
+      @campaign_names = spends.group_by { |spend| [ spend.source, spend.campaign_name ] }
         .transform_values { |entries| entries.map(&:campaign_id).uniq }
       campaigns, ads = {}, {}
       labels = spends.group_by { |spend| [ spend.source, "id:#{spend.campaign_id}" ] }
@@ -90,7 +99,7 @@ module InquiryCosts
 
       inquiries.each do |received_at, created_at, source, campaign_name, metadata, id|
         day = (received_at || created_at).in_time_zone.to_date
-        source, key, name, ad_id = identity(source, campaign_name, metadata, campaign_names)
+        source, key, name, ad_id = identity(source, campaign_name, metadata)
         labels[[ source, key ]] ||= name
         row_key = [ day, source, key ]
         row = campaigns[row_key] ||= new_row(*row_key)
@@ -181,7 +190,7 @@ module InquiryCosts
           start_date.in_time_zone.beginning_of_day, (end_date + 1).in_time_zone.beginning_of_day)
     end
 
-    def identity(compatibility_source, campaign_name, metadata, names)
+    def identity(compatibility_source, campaign_name, metadata)
       metadata = {} unless metadata.is_a?(Hash)
       acquisition = metadata["acquisition"]
       if acquisition.is_a?(Hash)
@@ -199,11 +208,8 @@ module InquiryCosts
       name = touch["utm_campaign"].to_s.strip.presence
       name ||= campaign_name.to_s.strip.presence unless acquisition.is_a?(Hash)
       id = touch["campaign_id"].to_s.strip.presence
-      matches = names[[ source, name ]] || []
-      return [ source, nil, nil, touch["ad_id"].to_s.strip.presence ] if id.nil? && matches.size > 1
-      id ||= matches.sole if matches.size == 1
-      key = id ? "id:#{id}" : ("name:#{name}" if name)
-      [ source, key, name, touch["ad_id"].to_s.strip.presence ]
+      key = campaign_key(source: source, id: id, name: name)
+      [ source, key, key ? name : nil, touch["ad_id"].to_s.strip.presence ]
     end
   end
 end
