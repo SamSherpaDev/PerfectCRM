@@ -91,4 +91,28 @@ class InquirySafetyNetJobTest < ActiveSupport::TestCase
     assert_equal [ original.id ], Leads::UnlinkedInquiries.new.messages.map(&:id)
     assert_emails(0) { InquirySafetyNetJob.perform_now }
   end
+
+  test "an alert delivered to the info mailbox is filtered and retries never alert again" do
+    ENV["ALLOWED_GOOGLE_EMAILS"] = "info@sherpaholidays.com"
+    original = ingest_inquiry(provider_id: "synthetic-self-mail-inquiry")
+    assert_emails(1) { InquirySafetyNetJob.perform_now }
+    mail = ActionMailer::Base.deliveries.last
+    assert_equal [ "info@sherpaholidays.com" ], mail.to
+    assert_equal [ "info@sherpaholidays.com" ], mail.from
+
+    parsed = Mail::Ingester.parse_raw(mail.to_s)
+    assert_no_difference([ "Message.count", "Conversation.count", "Lead.count" ]) do
+      2.times do
+        result = Mail::Ingester.ingest(parsed: parsed,
+          provider: { message_id: "synthetic-self-mail-alert" })
+        assert_equal :filtered, result[:status]
+        assert_nil result[:message]
+      end
+    end
+    assert_equal original, ingest_inquiry(provider_id: "synthetic-self-mail-inquiry")
+    assert original.reload.inquiry_alert_attempted_at
+    assert_equal [ original.id ], Leads::UnlinkedInquiries.new.messages.map(&:id)
+    assert_empty Leads::UnlinkedInquiries.new.messages(unalerted: true)
+    assert_emails(0) { 2.times { InquirySafetyNetJob.perform_now } }
+  end
 end
