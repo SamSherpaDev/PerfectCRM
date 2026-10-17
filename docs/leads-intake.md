@@ -268,6 +268,14 @@ or ad outcome is created. Identical answers are no-ops. Converted and archived
 inquiries stay protected. The authenticated CRM confirmation has no public
 24-hour limit.
 
+Each optional `first_touch`, `last_touch`, and `last_non_direct_touch` snapshot
+may be omitted or JSON `null` when unobserved. The storefront sends `null` for
+the non-direct snapshot on a visitor's first direct visit. Both forms mean
+absent evidence: intake still saves the inquiry and schedules its eligible
+First reply, while details preserve previously observed snapshots. Missing
+evidence never implies a direct visit; non-null snapshots must be objects and
+retain their existing permission and validation rules.
+
 ```json
 {
   "acquisition": {

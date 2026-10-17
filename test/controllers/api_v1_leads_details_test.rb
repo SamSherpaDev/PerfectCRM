@@ -98,6 +98,24 @@ class ApiV1LeadsDetailsTest < ActionDispatch::IntegrationTest
     assert_equal "search", @lead.reported_source_code
   end
 
+  test "null optional touches on source follow-up preserve observed acquisition" do
+    permission = { "state" => "allowed", "measurement" => true, "sharing" => true, "observed_at" => Time.current.iso8601 }
+    touch = { "observed_at" => 1.hour.ago.iso8601, "utm_source" => "google", "utm_medium" => "cpc", "gclid" => "synthetic-click" }
+    post_details details_body("acquisition" => { "permission" => permission,
+      "first_touch" => touch, "last_touch" => touch, "last_non_direct_touch" => touch })
+    assert_response :ok
+    original = @lead.reload.metadata["acquisition"]
+    body = { "schema" => "sherpa.inquiry.details.v1", "submission_id" => @submission_id,
+      "source_answer" => { "code" => "search", "question_version" => "how-heard-v1" },
+      "acquisition" => { "permission" => permission, "first_touch" => nil, "last_touch" => nil, "last_non_direct_touch" => nil } }
+    assert_no_difference([ "Lead.count", "Message.count", "AutomaticFirstReply.count" ]) { post_details body }
+    assert_response :ok
+    assert_equal "search", @lead.reload.reported_source_code
+    assert_equal original, @lead.metadata["acquisition"]
+    assert_no_difference([ "Note.count", "ActivityEvent.count", "LeadNotification.count" ]) { post_details body }
+    assert_response :ok
+  end
+
   test "first touch remains immutable and withdrawal removes legacy and snapshot identifiers" do
     permission = { "state" => "allowed", "measurement" => true, "sharing" => true, "observed_at" => Time.current.iso8601 }
     first = { "observed_at" => 1.hour.ago.iso8601, "gclid" => "first-google" }

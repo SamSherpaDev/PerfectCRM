@@ -40,6 +40,28 @@ class AcquisitionTest < ActiveSupport::TestCase
     assert_equal "meta_ads", Leads::Acquisition.touch({ "observed_at" => Time.current.iso8601, "fbclid" => "ordinary-link", "utm_source" => "facebook", "utm_medium" => "cpc" }, allowed: true)["source"]
   end
 
+  test "null optional touches are absent evidence without inventing a direct visit" do
+    Leads::Acquisition::TOUCHES.each do |key|
+      payload = snapshot
+      payload["acquisition"][key] = nil
+      result = Leads::Acquisition.parse(payload)
+      assert_not result.key?(key)
+      payload["acquisition"].delete(key)
+      assert_equal Leads::Acquisition.parse(payload), result
+    end
+  end
+
+  test "non-null malformed touches are still rejected" do
+    Leads::Acquisition::TOUCHES.each do |key|
+      [ false, 0, "", [] ].each do |value|
+        payload = snapshot
+        payload["acquisition"][key] = value
+        error = assert_raises(ArgumentError) { Leads::Acquisition.parse(payload) }
+        assert_equal "acquisition.touch", error.message
+      end
+    end
+  end
+
   test "invalid timestamps and overlong IDs fail closed without rejecting legacy payloads" do
     [ "not-a-time", 1.day.from_now.iso8601 ].each do |time|
       assert_raises(ArgumentError) { Leads::Acquisition.touch({ "observed_at" => time }, allowed: true) }
