@@ -156,8 +156,9 @@ All from `/opt/apps/perfectcrm` on the box.
 - **Logs.** `docker compose -f compose.yml logs -f app` (add
   `litestream` for the replicator). Compose runs Rails/Puma directly on port
   80 behind the system Caddy, bypassing Thruster and its unfiltered access
-  and error logs. Rails retains request logs with customer parameters and
-  quote capability paths filtered. Rails serves static assets, compresses
+  and error logs. Rails retains request logs under the
+  [request-log filtering policy](../README.md#google-sign-in).
+  Rails serves static assets, compresses
   responses with Rack::Deflater, and sends download bodies without X-Sendfile
   offloading.
   This takes effect when the updated compose file is installed and the app
