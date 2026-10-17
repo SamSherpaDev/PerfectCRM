@@ -2,11 +2,13 @@ require "test_helper"
 require "yaml"
 
 class DeploymentLoggingTest < ActiveSupport::TestCase
-  test "production compose disables Thruster's unfiltered request logger" do
+  test "production compose serves Rails directly on the healthcheck port" do
     compose = YAML.safe_load_file(Rails.root.join("deploy/compose.yml"))
-    environment = compose.fetch("services").fetch("app").fetch("environment")
+    app = compose.fetch("services").fetch("app")
+    environment = app.fetch("environment")
 
-    assert_equal "0", environment.fetch("THRUSTER_LOG_REQUESTS", nil),
-      "Thruster request logs bypass Rails filtering of customer data and quote capabilities"
+    assert_equal [ "./bin/rails", "server" ], app.fetch("command")
+    assert_equal "80", environment.fetch("PORT")
+    assert_includes app.fetch("expose"), "80"
   end
 end
