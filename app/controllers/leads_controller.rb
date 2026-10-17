@@ -2,41 +2,42 @@ class LeadsController < ApplicationController
   include ReplyBox
   include RecordPage
 
-  before_action :set_lead, only: %i[show edit update convert refresh_bookings archive unarchive mark_as_spam not_spam mark_potential unmark_potential]
+  before_action :set_lead, only: %i[show edit update convert refresh_bookings archive unarchive mark_as_spam not_spam mark_potential unmark_potential mark_unsure unmark_unsure]
   before_action :block_converted_edit, only: %i[edit update]
   before_action :block_archived_edit, only: %i[edit update]
 
-  TABS = %w[potential new chatting quoted nudged lost converted archived missing_source].freeze
+  TABS = %w[new potential unsure quoted converted archived missing_source].freeze
+  # Stages without their own tab: chatting and nudged wait in New until
+  # sorted, and lost rests with Archived. Old links land on that home.
+  RETIRED_TABS = { "chatting" => "new", "nudged" => "new", "lost" => "archived" }.freeze
 
   def index
+    if (home = RETIRED_TABS[params[:tab]])
+      return redirect_to leads_path(params.permit(:q, :sort).to_h.merge(tab: home))
+    end
     @tab = TABS.include?(params[:tab]) ? params[:tab] : "new"
     @query = params[:q].to_s.strip
     @sort = %w[activity name newest fit].include?(params[:sort]) ? params[:sort] : "activity"
-    new_leads = Lead.by_status("new").where.not(id: Lead.potential.select(:id))
+    new_leads = Lead.by_status(%w[new chatting nudged])
+      .where.not(id: Lead.potential.select(:id)).where.not(id: Lead.unsure.select(:id))
+    set_aside = Lead.archived.or(Lead.lost)
 
     @counts = {
-      "potential" => Lead.potential.count,
       "new" => new_leads.count,
-      "chatting" => Lead.by_status("chatting").count,
+      "potential" => Lead.potential.count,
+      "unsure" => Lead.unsure.count,
       "quoted" => Lead.by_status("quoted").count,
-      "nudged" => Lead.by_status("nudged").count,
-      "lost" => Lead.lost.count,
       "converted" => Lead.converted.count,
-      "archived" => Lead.archived.count
+      "archived" => set_aside.count
     }
 
-    base = if @tab == "potential"
-      Lead.potential
-    elsif @tab == "new"
-      new_leads
-    elsif @tab == "converted"
-      Lead.converted
-    elsif @tab == "archived"
-      Lead.archived
-    elsif @tab == "lost"
-      Lead.lost
-    else
-      Lead.by_status(@tab)
+    base = case @tab
+    when "new" then new_leads
+    when "potential" then Lead.potential
+    when "unsure" then Lead.unsure
+    when "converted" then Lead.converted
+    when "archived" then set_aside
+    else Lead.by_status(@tab)
     end
     base = WeeklyReport::Monthly.new.eligible_leads.where(source_answer_state: "not_asked") if @tab == "missing_source"
     scope = @query.present? ? base.search(@query) : base
@@ -144,6 +145,20 @@ class LeadsController < ApplicationController
   def unmark_potential
     @lead.unmark_potential!
     redirect_back fallback_location: lead_path(@lead), notice: "Removed from Potential."
+  rescue ActiveRecord::RecordInvalid => e
+    redirect_to @lead, alert: e.record.errors.full_messages.to_sentence
+  end
+
+  def mark_unsure
+    @lead.mark_unsure!
+    redirect_back fallback_location: lead_path(@lead), notice: "Marked as Unsure. Find it in the Unsure tab."
+  rescue ActiveRecord::RecordInvalid => e
+    redirect_to @lead, alert: e.record.errors.full_messages.to_sentence
+  end
+
+  def unmark_unsure
+    @lead.unmark_unsure!
+    redirect_back fallback_location: lead_path(@lead), notice: "Removed from Unsure."
   rescue ActiveRecord::RecordInvalid => e
     redirect_to @lead, alert: e.record.errors.full_messages.to_sentence
   end

@@ -1981,6 +1981,27 @@
   .tab {
     min-height: 44px;
   }
+  .tabs {
+    flex-wrap: nowrap;
+    gap: 0 20px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .tabs .tab {
+    flex: none;
+  }
+  .tabs.tabs-more-end {
+    mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
+  }
+  .tabs.tabs-more-start {
+    mask-image: linear-gradient(to left, #000 calc(100% - 40px), transparent);
+  }
+  .tabs.tabs-more-start.tabs-more-end {
+    mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent);
+  }
   .tabbar {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -2474,7 +2495,10 @@
   min-height: 72px;
   transition: min-height 160ms ease-out;
 }
-.composer .reply-body:focus {
+/* Stay grown while holding text: shrinking on blur would move Send and
+   Save draft out from under the pointer mid-click. */
+.composer .reply-body:focus,
+.composer .reply-body:not(:placeholder-shown) {
   min-height: 128px;
 }
 .composer .reply-details {
@@ -2864,7 +2888,8 @@
   .record-thread {
     gap: 16px;
   }
-  .composer .reply-body:focus {
+  .composer .reply-body:focus,
+  .composer .reply-body:not(:placeholder-shown) {
     min-height: 128px;
   }
   .composer .reply-composer:not([hidden]) .composer-mode {

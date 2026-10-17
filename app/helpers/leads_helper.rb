@@ -9,6 +9,19 @@ module LeadsHelper
     "manual" => :pencil
   }.freeze
 
+  LEAD_TAB_CAPTIONS = {
+    "new" => "Leads you have not sorted yet. Mark Potential, Unsure, or spam.",
+    "potential" => "Leads you want to follow up with, across all stages. Remove Potential when you no longer need the reminder.",
+    "unsure" => "Leads you cannot call yet: voicemail, no reply, maybe spam. Move them on once you know.",
+    "missing_source" => "All inquiries without a discovery answer, including converted records. Tests and spam stay out.",
+    "archived" => "Archived, spam, and lost leads. Restore an archived lead any time.",
+    "converted" => "Leads that became clients. Read-only, kept for memory."
+  }.freeze
+
+  def lead_tab_caption(tab)
+    LEAD_TAB_CAPTIONS.fetch(tab, "Best fit first. Tap a lead to see the full story.")
+  end
+
   def lead_source_icon(source)
     LEAD_SOURCE_ICONS.fetch(source.to_s, :info)
   end

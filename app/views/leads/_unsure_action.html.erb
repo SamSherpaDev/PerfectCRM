@@ -1,0 +1,8 @@
+<%# locals: (lead:) %>
+<% if !lead.archived? && !lead.converted? && lead.spam_marked_at.nil? %>
+  <% if lead.unsure? %>
+    <%= button_to "Remove Unsure", unmark_unsure_lead_path(lead), method: :patch, class: "btn-secondary btn btn-sm", aria: { label: "Remove Unsure", pressed: true } %>
+  <% else %>
+    <%= button_to "Mark Unsure", mark_unsure_lead_path(lead), method: :patch, class: "btn-secondary btn btn-sm", aria: { label: "Mark Unsure", pressed: false } %>
+  <% end %>
+<% end %>

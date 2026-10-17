@@ -62,6 +62,8 @@ Rails.application.routes.draw do
       patch :unarchive
       patch :mark_potential
       patch :unmark_potential
+      patch :mark_unsure
+      patch :unmark_unsure
       patch :mark_as_spam
       patch :not_spam
       post :refresh_bookings

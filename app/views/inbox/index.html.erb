@@ -3,7 +3,7 @@
   <%= render layout: "shared/page_header", locals: { eyebrow: "Conversations", title: "Inbox", subtitle: "Every message to and from #{Mail.mailbox_address}, newest waiting reply first." } do %><% end %>
   <%= render "shared/flash" %>
 
-  <nav class="tabs" aria-label="Inbox">
+  <nav class="tabs" data-controller="tab-row" aria-label="Inbox">
     <%= tab_link "Waiting on you", inbox_path(tab: "waiting"), icon: :mail, active: @tab == "waiting", count: @waiting_count %>
     <%= tab_link "Waiting on them", inbox_path(tab: "waiting_them"), icon: :check, active: @tab == "waiting_them", count: @waiting_them_count %>
     <%= tab_link "All", inbox_path(tab: "all"), icon: :list, active: @tab == "all", count: @all_count %>

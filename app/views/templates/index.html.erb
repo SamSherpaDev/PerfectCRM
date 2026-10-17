@@ -6,7 +6,7 @@
   <% end %>
   <%= render "shared/flash" %>
 
-  <nav class="tabs" aria-label="Template states">
+  <nav class="tabs" data-controller="tab-row" aria-label="Template states">
     <%= tab_link "Active", templates_path, icon: :check, active: @tab == "active", count: @active_count %>
     <%= tab_link "Archived", templates_path(tab: "archived"), icon: :archive, active: @tab == "archived", count: @archived_count %>
   </nav>

@@ -61,15 +61,17 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
   end
 
   test "stage changes archive and conversion move New leads to their own sections" do
-    %w[chatting quoted nudged lost].each do |status|
+    { "chatting" => "new", "nudged" => "new", "quoted" => "quoted", "lost" => "archived" }.each do |status, tab|
       lead = Lead.create!(name: "Move to #{status}")
       attrs = { status: status }
       attrs[:lost_reason] = "no_reply" if status == "lost"
       patch lead_path(lead), params: { lead: attrs }
       assert_redirected_to lead_path(lead)
-      get leads_path(tab: "new")
-      assert_select "a", text: lead.name, count: 0
-      get leads_path(tab: status)
+      (%w[new quoted archived] - [ tab ]).each do |other_tab|
+        get leads_path(tab: other_tab)
+        assert_select "a", text: lead.name, count: 0
+      end
+      get leads_path(tab: tab)
       assert_select "a", text: lead.name
     end
 
@@ -87,7 +89,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
   end
 
   test "Potential actions keep stage membership and filter search and counts" do
-    lead = Lead.create!(name: "Potential traveler", status: "chatting")
+    lead = Lead.create!(name: "Potential traveler", status: "quoted")
     other = Lead.create!(name: "General traveler")
     get lead_path(lead)
     assert_select "button", text: "Mark Potential"
@@ -99,7 +101,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     assert_select "a", text: lead.name
     assert_select "a", text: other.name, count: 0
     assert_select "button[aria-pressed=true]", text: "Remove Potential"
-    get leads_path(tab: "chatting")
+    get leads_path(tab: "quoted")
     assert_select "a", text: lead.name
     get leads_path(tab: "potential", q: "General")
     assert_select "a", text: lead.name, count: 0
@@ -110,7 +112,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     follow_redirect!
     assert_select ".empty", text: /No potential leads yet/
     assert_not lead.reload.potential?
-    assert_equal "chatting", lead.status
+    assert_equal "quoted", lead.status
   end
 
   test "Potential endpoints refuse archived converted and suspected spam inquiries" do
@@ -214,22 +216,100 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     get leads_path
     assert_response :success
     assert_select "h1", "Leads"
-    assert_select "nav.tabs a", text: /New/
-    assert_select "nav.tabs a", text: /Chatting/
-    assert_select "nav.tabs a", text: /Quoted/
-    assert_select "nav.tabs a", text: /Nudged/
-    assert_select "nav.tabs a", text: /Lost/
-    assert_select "nav.tabs a", text: /Converted/
+    assert_equal %w[New Potential Unsure Quoted Converted Archived],
+      css_select("nav.tabs a").map { |tab| tab.at_css("span").text }
+    assert_select "nav.tabs a", text: /New.*2/
+    assert_select "a", text: "Chatty"
     assert_select "form input[name=q]"
   end
 
-  test "index tabs filter by status" do
+  test "retired stage tabs redirect to the tab that now holds those leads" do
     Lead.create!(name: "Newbie", source: "manual", status: "new")
     Lead.create!(name: "Lostie", source: "manual", status: "lost", lost_reason: "no_reply")
-    get leads_path(tab: "lost")
-    assert_response :success
+    get leads_path(tab: "lost", q: "ie", sort: "name")
+    assert_redirected_to leads_path(q: "ie", sort: "name", tab: "archived")
+    follow_redirect!
+    assert_select "h2", text: "Archived"
     assert_select "a", text: "Lostie"
     assert_select "a", { text: "Newbie", count: 0 }
+    assert_select "li", text: /Lost/
+    assert_select "li button", text: "Restore", count: 0
+    %w[chatting nudged].each do |tab|
+      get leads_path(tab: tab)
+      assert_redirected_to leads_path(tab: "new")
+    end
+  end
+
+  test "Unsure moves leads out of New and back, and between Potential and spam" do
+    lead = Lead.create!(name: "Voicemail traveler")
+    other = Lead.create!(name: "Answering traveler")
+    list_url = leads_url(tab: "new", q: "traveler", sort: "name")
+    get list_url
+    assert_select "form[action='#{mark_unsure_lead_path(lead)}'] button[aria-pressed=false]", text: "Mark Unsure"
+
+    patch mark_unsure_lead_path(lead), headers: { "HTTP_REFERER" => list_url }
+    assert_redirected_to list_url
+    follow_redirect!
+    assert_select "a", text: lead.name, count: 0
+    assert_select "a", text: other.name
+    assert_select "nav.tabs a", text: /New.*1/
+    assert_select "nav.tabs a", text: /Unsure.*1/
+    assert_equal "new", lead.reload.status
+
+    get leads_path(tab: "unsure")
+    assert_select "h2", text: "Unsure"
+    assert_select "a", text: lead.name
+    assert_select "a", text: other.name, count: 0
+    assert_select "li .badge", text: "Unsure"
+    assert_select "button[aria-pressed=true]", text: "Remove Unsure"
+
+    patch mark_potential_lead_path(lead)
+    assert lead.reload.potential?
+    assert_not lead.unsure?
+    get leads_path(tab: "unsure")
+    assert_select "a", text: lead.name, count: 0
+    get leads_path(tab: "potential")
+    assert_select "a", text: lead.name
+
+    patch mark_unsure_lead_path(lead)
+    assert lead.reload.unsure?
+    assert_not lead.potential?
+    get leads_path(tab: "potential")
+    assert_select "a", text: lead.name, count: 0
+
+    patch mark_as_spam_lead_path(lead)
+    assert_nil lead.reload.unsure_marked_at
+    get leads_path(tab: "unsure")
+    assert_select "a", text: lead.name, count: 0
+    get leads_path(tab: "archived")
+    assert_select "a", text: lead.name
+    patch mark_unsure_lead_path(lead)
+    assert_redirected_to lead_path(lead)
+    assert_nil lead.reload.unsure_marked_at
+
+    patch not_spam_lead_path(lead)
+    patch mark_unsure_lead_path(lead)
+    assert lead.reload.unsure?
+    patch unmark_unsure_lead_path(lead), headers: { "HTTP_REFERER" => leads_url(tab: "unsure") }
+    follow_redirect!
+    assert_select ".empty", text: /No unsure leads/
+    get list_url
+    assert_select "a", text: lead.name
+    assert_select "nav.tabs a", text: /New.*2/
+  end
+
+  test "suspected spam can wait in Unsure without a spam verdict" do
+    lead = Lead.create!(name: "Maybe spam", tag_list: Lead::SUSPECTED_SPAM_TAG)
+    get lead_path(lead)
+    assert_select "button", text: "Mark Potential", count: 0
+    assert_select "button", text: "Mark Unsure"
+    patch mark_unsure_lead_path(lead)
+    assert lead.reload.unsure?
+    get leads_path(tab: "unsure")
+    assert_select "li", text: /Looks like spam/
+    assert_select "li button", text: "Not spam"
+    get leads_path(tab: "new")
+    assert_select "a", text: lead.name, count: 0
   end
 
   test "converted tab lists converted leads" do

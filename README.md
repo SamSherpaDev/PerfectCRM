@@ -627,8 +627,11 @@ A lead carries source (`google_ads`, `meta_ads`, `trade_show`, `website_form`,
 `email`, `referral`, `manual`), campaign, `external_ref` for n8n idempotency, an optional
 advisor `referral_code` from the storefront `?ref=` links, Panda
 AI fit (`fit_score`, `fit_band`, `fit_reason`), and status (`new`,
-`chatting`, `quoted`, `nudged`, `lost`). Tabs are Potential, New, Chatting,
-Quoted, Nudged, Lost, Converted, and Archived. A PerfectBook contact ID can recur
+`chatting`, `quoted`, `nudged`, `lost`). Tabs are New, Potential, Unsure,
+Quoted, Converted, and Archived. Stages keep driving the pipeline, reports,
+and automations; on the Leads tabs, chatting and nudged leads stay in New until
+you sort them, and lost leads rest in Archived beside archived and spam leads
+(old Chatting, Nudged, and Lost links open those tabs). A PerfectBook contact ID can recur
 across lost or converted inquiries, but only one open lead (unconverted,
 not lost, not archived) can hold it. The same email address may hold several
 open inquiries at once. Storefront submission and replay behavior follows the
@@ -638,12 +641,22 @@ open inquiries at once. Storefront submission and replay behavior follows the
 Mark Potential on an inquiry or lead row to remember who you want to follow up
 with. The Potential tab gathers marked leads across stages. Marking Potential
 removes a lead from New immediately, including its tab count; removing Potential
-returns it to New if its stage is still new. Marked leads stay in their other
+returns it to New if its stage is new, chatting, or nudged. Marked leads stay in their other
 stage tabs so the pipeline remains intact. Remove Potential clears the
 reminder without changing fit or stage. Archived and converted leads stay out
 of Potential. Restoring an ordinarily archived lead restores its Potential
 reminder. Mark as spam clears the reminder, and Not spam does not restore
 it; suspected spam cannot be marked Potential.
+
+Mark Unsure on a lead you cannot call yet: voicemail, no reply to email, or
+no way to tell if it is spam. The Unsure tab gathers them across stages, and
+marking removes a lead from New immediately; Remove Unsure returns it to New
+the same way Remove Potential does.
+Potential and Unsure exclude each other, so Mark Potential on an Unsure lead
+moves it to Potential, and Mark Unsure on a Potential lead moves it back.
+Automatically suspected spam can wait in Unsure until you choose Not spam or
+Mark as spam. Mark as spam clears Unsure the same way it clears Potential,
+and restoring an ordinarily archived lead restores its Unsure mark.
 
 More → Delete lead archives it after one confirmation naming the lead; the
 Archived tab restores it to its previous stage, and nothing is ever

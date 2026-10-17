@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_17_033236) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_17_185501) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -402,6 +402,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_17_033236) do
     t.string "trip_handle"
     t.string "trip_interest"
     t.string "trip_title"
+    t.datetime "unsure_marked_at"
     t.datetime "updated_at", null: false
     t.index ["archived_at"], name: "index_leads_on_archived_at"
     t.index ["converted_client_id"], name: "index_leads_on_converted_client_id"

@@ -43,22 +43,59 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
     end
   end
 
+  test "unsure leads leave New and move on once known on desktop and phone" do
+    [ 1400, 390 ].each do |width|
+      page.current_window.resize_to(width, 900)
+      unsure = Lead.create!(name: "Sorting#{width} Voicemail", tag_list: Lead::SUSPECTED_SPAM_TAG)
+      waiting = Lead.create!(name: "Sorting#{width} Waiting")
+      chatting = Lead.create!(name: "Sorting#{width} Chatting", status: "chatting")
+      visit leads_path(tab: "new", q: "Sorting#{width}", sort: "name")
+      assert_equal %w[New Potential Unsure Quoted Converted Archived],
+        all("nav.tabs a").map { |tab| tab.first("span").text }
+      assert_link chatting.name
+      capture("new-#{width}")
+      within("li", text: unsure.name) { click_button "Mark Unsure" }
+      assert_selector "h2", text: "New", exact_text: true
+      assert_no_link unsure.name
+      assert_link waiting.name
+      within("nav.tabs") { click_link "Unsure" }
+      assert_selector "h2", text: "Unsure", exact_text: true
+      assert_link unsure.name
+      assert_no_link waiting.name
+      within("li", text: unsure.name) { assert_button "Remove Unsure" }
+      assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, width
+      capture("unsure-#{width}")
+      within("li", text: unsure.name) { click_button "Not spam" }
+      visit lead_path(unsure)
+      assert_button "Remove Unsure"
+      assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, width
+      capture("lead-#{width}")
+      click_button "Mark Potential", exact: true
+      assert_button "Remove Potential"
+      assert_button "Mark Unsure"
+      visit leads_path(tab: "unsure", q: "Sorting#{width}")
+      assert_no_link unsure.name
+      visit leads_path(tab: "potential", q: "Sorting#{width}")
+      assert_link unsure.name
+    end
+  end
+
   test "owner manages potential reminders on desktop and phone" do
     [ 1400, 390 ].each do |width|
       page.current_window.resize_to(width, 900)
-      lead = Lead.create!(name: "Potential traveler #{width}", status: "chatting", owner_fit_at_inquiry: "possible")
+      lead = Lead.create!(name: "Potential traveler #{width}", status: "quoted", owner_fit_at_inquiry: "possible")
       general = Lead.create!(name: "Unmarkedguest#{width}")
       visit lead_path(lead)
       click_button "Mark Potential", exact: true
       assert_button "Remove Potential"
-      assert_equal "chatting", lead.reload.status
+      assert_equal "quoted", lead.reload.status
       assert_equal "possible", lead.owner_fit_at_inquiry
       visit leads_path(tab: "potential")
       assert_link lead.name
       assert_no_link general.name
       page.execute_script("arguments[0].scrollIntoView({block: 'center'})", find_link(lead.name)) if width == 390
       assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, width
-      visit leads_path(tab: "chatting")
+      visit leads_path(tab: "quoted")
       within("li", text: lead.name) { assert_button "Remove Potential" }
       visit leads_path(tab: "potential", q: general.name)
       assert_text "No matches"
@@ -67,7 +104,7 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
       click_button "Remove Potential"
       assert_no_link lead.name
       assert_nil lead.reload.potential_marked_at
-      visit leads_path(tab: "chatting")
+      visit leads_path(tab: "quoted")
       within("li", text: lead.name) { click_button "Mark Potential" }
       assert_button "Remove Potential"
       assert lead.reload.potential?
@@ -109,5 +146,13 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
         assert_not blocked.reload.potential?
       end
     end
+  end
+
+  private
+
+  def capture(name)
+    return unless ENV["LEAD_TABS_EVIDENCE"]
+
+    page.save_screenshot(File.join(ENV.fetch("LEAD_TABS_EVIDENCE"), "#{name}.png"))
   end
 end
