@@ -1072,10 +1072,12 @@ Google address, falling back to info@), independently of the morning-digest
 toggle. A clear check sends nothing. The job never creates leads or emails
 customers. Each message is reserved before SMTP, so overlapping runs, retries,
 and an uncertain SMTP acknowledgement cannot send the same alert twice. An
-SMTP failure leaves the reservation in place and the job records the error;
+SMTP failure leaves the reservation in place and the job raises the error;
 Today still shows the inquiry. A small **Unlinked inquiries** note on Today uses
 the same rules and includes previously alerted messages within the seven-day
-window. Linking the thread or ignoring it clears the note.
+window. Linking the thread to a lead or a converted inquiry's client, matching
+a website copy to a saved lead by Reference or submission ID, or ignoring the
+thread clears its notices.
 
 Ordinary email attachments are part of the conversation and stay in CRM storage.
 There is no attachment-count cap. On import, files over 25 MB are skipped with a visible
