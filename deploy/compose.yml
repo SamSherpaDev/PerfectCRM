@@ -12,6 +12,7 @@ services:
     environment:
       RAILS_ENV: production
       SOLID_QUEUE_IN_PUMA: "true"
+      THRUSTER_LOG_REQUESTS: "0"
     expose:
       - "80"
     volumes:
