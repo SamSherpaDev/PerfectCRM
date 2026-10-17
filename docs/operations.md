@@ -221,56 +221,63 @@ with the same cron command shape. The scripts change into their app directory.
 
 ## Restore drill
 
-`deploy/restore-drill.sh` restores the primary Litestream replica to an
-isolated writable directory under `${TMPDIR:-/tmp}` (queue and cache are
-recreated by `db:prepare`),
-integrity-checks it, boots a throwaway app container against it on a random
-loopback port, and curls `/up`. On success it prints the loopback URL and an
-SSH-forward hint plus the cleanup command; the drill container stays up until
-the operator confirms the app looks right and runs that cleanup. Quarterly,
-and once before trusting backups.
+Run quarterly and once before trusting backups. On the VPS, with the deployed
+`restore-drill.sh`, `litestream.yml`, and `.env.litestream` in place:
 
-### Signed-in verification over HTTPS
+```sh
+ssh -o BatchMode=yes ubuntu@40.160.139.122
+cd /opt/apps/perfectcrm
+sudo ./restore-drill.sh
+```
 
-On the laptop, have Caddy available and add
-`https://localhost:8443/auth/google_oauth2/callback` to the authorized redirect
-URIs of the Google web OAuth client whose ID is in the server's `.env.app`.
-Keep the production redirect URI. The callback must match exactly, including
-scheme and port ([Google redirect URI rules](https://developers.google.com/identity/protocols/oauth2/web-server#uri-validation)).
+To verify a candidate script without replacing the installed one, copy it to a
+scratch path and run `sudo bash /tmp/<candidate>/restore-drill.sh /opt/apps/perfectcrm`.
+The optional argument selects the config directory; it does not select production
+storage. Remove that candidate directory afterward.
 
-1. Run the SSH command printed by the drill in a laptop terminal and leave
-   it running. It forwards laptop port 18080 to the restored app's random
-   server loopback port.
-2. In a local working directory on the laptop, create `Caddyfile.drill`:
+The drill uses the immutable image ID of the running `perfectcrm-app`, rather
+than resolving `latest` or another tag. It restores the primary Litestream
+replica into a new writable directory under `${TMPDIR:-/tmp}`. The restore
+uses `restore -config /etc/litestream.yml -o /restore/production.sqlite3
+/rails/storage/production.sqlite3`, so the replica's configured R2 endpoint,
+region, bucket, and credentials apply. Only the Litestream restore container
+has network access and reads `.env.litestream`; it downloads the replica and
+never starts replication or writes to the backup bucket. The production
+storage volume is never mounted.
 
-   ```caddyfile
-   {
-       admin 127.0.0.1:20199
-       auto_https disable_redirects
-   }
+Before booting, `PRAGMA integrity_check` must return exactly `ok`; an error,
+empty result, or any diagnostic fails the drill. The app then boots in production
+mode from the restored copy, with these deliberate drill-only settings:
 
-   https://localhost:8443 {
-       bind 127.0.0.1
-       tls internal
-       reverse_proxy 127.0.0.1:18080
-   }
-   ```
+- Docker `--network none`, no published ports, and an internal loopback listener.
+  Both `/up` and the Rails record probe run through `docker exec`.
+- `.env.app` is never loaded. No production OAuth, SMTP, R2 attachment, webhook,
+  PerfectBook, AI, or other integration credentials are passed to the app.
+- Rails generates a throwaway session secret with `SECRET_KEY_BASE_DUMMY=1`.
+  Neither the real `SECRET_KEY_BASE` nor the Active Record encryption keys are
+  needed: the record probe selects only an unencrypted `User` ID and never
+  decrypts columns. Encrypted integration values still exist in the restored
+  database, but the drill neither reads nor uses them.
+- `SOLID_QUEUE_IN_PUMA` is absent (setting it to `false` would still start the
+  plugin). The Active Job test adapter stores enqueues without executing them,
+  mail delivery is disabled, attachments use local disk, and cache uses memory.
+  No queue workers, scheduler, migrations, seeds, or `db:prepare` run. Queue and
+  cache backups are outside this boot test.
 
-   Run `caddy run --config Caddyfile.drill --adapter caddyfile` and leave it
-   running. This laptop proxy supplies HTTPS and preserves the localhost
-   host and port for OAuth; the VPS Caddy configuration stays unchanged.
-3. In another laptop terminal, run
-   `caddy trust --address 127.0.0.1:20199` and approve the local CA trust
-   prompt if needed. If the browser uses a separate certificate store,
-   import the Caddy root certificate shown in the Caddy logs there too.
-   See [Caddy's trust command](https://caddyserver.com/docs/command-line#caddy-trust).
-4. Open `https://localhost:8443`, sign in with the allowlisted Google account,
-   and open Today and Settings. Database writes go to the isolated
-   restored copy. Open a known ordinary email attachment as well; attachment
-   reads still use the configured production bucket.
-5. Run the cleanup command printed by the drill on the VPS, stop both laptop
-   terminal processes with Ctrl-C, and remove the temporary localhost
-   redirect URI from the Google client.
+Success means the restored image served `/up` and Rails read an existing `User`
+record without logging any record fields. A missing record, database/read error,
+boot failure, or cleanup failure makes the command exit nonzero. Every normal
+exit, including failure and handled interrupt/termination, attempts both app
+container removal and scratch removal, reporting any cleanup errors. The final
+`Restore drill passed` message appears only after both cleanup steps succeed;
+there is no manual container cleanup after a successful run. If Docker or the
+filesystem prevents cleanup, resolve the reported failure and remove the named
+container/directory before repeating the drill.
+
+This is an offline primary-database boot test. It does not verify signed-in
+pages, encryption-key recovery, queue recovery, or attachment availability.
+Those require a separately planned acceptance check; production credentials,
+network access, and attachment bucket reads are intentionally outside this drill.
 
 ## Adding another app to this server
 
