@@ -65,6 +65,29 @@ class SecurityBoundariesTest < ActionDispatch::IntegrationTest
     assert_not_includes logs, "unknown-synthetic-capability"
   end
 
+  test "failed group send logs omit redirect recipient data while preserving status" do
+    sign_in
+    template = Template.create!(name: "Synthetic departure", purpose: "custom",
+      subject: "Departure update", body: "Hello {{first_name}}")
+    recipients = "PrivateRedirectName <private-redirect@example.test>\nPrivateRedirectFreeText"
+    logs = capture_request_logs do
+      assert_no_difference "GroupSend.count" do
+        post group_sends_path, params: { template_id: template.id, recipients: recipients }
+      end
+      assert_redirected_to merge_templates_path(template_id: template.id, recipients: recipients)
+      follow_redirect!
+      assert_response :success
+      assert_select ".flash-alert", text: /Fix 1 line/
+    end
+    assert_includes logs, "Processing by GroupSendsController#create"
+    assert_includes logs, "Redirected to [FILTERED]"
+    assert_includes logs, "Completed 302"
+    [ "PrivateRedirectName", "private-redirect@example.test", "PrivateRedirectFreeText",
+      "private-redirect%40example.test", "PrivateRedirectName+%3C" ].each do |value|
+      assert_not_includes logs, value
+    end
+  end
+
   test "public quote HTML and documents prohibit storage" do
     quote = Quote.create!(client: Client.create!(name: "Synthetic quote customer", email: "synthetic@example.test"),
       trip_name: "Synthetic journey", valid_until: Date.current + 14)

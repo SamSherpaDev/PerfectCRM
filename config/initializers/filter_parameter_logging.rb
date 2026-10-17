@@ -19,5 +19,4 @@ Rails.application.config.filter_parameters += [
 # chasing every new identity/free-text field as the intake evolves.
 Rails.application.config.filter_parameters << /\A(?!(?:controller|action|id|format)\z)/
 
-# Redirect notifications otherwise log the public quote's bearer capability.
-Rails.application.config.filter_redirect << %r{/q/}
+Rails.application.config.filter_redirect << /.*/
