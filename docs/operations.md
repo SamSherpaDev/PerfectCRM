@@ -154,7 +154,16 @@ environment changes. Then use Settings → PerfectBook → Test connection.
 All from `/opt/apps/perfectcrm` on the box.
 
 - **Logs.** `docker compose -f compose.yml logs -f app` (add
-  `litestream` for the replicator).
+  `litestream` for the replicator). Compose runs Rails/Puma directly on port
+  80 behind the system Caddy, bypassing Thruster and its unfiltered access
+  and error logs. Rails retains request logs under the
+  [request-log filtering policy](../README.md#google-sign-in).
+  Rails serves static assets, compresses
+  responses with Rack::Deflater, and sends download bodies without X-Sendfile
+  offloading.
+  This takes effect when the updated compose file is installed and the app
+  container is recreated. Historical logs are not rewritten; configured Docker
+  log rotation ages them out as its retention limits are reached.
 - **Restart.** `docker compose -f compose.yml up -d` recreates anything
   stopped; `./deploy.sh` also pulls the newest green image first.
 - **Deploy a version.** `./deploy.sh` pulls and runs `:latest` (last green

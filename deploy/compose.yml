@@ -7,11 +7,13 @@ services:
     image: ghcr.io/samsherpadev/perfectcrm:${IMAGE_TAG:-latest}
     container_name: perfectcrm-app
     restart: unless-stopped
+    command: ["./bin/rails", "server"]
     env_file:
       - .env.app
     environment:
       RAILS_ENV: production
       SOLID_QUEUE_IN_PUMA: "true"
+      PORT: "80"
     expose:
       - "80"
     volumes:
