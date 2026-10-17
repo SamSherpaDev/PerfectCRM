@@ -4,7 +4,7 @@ require_relative "../support/google_sign_in_test_helper"
 class LeadPotentialSystemTest < ApplicationSystemTestCase
   include GoogleSignInTestHelper
 
-  test "owner manages potential reminders on desktop and phone" do
+  setup do
     OmniAuth.config.mock_auth[:google_oauth2] = OmniAuth::AuthHash.new(
       provider: "google_oauth2", uid: "google-captain",
       extra: { id_token: JWT.encode(@claims, @key, "RS256") }
@@ -13,7 +13,37 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
       visit "/auth/google_oauth2/callback"
       assert_selector "h1", text: "Today"
     end
+  end
 
+  test "reviewed leads leave New immediately on desktop and phone" do
+    [ 1400, 390 ].each do |width|
+      page.current_window.resize_to(width, 900)
+      potential = Lead.create!(name: "Routing#{width} Potential")
+      spam = Lead.create!(name: "Routing#{width} Spam")
+      waiting = Lead.create!(name: "Routing#{width} Waiting")
+      visit leads_path(tab: "new", q: "Routing#{width}", sort: "name")
+      within("li", text: potential.name) { click_button "Mark Potential" }
+      assert_selector "h2", text: "New", exact_text: true
+      assert_no_link potential.name
+      assert_link waiting.name
+      assert_link spam.name
+      within("nav.tabs") { click_link "Potential" }
+      assert_link potential.name
+      assert_no_link spam.name
+      within("nav.tabs") { click_link "New" }
+      assert_no_link potential.name
+      within("li", text: spam.name) { click_button "Mark as spam" }
+      assert_selector "h2", text: "Archived", exact_text: true
+      assert_link spam.name
+      within("nav.tabs") { click_link "New" }
+      assert_no_link spam.name
+      assert_no_link potential.name
+      assert_link waiting.name
+      assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, width
+    end
+  end
+
+  test "owner manages potential reminders on desktop and phone" do
     [ 1400, 390 ].each do |width|
       page.current_window.resize_to(width, 900)
       lead = Lead.create!(name: "Potential traveler #{width}", status: "chatting", owner_fit_at_inquiry: "possible")

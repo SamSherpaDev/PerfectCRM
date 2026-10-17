@@ -28,7 +28,9 @@ class SignatureSystemTest < ApplicationSystemTestCase
     assert_selector "#signature-preview img", count: 1
     assert_includes setting.reload.email_signature_html, 'href="https://sherpaholidays.com/contact"'
     assert_includes setting.email_signature_html, 'src="https://tracker.example/p.gif"'
-    assert page.evaluate_script("document.querySelector('#signature-preview img').complete && document.querySelector('#signature-preview img').naturalWidth > 0")
+    assert_selector "#signature-preview img" do |image|
+      image.evaluate_script("this.complete && this.naturalWidth > 0")
+    end
     assert_operator find("#signature-preview img").rect.width, :<=, 120
     assert_operator find("#signature-preview img").rect.height, :<=, 44
     capture("signature-legacy-desktop")

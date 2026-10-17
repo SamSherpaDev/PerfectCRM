@@ -8,6 +8,84 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     sign_in
   end
 
+  test "marking Potential from New removes the row and updates counts through the redirect" do
+    lead = Lead.create!(name: "New traveler to review")
+    other = Lead.create!(name: "New traveler still waiting")
+    list_url = leads_url(tab: "new", q: "New traveler", sort: "name")
+    get list_url
+    assert_select "form[action='#{mark_potential_lead_path(lead)}'] button", text: "Mark Potential"
+    assert_select "nav.tabs a", text: /New.*2/
+
+    patch mark_potential_lead_path(lead), headers: { "HTTP_REFERER" => list_url }
+    assert_redirected_to list_url
+    follow_redirect!
+    assert_select "h2", text: "New"
+    assert_select "a", text: lead.name, count: 0
+    assert_select "a", text: other.name
+    assert_select "nav.tabs a", text: /New.*1/
+    assert_select "nav.tabs a", text: /Potential.*1/
+    assert_equal "new", lead.reload.status
+
+    get leads_path
+    assert_select "a", text: lead.name, count: 0
+    get leads_path(tab: "potential", q: "New traveler", sort: "name")
+    assert_select "a", text: lead.name
+    assert_select "a", text: other.name, count: 0
+    patch unmark_potential_lead_path(lead), headers: { "HTTP_REFERER" => leads_url(tab: "potential") }
+    follow_redirect!
+    assert_select "a", text: lead.name, count: 0
+    get list_url
+    assert_select "a", text: lead.name
+    assert_select "nav.tabs a", text: /New.*2/
+    assert_select "nav.tabs a", text: /Potential.*0/
+  end
+
+  test "marking spam from New moves the row to Archived through the redirect" do
+    lead = Lead.create!(name: "New spam inquiry")
+    other = Lead.create!(name: "New genuine inquiry")
+    get leads_path(tab: "new")
+    assert_select "form[action='#{mark_as_spam_lead_path(lead)}'] button", text: "Mark as spam"
+    patch mark_as_spam_lead_path(lead), headers: { "HTTP_REFERER" => leads_url(tab: "new") }
+    assert_redirected_to leads_path(tab: "archived")
+    follow_redirect!
+    assert_select "h2", text: "Archived"
+    assert_select "a", text: lead.name
+    assert_select "nav.tabs a", text: /New.*1/
+    assert_select "nav.tabs a", text: /Archived.*1/
+    get leads_path(tab: "new", q: "New", sort: "name")
+    assert_select "a", text: lead.name, count: 0
+    assert_select "a", text: other.name
+    patch not_spam_lead_path(lead)
+    get leads_path(tab: "new")
+    assert_select "a", text: lead.name
+  end
+
+  test "stage changes archive and conversion move New leads to their own sections" do
+    %w[chatting quoted nudged lost].each do |status|
+      lead = Lead.create!(name: "Move to #{status}")
+      attrs = { status: status }
+      attrs[:lost_reason] = "no_reply" if status == "lost"
+      patch lead_path(lead), params: { lead: attrs }
+      assert_redirected_to lead_path(lead)
+      get leads_path(tab: "new")
+      assert_select "a", text: lead.name, count: 0
+      get leads_path(tab: status)
+      assert_select "a", text: lead.name
+    end
+
+    archived = Lead.create!(name: "Move to archive")
+    patch archive_lead_path(archived)
+    follow_redirect!
+    assert_select "a", text: archived.name
+    converted = Lead.create!(name: "Move to converted")
+    post convert_lead_path(converted)
+    assert_redirected_to client_path(converted.reload.converted_client)
+    get leads_path(tab: "converted")
+    assert_select "a", text: converted.name
+    get leads_path(tab: "new")
+    [ archived, converted ].each { |lead| assert_select "a", text: lead.name, count: 0 }
+  end
+
   test "Potential actions keep stage membership and filter search and counts" do
     lead = Lead.create!(name: "Potential traveler", status: "chatting")
     other = Lead.create!(name: "General traveler")

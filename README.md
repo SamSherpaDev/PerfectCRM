@@ -636,8 +636,10 @@ open inquiries at once. Storefront submission and replay behavior follows the
 `external_ref` remains unique across all leads.
 
 Mark Potential on an inquiry or lead row to remember who you want to follow up
-with. The Potential tab gathers marked leads across stages; they also stay in
-their stage tabs so the pipeline remains intact. Remove Potential clears the
+with. The Potential tab gathers marked leads across stages. Marking Potential
+removes a lead from New immediately, including its tab count; removing Potential
+returns it to New if its stage is still new. Marked leads stay in their other
+stage tabs so the pipeline remains intact. Remove Potential clears the
 reminder without changing fit or stage. Archived and converted leads stay out
 of Potential. Restoring an ordinarily archived lead restores its Potential
 reminder. Mark as spam clears the reminder, and Not spam does not restore
