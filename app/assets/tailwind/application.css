@@ -617,7 +617,7 @@
     @apply h-9 w-9;
   }
   .empty-inline .scene {
-    @apply absolute right-6 -bottom-1 w-[240px] pointer-events-none;
+    @apply order-last w-[240px] max-w-full self-end pointer-events-none;
     opacity: calc(var(--pb-sketch-op) * 0.7);
   }
 

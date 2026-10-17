@@ -88,7 +88,67 @@ class ClientsSystemTest < ApplicationSystemTestCase
     assert_no_overflow("archived tab")
   end
 
+  test "long client email stays readable without widening the record page" do
+    client = Client.create!(name: "Alexandra Montgomery",
+      email: "alexandra.montgomery@northumberland.example.test")
+    browser_sign_in
+
+    [ 390, 1440 ].each do |width|
+      page.current_window.resize_to(width, 844)
+      visit client_path(client)
+      within(".page-header") { assert_text client.email }
+      assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, width,
+        "The client email must wrap without widening a #{width}px viewport"
+      assert find(".page-header").evaluate_script(<<~JS), "The full email must fit inside the header"
+        (() => {
+          const subtitle = this.querySelector('p:last-child');
+          const range = document.createRange();
+          range.selectNodeContents(subtitle);
+          const header = this.getBoundingClientRect();
+          return Array.from(range.getClientRects()).every(line =>
+            line.left >= header.left && line.right <= header.right);
+        })()
+      JS
+    end
+  end
+
+  test "empty booking drawing stays below the text in narrow record cards" do
+    client = Client.create!(name: "Unbooked traveler")
+    browser_sign_in
+
+    [ 1440, 980, 390 ].each do |width|
+      page.current_window.resize_to(width, 844)
+      visit client_path(client)
+      click_button "Files & dates", exact: false if width == 390
+      within(".trip") { assert_text "No bookings yet." }
+      assert find(".trip .empty-inline").evaluate_script(<<~JS), "The booking drawing must stay below the text at #{width}px"
+        (() => {
+          const scene = this.querySelector('.scene').getBoundingClientRect();
+          const container = this.getBoundingClientRect();
+          const lines = Array.from(this.querySelectorAll('p')).flatMap(p => {
+            const range = document.createRange();
+            range.selectNodeContents(p);
+            return Array.from(range.getClientRects());
+          });
+          return scene.left >= container.left && scene.right <= container.right &&
+            lines.every(line => line.bottom <= scene.top);
+        })()
+      JS
+    end
+  end
+
   private
+
+  def browser_sign_in
+    OmniAuth.config.mock_auth[:google_oauth2] = OmniAuth::AuthHash.new(
+      provider: "google_oauth2", uid: "google-captain",
+      extra: { id_token: JWT.encode(@claims, @key, "RS256") }
+    )
+    Google::Auth::IDTokens.stub(:oidc_key_source, @source) do
+      visit "/auth/google_oauth2/callback"
+      assert_selector "h1", text: "Today"
+    end
+  end
 
   def assert_no_overflow(context)
     width = page.evaluate_script("document.documentElement.scrollWidth")
