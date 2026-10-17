@@ -50,7 +50,7 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
       waiting = Lead.create!(name: "Sorting#{width} Waiting")
       chatting = Lead.create!(name: "Sorting#{width} Chatting", status: "chatting")
       visit leads_path(tab: "new", q: "Sorting#{width}", sort: "name")
-      assert_equal %w[New Potential Unsure Quoted Converted Archived],
+      assert_equal %w[New Potential Unsure Quoted Archived],
         all("nav.tabs a").map { |tab| tab.first("span").text }
       assert_link chatting.name
       capture("new-#{width}")

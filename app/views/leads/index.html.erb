@@ -25,7 +25,6 @@
     <%= tab_link "Potential", leads_path(tab: "potential", q: @query, sort: @sort), icon: :check, active: @tab == "potential", count: @counts["potential"] %>
     <%= tab_link "Unsure", leads_path(tab: "unsure", q: @query, sort: @sort), icon: :question, active: @tab == "unsure", count: @counts["unsure"] %>
     <%= tab_link "Quoted", leads_path(tab: "quoted", q: @query, sort: @sort), icon: :receipt, active: @tab == "quoted", count: @counts["quoted"] %>
-    <%= tab_link "Converted", leads_path(tab: "converted", q: @query, sort: @sort), icon: :check, active: @tab == "converted", count: @counts["converted"] %>
     <%= tab_link "Archived", leads_path(tab: "archived", q: @query, sort: @sort), icon: :archive, active: @tab == "archived", count: @counts["archived"] %>
   </nav>
 
@@ -97,8 +96,6 @@
         <%= render "shared/empty_state", title: "No unsure leads", body: "Mark Unsure on a lead that has not answered yet. They wait here until you know.", scene: :cairn %>
       <% elsif @tab == "archived" %>
         <%= render "shared/empty_state", title: "Nothing archived", body: "Archived, spam and lost leads rest here until they need follow-up again.", scene: :cairn %>
-      <% elsif @tab == "converted" %>
-        <%= render "shared/empty_state", title: "No conversions yet", body: "Converted leads stay here with a link forward to their client.", scene: :cairn %>
       <% else %>
         <%= render "shared/empty_state", title: "No leads here", body: "New asks from ads, the website, and email will gather here for scoring.", scene: :cairn do %>
           <%= link_to "Add your first lead", new_lead_path, class: "btn-primary btn btn-sm" %>

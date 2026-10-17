@@ -14,8 +14,7 @@ module LeadsHelper
     "potential" => "Leads you want to follow up with, across all stages. Remove Potential when you no longer need the reminder.",
     "unsure" => "Leads you cannot call yet: voicemail, no reply, maybe spam. Move them on once you know.",
     "missing_source" => "All inquiries without a discovery answer, including converted records. Tests and spam stay out.",
-    "archived" => "Archived, spam, and lost leads. Restore an archived lead any time.",
-    "converted" => "Leads that became clients. Read-only, kept for memory."
+    "archived" => "Archived, spam, and lost leads. Restore an archived lead any time."
   }.freeze
 
   def lead_tab_caption(tab)
