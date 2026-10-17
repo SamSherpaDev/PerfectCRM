@@ -1,0 +1,9 @@
+<%= pluralize(@messages.size, "possible inquiry") %> from the last 7 days may be missing a lead.
+Review each thread and link or create a lead if needed:
+<% @messages.each do |message| %>
+
+<%= (message.inbound_received_at || message.sent_at || message.created_at).in_time_zone.strftime("%b %-d") %> - <%= message.subject.presence || "(no subject)" %>
+<%= inbox_thread_url(message.conversation) %>
+<% end %>
+
+Unlinked messages remain on Today during the 7-day lookback. Each message is emailed only once.

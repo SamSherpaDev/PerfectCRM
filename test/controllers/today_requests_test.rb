@@ -1,10 +1,12 @@
 require "test_helper"
 require_relative "../support/quote_terms_test_helper"
 require_relative "../support/google_sign_in_test_helper"
+require_relative "../support/inquiry_mail_test_helper"
 
 class TodayRequestsTest < ActionDispatch::IntegrationTest
   include QuoteTermsTestHelper
   include GoogleSignInTestHelper
+  include InquiryMailTestHelper
 
   setup do
     sign_in
@@ -22,6 +24,24 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     assert_select ".stat", text: /Overdue/
     assert_select ".stat", text: /New leads/
     assert_select ".stat", text: /Active clients/
+  end
+
+  test "Today exposes HTML-only and plain inquiry notifications stranded in triage" do
+    messages = [ ingest_inquiry(html: true), ingest_inquiry ]
+    assert messages.all? { |message| message.conversation.triage? }
+    assert_equal 0, Lead.count
+
+    get root_path
+    assert_response :success
+    assert_select "[aria-label='Unlinked inquiries']" do
+      assert_select "strong", "Unlinked inquiries: 2"
+      messages.each { |message| assert_select "a[href=?]", inbox_thread_path(message.conversation) }
+    end
+    messages.first.conversation.update!(linkable: Lead.create!(name: "Recovered"))
+    messages.last.conversation.update!(ignored: true)
+    get root_path
+    assert_response :success
+    assert_select "[aria-label='Unlinked inquiries']", count: 0
   end
 
   test "today counts new leads and active clients" do
@@ -197,6 +217,7 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     assert_select "p", text: /Nothing owed this week/
     assert_select "p", text: /No replies waiting/
     assert_select "p", text: "No inquiries waiting for first contact."
+    assert_select "[aria-label='Unlinked inquiries']", count: 0
   end
 
   private

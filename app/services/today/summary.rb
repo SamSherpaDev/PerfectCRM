@@ -24,6 +24,10 @@ module Today
       waiting_threads.limit(5).to_a
     end
 
+    def unlinked_inquiries
+      @unlinked_inquiries ||= Leads::UnlinkedInquiries.new(now: @now).messages
+    end
+
     # Sent or viewed quotes whose valid-until has not passed.
     def quotes_out
       Quote.live.where.not(id: Quote.expired.select(:id))

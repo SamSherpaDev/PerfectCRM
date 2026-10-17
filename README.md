@@ -1052,6 +1052,28 @@ silently. Inbox tabs are Waiting on you, Waiting on them, All, and Triage,
 with icons and counts. Inbox and record timelines offer Load older so complete
 history is reachable, and expanded messages show their full body.
 
+The inquiry safety net checks the last seven days of imported inbound mail at
+7:10am Pacific every day (`InquirySafetyNetJob` in `config/recurring.yml`). Website
+inquiry/fallback notifications, contact-form copies, explicit inquiry subjects,
+travel requests, and threads already classified as new inquiries are checked
+for a linked lead. A converted inquiry's client thread also counts as linked.
+Unlinked website copies can match a saved lead by their Reference or submission
+ID; an unrelated lead sharing the visitor's email is insufficient. Ignored
+threads, ordinary correspondence, outbound mail, and obvious automatic replies
+or bounces stay out. This is a heuristic check of mail already imported into CRM;
+it cannot detect a submission that produced neither a lead nor imported mail.
+
+When something is missing, one short email lists the count and links each message
+to its CRM thread. It goes only to `Setting.captain_email` (the first allowed
+Google address, falling back to info@), independently of the morning-digest
+toggle. A clear check sends nothing. The job never creates leads or emails
+customers. Each message is reserved before SMTP, so overlapping runs, retries,
+and an uncertain SMTP acknowledgement cannot send the same alert twice. An
+SMTP failure leaves the reservation in place and the job records the error;
+Today still shows the inquiry. A small **Unlinked inquiries** note on Today uses
+the same rules and includes previously alerted messages within the seven-day
+window. Linking the thread or ignoring it clears the note.
+
 Ordinary email attachments are part of the conversation and stay in CRM storage.
 There is no attachment-count cap. On import, files over 25 MB are skipped with a visible
 message notice. Before any blob is created or uploaded, filenames, content types,

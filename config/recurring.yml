@@ -28,6 +28,9 @@ production:
   today_digest:
     class: TodayDigestJob
     schedule: every day at 7am
+  inquiry_safety_net:
+    class: InquirySafetyNetJob
+    schedule: every day at 7:10am America/Los_Angeles
   mail_sync:
     class: Mail::SyncJob
     schedule: every 5 minutes
