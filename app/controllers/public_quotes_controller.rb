@@ -8,6 +8,7 @@ class PublicQuotesController < ApplicationController
   VIEW_LIMIT = 30
   VIEW_WINDOW = 10.minutes
 
+  before_action { response.headers["Cache-Control"] = "no-store" }
   before_action :find_quote
   before_action :rate_limit_views, only: :show
 

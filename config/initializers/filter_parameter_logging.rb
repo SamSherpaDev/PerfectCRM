@@ -13,3 +13,10 @@ Rails.application.config.filter_parameters += [
   # Hide channel check payloads, including campaign and ad names in spend requests.
   :snapshot, /\Aspends?\z/
 ]
+
+# Request parameters are customer-controlled, including nested intake metadata,
+# composer text and search queries. Retain only routing fields, rather than
+# chasing every new identity/free-text field as the intake evolves.
+Rails.application.config.filter_parameters << /\A(?!(?:controller|action|id|format)\z)/
+
+Rails.application.config.filter_redirect << /.*/

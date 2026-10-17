@@ -1,4 +1,5 @@
 require "test_helper"
+require_relative "../../support/outbound_origins_test_helper"
 require "stringio"
 
 class MemoryEtags
@@ -42,6 +43,7 @@ class StubPbClient < PerfectBook::Client
 end
 
 class PerfectBookClientTest < ActiveSupport::TestCase
+  include OutboundOriginsTestHelper
   setup do
     PerfectBook::Circuit.reset!
     PerfectBook::EtagStore.delete_all

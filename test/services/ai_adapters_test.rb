@@ -20,7 +20,7 @@ class AiAdaptersTest < ActiveSupport::TestCase
     payload = { choices: [ { message: { content: "Namaste!" } } ],
                 usage: { prompt_tokens: 10, completion_tokens: 4 } }
     with_http(fake_ok(payload)) do
-      result = Ai::OpenAiAdapter.new(base_url: "https://api.example.com/v1",
+      result = Ai::OpenAiAdapter.new(base_url: "https://api.openai.com/v1",
         model: "mini", api_key: "k").chat(system: "sys", messages: [ { role: :user, content: "hi" } ])
       assert_equal "Namaste!", result[:text]
       assert_equal 10, result[:input_tokens]
@@ -35,7 +35,7 @@ class AiAdaptersTest < ActiveSupport::TestCase
     error.instance_variable_set(:@body, "{}")
     with_http(error) do
       assert_raises(RuntimeError) do
-        Ai::OpenAiAdapter.new(base_url: "https://api.example.com/v1",
+        Ai::OpenAiAdapter.new(base_url: "https://api.openai.com/v1",
           model: "mini", api_key: "k").chat(system: "s", messages: [])
       end
     end

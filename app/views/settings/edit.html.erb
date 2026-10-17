@@ -182,7 +182,7 @@
       <div>
         <%= form.label :lead_webhook_url, "n8n webhook URL", class: "label" %>
         <%= form.url_field :lead_webhook_url, class: "input mono text-xs", placeholder: "https://n8n.example.com/webhook/lead" %>
-        <p class="hint">Each new lead and each details answer is posted here, signed with the relay secret. Empty means disabled.</p>
+        <p class="hint">Each new lead and each details answer is posted here, signed with the relay secret. Use an approved HTTPS endpoint. Empty means disabled.</p>
       </div>
       <div>
         <%= form.submit "Save automations", class: "btn-primary btn btn-sm" %>

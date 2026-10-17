@@ -1,8 +1,10 @@
 require "application_system_test_case"
 require_relative "../support/google_sign_in_test_helper"
+require_relative "../support/outbound_origins_test_helper"
 
 class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
   include GoogleSignInTestHelper
+  include OutboundOriginsTestHelper
 
   setup do
     OmniAuth.config.mock_auth[:google_oauth2] = OmniAuth::AuthHash.new(

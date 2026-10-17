@@ -285,11 +285,34 @@ allowlist gets a "Not allowed" page; unverified emails and other sign-in
 failures get a "Sign-in failed" retry page. Neither failure creates a
 session, and there is no registration page. Visiting `/auth/failure`,
 including after cancelling Google consent, preserves an existing valid
-session. Production cookies are Secure, HttpOnly and SameSite=Lax; sessions
-expire after 12 hours of inactivity, and Sign out (`DELETE /sign-out`) clears
-the cookie session. After an updated allowlist takes effect in the running
+session. Google account selection does not force consent on each sign-in.
+Production cookies are Secure, HttpOnly and SameSite=Lax. Staff sessions
+expire after 30 days of inactivity; each authenticated visit renews both
+the cookie and the server-side expiry. The single duration setting is
+`config.x.staff_session_idle_timeout` in `config/initializers/session_store.rb`.
+The cookie carries a random token whose digest is stored in `LoginSession`.
+Sign out (`DELETE /sign-out`) deletes that session, so replaying a copied
+cookie fails. Signing in rotates and revokes the previous session in that
+browser, while other devices retain their own sessions. Deploying the
+revocable-session migration requires one new sign-in for existing cookies.
+After an updated allowlist takes effect in the running
 app, removing an email also denies its existing session on its next request;
 `/up` stays public.
+
+Request parameter logs retain only routing fields (`controller`, `action`,
+`id`, `format`); customer fields, searches, composer bodies and nested intake
+metadata are filtered. Public quote capability segments are redacted and all
+redirect destinations are suppressed in Rails request logs; response status
+metadata remains available. Public quote HTML and document
+downloads send `Cache-Control: no-store`. Any future proxy access logging
+must redact `/q/:token` paths as well. Existing log retention and access are
+operational concerns; this change does not delete historical logs.
+
+An enforced Content Security Policy restricts scripts and connections to
+this app, nonces the importmap scripts, blocks embedded objects and framing,
+and permits the Google/Microsoft OAuth form destinations. Assets and fonts
+are served locally. Inline styles remain permitted for the kit's layouts,
+progress bars and animations; inline script handlers are blocked.
 
 ## PerfectBook connection
 
@@ -324,6 +347,29 @@ also filter the token (`config/initializers/filter_parameter_logging.rb`).
 
 Settings → PerfectBook connection shows configured/unconfigured, the last
 successful sync, the last error, and a Test connection button.
+
+## Outbound service origins
+
+Credential-bearing HTTP clients and lead webhooks require HTTPS, verify
+TLS certificates and never follow redirects. Microsoft Graph accepts only
+`https://graph.microsoft.com` (including next/delta links); token exchanges
+accept only `https://login.microsoftonline.com`.
+
+AI defaults to the OpenAI and OpenRouter origins, and PerfectBook defaults
+to `https://perfectbook.sherpaholidays.com`. Additional deployments require
+the corresponding environment allowlist: `AI_ALLOWED_ORIGINS` or
+`PERFECTBOOK_ALLOWED_ORIGINS`. Webhooks have no default destination; set
+`LEAD_WEBHOOK_ALLOWED_ORIGINS` before saving a webhook in Settings.
+These are comma-separated HTTPS origins, including an explicit port when
+nonstandard, with no credentials, path, query or fragment. For example,
+`LEAD_WEBHOOK_ALLOWED_ORIGINS=https://n8n.example.com` allows that host's
+webhook paths. Private services also require an explicit HTTPS origin and
+a trusted certificate; there is no HTTP or wildcard exception. A different
+host or port is rejected before credentials or customer data are attached.
+Saved endpoints are checked again when used, so changing the allowlist
+also applies to previously configured URLs. New or changed AI and webhook
+URLs are validated on save; revoking an origin does not prevent unrelated
+Settings updates, including Microsoft refresh-token rotation.
 
 ## Quotes
 
@@ -1227,6 +1273,8 @@ AI assistance is on by default. In Settings → AI assistance, enter an
 OpenAI-compatible base URL (OpenAI or OpenRouter), model name, provider key,
 and short voice guide (templates are the style examples). Without a key,
 threads show "Add a provider key in Settings to enable drafts".
+Endpoint requirements and additional deployments follow
+[Outbound service origins](#outbound-service-origins).
 Drafts appear in an editable dashed-edge block. Use this draft replaces the
 body in the [reply box](#replying), opening it on phones, for editing and
 review before Send. Copy draft lets the captain paste the text into his mail app.

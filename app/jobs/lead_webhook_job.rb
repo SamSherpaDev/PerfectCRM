@@ -36,9 +36,9 @@ class LeadWebhookJob < ApplicationJob
   end
 
   def post(url, body, signature)
-    uri = URI.parse(url)
+    uri = OutboundEndpoint.for_service!(url, service: "LEAD_WEBHOOK")
     http = Net::HTTP.new(uri.host, uri.port)
-    http.use_ssl = uri.scheme == "https"
+    http.use_ssl = true
     http.open_timeout = 10
     http.read_timeout = 10
     request = Net::HTTP::Post.new(uri.request_uri,

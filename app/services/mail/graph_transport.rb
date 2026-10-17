@@ -19,7 +19,7 @@ module Mail
     end
 
     def post_form(url, params)
-      uri = URI.parse(url.to_s)
+      uri = OutboundEndpoint.validate!(url, allowed_origins: [ "https://login.microsoftonline.com" ])
       http = build_http(uri)
       request = Net::HTTP::Post.new(uri.request_uri)
       request.set_form_data(params)
@@ -50,7 +50,7 @@ module Mail
     private
 
     def get(url, token:, params: nil, headers: {})
-      uri = URI.parse(url.to_s)
+      uri = OutboundEndpoint.validate!(url, allowed_origins: [ "https://graph.microsoft.com" ])
       if params&.any?
         query = URI.encode_www_form(params)
         uri.query = [ uri.query, query ].compact.join("&")
@@ -67,7 +67,7 @@ module Mail
 
     def build_http(uri)
       http = Net::HTTP.new(uri.host, uri.port)
-      http.use_ssl = uri.scheme == "https"
+      http.use_ssl = true
       http.open_timeout = OPEN_TIMEOUT
       http.read_timeout = READ_TIMEOUT
       http

@@ -84,17 +84,17 @@ class GoogleSignInTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
-  test "session expires after twelve inactive hours but activity renews it" do
+  test "session lasts thirty idle days and activity renews it across months" do
     sign_in
-    travel 11.hours do
+    travel 29.days do
       get root_path
       assert_response :success
     end
-    travel 22.hours do
+    travel 58.days do
       get root_path
       assert_response :success
     end
-    travel 35.hours do
+    travel 89.days do
       get root_path
       assert_redirected_to sign_in_path
     end
@@ -126,6 +126,8 @@ class GoogleSignInTest < ActionDispatch::IntegrationTest
     query = Rack::Utils.parse_query(URI.parse(response.location).query)
     assert_equal "https://accounts.google.com", "#{URI.parse(response.location).scheme}://#{URI.parse(response.location).host}"
     assert_equal %w[email openid profile], query.fetch("scope").split.sort
+    assert_equal "select_account", query.fetch("prompt")
+    assert_not_includes query.fetch("prompt").split, "consent"
     assert_not_equal "attacker", query.fetch("state")
   ensure
     ActionController::Base.allow_forgery_protection = original_protection

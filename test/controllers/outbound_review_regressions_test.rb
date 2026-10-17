@@ -112,7 +112,7 @@ class OutboundReviewRegressionsTest < ActionDispatch::IntegrationTest
 
   test "recipient request fields are redacted" do
     filter = ActiveSupport::ParameterFilter.new(Rails.application.config.filter_parameters)
-    assert_equal({ "message" => { "to" => "[FILTERED]", "cc" => "[FILTERED]", "bcc" => "[FILTERED]" } },
+    assert_equal({ "message" => "[FILTERED]" },
       filter.filter("message" => { "to" => "a@example.com", "cc" => "b@example.com", "bcc" => "c@example.com" }))
   end
 end

@@ -1,6 +1,8 @@
 require "test_helper"
+require_relative "../support/outbound_origins_test_helper"
 
 class LeadWebhookJobTest < ActiveJob::TestCase
+  include OutboundOriginsTestHelper
   FakeResponse = Struct.new(:code) do
     def is_a?(klass)
       return code.start_with?("2") if klass == Net::HTTPSuccess

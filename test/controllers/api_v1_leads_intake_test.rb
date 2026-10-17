@@ -1,8 +1,10 @@
 require "test_helper"
+require_relative "../support/request_logs_test_helper"
 
 # Public intake contract (docs/leads-intake.md, intake-spec.md section 2):
 # every status code and mode, in validation order.
 class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
+  include RequestLogsTestHelper
   ORIGIN = "https://www.sherpaholidays.com"
 
   setup do
@@ -73,6 +75,21 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
   end
 
   # -- happy path ----------------------------------------------------------
+
+  test "intake request logs retain operational status without identity or nested free text" do
+    logs = capture_request_logs do
+      post_intake intake_body("contact" => { "name" => "PrivateSyntheticName", "email" => "private@example.com" },
+        "message" => "PrivateSyntheticMessage", "attribution" => { "utm_campaign" => "PrivateSyntheticCampaign" })
+      assert_response :accepted
+    end
+    assert_includes logs, "Started POST"
+    assert_includes logs, "Completed 202"
+    assert_includes logs, "[FILTERED]"
+    %w[PrivateSyntheticName private@example.com PrivateSyntheticMessage PrivateSyntheticCampaign].each do |value|
+      assert_not_includes logs, value
+    end
+    assert_equal "PrivateSyntheticMessage", Lead.last.message
+  end
 
   test "valid browser request creates one lead and answers 202" do
     assert_enqueued_jobs 3, only: LeadNotificationJob do
