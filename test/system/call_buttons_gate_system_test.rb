@@ -38,7 +38,7 @@ class CallButtonsGateSystemTest < ApplicationSystemTestCase
         Promise.all([1, 2].map(() => fetch(form.action, {method: 'POST', body})))
           .then(responses => done(responses.map(r => r.status)));
       JS
-      assert_equal [200, 200], result
+      assert_equal [ 200, 200 ], result
     end
     page.refresh
     within("[aria-label='Calls for SH-SECOND']") { assert_selector ".calls-recent li", count: 1, text: "No answer" }
