@@ -53,7 +53,7 @@ class SourceHistorySystemTest < ApplicationSystemTestCase
     select "Inbound", from: "Direction"
     fill_in "Duration in seconds (optional)", with: "60"
     tolerate_submit_navigation { click_button "Save call" }
-    assert_text "Call logged: Talked."
+    tolerate_navigation_assertion { assert_text "Call logged: Talked." }
     within(".timeline") { assert_text "Call: Talked" }
     within(".calls-recent") { assert_text "Talked, they called" }
     call = lead.activity_events.find_by!(kind: "call")
@@ -72,7 +72,7 @@ class SourceHistorySystemTest < ApplicationSystemTestCase
       assert_text "Call logged: Voicemail."
       within(".calls-recent li") { assert_text "Voicemail"; assert_text "Today #{now.strftime('%H:%M')}" }
       tolerate_submit_navigation { click_button "Talked" }
-      assert_text "Call logged: Talked."
+      tolerate_navigation_assertion { assert_text "Call logged: Talked." }
       within(".calls-recent") { assert_selector "li", count: 2 }
     end
     calls = lead.activity_events.where(kind: "call").order(:id)

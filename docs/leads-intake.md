@@ -358,8 +358,10 @@ Connected calls are explicit `ActivityEvent(kind=call)` entries on an inquiry,
 not task completion. Outcomes: `attempted`, `connected`, `voicemail`, `no_answer`;
 direction inbound/outbound, occurrence time, optional duration, operator and
 source-answer event reference. A stable per-save UUID is unique per inquiry;
-a double save counts once. Client call logging requires selection of one of
-that client's explicit inquiries. Copying a timeline on conversion retains the
+a double save counts once. Client call logging must identify one of
+that client's explicit inquiries. For the call buttons and details form, see
+[Source history and calls](../README.md#source-history-and-calls).
+Copying a timeline on conversion retains the
 original inquiry ID; count only inquiry-subject events for business call counts.
 
 The shared booking reference is **`crm_inquiry_ref` = Lead.reference**, the
