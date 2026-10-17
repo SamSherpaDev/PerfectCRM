@@ -3,6 +3,9 @@
 module CallLog
   OUTCOMES = %w[attempted connected voicemail no_answer].freeze
   DIRECTIONS = %w[inbound outbound].freeze
+  # What the captain sees, in button order; "Talked" is the stored `connected`.
+  LABELS = { "connected" => "Talked", "voicemail" => "Voicemail", "no_answer" => "No answer", "attempted" => "Attempted" }.freeze
+  ONE_TAP = %w[connected voicemail no_answer].freeze
   module_function
 
   def record!(record, key:, occurred_at:, outcome:, direction:, duration: nil)
@@ -15,7 +18,7 @@ module CallLog
     record.with_lock do
       event = record.activity_events.find_by(kind: "call", idempotency_key: key) ||
         record.activity_events.create!(kind: "call", idempotency_key: key,
-          summary: "Call: #{outcome.humanize}", occurred_at: occurred_at,
+          summary: "Call: #{LABELS.fetch(outcome)}", occurred_at: occurred_at,
           metadata: { "inquiry_id" => record.id, "direction" => direction, "outcome" => outcome,
             "duration_seconds" => seconds, "owner" => Current.user_email,
             "source_answer_event_id" => record.activity_events.where(kind: "source_answer").order(:id).last&.id })

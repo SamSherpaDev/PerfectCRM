@@ -36,9 +36,8 @@ class NotYetCalledSystemTest < ApplicationSystemTestCase
       capture("today-phone")
       page.current_window.resize_to(1400, 900)
       click_link oldest.name
-      find("summary", text: "Log a call").click
-      click_button "Save call"
-      assert_text "Call saved."
+      tolerate_submit_navigation { click_button "No answer" }
+      assert_text "Call logged: No answer."
       visit root_path
       assert_equal expected.drop(1), inquiry_links
       capture("today-after-call")

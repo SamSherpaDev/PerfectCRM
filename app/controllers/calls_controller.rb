@@ -6,12 +6,15 @@ class CallsController < ApplicationController
     else
       record
     end
-    return redirect_to record, alert: "Restore this record before logging a call." if record.archived?
+    back = polymorphic_path(record, anchor: "record-details")
+    return redirect_to back, alert: "Restore this record before logging a call." if record.archived?
 
-    CallLog.record!(inquiry, key: params[:save_key], occurred_at: Time.zone.parse(params[:occurred_at].to_s),
+    # One-tap buttons send no time: the call happened now.
+    occurred_at = params[:occurred_at].present? ? Time.zone.parse(params[:occurred_at].to_s) : Time.current
+    event = CallLog.record!(inquiry, key: params[:save_key], occurred_at: occurred_at,
       outcome: params[:outcome], direction: params[:direction], duration: params[:duration])
-    redirect_to record, notice: "Call saved."
+    redirect_to back, notice: "Call logged: #{CallLog::LABELS.fetch(event.metadata['outcome'])}."
   rescue ArgumentError, TypeError
-    redirect_to record, alert: "Check the call time, outcome and duration."
+    redirect_to back, alert: "Check the call time, outcome and duration."
   end
 end

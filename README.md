@@ -755,10 +755,14 @@ available in record Details at the start of a call. Missing answers open
 answer is optional, 240 characters; for referrals a first name is enough.
 Confirming a form answer records the call confirmation without losing the
 original answer. Corrections need a reason and append history, never rewrite it.
-Call logging is a separate disclosure: time, direction, outcome and optional
-duration. Only a `connected` call event counts as connected, not a completed
+Log a call sits at the top of record Details: one tap on Talked, Voicemail or
+No answer logs an outbound call at the current time, and the last three calls
+show under the buttons. Add details keeps the full form for an inbound call,
+an earlier time, the Attempted outcome or a duration. Talked is stored as
+`connected`; only a `connected` call event counts as connected, not a completed
 task. Double saves with the same save UUID produce one event. Client calls
-explicitly select an inquiry; no unbound calls are counted as inquiry outcomes.
+always name an inquiry (one row of buttons per inquiry); no unbound calls are
+counted as inquiry outcomes.
 
 The [intake contract](docs/leads-intake.md#exact-optional-question-and-stable-answers)
 lists the shared answers and stable codes.
