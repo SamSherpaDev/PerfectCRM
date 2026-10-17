@@ -71,14 +71,33 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
     assert_equal [ message.id ], missing.map(&:id)
   end
 
-  test "ignores ordinary mail, newsletters, ignored threads, bounces, and outbound mail" do
-    ingest_inquiry(subject: "Receipt", body: "Thanks for your payment.")
-    ingest_inquiry(subject: "Nepal travel newsletter", body: "Our latest travel photos and stories.")
+  test "finds human mail without inquiry keywords" do
+    message = ingest_inquiry(from: "family@example.com", subject: "Holiday in Bhutan",
+      body: "Could you arrange ten days for our family?")
+    assert_equal [ message.id ], missing.map(&:id)
+  end
+
+  test "website copies survive automation headers and human auto-submitted no remains eligible" do
+    website = ingest_inquiry(from: "noreply@example.com", headers: { "Auto-Submitted" => "auto-generated",
+      "List-Unsubscribe" => "<https://example.com/unsubscribe>" })
+    human = ingest_inquiry(subject: "Hello", body: "Please call", headers: { "Auto-Submitted" => "no" })
+    assert_equal [ website.id, human.id ], missing.map(&:id)
+  end
+
+  test "ignores automated and bulk mail, organizations, ignored threads, and outbound mail" do
+    [ { "List-Unsubscribe" => "<https://example.com/unsubscribe>" },
+      { "Auto-Submitted" => "auto-generated" }, { "Precedence" => "bulk" },
+      { "X-Autoreply" => "yes" } ].each do |headers|
+      ingest_inquiry(subject: "Holiday in Bhutan", body: "Our latest news", headers: headers)
+    end
+    Organization.create!(name: "Operator", kind: "operator", email: "operator@example.com")
+    ingest_inquiry(from: "operator@example.com", subject: "Rates", body: "Updated rates")
+    ingest_inquiry(from: "no-reply@example.com", subject: "Notice", body: "Updated rates")
     ignored = ingest_inquiry
     ignored.conversation.update!(ignored: true)
-    ingest_inquiry(subject: "Undeliverable: Nepal trip inquiry")
-    ingest_inquiry(subject: "Automatic reply: New inquiry from Synthetic Traveler")
-    ingest_inquiry(from: "mailer-daemon@example.com")
+    ingest_inquiry(subject: "Undeliverable: Nepal trip inquiry", body: "Failed")
+    ingest_inquiry(subject: "Automatic reply: New inquiry from Synthetic Traveler", body: "Away")
+    ingest_inquiry(from: "mailer-daemon@example.com", subject: "Failure", body: "Failed")
     outbound = ingest_inquiry
     outbound.update!(direction: "out", to_addresses: [ "traveler@example.com" ])
     assert_empty missing

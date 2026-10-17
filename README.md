@@ -1053,15 +1053,18 @@ with icons and counts. Inbox and record timelines offer Load older so complete
 history is reachable, and expanded messages show their full body.
 
 The inquiry safety net checks the last seven days of imported inbound mail at
-7:10am Pacific every day (`InquirySafetyNetJob` in `config/recurring.yml`). Website
-inquiry/fallback notifications, contact-form copies, explicit inquiry subjects,
-travel requests, and threads already classified as new inquiries are checked
-for a linked lead. A converted inquiry's client thread also counts as linked.
+7:10am Pacific every day (`InquirySafetyNetJob` in `config/recurring.yml`). Every
+unlinked human message and website-form inquiry is a candidate, regardless of
+wording. Mail linked to an existing lead or a converted inquiry's client is
+already visible on that record's thread and stays outside the safety net.
 Unlinked website copies can match a saved lead by their Reference or submission
 ID; an unrelated lead sharing the visitor's email is insufficient. Ignored
-threads, ordinary correspondence, outbound mail, and obvious automatic replies
-or bounces stay out. This is a heuristic check of mail already imported into CRM;
-it cannot detect a submission that produced neither a lead nor imported mail.
+threads, outbound mail, known organization/operator senders, and clearly automated
+or bulk mail (automation headers, List-Unsubscribe, bulk/list/junk Precedence,
+no-reply senders, automatic replies and bounces) stay out; website-form copies
+remain candidates even when sent automatically. Classification headers are retained
+on newly imported mail; older mail without them is conservatively included.
+The check cannot detect a submission that produced neither a lead nor imported mail.
 
 When something is missing, one short email lists the count and links each message
 to its CRM thread. It goes only to `Setting.captain_email` (the first allowed

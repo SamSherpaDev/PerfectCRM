@@ -28,6 +28,7 @@ class Message < ApplicationRecord
   serialize :to_addresses, coder: JSON
   serialize :cc_addresses, coder: JSON
   serialize :provider_labels, coder: JSON
+  serialize :inquiry_headers, coder: JSON
   serialize :attachment_notices, coder: JSON
   serialize :held_attachments, coder: JSON
 

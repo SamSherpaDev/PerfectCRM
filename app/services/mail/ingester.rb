@@ -73,6 +73,7 @@ module Mail
           html_body: parsed.html_body.present? ? Sanitizer.clean(parsed.html_body) : nil,
           sent_at: parsed.sent_at || Time.current,
           raw_size: parsed.raw_size.to_i,
+          inquiry_headers: parsed.headers.transform_keys { |key| key.to_s.downcase }.slice(*Leads::UnlinkedInquiries::HEADERS),
           provider_labels: labels,
           inbound_received_at: parsed.received_at || parsed.sent_at || Time.current,
           reply_alert_state: ("pending" if alert && ReplyAlerts.eligible?(parsed, provider))
@@ -132,7 +133,7 @@ module Mail
           "bcc" => Array(mail.bcc).map(&:downcase),
           "delivered-to" => mail.header.fields.select { |field| field.name.casecmp?("Delivered-To") }.map(&:value),
           "x-original-to" => mail.header.fields.select { |field| field.name.casecmp?("X-Original-To") }.map(&:value) }.merge(
-            ReplyAlerts::HEADERS.to_h { |name| [ name, mail.header.fields.select { |field| field.name.casecmp?(name) }.map(&:value) ] }),
+            (ReplyAlerts::HEADERS | Leads::UnlinkedInquiries::HEADERS).to_h { |name| [ name, mail.header.fields.select { |field| field.name.casecmp?(name) }.map(&:value) ] }),
         from_addresses: from, to_addresses: to, cc_addresses: cc,
         subject: mail.subject.to_s.strip.presence,
         message_id: mail.message_id.to_s.presence,

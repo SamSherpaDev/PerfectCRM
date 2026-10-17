@@ -5,10 +5,7 @@ module Leads
     LOOKBACK = 7.days
     RECEIVED_AT = "COALESCE(messages.inbound_received_at, messages.sent_at, messages.created_at)"
     WEBSITE = /\b(?:new (?:website |trip )?inquiry|website inquiry|contact form|new customer message|(?:perfect)?crm fallback)\b/i
-    INQUIRY = /\b(?:inquir(?:y|ies)|enquir(?:y|ies)|trip|trek|tour|itinerary|quote|booking)\b/i
-    TRAVEL = /\b(?:nepal|everest|annapurna|trip|trek(?:king)?|tour|travel|itinerary)\b/i
-    REQUEST = /\?|\b(?:interested|planning|plan|would like|looking for|can we|can you|could|quote|cost|price|availability|inquiry|enquiry)\b/i
-    EXPLICIT_INQUIRY = /\b(?:inquir(?:y|ies)|enquir(?:y|ies))\b/i
+    HEADERS = %w[list-unsubscribe auto-submitted precedence x-autoreply x-autorespond x-ms-exchange-inbox-rules-loop].freeze
     AUTOMATIC = /\A(?:automatic reply|auto(?:matic)?[- ]response|out of (?:the )?office|undeliverable|delivery (?:status notification|failure)|mail delivery failed)\b/i
     Candidate = Data.define(:message, :references, :external_refs)
 
@@ -43,9 +40,19 @@ module Leads
       body = body_text(message)
       text = "#{message.subject}\n#{body}"
       website = text.match?(WEBSITE)
-      return unless website || message.subject.to_s.match?(EXPLICIT_INQUIRY) ||
-        message.conversation.ai_triage == "new_inquiry" ||
-        (text.match?(INQUIRY) && text.match?(TRAVEL) && text.match?(REQUEST))
+      unless website
+        return if message.conversation.linkable_type == "Organization" ||
+          ::Mail::Matcher.call([ message.from_address ]).linkable.is_a?(Organization)
+        return if message.from_address.to_s.match?(/\Ano[._-]?reply(?:[+._-][^@]*)?@/i)
+
+        headers = message.inquiry_headers || {}
+        return if Array(headers["list-unsubscribe"]).any?(&:present?)
+        return if Array(headers["auto-submitted"]).any? { |value| value.present? && !value.strip.casecmp?("no") }
+        return if Array(headers["precedence"]).any? { |value| value.match?(/\b(?:bulk|list|junk)\b/i) }
+        return if %w[x-autoreply x-autorespond x-ms-exchange-inbox-rules-loop].any? do |name|
+          Array(headers[name]).any?(&:present?)
+        end
+      end
 
       Candidate.new(message: message,
         references: website ? body.scan(/\bReference:\s*(SH-[a-z0-9]+)\b/i).flatten.map(&:upcase) : [],
