@@ -2,7 +2,7 @@
 <%# The left column: who this is and what they asked. Empty rows stay out. %>
 <% lead = record.is_a?(Lead) %>
 <% read_only = record.archived? || (lead && record.converted?) %>
-<section class="card card-pad" aria-labelledby="details-heading" data-tab="details">
+<section class="card card-pad record-details-card" id="record-details" aria-labelledby="details-heading" data-tab="details">
   <div class="card-header">
     <h2 class="card-title" id="details-heading">Details</h2>
     <% unless read_only %>
@@ -11,8 +11,8 @@
   </div>
   <%= card_caption lead ? "Where this ask came from and what they want." : "Who this client is and how they found Sherpa Holidays." %>
 
-  <%= render "records/source", record: record, read_only: read_only %>
   <% unless read_only %><%= render "records/call", record: record %><% end %>
+  <%= render "records/source", record: record, read_only: read_only %>
 
   <% if lead %>
     <%= turbo_frame_tag dom_id(record, :fit) do %>

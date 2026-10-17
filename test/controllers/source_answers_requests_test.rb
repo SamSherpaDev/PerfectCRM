@@ -74,7 +74,7 @@ class SourceAnswersRequestsTest < ActionDispatch::IntegrationTest
     another = Lead.create!(name: "Someone Else")
     body = { inquiry_id: inquiry.id, save_key: SecureRandom.uuid, occurred_at: Time.current.iso8601, outcome: "connected", direction: "outbound" }
     post client_calls_path(client), params: body
-    assert_redirected_to client_path(client)
+    assert_redirected_to client_path(client, anchor: "record-details")
     assert_equal 1, inquiry.activity_events.where(kind: "call").count
     assert_no_difference("ActivityEvent.count") { post client_calls_path(client), params: body }
     post client_calls_path(client), params: body.merge(inquiry_id: another.id)
@@ -87,7 +87,7 @@ class SourceAnswersRequestsTest < ActionDispatch::IntegrationTest
     assert_no_difference("ActivityEvent.count") do
       post lead_calls_path(lead), params: { save_key: SecureRandom.uuid, occurred_at: "bad", outcome: "connected", direction: "outbound" }
     end
-    assert_redirected_to lead_path(lead)
+    assert_redirected_to lead_path(lead, anchor: "record-details")
     delete sign_out_path
     post source_answers_path, params: { record_type: "Lead", record_id: lead.id, source_choice: "search" }
     assert_redirected_to sign_in_path

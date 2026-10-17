@@ -52,7 +52,7 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
 
       post lead_calls_path(older), params: { save_key: "first-contact-call", occurred_at: 1.hour.ago.iso8601,
         outcome: "voicemail", direction: "outbound" }
-      assert_redirected_to lead_path(older)
+      assert_redirected_to lead_path(older, anchor: "record-details")
       get root_path
       assert_select "section[aria-labelledby='not-yet-called-heading']" do
         assert_select "a", count: 1
@@ -79,7 +79,7 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
 
     post lead_calls_path(lead), params: { save_key: "demo-call-1", occurred_at: 1.day.ago.iso8601,
       outcome: "no_answer", direction: "outbound" }
-    assert_redirected_to lead_path(lead)
+    assert_redirected_to lead_path(lead, anchor: "record-details")
     get root_path
     assert_equal "0", stat_value("Waiting on you")
     assert_select "a[href=?]", inbox_thread_path(thread), count: 0
@@ -124,7 +124,7 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
 
     post client_calls_path(client), params: { inquiry_id: other.id, save_key: "other-inquiry-call",
       occurred_at: 1.hour.ago.iso8601, outcome: "connected", direction: "outbound" }
-    assert_redirected_to client_path(client)
+    assert_redirected_to client_path(client, anchor: "record-details")
     assert thread.waiting_on_you?
     assert_not other_thread.waiting_on_you?
     get root_path
@@ -133,7 +133,7 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     assert_select "a[href=?]", inbox_thread_path(other_thread), count: 0
     post client_calls_path(client), params: { inquiry_id: lead.id, save_key: "conversion-call-2",
       occurred_at: 1.hour.ago.iso8601, outcome: "voicemail", direction: "inbound" }
-    assert_redirected_to client_path(client)
+    assert_redirected_to client_path(client, anchor: "record-details")
     assert_not thread.waiting_on_you?
     get root_path
     assert_equal "0", stat_value("Waiting on you")

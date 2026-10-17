@@ -2387,6 +2387,61 @@
   padding-inline: 6px;
   font-size: 12px;
 }
+/* Record Details: one-tap call outcomes and the last few calls under them. */
+.record-details-card {
+  scroll-margin-top: 16px;
+}
+.calls {
+  margin-top: 16px;
+}
+.calls-title {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--pb-ink-3);
+}
+.calls .hint {
+  text-wrap: pretty;
+}
+.calls-inquiry + .calls-inquiry {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--pb-rule-2);
+}
+.calls-for {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--pb-ink-2);
+}
+.call-choices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+.call-choices button {
+  padding-inline: 6px;
+  font-size: 12px;
+}
+.calls-recent {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--pb-ink);
+}
+.calls-recent li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+.calls-recent time {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--pb-ink-3);
+  white-space: nowrap;
+}
 .facts-col {
   grid-template-columns: minmax(0, 1fr);
   gap: 12px 0;
@@ -2776,6 +2831,9 @@
 @media (max-width: 749px) {
   .page-wide {
     gap: 20px;
+  }
+  .call-choices button {
+    min-height: 44px;
   }
   .record {
     display: block;
