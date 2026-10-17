@@ -113,7 +113,8 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     fill_in "Subject", with: "Attachment"
     fill_in "Message", with: "See attached"
     attach_file "Attachments", Rails.root.join("test/fixtures/files/sample.txt")
-    click_button "Save draft"
+    # Submit by keyboard while the editor's blur animation moves the button.
+    find_button("Save draft").send_keys(:enter)
     assert_selector "[aria-label='Draft attachments'] li", text: "sample.txt", count: 1
     capture_outbound_evidence("saved-attachment")
     assert_equal "", find_field("Attachments").value
@@ -214,7 +215,8 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
       fill_in "Subject", with: "Correct this reply"
       fill_in "Message", with: "  "
       attach_file "Attachments", Rails.root.join("test/fixtures/files/sample.txt")
-      click_button "Send"
+      # Submit by keyboard while the editor's blur animation moves the button.
+      find_button("Send").send_keys(:enter)
       assert_text "Could not send"
       assert_field "To", with: "secondary@example.com"
       assert_field "Subject", with: "Correct this reply"
