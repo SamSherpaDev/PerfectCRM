@@ -25,7 +25,9 @@ module Leads::Acquisition
       "permission" => permission.slice("state", "measurement", "sharing", "opted_out").merge("recorded_at" => Time.current.iso8601) }
     result["permission"]["observed_at"] = timestamp(permission["observed_at"]) if permission["observed_at"].present?
     TOUCHES.each do |key|
-      next unless input.key?(key)
+      # The storefront sends null for a touch it has never observed, such as
+      # last_non_direct_touch on a direct visit. Treat it like an omitted touch.
+      next if input[key].nil?
       result[key] = touch(input[key], allowed: allowed)
     end
     if allowed && input.key?("submission_page")

@@ -122,14 +122,24 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     assert lead.metadata["ip_hash"].present?
   end
 
-  test "website inquiry schedules only its first reply for two minutes later" do
+  test "direct website inquiry without a non-direct visit gets one first reply two minutes later" do
     Setting.current.update!(auto_first_reply_enabled_at: 1.hour.ago, sender_name: "Sam", email_signature: "Sam")
     Template.create!(name: "First reply", purpose: :first_reply, body: "Hi {{first_name}}, let's arrange a call.", channel: "email")
     travel_to Time.current.change(usec: 0) do
-      body = intake_body("contact" => { "email" => "synthetic@gmail.com" })
+      # The live storefront emits null when this visitor has no sh_non_direct
+      # cookie. Direct visits still carry their observed first and last touch.
+      touch = { "observed_at" => Time.current.iso8601, "landing_url" => "https://www.sherpaholidays.com/pages/contact" }
+      body = intake_body("contact" => { "email" => "synthetic@gmail.com" }, "acquisition" => {
+        "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true, "opted_out" => false,
+          "observed_at" => Time.current.iso8601 },
+        "first_touch" => touch, "last_touch" => touch, "last_non_direct_touch" => nil
+      })
       post_intake body
       assert_response :accepted
       lead = Lead.last
+      assert_equal "new", lead.status
+      assert_equal "direct", lead.metadata.dig("acquisition", "last_touch", "source")
+      assert_nil lead.metadata.dig("acquisition", "last_non_direct_touch")
       notification = lead.lead_notifications.find_by!(event: "auto_first_reply")
       assert_equal 2.minutes.from_now, notification.available_at
       assert_enqueued_with(job: LeadNotificationJob, args: [ notification.id ], at: 2.minutes.from_now)
