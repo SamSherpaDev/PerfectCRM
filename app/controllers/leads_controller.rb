@@ -12,10 +12,11 @@ class LeadsController < ApplicationController
     @tab = TABS.include?(params[:tab]) ? params[:tab] : "new"
     @query = params[:q].to_s.strip
     @sort = %w[activity name newest fit].include?(params[:sort]) ? params[:sort] : "activity"
+    new_leads = Lead.by_status("new").where.not(id: Lead.potential.select(:id))
 
     @counts = {
       "potential" => Lead.potential.count,
-      "new" => Lead.by_status("new").count,
+      "new" => new_leads.count,
       "chatting" => Lead.by_status("chatting").count,
       "quoted" => Lead.by_status("quoted").count,
       "nudged" => Lead.by_status("nudged").count,
@@ -26,6 +27,8 @@ class LeadsController < ApplicationController
 
     base = if @tab == "potential"
       Lead.potential
+    elsif @tab == "new"
+      new_leads
     elsif @tab == "converted"
       Lead.converted
     elsif @tab == "archived"
