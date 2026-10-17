@@ -171,7 +171,7 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
     assert_no_link lead.name
     converted = Lead.create!(name: "Converted traveler")
     converted.convert_to_client!
-    [lead, converted].each do |blocked|
+    [ lead, converted ].each do |blocked|
       visit lead_path(blocked)
       assert_no_button "Mark Unsure"
       page.execute_script(<<~JS, mark_unsure_lead_path(blocked))
