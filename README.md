@@ -301,8 +301,9 @@ app, removing an email also denies its existing session on its next request;
 
 Request parameter logs retain only routing fields (`controller`, `action`,
 `id`, `format`); customer fields, searches, composer bodies and nested intake
-metadata are filtered. Public quote capability segments and redirects are
-also redacted from Rails request logs, and public quote HTML and document
+metadata are filtered. Public quote capability segments are redacted and all
+redirect destinations are suppressed in Rails request logs; response status
+metadata remains available. Public quote HTML and document
 downloads send `Cache-Control: no-store`. Any future proxy access logging
 must redact `/q/:token` paths as well. Existing log retention and access are
 operational concerns; this change does not delete historical logs.
@@ -366,7 +367,9 @@ webhook paths. Private services also require an explicit HTTPS origin and
 a trusted certificate; there is no HTTP or wildcard exception. A different
 host or port is rejected before credentials or customer data are attached.
 Saved endpoints are checked again when used, so changing the allowlist
-also applies to previously configured URLs.
+also applies to previously configured URLs. New or changed AI and webhook
+URLs are validated on save; revoking an origin does not prevent unrelated
+Settings updates, including Microsoft refresh-token rotation.
 
 ## Quotes
 
@@ -1270,6 +1273,8 @@ AI assistance is on by default. In Settings → AI assistance, enter an
 OpenAI-compatible base URL (OpenAI or OpenRouter), model name, provider key,
 and short voice guide (templates are the style examples). Without a key,
 threads show "Add a provider key in Settings to enable drafts".
+Endpoint requirements and additional deployments follow
+[Outbound service origins](#outbound-service-origins).
 Drafts appear in an editable dashed-edge block. Use this draft replaces the
 body in the [reply box](#replying), opening it on phones, for editing and
 review before Send. Copy draft lets the captain paste the text into his mail app.

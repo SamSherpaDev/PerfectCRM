@@ -480,7 +480,8 @@ verdicts and repeated statuses leave stage timing unchanged.
   defines the payload fields; each attempt reads the current lead and current
   subscription settings. An empty URL disables delivery, completing pending
   webhook notifications without sending; enabling it later does not replay
-  those completed notifications.
+  those completed notifications. Endpoint configuration follows
+  [Outbound service origins](../README.md#outbound-service-origins).
 - **Spam.** Fast submits, link-stuffed messages, throwaway domains, and
   name-equals-email are scored, tagged `suspected_spam`, and counted -
   never rejected.
