@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_17_185501) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_17_230332) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -476,6 +476,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_17_185501) do
     t.text "html_body"
     t.string "in_reply_to"
     t.datetime "inbound_received_at"
+    t.datetime "inquiry_alert_attempted_at"
+    t.text "inquiry_headers"
     t.string "message_id"
     t.text "provider_labels", default: "[]", null: false
     t.string "provider_message_id"
@@ -493,6 +495,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_17_185501) do
     t.text "text_body"
     t.text "to_addresses", default: "[]", null: false
     t.datetime "updated_at", null: false
+    t.index "COALESCE(inbound_received_at, sent_at, created_at)", name: "index_messages_on_inquiry_received_at", where: "direction = 'in'"
     t.index ["conversation_id", "sent_at"], name: "index_messages_on_conversation_id_and_sent_at"
     t.index ["conversation_id"], name: "index_messages_on_conversation_id"
     t.index ["group_send_id"], name: "index_messages_on_group_send_id"

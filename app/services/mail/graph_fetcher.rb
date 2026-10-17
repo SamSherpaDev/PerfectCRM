@@ -463,7 +463,7 @@ module Mail
         "bcc" => addresses_of(json["bccRecipients"]),
         "delivered-to" => header_values(json, "Delivered-To"),
         "x-original-to" => header_values(json, "X-Original-To")
-      }.merge(ReplyAlerts::HEADERS.to_h { |name| [ name, header_values(json, name) ] })
+      }.merge((ReplyAlerts::HEADERS | Leads::UnlinkedInquiries::HEADERS).to_h { |name| [ name, header_values(json, name) ] })
     end
 
     def parsed_from(client, json, headers)
