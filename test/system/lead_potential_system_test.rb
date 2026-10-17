@@ -148,6 +148,67 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
     end
   end
 
+  test "unsure can be removed or resolved as spam and rejects inactive leads" do
+    page.current_window.resize_to(390, 900)
+    lead = Lead.create!(name: "Unanswered traveler")
+    visit lead_path(lead)
+    click_button "Mark Unsure"
+    assert_button "Remove Unsure"
+    visit leads_path(tab: "unsure", q: lead.name)
+    click_button "Remove Unsure"
+    assert_no_link lead.name
+    visit leads_path(tab: "new", q: lead.name)
+    assert_link lead.name
+    within("li", text: lead.name) { click_button "Mark Potential" }
+    visit lead_path(lead)
+    click_button "Mark Unsure"
+    assert_button "Mark Potential"
+    assert_button "Remove Unsure"
+    click_button "Mark as spam"
+    assert_no_button "Mark Unsure"
+    assert_nil lead.reload.unsure_marked_at
+    visit leads_path(tab: "unsure", q: lead.name)
+    assert_no_link lead.name
+    converted = Lead.create!(name: "Converted traveler")
+    converted.convert_to_client!
+    [lead, converted].each do |blocked|
+      visit lead_path(blocked)
+      assert_no_button "Mark Unsure"
+      page.execute_script(<<~JS, mark_unsure_lead_path(blocked))
+        const form = document.createElement("form");
+        form.method = "post"; form.action = arguments[0];
+        const method = document.createElement("input");
+        method.name = "_method"; method.value = "patch";
+        form.append(method); document.body.append(form); form.submit();
+      JS
+      assert_text "Only active leads not marked as spam can be marked Unsure"
+      assert_nil blocked.reload.unsure_marked_at
+    end
+    capture("unsure-guard-phone")
+  end
+
+  test "old stage links preserve search and reveal the selected phone tab" do
+    page.current_window.resize_to(390, 900)
+    %w[chatting nudged lost].each do |stage|
+      attrs = { name: "Legacy #{stage}", status: stage }
+      attrs[:lost_reason] = "no_reply" if stage == "lost"
+      lead = Lead.create!(attrs)
+      visit leads_path(tab: stage, q: "Legacy", sort: "name")
+      home = stage == "lost" ? "archived" : "new"
+      assert_current_path leads_path(q: "Legacy", sort: "name", tab: home)
+      assert_link lead.name
+      current = find("nav.tabs [aria-current]")
+      assert_equal home.capitalize, current.first("span").text
+      assert current.evaluate_script(<<~JS)
+        (() => { const tab = this.getBoundingClientRect();
+          const row = this.parentElement.getBoundingClientRect();
+          return tab.left >= row.left - 1 && tab.right <= row.right + 1; })()
+      JS
+      assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, 390
+      capture("legacy-#{stage}-phone")
+    end
+  end
+
   private
 
   def capture(name)

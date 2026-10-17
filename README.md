@@ -641,8 +641,9 @@ open inquiries at once. Storefront submission and replay behavior follows the
 Mark Potential on an inquiry or lead row to remember who you want to follow up
 with. The Potential tab gathers marked leads across stages. Marking Potential
 removes a lead from New immediately, including its tab count; removing Potential
-returns it to New if its stage is new, chatting, or nudged. Marked leads stay in their other
-stage tabs so the pipeline remains intact. Remove Potential clears the
+returns it to New if its stage is new, chatting, or nudged. Marked leads also
+appear in Quoted or Archived when their stage is quoted or lost, respectively;
+marking does not change their pipeline stage. Remove Potential clears the
 reminder without changing fit or stage. Archived and converted leads stay out
 of Potential. Restoring an ordinarily archived lead restores its Potential
 reminder. Mark as spam clears the reminder, and Not spam does not restore
@@ -654,8 +655,9 @@ marking removes a lead from New immediately; Remove Unsure returns it to New
 the same way Remove Potential does.
 Potential and Unsure exclude each other, so Mark Potential on an Unsure lead
 moves it to Potential, and Mark Unsure on a Potential lead moves it back.
-Automatically suspected spam can wait in Unsure until you choose Not spam or
-Mark as spam. Mark as spam clears Unsure the same way it clears Potential,
+Automatically suspected spam can wait in Unsure. Not spam clears the spam flag
+without removing Unsure; Mark Potential or Remove Unsure sorts it out of Unsure.
+Mark as spam clears Unsure the same way it clears Potential,
 and restoring an ordinarily archived lead restores its Unsure mark.
 
 More → Delete lead archives it after one confirmation naming the lead; the
