@@ -115,6 +115,7 @@ class Setting < ApplicationRecord
 
   def outbound_endpoints
     { lead_webhook_url: "LEAD_WEBHOOK", ai_base_url: "AI" }.each do |attribute, service|
+      next unless new_record? || will_save_change_to_attribute?(attribute)
       next if public_send(attribute).blank?
 
       begin

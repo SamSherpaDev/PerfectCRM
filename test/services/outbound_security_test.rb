@@ -1,6 +1,53 @@
 require "test_helper"
+require_relative "../support/graph_fake"
 
 class OutboundSecurityTest < ActiveSupport::TestCase
+  { "AI" => :ai_base_url, "LEAD_WEBHOOK" => :lead_webhook_url }.each do |service, attribute|
+    test "revoking #{service} origin blocks delivery without blocking unrelated settings saves" do
+      key = "#{service}_ALLOWED_ORIGINS"
+      previous = ENV[key]
+      ENV[key] = "https://revocable.example"
+      settings = Setting.current
+      settings.update!(attribute => "https://revocable.example/v1")
+      settings.update!(ms_graph_refresh_token: "refresh-0")
+      ENV[key] = ""
+
+      settings.update!(appearance: "night", digest_enabled: false, sender_name: "Captain")
+      assert_equal "night", settings.reload.appearance
+      assert_not settings.digest_enabled
+      assert_equal "Captain", settings.sender_name
+      transport = FakeMailbox.new.transport
+      assert_equal "access-1", Mail::GraphAuth.access_token!(transport: transport)
+      assert_equal "refresh-2", settings.reload.ms_graph_refresh_token
+
+      Net::HTTP.stub(:new, ->(*) { flunk "Webhook transport reached" }) do
+        Net::HTTP.stub(:start, ->(*) { flunk "AI transport reached" }) do
+          assert_raises(ArgumentError) do
+            if service == "AI"
+              Ai::OpenAiAdapter.new(base_url: settings.ai_base_url, model: "synthetic", api_key: "secret")
+                .chat(system: "synthetic", messages: [])
+            else
+              lead = Lead.create!(name: "Synthetic customer")
+              LeadWebhookJob.new.perform(lead.id, "lead.created")
+            end
+          end
+        end
+      end
+
+      settings.public_send("#{attribute}=", "https://revocable.example/changed")
+      assert_not settings.save
+      assert settings.errors[attribute].present?
+      settings.public_send("#{attribute}=", "")
+      assert settings.save
+
+      fresh = Setting.new(attribute => "https://revocable.example/v1")
+      assert_not fresh.valid?
+      assert fresh.errors[attribute].present?
+    ensure
+      ENV[key] = previous
+    end
+  end
+
   test "settings reject unencrypted credential and webhook endpoints" do
     settings = Setting.current
     settings.lead_webhook_url = "http://127.0.0.1:9876/security-probe"
