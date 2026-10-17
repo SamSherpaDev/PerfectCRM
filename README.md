@@ -632,8 +632,8 @@ Quoted, and Archived. Stages keep driving the pipeline, reports,
 and automations; on the Leads tabs, chatting and nudged leads stay in New until
 you sort them, and lost leads rest in Archived beside archived and spam leads
 (old Chatting, Nudged, and Lost links open those tabs). Converted leads leave
-the Leads tabs: find them under Clients, where each client's Details link back
-to the lead it started as (old Converted links open New). A PerfectBook contact ID can recur
+the Leads tabs: find their clients under Clients (old Converted links open New).
+A PerfectBook contact ID can recur
 across lost or converted inquiries, but only one open lead (unconverted,
 not lost, not archived) can hold it. The same email address may hold several
 open inquiries at once. Storefront submission and replay behavior follows the

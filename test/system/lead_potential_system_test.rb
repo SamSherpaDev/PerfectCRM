@@ -209,6 +209,45 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
     end
   end
 
+  test "quoted stays visible and converted leads move to Clients without breaking old links" do
+    [ 1400, 390 ].each do |width|
+      page.current_window.resize_to(width, 900)
+      lead = Lead.create!(name: "Tab traveler #{width}", status: "quoted", source: "manual")
+      visit leads_path
+      assert_equal %w[New Potential Unsure Quoted Archived],
+        all("nav.tabs a").map { |tab| tab.first("span").text }
+      within("nav.tabs") { click_link "Quoted" }
+      assert_link lead.name
+      assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, width
+      find_link(lead.name).scroll_to(:center) if width == 390
+      capture("quoted-kept-#{width}")
+      click_link lead.name
+      accept_confirm { click_button "Convert to client" }
+      assert_selector "h1", text: lead.name
+      assert_text "Started as a lead"
+      %w[new potential unsure quoted archived].each do |tab|
+        visit leads_path(tab: tab, q: lead.name)
+        assert_no_link lead.name
+      end
+      visit leads_path(tab: "converted", q: lead.name, sort: "name")
+      assert_current_path leads_path(q: lead.name, sort: "name", tab: "new")
+      assert_selector "h2", text: "New", exact_text: true
+      assert_no_link lead.name
+      capture("converted-redirect-#{width}")
+      visit clients_path(q: lead.name)
+      assert_link lead.name
+      click_link lead.name
+      assert_selector "h1", text: lead.name
+      click_button "Details", exact: true if width == 390
+      assert_link "open it", href: lead_path(lead)
+      find_link("open it").scroll_to(:center) if width == 390
+      capture("converted-client-#{width}")
+      click_link "open it"
+      assert_text "Converted leads stay read-only."
+      assert_no_button "Convert to client"
+    end
+  end
+
   private
 
   def capture(name)
