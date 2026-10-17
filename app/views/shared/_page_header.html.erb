@@ -3,7 +3,7 @@
     The Everest drawing sits top-right above the actions and draws itself on load (docs/DESIGN.md 7, 8). %>
 <header class="page-header">
   <%= sketch :everest, class: "sk hdr-ridge" %>
-  <div class="relative min-w-0 sm:max-w-[62%]">
+  <div class="relative min-w-0 break-words sm:max-w-[62%]">
     <% if local_assigns[:back] %>
       <%= link_to local_assigns[:back][1], class: "link-quiet mb-4 inline-flex items-center gap-1.5 text-xs" do %>
         <%= render "shared/icon", name: :arrow_left, class: "h-3.5 w-3.5" %><%= local_assigns[:back][0] %>
