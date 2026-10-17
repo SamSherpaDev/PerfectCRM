@@ -14,7 +14,7 @@ module Ai
     end
 
     def chat(system:, messages:, max_tokens: 800, json_mode: false)
-      uri = URI("#{@base_url}/chat/completions")
+      uri = OutboundEndpoint.for_service!("#{@base_url}/chat/completions", service: "AI")
       payload = {
         model: @model,
         max_tokens: max_tokens,
@@ -26,7 +26,7 @@ module Ai
       request["Content-Type"] = "application/json"
       request.body = JSON.generate(payload)
       started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == "https",
+      response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true,
         open_timeout: 10, read_timeout: 60) { |http| http.request(request) }
       latency_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1000).round
       raise "AI provider error #{response.code}" unless response.is_a?(Net::HTTPSuccess)

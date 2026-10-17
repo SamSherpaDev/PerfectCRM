@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_16_034536) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_17_033236) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -418,6 +418,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_16_034536) do
     t.index ["reported_source_code"], name: "index_leads_on_reported_source_code"
     t.index ["source_answer_state"], name: "index_leads_on_source_answer_state"
     t.index ["status"], name: "index_leads_on_status"
+  end
+
+  create_table "login_sessions", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "expires_at", null: false
+    t.string "token_digest", null: false
+    t.datetime "updated_at", null: false
+    t.integer "user_id", null: false
+    t.index ["token_digest"], name: "index_login_sessions_on_token_digest", unique: true
+    t.index ["user_id"], name: "index_login_sessions_on_user_id"
   end
 
   create_table "mail_imports", force: :cascade do |t|
@@ -916,6 +926,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_16_034536) do
   add_foreign_key "leads", "leads", column: "origin_lead_id"
   add_foreign_key "leads", "organizations", column: "referred_by_organization_id"
   add_foreign_key "leads", "people", column: "referred_by_person_id"
+  add_foreign_key "login_sessions", "users"
   add_foreign_key "messages", "conversations"
   add_foreign_key "messages", "group_sends"
   add_foreign_key "messages", "templates"

@@ -1,5 +1,5 @@
 <% content_for :title, "New quote · PerfectCRM" %>
-<div class="page">
+<div class="page" data-controller="quote-builder">
   <%= render layout: "shared/page_header", locals: { eyebrow: "Quote", title: "New quote", subtitle: "For #{@owner.name} · built from current trip details.", back: ["Quotes", quotes_path] } do %><% end %>
   <%= render "shared/flash" %>
   <% if @quote.errors.any? %>
@@ -24,7 +24,7 @@
         <%= label_tag :trip_id, "Trip", class: "label" %>
         <%= select_tag :trip_id, options_for_select(@trip_choices, @quote.catalog_choice),
           include_blank: "Choose a trip…", class: "select", form: "quote-builder-form",
-          onchange: "document.querySelectorAll('[name=departure_id]').forEach(input => input.checked = false); this.form.requestSubmit(document.getElementById('quote-catalog-refresh'))" %>
+          data: { action: "change->quote-builder#changeTrip" } %>
       </div>
       <% unless params[:storefront] == "1" %>
         <%= button_tag "Browse all published trips", name: "storefront", value: "1", form: "quote-builder-form", formaction: preview_quotes_path, formnovalidate: true, class: "btn btn-secondary btn-sm" %>
@@ -39,7 +39,7 @@
                 <% seats = departure.available_seats %>
                 <label class="card flex cursor-pointer items-center gap-3 px-4 py-3 has-checked:bg-seal-tint has-checked:shadow-press">
                   <%= radio_button_tag :departure_id, departure.perfectbook_id, @quote.perfectbook_departure_id == departure.perfectbook_id,
-                    class: "h-4 w-4 accent-[#a85a12]", form: "quote-builder-form", onchange: "this.form.requestSubmit(document.getElementById('quote-catalog-refresh'))" %>
+                    class: "h-4 w-4 accent-[#a85a12]", form: "quote-builder-form", data: { action: "change->quote-builder#refreshCatalog" } %>
                   <span class="min-w-0 flex-1">
                     <span class="block text-sm font-medium text-ink"><%= label %></span>
                     <% if departure.place.present? %><span class="block text-xs muted"><%= departure.place %></span><% end %>
@@ -67,7 +67,7 @@
     </div>
   </section>
 
-  <%= form_with model: @quote, url: quotes_path, id: "quote-builder-form", authenticity_token: form_authenticity_token, data: { controller: "quote-builder", turbo: false }, class: "grid gap-6 lg:grid-cols-[3fr_2fr] lg:items-start" do |form| %>
+  <%= form_with model: @quote, url: quotes_path, id: "quote-builder-form", authenticity_token: form_authenticity_token, data: { turbo: false }, class: "grid gap-6 lg:grid-cols-[3fr_2fr] lg:items-start" do |form| %>
     <%= hidden_field_tag :client_id, params[:client_id] %>
     <%= hidden_field_tag :lead_id, params[:lead_id] %>
     <%= form.hidden_field :perfectbook_trip_id %>

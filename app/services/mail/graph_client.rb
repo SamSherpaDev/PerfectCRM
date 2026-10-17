@@ -62,8 +62,9 @@ module Mail
     end
 
     def get_json(url, params: nil, headers: {})
+      url = absolute(url)
       with_token do |token|
-        response = @transport.get_json(absolute(url), token: token, params: params, headers: headers)
+        response = @transport.get_json(url, token: token, params: params, headers: headers)
         case response.status
         when 200
           response.json
@@ -83,8 +84,9 @@ module Mail
     end
 
     def get_bytes(url)
+      url = absolute(url)
       with_token do |token|
-        response = @transport.get_bytes(absolute(url), token: token)
+        response = @transport.get_bytes(url, token: token)
         case response.status
         when 200
           response.body.to_s.b
@@ -158,7 +160,9 @@ module Mail
     end
 
     def absolute(url)
-      url.to_s.start_with?("http") ? url.to_s : "#{BASE}#{url}"
+      value = url.to_s
+      value = "#{BASE}#{value}" if value.start_with?("/") && !value.start_with?("//")
+      OutboundEndpoint.validate!(value, allowed_origins: [ "https://graph.microsoft.com" ]).to_s
     end
   end
 end

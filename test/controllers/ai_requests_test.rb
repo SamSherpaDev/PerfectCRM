@@ -27,7 +27,7 @@ class AiRequestsTest < ActionDispatch::IntegrationTest
 
   def enable_ai!
     Setting.current.update!(ai_enabled: true,
-      ai_model: "mini", ai_api_key: "test-key", ai_base_url: "https://api.example.com/v1",
+      ai_model: "mini", ai_api_key: "test-key", ai_base_url: "https://api.openai.com/v1",
       ai_daily_cost_cap_cents: 10_000, ai_rate_limit_per_minute: 20)
   end
 

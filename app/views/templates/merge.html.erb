@@ -4,7 +4,7 @@
   <%= render "shared/flash" %>
 
   <div class="card card-pad">
-    <%= form_with url: merge_templates_path, method: :post, data: { turbo: false } do |form| %>
+    <%= form_with url: merge_templates_path, method: :post, data: { controller: "autosubmit", turbo: false } do |form| %>
       <div class="grid gap-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
         <div class="space-y-4">
           <div>
@@ -18,7 +18,7 @@
                   options_for_select([ [ "Paste addresses below", "" ] ] +
                     @departures.map { |departure| [ "#{departure.trip_name} · #{departure.label.presence || departure.start_date}", departure.perfectbook_id ] },
                     @departure&.perfectbook_id),
-                  {}, class: "select", onchange: "this.form.requestSubmit(this.form.querySelector('[name=refill]'))" %>
+                  {}, class: "select", data: { action: "change->autosubmit#refill" } %>
             <button type="submit" name="refill" value="1" hidden>Load travelers</button>
             <p class="hint">Choosing a departure fills the list from its mirrored bookings. Changing it refills the list.</p>
           </div>

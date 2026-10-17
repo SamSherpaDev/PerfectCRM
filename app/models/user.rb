@@ -1,4 +1,6 @@
 class User < ApplicationRecord
+  has_many :login_sessions, dependent: :delete_all
+
   validates :google_sub, presence: true, uniqueness: true
   validates :email, presence: true
 

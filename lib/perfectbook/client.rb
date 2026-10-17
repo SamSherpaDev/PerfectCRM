@@ -48,6 +48,7 @@ module PerfectBook
 
     def initialize(base_url: PerfectBook.base_url, api_token: PerfectBook.api_token, etag_store: nil, pace_requests: false)
       @base_url = base_url.to_s.sub(%r{/+\z}, "")
+      OutboundEndpoint.for_service!(@base_url, service: "PERFECTBOOK")
       @api_token = api_token.to_s
       @etag_store = etag_store || EtagStore
       @pace_requests = pace_requests
@@ -187,6 +188,7 @@ module PerfectBook
       raise CircuitOpenError, "PerfectBook circuit is open; skipping request" unless Circuit.allow_request?
 
       uri = URI.join("#{@base_url}/", path.sub(%r{\A/}, ""))
+      OutboundEndpoint.for_service!(uri.to_s, service: "PERFECTBOOK")
       uri.query = URI.encode_www_form(query) if query.any?
       cache_key = "GET #{uri.path}#{uri.query ? "?#{uri.query}" : ""}"
       headers = { "Accept" => "application/json" }
@@ -248,7 +250,7 @@ module PerfectBook
 
     def perform_request(uri, headers)
       http = Net::HTTP.new(uri.host, uri.port)
-      http.use_ssl = uri.scheme == "https"
+      http.use_ssl = true
       http.open_timeout = OPEN_TIMEOUT
       http.read_timeout = READ_TIMEOUT
       request = Net::HTTP::Get.new(uri.request_uri, headers)
@@ -346,8 +348,9 @@ module PerfectBook
       body = build_multipart(parts, boundary)
       path = "/api/v1/bookings/#{URI.encode_uri_component(booking_ref.to_s)}/travelers/#{URI.encode_uri_component(traveler_id.to_s)}/documents"
       uri = URI.join("#{@base_url}/", path.sub(%r{\A/}, ""))
+      OutboundEndpoint.for_service!(uri.to_s, service: "PERFECTBOOK")
       http = Net::HTTP.new(uri.host, uri.port)
-      http.use_ssl = uri.scheme == "https"
+      http.use_ssl = true
       http.open_timeout = OPEN_TIMEOUT
       http.read_timeout = READ_TIMEOUT
       request = Net::HTTP::Post.new(uri.request_uri)

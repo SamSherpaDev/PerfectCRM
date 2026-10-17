@@ -9,6 +9,15 @@ export default class extends Controller {
     this.recalc()
   }
 
+  changeTrip(event) {
+    this.element.querySelectorAll("[name=departure_id]").forEach(input => { input.checked = false })
+    this.refreshCatalog(event)
+  }
+
+  refreshCatalog(event) {
+    event.currentTarget.form.requestSubmit(this.element.querySelector("#quote-catalog-refresh"))
+  }
+
   editInclusions() {
     this.inclusionsEditedTarget.value = "1"
   }

@@ -18,10 +18,10 @@ class Setting < ApplicationRecord
   validates :meta_dataset_id, format: { with: /\A\d{5,20}\z/, message: "is the number shown in Meta Events Manager" }, allow_blank: true
   validates :ad_booking_value_percent, numericality: { only_integer: true, greater_than_or_equal_to: 1, less_than_or_equal_to: 100 }
   validates :weekly_report_recipient, format: { with: URI::MailTo::EMAIL_REGEXP, allow_blank: true }
-  validates :lead_webhook_url, format: { with: %r{\Ahttps?://[^\s/]+(?:/[^\s]*)?\z}, allow_blank: true }
   validates :google_review_url, format: { with: %r{\Ahttps://[^\s/]+(?:/[^\s]*)?\z}, allow_blank: true,
     message: "must be a full link starting with https://" }
   validate :signature_logo_requirements
+  validate :outbound_endpoints
 
   before_save :normalize_signature
   before_validation { self.google_review_url = google_review_url.to_s.strip }
@@ -112,6 +112,18 @@ class Setting < ApplicationRecord
   end
 
   private
+
+  def outbound_endpoints
+    { lead_webhook_url: "LEAD_WEBHOOK", ai_base_url: "AI" }.each do |attribute, service|
+      next if public_send(attribute).blank?
+
+      begin
+        OutboundEndpoint.for_service!(public_send(attribute), service: service)
+      rescue ArgumentError => error
+        errors.add(attribute, error.message)
+      end
+    end
+  end
 
   # The email logo: PNG, JPEG, or GIF around 500 KB. No SVG, which mail
   # clients do not render.

@@ -1,6 +1,8 @@
 require "test_helper"
+require_relative "../support/outbound_origins_test_helper"
 
 class LeadNotificationJobTest < ActiveJob::TestCase
+  include OutboundOriginsTestHelper
   setup do
     @lead = Lead.create!(name: "Visitor", email: "visitor@example.com")
     @notification = @lead.lead_notifications.create!(event: "email_copy")

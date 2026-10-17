@@ -14,12 +14,25 @@ class ApplicationController < ActionController::Base
     return @current_user if defined?(@current_user)
 
     @current_user = nil
-    if session[:user_id]
-      user = User.find_by(id: session[:user_id])
-      @current_user = user if user && User.allowed_email?(user.email)
-      reset_session unless @current_user
+    if session[:login_token].present?
+      login = LoginSession.includes(:user).for_token(session[:login_token])
+      if login && login.expires_at > Time.current && User.allowed_email?(login.user.email)
+        login.renew!
+        @current_user = login.user
+      else
+        end_login_session
+      end
+    elsif session[:user_id]
+      # Pre-revocation cookies cannot establish a server-side session.
+      reset_session
     end
     @current_user
+  end
+
+  def end_login_session
+    LoginSession.for_token(session[:login_token])&.destroy!
+    reset_session
+    @current_user = nil
   end
 
   def require_sign_in

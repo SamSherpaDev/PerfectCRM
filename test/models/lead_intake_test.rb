@@ -1,4 +1,5 @@
 require "test_helper"
+require_relative "../support/outbound_origins_test_helper"
 
 class LeadIntakeFieldsTest < ActiveSupport::TestCase
   test "reference is assigned on create in SH-XXXX form" do
@@ -45,6 +46,8 @@ class LeadIntakeFieldsTest < ActiveSupport::TestCase
 end
 
 class SettingIntakeCredentialsTest < ActiveSupport::TestCase
+  include OutboundOriginsTestHelper
+
   test "rotation changes keys and masks the secret" do
     settings = Setting.current
     key = settings.rotate_site_key!

@@ -1,7 +1,9 @@
 require "test_helper"
+require_relative "../support/outbound_origins_test_helper"
 require_relative "../support/google_sign_in_test_helper"
 
 class SettingsAutomationsTest < ActionDispatch::IntegrationTest
+  include OutboundOriginsTestHelper
   include GoogleSignInTestHelper
 
   setup do
