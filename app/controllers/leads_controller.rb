@@ -6,10 +6,11 @@ class LeadsController < ApplicationController
   before_action :block_converted_edit, only: %i[edit update]
   before_action :block_archived_edit, only: %i[edit update]
 
-  TABS = %w[new potential unsure quoted converted archived missing_source].freeze
+  TABS = %w[new potential unsure quoted archived missing_source].freeze
   # Stages without their own tab: chatting and nudged wait in New until
-  # sorted, and lost rests with Archived. Old links land on that home.
-  RETIRED_TABS = { "chatting" => "new", "nudged" => "new", "lost" => "archived" }.freeze
+  # sorted, and lost rests with Archived. Converted leads live on as clients,
+  # so the retired Converted tab opens New. Old links land on that home.
+  RETIRED_TABS = { "chatting" => "new", "nudged" => "new", "lost" => "archived", "converted" => "new" }.freeze
 
   def index
     if (home = RETIRED_TABS[params[:tab]])
@@ -27,7 +28,6 @@ class LeadsController < ApplicationController
       "potential" => Lead.potential.count,
       "unsure" => Lead.unsure.count,
       "quoted" => Lead.by_status("quoted").count,
-      "converted" => Lead.converted.count,
       "archived" => set_aside.count
     }
 
@@ -35,7 +35,6 @@ class LeadsController < ApplicationController
     when "new" then new_leads
     when "potential" then Lead.potential
     when "unsure" then Lead.unsure
-    when "converted" then Lead.converted
     when "archived" then set_aside
     else Lead.by_status(@tab)
     end

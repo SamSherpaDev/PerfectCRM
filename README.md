@@ -628,10 +628,12 @@ A lead carries source (`google_ads`, `meta_ads`, `trade_show`, `website_form`,
 advisor `referral_code` from the storefront `?ref=` links, Panda
 AI fit (`fit_score`, `fit_band`, `fit_reason`), and status (`new`,
 `chatting`, `quoted`, `nudged`, `lost`). Tabs are New, Potential, Unsure,
-Quoted, Converted, and Archived. Stages keep driving the pipeline, reports,
+Quoted, and Archived. Stages keep driving the pipeline, reports,
 and automations; on the Leads tabs, chatting and nudged leads stay in New until
 you sort them, and lost leads rest in Archived beside archived and spam leads
-(old Chatting, Nudged, and Lost links open those tabs). A PerfectBook contact ID can recur
+(old Chatting, Nudged, and Lost links open those tabs). Converted leads leave
+the Leads tabs: find their clients under Clients (old Converted links open New).
+A PerfectBook contact ID can recur
 across lost or converted inquiries, but only one open lead (unconverted,
 not lost, not archived) can hold it. The same email address may hold several
 open inquiries at once. Storefront submission and replay behavior follows the

@@ -95,8 +95,7 @@ class LeadFieldsSystemTest < ApplicationSystemTestCase
     assert_equal "+14155550199", existing.reload.phone
     assert_nil invalid.reload.phone
     assert_equal "+14155550134", client.people.find_by!(email: lead.email).phone
-    visit leads_path(q: "5550134", tab: "converted")
-    assert_text "Recovered Booker"
+    assert_includes Lead.search("5550134"), lead
     visit clients_path(q: "5550134")
     assert_text "Recovered Booker"
     page.save_screenshot(File.join(EVIDENCE, "recovered-client-search.png"))

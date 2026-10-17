@@ -82,8 +82,6 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     converted = Lead.create!(name: "Move to converted")
     post convert_lead_path(converted)
     assert_redirected_to client_path(converted.reload.converted_client)
-    get leads_path(tab: "converted")
-    assert_select "a", text: converted.name
     get leads_path(tab: "new")
     [ archived, converted ].each { |lead| assert_select "a", text: lead.name, count: 0 }
   end
@@ -216,7 +214,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     get leads_path
     assert_response :success
     assert_select "h1", "Leads"
-    assert_equal %w[New Potential Unsure Quoted Converted Archived],
+    assert_equal %w[New Potential Unsure Quoted Archived],
       css_select("nav.tabs a").map { |tab| tab.at_css("span").text }
     assert_select "nav.tabs a", text: /New.*2/
     assert_select "a", text: "Chatty"
@@ -312,12 +310,24 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     assert_select "a", text: lead.name, count: 0
   end
 
-  test "converted tab lists converted leads" do
+  test "converted leads leave the Leads tabs and stay reachable from their client" do
     lead = Lead.create!(name: "Won", source: "manual", status: "quoted")
-    lead.convert_to_client!
-    get leads_path(tab: "converted")
+    client = lead.convert_to_client!
+    get leads_path(tab: "converted", q: "Won", sort: "name")
+    assert_redirected_to leads_path(q: "Won", sort: "name", tab: "new")
+    follow_redirect!
+    assert_select "h2", text: "New"
+    assert_select "nav.tabs a", text: /Converted/, count: 0
+    %w[new potential unsure quoted archived].each do |tab|
+      get leads_path(tab: tab)
+      assert_select "a", text: "Won", count: 0
+    end
+    get clients_path(q: "Won")
+    assert_select "a[href=?]", client_path(client)
+    get client_path(client)
+    assert_select "a[href=?]", lead_path(lead), text: "open it"
+    get lead_path(lead)
     assert_response :success
-    assert_select "a", text: "Won"
   end
 
   test "show renders facts, fit, notes, timeline, and convert" do
