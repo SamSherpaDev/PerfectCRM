@@ -20,7 +20,7 @@
     <p class="hint">Searches names, emails, phone tails, tags, and note text. Email matches work even on a fragment.</p>
   <% end %>
 
-  <nav class="tabs" aria-label="Client lists">
+  <nav class="tabs" data-controller="tab-row" aria-label="Client lists">
     <%= tab_link "Clients", clients_path(tab: "clients", q: @query, sort: @sort), icon: :people, active: @tab == "clients", count: @clients_count %>
     <%= tab_link "Organizations", clients_path(tab: "organizations", q: @query, sort: @sort), icon: :building, active: @tab == "organizations", count: @organizations_count %>
     <%= tab_link "Archived", clients_path(tab: "archived", q: @query, sort: @sort), icon: :archive, active: @tab == "archived", count: @archived_count %>

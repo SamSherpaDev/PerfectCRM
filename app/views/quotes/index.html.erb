@@ -5,7 +5,7 @@
   <% end %>
   <%= render "shared/flash" %>
 
-  <nav class="tabs" aria-label="Quote states">
+  <nav class="tabs" data-controller="tab-row" aria-label="Quote states">
     <% QuotesController::TAB_ICONS.each do |tab, icon| %>
       <%= tab_link tab.humanize, quotes_path(tab: tab), icon: icon, active: @tab == tab, count: @counts[tab] %>
     <% end %>

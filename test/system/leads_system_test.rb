@@ -113,14 +113,14 @@ class LeadsSystemTest < ApplicationSystemTestCase
     assert_selector "h2", text: "Archived"
     assert_text "Archive Tashi"
 
-    visit leads_path(tab: "chatting")
+    visit leads_path(tab: "new")
     assert_no_text "Archive Tashi"
 
     visit leads_path(tab: "archived")
     click_button "Restore"
     assert_selector "h1", text: "Archive Tashi"
     assert_link "Edit"
-    visit leads_path(tab: "chatting")
+    visit leads_path(tab: "new")
     assert_text "Archive Tashi"
   end
 

@@ -14,6 +14,7 @@
   <%= link_to "Edit", lead ? edit_lead_path(record) : edit_client_path(record), class: "btn-secondary btn btn-sm" %>
   <% if lead %>
     <%= render "leads/potential_action", lead: record %>
+    <%= render "leads/unsure_action", lead: record %>
     <% unless record.suspected_spam? %>
       <%= button_to "Mark as spam", mark_as_spam_lead_path(record), method: :patch, class: "btn-secondary btn btn-sm" %>
     <% end %>

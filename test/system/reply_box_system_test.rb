@@ -105,6 +105,21 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     assert_not Draft.exists?(owner: @client)
   end
 
+  test "a held click on Save draft still lands after typing" do
+    sign_in_browser
+    page.current_window.resize_to(1400, 1000)
+    visit client_path(@client)
+    fill_in "Message", with: "Short note"
+    assert_selector ".composer .reply-body" do |body|
+      body.evaluate_script("this.getBoundingClientRect().height") >= 128
+    end
+    # A real press: mousedown blurs the message, mouseup follows a beat later.
+    page.driver.browser.action.move_to(find_button("Save draft").native)
+      .click_and_hold.pause(duration: 0.3).release.perform
+    assert_text "Draft saved"
+    assert_equal "Short note", Draft.find_by!(owner: @client).body
+  end
+
   test "saving attachments clears selections before another save and send" do
     sign_in_browser
     page.current_window.resize_to(1400, 1000)

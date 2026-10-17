@@ -43,7 +43,7 @@ The first cut of this package is a refactor inside PerfectBook: split `applicati
 | `docs/DESIGN.md` | the approved CRM contract, sections 2.2, 4, 7, 10, 12 are CRM-specific |
 | `docs/DESIGN-SYNC.md` | this file |
 | `config/design.yml` (proposed) | Configuration derived from the visual decisions owned by `DESIGN.md`; lead data remains owned by the model, with usage in README.md |
-| `design/icons_crm.yml` | the CRM-only icons: lead, bolt, globe, ads, robot, arrow-right |
+| `design/icons_crm.yml` | the CRM-only icons: lead, bolt, globe, ads, robot, arrow-right, question |
 | `app/javascript/thinking_orbs.js`, `app/javascript/controllers/orb_controller.js` | the thinking-orbs port (MIT, Jakub Antalik) and its Stimulus mount; CRM-owned until PerfectBook has something to think about, then promoted into the package |
 
 After extraction, the proposed CRM `application.css` would be: `@import "tailwindcss"; @import "./design/tokens.css"; @import "./design/theme.css"; @import "./design/components.css"; @import "./design/motion.css"; @import "./crm.css";`. The proposed layout would render `shared/sketches` (package) and `shared/sketches_crm` (own) once.

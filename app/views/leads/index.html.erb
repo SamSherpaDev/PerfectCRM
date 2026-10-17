@@ -19,23 +19,21 @@
     <p class="hint">Searches names, emails, campaigns, tags, and note text.</p>
   <% end %>
 
-  <nav class="tabs" aria-label="Lead stages">
+  <nav class="tabs" data-controller="tab-row" aria-label="Lead stages">
     <% if @tab == "missing_source" %><%= tab_link "Missing source", leads_path(tab: "missing_source", q: @query, sort: @sort), icon: :list, active: true, count: @leads.size %><% end %>
-    <%= tab_link "Potential", leads_path(tab: "potential", q: @query, sort: @sort), icon: :check, active: @tab == "potential", count: @counts["potential"] %>
     <%= tab_link "New", leads_path(tab: "new", q: @query, sort: @sort), icon: :plus, active: @tab == "new", count: @counts["new"] %>
-    <%= tab_link "Chatting", leads_path(tab: "chatting", q: @query, sort: @sort), icon: :list, active: @tab == "chatting", count: @counts["chatting"] %>
+    <%= tab_link "Potential", leads_path(tab: "potential", q: @query, sort: @sort), icon: :check, active: @tab == "potential", count: @counts["potential"] %>
+    <%= tab_link "Unsure", leads_path(tab: "unsure", q: @query, sort: @sort), icon: :question, active: @tab == "unsure", count: @counts["unsure"] %>
     <%= tab_link "Quoted", leads_path(tab: "quoted", q: @query, sort: @sort), icon: :receipt, active: @tab == "quoted", count: @counts["quoted"] %>
-    <%= tab_link "Nudged", leads_path(tab: "nudged", q: @query, sort: @sort), icon: :alert, active: @tab == "nudged", count: @counts["nudged"] %>
-    <%= tab_link "Lost", leads_path(tab: "lost", q: @query, sort: @sort), icon: :void, active: @tab == "lost", count: @counts["lost"] %>
     <%= tab_link "Converted", leads_path(tab: "converted", q: @query, sort: @sort), icon: :check, active: @tab == "converted", count: @counts["converted"] %>
     <%= tab_link "Archived", leads_path(tab: "archived", q: @query, sort: @sort), icon: :archive, active: @tab == "archived", count: @counts["archived"] %>
   </nav>
 
   <section class="card" aria-labelledby="leads-heading">
     <div class="card-header">
-      <h2 class="card-title" id="leads-heading"><%= @tab == "archived" ? "Archived" : @tab.humanize %></h2>
+      <h2 class="card-title" id="leads-heading"><%= @tab.humanize %></h2>
     </div>
-    <%= card_caption(@tab == "potential" ? "Leads you want to follow up with, across all stages. Remove Potential when you no longer need the reminder." : @tab == "missing_source" ? "All inquiries without a discovery answer, including converted records. Tests and spam stay out." : (@tab == "archived" ? "Leads set aside for now. Restore any time." : (@tab == "converted" ? "Leads that became clients. Read-only, kept for memory." : "Best fit first. Tap a lead to see the full story."))) %>
+    <%= card_caption(lead_tab_caption(@tab)) %>
     <% if @leads.any? %>
       <ul class="divide-y divide-rule-2">
         <% @leads.each do |lead| %>
@@ -56,6 +54,7 @@
                   <%= badge "Scoring", :info, dot: true %>
                 <% end %>
                 <% if lead.potential? %><%= badge "Potential", :brand %><% end %>
+                <% if lead.unsure? %><%= badge "Unsure", :neutral %><% end %>
                 <%= status_badge(lead.converted? ? "converted" : lead.status) %>
                 <% lead.tags.each do |tag| %>
                   <%= badge(tag.name == Lead::SUSPECTED_SPAM_TAG ? (lead.spam_marked_at.present? ? "Spam" : "Looks like spam") : tag.name, :brand) %>
@@ -63,19 +62,22 @@
               </div>
             </div>
             <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs muted sm:justify-end">
-              <% if @tab == "archived" %>
+              <% if lead.archived? %>
                 <span>Archived <%= date_short(lead.archived_at) %></span>
                 <% if lead.suspected_spam? %>
                   <%= button_to "Not spam", not_spam_lead_path(lead), method: :patch, class: "btn-secondary btn btn-sm" %>
                 <% else %>
                   <%= button_to "Restore", unarchive_lead_path(lead), method: :patch, class: "btn-secondary btn btn-sm" %>
                 <% end %>
+              <% elsif @tab == "archived" %>
+                <span>Lost <%= date_short(lead.stage_changed_at) %></span>
               <% else %>
                 <span>Active <%= date_short(lead.last_activity) %></span>
                 <% if lead.converted_client %>
                   <%= link_to "Open client", client_path(lead.converted_client), class: "link-quiet" %>
                 <% else %>
                   <%= render "leads/potential_action", lead: lead %>
+                  <%= render "leads/unsure_action", lead: lead %>
                   <%= button_to "Mark as spam", mark_as_spam_lead_path(lead), method: :patch, class: "btn-secondary btn btn-sm" %>
                   <% if lead.suspected_spam? %>
                     <%= button_to "Not spam", not_spam_lead_path(lead), method: :patch, class: "btn-secondary btn btn-sm" %>
@@ -91,8 +93,10 @@
         <%= render "shared/empty_state", title: "No matches", body: "Nothing matches that search. Try a name fragment or a campaign.", scene: :cairn %>
       <% elsif @tab == "potential" %>
         <%= render "shared/empty_state", title: "No potential leads yet", body: "Mark Potential on a lead you want to follow up with. They will gather here across stages.", scene: :cairn %>
+      <% elsif @tab == "unsure" %>
+        <%= render "shared/empty_state", title: "No unsure leads", body: "Mark Unsure on a lead that has not answered yet. They wait here until you know.", scene: :cairn %>
       <% elsif @tab == "archived" %>
-        <%= render "shared/empty_state", title: "Nothing archived", body: "Archived leads rest here until they need follow-up again.", scene: :cairn %>
+        <%= render "shared/empty_state", title: "Nothing archived", body: "Archived, spam and lost leads rest here until they need follow-up again.", scene: :cairn %>
       <% elsif @tab == "converted" %>
         <%= render "shared/empty_state", title: "No conversions yet", body: "Converted leads stay here with a link forward to their client.", scene: :cairn %>
       <% else %>

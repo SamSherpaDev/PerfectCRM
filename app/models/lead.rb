@@ -92,6 +92,9 @@ class Lead < ApplicationRecord
     where.not(spam_marked_at: nil).or(where(id: flagged))
   }
   scope :potential, -> { active.where(converted_client_id: nil).where.not(potential_marked_at: nil).where.not(id: spam.select(:id)) }
+  # Unsure holds leads the captain cannot call yet (voicemail, no reply):
+  # not clearly Potential, not clearly spam. Suspected spam may wait here.
+  scope :unsure, -> { active.where(converted_client_id: nil, spam_marked_at: nil).where.not(unsure_marked_at: nil) }
   scope :open, -> { active.where(converted_client_id: nil).where.not(status: "lost") }
   scope :lost, -> { active.where(status: "lost").where(converted_client_id: nil) }
   scope :converted, -> { where.not(converted_client_id: nil) }
@@ -167,7 +170,7 @@ class Lead < ApplicationRecord
         errors.add(:base, "Only active, non-spam leads can be marked Potential")
         raise ActiveRecord::RecordInvalid, self
       end
-      update!(potential_marked_at: potential_marked_at || Time.current)
+      update!(potential_marked_at: potential_marked_at || Time.current, unsure_marked_at: nil)
     end
   end
 
@@ -181,11 +184,36 @@ class Lead < ApplicationRecord
     end
   end
 
+  def unsure?
+    unsure_marked_at.present? && spam_marked_at.nil? && !archived? && !converted?
+  end
+
+  def mark_unsure!
+    with_lock do
+      if archived? || converted? || spam_marked_at.present?
+        errors.add(:base, "Only active leads not marked as spam can be marked Unsure")
+        raise ActiveRecord::RecordInvalid, self
+      end
+      update!(unsure_marked_at: unsure_marked_at || Time.current, potential_marked_at: nil)
+    end
+  end
+
+  def unmark_unsure!
+    with_lock do
+      if archived? || converted?
+        errors.add(:base, "Only active leads can be changed")
+        raise ActiveRecord::RecordInvalid, self
+      end
+      update!(unsure_marked_at: nil)
+    end
+  end
+
   def mark_as_spam!
     with_lock do
       reject_converted_spam_review!
       tags << Tag.find_or_create_by!(name: SUSPECTED_SPAM_TAG) unless tags.exists?(name: SUSPECTED_SPAM_TAG)
       self.potential_marked_at = nil
+      self.unsure_marked_at = nil
       self.spam_marked_at ||= Time.current
       archive!
       record_spam_review!("spam", "Marked as spam and archived")
