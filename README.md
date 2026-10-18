@@ -1061,11 +1061,12 @@ wording. Mail linked to an existing lead or a converted inquiry's client is
 already visible on that record's thread and stays outside the safety net.
 Unlinked website copies can match a saved lead by their Reference or submission
 ID; an unrelated lead sharing the visitor's email is insufficient. Ignored
-threads, outbound mail, known organization/operator senders, and clearly automated
-or bulk mail (automation headers, List-Unsubscribe, bulk/list/junk Precedence,
-no-reply senders, automatic replies and bounces) stay out; website-form copies
-remain candidates even when sent automatically. Classification headers are retained
-on newly imported mail; older mail without them is conservatively included.
+threads, outbound and own-domain mail, known organization/operator or person contacts,
+and clearly automated, platform, or bulk mail (automation headers, List-Unsubscribe,
+bulk/list/junk Precedence, platform notification domains, newsletters, receipts,
+no-reply and notifications senders, automatic replies and bounces) stay out even
+when imported before header capture; website-form copies remain candidates even
+when sent automatically. Classification headers are retained on newly imported mail.
 The check cannot detect a submission that produced neither a lead nor imported mail.
 
 When something is missing, one short email lists the count and links each message

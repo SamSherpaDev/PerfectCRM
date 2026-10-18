@@ -24,9 +24,9 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
       body: "We would like to plan a trip for two. What dates are available?")
     html = ingest_inquiry(from: "html@example.com", subject: "A question", html: true,
       body: "<p>Can you quote a trek to Everest for our family?</p>")
-    triaged = ingest_inquiry(subject: "Following up", body: "Please call me")
+    triaged = ingest_inquiry(from: "triaged@example.com", subject: "Following up", body: "Please call me")
     triaged.conversation.update!(ai_triage: "new_inquiry")
-    explicit = ingest_inquiry(subject: "An enquiry", body: "Please call to discuss our plans")
+    explicit = ingest_inquiry(from: "enquiry@example.com", subject: "An enquiry", body: "Please call to discuss our plans")
     assert_equal [ plain.id, html.id, triaged.id, explicit.id ], missing.map(&:id)
   end
 
@@ -71,8 +71,8 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
     assert_equal [ message.id ], missing.map(&:id)
   end
 
-  test "finds human mail without inquiry keywords" do
-    message = ingest_inquiry(from: "family@example.com", subject: "Holiday in Bhutan",
+  test "finds gmail-style human inquiry without inquiry keywords" do
+    message = ingest_inquiry(from: "family.traveler@gmail.com", subject: "Holiday in Bhutan",
       body: "Could you arrange ten days for our family?")
     assert_equal [ message.id ], missing.map(&:id)
   end
@@ -80,19 +80,62 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
   test "website copies survive automation headers and human auto-submitted no remains eligible" do
     website = ingest_inquiry(from: "noreply@example.com", headers: { "Auto-Submitted" => "auto-generated",
       "List-Unsubscribe" => "<https://example.com/unsubscribe>" })
-    human = ingest_inquiry(subject: "Hello", body: "Please call", headers: { "Auto-Submitted" => "no" })
+    human = ingest_inquiry(from: "human@gmail.com", subject: "Hello", body: "Please call",
+      headers: { "Auto-Submitted" => "no" })
     assert_equal [ website.id, human.id ], missing.map(&:id)
   end
 
-  test "ignores automated and bulk mail, organizations, ignored threads, and outbound mail" do
+  test "ignores automated and bulk mail, organizations, people, platform notifications, newsletters, receipts, and outbound mail" do
     [ { "List-Unsubscribe" => "<https://example.com/unsubscribe>" },
       { "Auto-Submitted" => "auto-generated" }, { "Precedence" => "bulk" },
       { "X-Autoreply" => "yes" } ].each do |headers|
-      ingest_inquiry(subject: "Holiday in Bhutan", body: "Our latest news", headers: headers)
+      ingest_inquiry(from: "sender@example.com", subject: "Holiday in Bhutan", body: "Our latest news", headers: headers)
     end
-    Organization.create!(name: "Operator", kind: "operator", email: "operator@example.com")
-    ingest_inquiry(from: "operator@example.com", subject: "Rates", body: "Updated rates")
-    ingest_inquiry(from: "no-reply@example.com", subject: "Notice", body: "Updated rates")
+    Organization.create!(name: "Operator", kind: "operator", email: "operator@example.com",
+      website: "https://www.nepalsocialtreks.com")
+    Organization.create!(name: "Gmail Guide", kind: "operator", email: "guide.operator@gmail.com")
+    client = Client.create!(name: "Client Household", email: "household@example.com")
+    Person.create!(client: client, name: "Known Companion", email: "partner.person@example.com")
+
+    [
+      [ "operator@example.com", "Rates", "Updated rates" ],
+      [ "sales@nepalsocialtreks.com", "Ground handling", "Private 16 day program" ],
+      [ "guide.operator@gmail.com", "Guide rates", "Available next month" ],
+      [ "partner.person@example.com", "Checking in", "Following up on our details" ],
+      [ "no-reply@example.com", "Notice", "Updated rates" ],
+      [ "noreply@example.com", "Notice", "Updated rates" ],
+      [ "do-not-reply@cloud-protect.net", "Quarantine digest", "3 held messages" ],
+      [ "testflight_no_reply@email.apple.com", "TestFlight build", "Build is ready" ],
+      [ "ads-noreply@google.com", "Google Ads", "Campaign update" ],
+      [ "ads-account-noreply@ads.google.com", "Account alert", "Billing summary" ],
+      [ "rep@xwf.google.com", "Google Ads consultation", "Schedule a call" ],
+      [ "security@mail.instagram.com", "New login", "We noticed a new login" ],
+      [ "notification@email.meta.com", "Meta alert", "Ad account update" ],
+      [ "hello@buffer.com", "Scheduled post", "Your queue is empty" ],
+      [ "listings_no_reply@t1.tripadvisor.com", "New review", "A traveler reviewed you" ],
+      [ "info@simplefin.org", "SimpleFIN sign-in", "Sign-in link" ],
+      [ "notifications@link.com", "Link code", "Your verification code" ],
+      [ "notifications@e.link.com", "Link update", "Saved payment method" ],
+      [ "notifications@example.com", "System alert", "Automated notification" ],
+      [ "reservation@heritageaviation.in", "Heli update", "You can Unsubscribe or Update your preferences." ],
+      [ "e.email@dnb.com", "D&B profile", "To unsubscribe from future emails or update your email preferences." ],
+      [ "billing@vendor.example", "Your receipt from Vendor", "Amount paid: $50.00" ],
+      [ "accounts@vendor.example", "Invoice #IN-83445807", "Your invoice is attached" ],
+      [ "shop@vendor.example", "Order confirmation #104", "Thank you for your purchase" ],
+      [ "staff@sherpaholidays.com", "Internal check", "Sent from our own domain" ],
+      [ "alerts@mail.sherpaholidays.com", "Subdomain check", "Internal subdomain" ]
+    ].each do |from, subject, body|
+      msg = ingest_inquiry(from: from, subject: subject, body: body)
+      msg.update_columns(inquiry_headers: nil, direction: "in")
+    end
+
+    own_mailbox = ingest_inquiry(from: "sender@example.com", subject: "Internal note", body: "Self copy")
+    own_mailbox.update_columns(from_address: "info@sherpaholidays.com", inquiry_headers: nil, direction: "in")
+
+    html_newsletter = ingest_inquiry(from: "promo@vendor.example", subject: "Autumn specials", html: true,
+      body: "<p>Special partner rates</p><p><a href='https://vendor.example/unsub'>Unsubscribe</a></p>")
+    html_newsletter.update_columns(inquiry_headers: nil)
+
     ignored = ingest_inquiry
     ignored.conversation.update!(ignored: true)
     ingest_inquiry(subject: "Undeliverable: Nepal trip inquiry", body: "Failed")
@@ -101,6 +144,11 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
     outbound = ingest_inquiry
     outbound.update!(direction: "out", to_addresses: [ "traveler@example.com" ])
     assert_empty missing
+
+    gmail_human = ingest_inquiry(from: "real.traveler@gmail.com", subject: "Everest trek in October",
+      body: "Hi, my partner and I want to trek to Everest Base Camp this autumn.")
+    gmail_human.update_columns(inquiry_headers: nil)
+    assert_equal [ gmail_human.id ], missing.map(&:id)
   end
 
   test "uses received time with sent and created fallbacks and excludes old or future mail" do
