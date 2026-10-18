@@ -20,6 +20,7 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
       page.current_window.resize_to(width, 900)
       potential = Lead.create!(name: "Routing#{width} Potential")
       spam = Lead.create!(name: "Routing#{width} Spam")
+      second_spam = Lead.create!(name: "Routing#{width} Second spam")
       waiting = Lead.create!(name: "Routing#{width} Waiting")
       visit leads_path(tab: "new", q: "Routing#{width}", sort: "name")
       within("li", text: potential.name) { click_button "Mark Potential" }
@@ -33,8 +34,16 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
       within("nav.tabs") { click_link "New" }
       assert_no_link potential.name
       within("li", text: spam.name) { click_button "Mark as spam" }
+      assert_selector "h2", text: "New", exact_text: true
+      assert_no_link spam.name
+      assert_link second_spam.name
+      within("li", text: second_spam.name) { click_button "Mark as spam" }
+      assert_selector "h2", text: "New", exact_text: true
+      assert_no_link second_spam.name
+      within("nav.tabs") { click_link "Archived" }
       assert_selector "h2", text: "Archived", exact_text: true
       assert_link spam.name
+      assert_link second_spam.name
       within("nav.tabs") { click_link "New" }
       assert_no_link spam.name
       assert_no_link potential.name
@@ -63,14 +72,19 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
       assert_link unsure.name
       assert_no_link waiting.name
       within("li", text: unsure.name) { assert_button "Remove Unsure" }
+      visit lead_path(unsure)
+      assert_button "Remove Unsure"
       assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, width
       capture("unsure-#{width}")
-      within("li", text: unsure.name) { click_button "Not spam" }
+      click_button "Not spam"
+      assert_current_path leads_path(tab: "new")
       visit lead_path(unsure)
       assert_button "Remove Unsure"
       assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, width
       capture("lead-#{width}")
       click_button "Mark Potential", exact: true
+      assert_current_path leads_path(tab: "new")
+      visit lead_path(unsure)
       assert_button "Remove Potential"
       assert_button "Mark Unsure"
       visit leads_path(tab: "unsure", q: "Sorting#{width}")
@@ -87,6 +101,8 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
       general = Lead.create!(name: "Unmarkedguest#{width}")
       visit lead_path(lead)
       click_button "Mark Potential", exact: true
+      assert_current_path leads_path(tab: "new")
+      visit lead_path(lead)
       assert_button "Remove Potential"
       assert_equal "quoted", lead.reload.status
       assert_equal "possible", lead.owner_fit_at_inquiry
@@ -110,6 +126,7 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
       assert lead.reload.potential?
       visit lead_path(lead)
       click_button "Mark as spam"
+      assert_current_path leads_path(tab: "new")
       assert_no_button "Remove Potential"
       assert lead.reload.archived?
       assert_nil lead.potential_marked_at
@@ -118,10 +135,13 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
       visit lead_path(lead)
       assert_no_button "Mark Potential"
       click_button "Not spam"
+      assert_current_path leads_path(tab: "new")
+      visit lead_path(lead)
       assert_button "Mark Potential"
       assert_not lead.reload.potential?
       visit lead_path(lead)
       click_button "Mark Potential"
+      visit lead_path(lead)
       accept_confirm { click_button "Convert to client" }
       assert_selector "h1", text: lead.name
       visit leads_path(tab: "potential")
@@ -153,6 +173,8 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
     lead = Lead.create!(name: "Unanswered traveler")
     visit lead_path(lead)
     click_button "Mark Unsure"
+    assert_current_path leads_path(tab: "new")
+    visit lead_path(lead)
     assert_button "Remove Unsure"
     visit leads_path(tab: "unsure", q: lead.name)
     click_button "Remove Unsure"
@@ -162,6 +184,8 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
     within("li", text: lead.name) { click_button "Mark Potential" }
     visit lead_path(lead)
     click_button "Mark Unsure"
+    assert_current_path leads_path(tab: "new")
+    visit lead_path(lead)
     assert_button "Mark Potential"
     assert_button "Remove Unsure"
     click_button "Mark as spam"
