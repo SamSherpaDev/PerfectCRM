@@ -36,7 +36,7 @@ class InboxRequestsTest < ActionDispatch::IntegrationTest
     assert_includes Conversation.waiting_on_them, replied
 
     patch mark_as_spam_lead_path(lead)
-    assert_redirected_to leads_path(tab: "archived")
+    assert_redirected_to leads_path(tab: "new")
     [ "waiting", "waiting_them", "all" ].each do |tab|
       get inbox_path(tab: tab)
       assert_response :success
@@ -52,7 +52,7 @@ class InboxRequestsTest < ActionDispatch::IntegrationTest
     end
 
     patch not_spam_lead_path(lead)
-    assert_redirected_to lead_path(lead)
+    assert_redirected_to leads_path(tab: "new")
     get inbox_path(tab: "waiting")
     assert_select "a[href=?]", inbox_thread_path(thread), count: 1
     get inbox_path(tab: "waiting_them")
