@@ -661,6 +661,9 @@ Automatically suspected spam can wait in Unsure. Not spam clears the spam flag
 without removing Unsure; Mark Potential or Remove Unsure sorts it out of Unsure.
 Mark as spam clears Unsure the same way it clears Potential,
 and restoring an ordinarily archived lead restores its Unsure mark.
+These actions move the lead to the matching tab while returning you to the
+Leads list context you came from, including its tab, search, and sort. From a
+lead detail page without a list context, they return to New.
 
 More → Delete lead archives it after one confirmation naming the lead; the
 Archived tab restores it to its previous stage, and nothing is ever
@@ -683,6 +686,9 @@ messages, and history; the timeline records who reviewed it. Confirmed spam
 stays excluded from cost-per-inquiry, Monday and monthly reports, and ad
 conversions even if its tag is later edited. Monday's held-back spam count
 includes archived spam.
+Spam verdict, restore, archive, and stage-change actions use the same return
+behavior: they move the lead to its destination but keep you in the originating
+Leads list context, or return to New from a detail page without one.
 
 Conversion is one-way and manual. Convert to client matches an existing
 client by an explicit returning-inquiry link first, then PerfectBook contact
