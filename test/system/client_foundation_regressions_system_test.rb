@@ -327,13 +327,13 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
     select "Lost", from: "Status"
     select "Dates", from: "Lost reason"
     click_button "Save changes"
-    assert_selector "h1", text: "Next inquiry"
+    assert_selector "h2", text: "New"
     assert_equal "lost", repeat.reload.status
 
     visit edit_lead_path(repeat)
     select "Chatting", from: "Status"
     click_button "Save changes"
-    assert_selector "h1", text: "Next inquiry"
+    assert_selector "h2", text: "New"
     assert_equal "chatting", repeat.reload.status
     assert_equal active.email, repeat.email
   end
@@ -359,11 +359,11 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
     select "Lost", from: "Status"
     select "Dates", from: "Lost reason"
     click_button "Save changes"
-    assert_selector "h1", text: "Active inquiry"
+    assert_selector "h2", text: "New"
     visit edit_lead_path(lost)
     select "Chatting", from: "Status"
     click_button "Save changes"
-    assert_selector "h1", text: "Next inquiry"
+    assert_selector "h2", text: "New"
     assert_equal "chatting", lost.reload.status
     Lead.create!(name: "Historical import", status: "lost", lost_reason: "dates", external_ref: "import-123")
     visit new_lead_path

@@ -1,9 +1,10 @@
 <% content_for :title, "Edit #{@lead.name} · PerfectCRM" %>
 <div class="page-narrow">
-  <%= render layout: "shared/page_header", locals: { eyebrow: "Pipeline", title: "Edit lead", subtitle: @lead.name, back: [ @lead.name, lead_path(@lead) ] } do %><% end %>
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Pipeline", title: "Edit lead", subtitle: @lead.name, back: [ @lead.name, lead_path(@lead, return_to: @lead_action_return_to) ] } do %><% end %>
   <%= render "shared/flash" %>
 
   <%= form_with model: @lead, class: "space-y-6" do |form| %>
+    <%= hidden_field_tag :return_to, @lead_action_return_to %>
     <%= render "form", form: form %>
     <div class="flex flex-wrap gap-2">
       <%= form.submit "Save changes", class: "btn-primary btn" %>

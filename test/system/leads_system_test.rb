@@ -110,7 +110,9 @@ class LeadsSystemTest < ApplicationSystemTestCase
     accept_confirm "Delete Archive Tashi? They move to the archive and can be restored from the Archived tab." do
       click_button "Delete lead"
     end
-    assert_selector "h2", text: "Archived"
+    assert_selector "h2", text: "New"
+    assert_no_text "Archive Tashi"
+    visit leads_path(tab: "archived")
     assert_text "Archive Tashi"
 
     visit leads_path(tab: "new")
@@ -118,8 +120,8 @@ class LeadsSystemTest < ApplicationSystemTestCase
 
     visit leads_path(tab: "archived")
     click_button "Restore"
-    assert_selector "h1", text: "Archive Tashi"
-    assert_link "Edit"
+    assert_selector "h2", text: "Archived"
+    assert_no_text "Archive Tashi"
     visit leads_path(tab: "new")
     assert_text "Archive Tashi"
   end

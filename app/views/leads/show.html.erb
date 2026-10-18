@@ -1,7 +1,7 @@
 <% content_for :title, "#{@lead.name} · PerfectCRM" %>
 <% read_only = @lead.converted? || @lead.archived? %>
 <div class="page-wide">
-  <%= render layout: "shared/page_header", locals: { eyebrow: record_eyebrow(@lead), title: @lead.name, subtitle: record_subtitle(@lead), back: [ "Leads", leads_path ] } do %>
+  <%= render layout: "shared/page_header", locals: { eyebrow: record_eyebrow(@lead), title: @lead.name, subtitle: record_subtitle(@lead), back: [ "Leads", @lead_action_return_to ] } do %>
     <%= render "records/header_actions", record: @lead %>
   <% end %>
   <%= render "shared/flash" %>
@@ -17,9 +17,9 @@
         <% end %>
         <% if @lead.spam_marked_at.nil? %>
           <div class="flex flex-wrap gap-2">
-            <%= button_to "Mark as spam", mark_as_spam_lead_path(@lead), method: :patch, class: "btn-secondary btn btn-sm" %>
+            <%= button_to "Mark as spam", mark_as_spam_lead_path(@lead), method: :patch, params: { return_to: @lead_action_return_to }, class: "btn-secondary btn btn-sm" %>
             <% unless @lead.archived? %>
-              <%= button_to "Not spam", not_spam_lead_path(@lead), method: :patch, class: "btn-secondary btn btn-sm" %>
+              <%= button_to "Not spam", not_spam_lead_path(@lead), method: :patch, params: { return_to: @lead_action_return_to }, class: "btn-secondary btn btn-sm" %>
             <% end %>
           </div>
         <% end %>

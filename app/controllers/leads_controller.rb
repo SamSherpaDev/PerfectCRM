@@ -19,6 +19,7 @@ class LeadsController < ApplicationController
     @tab = TABS.include?(params[:tab]) ? params[:tab] : "new"
     @query = params[:q].to_s.strip
     @sort = %w[activity name newest fit].include?(params[:sort]) ? params[:sort] : "activity"
+    @lead_action_return_to = leads_path(tab: @tab, q: @query, sort: @sort)
     new_leads = Lead.by_status(%w[new chatting nudged])
       .where.not(id: Lead.potential.select(:id)).where.not(id: Lead.unsure.select(:id))
     set_aside = Lead.archived.or(Lead.lost)
@@ -44,6 +45,7 @@ class LeadsController < ApplicationController
   end
 
   def show
+    @lead_action_return_to = safe_leads_return_path(params[:return_to]) || leads_path(tab: "new")
     @matching_client = @lead.matching_client unless @lead.converted?
     @note = Note.new
     load_reply_box(@lead)
@@ -66,24 +68,31 @@ class LeadsController < ApplicationController
   end
 
   def edit
+    @lead_action_return_to = safe_leads_return_path(params[:return_to]) || leads_path(tab: "new")
     @lead.people.build
   end
 
   def update
+    @lead_action_return_to = safe_leads_return_path(params[:return_to]) || leads_path(tab: "new")
     attrs = lead_params.to_h
     target_status = attrs.delete("status")
     if target_status.present? && !Lead::STATUSES.include?(target_status)
       @lead.errors.add(:status, "is not a lead stage")
       raise ActiveRecord::RecordInvalid, @lead
     end
-    if target_status.present? && target_status != @lead.status
+    status_changed = target_status.present? && target_status != @lead.status
+    if status_changed
       Leads::Transition.call(@lead, to: target_status, actor: :captain,
         lost_reason: attrs.delete("lost_reason"), lost_note: attrs.delete("lost_note"),
         attributes: attrs)
     else
       @lead.update!(attrs)
     end
-    redirect_to @lead, notice: "Lead saved."
+    if status_changed
+      redirect_to lead_action_return_to, notice: "Marked as #{target_status.humanize} - moved to #{lead_destination_tab}."
+    else
+      redirect_to @lead, notice: "Lead saved."
+    end
   rescue ActiveRecord::RecordInvalid
     @lead.people.build unless @lead.people.any?(&:new_record?)
     render :edit, status: :unprocessable_entity
@@ -108,56 +117,56 @@ class LeadsController < ApplicationController
       return redirect_to @lead, alert: "Converted leads stay read-only."
     end
     @lead.archive!
-    redirect_to leads_path(tab: "archived"), notice: "Lead archived."
+    redirect_to lead_action_return_to, notice: "Archived - moved to Archived. Choose Restore to bring this lead back."
   rescue ActiveRecord::RecordInvalid => e
     redirect_to @lead, alert: e.record.errors.full_messages.to_sentence.presence || "Could not archive."
   end
 
   def unarchive
     @lead.unarchive!
-    redirect_to @lead, notice: "Lead restored."
+    redirect_to lead_action_return_to, notice: "Restored - moved to #{lead_destination_tab}."
   rescue ActiveRecord::RecordInvalid => e
     redirect_to @lead, alert: e.record.errors.full_messages.to_sentence.presence || "Could not restore."
   end
 
   def mark_as_spam
     @lead.mark_as_spam!
-    redirect_to leads_path(tab: "archived"), notice: "Marked as spam and archived. Choose Not spam to restore."
+    redirect_to lead_action_return_to, notice: "Marked as spam - moved to Archived. Choose Not spam to restore."
   rescue ActiveRecord::RecordInvalid => e
     redirect_to @lead, alert: e.record.errors.full_messages.to_sentence.presence || "Could not mark as spam."
   end
 
   def not_spam
     @lead.mark_not_spam!
-    redirect_to @lead, notice: "Marked as not spam. Lead is active again."
+    redirect_to lead_action_return_to, notice: "Not spam - restored to #{lead_destination_tab}."
   rescue ActiveRecord::RecordInvalid => e
     redirect_to @lead, alert: e.record.errors.full_messages.to_sentence.presence || "Could not clear spam."
   end
 
   def mark_potential
     @lead.mark_potential!
-    redirect_back fallback_location: lead_path(@lead), notice: "Marked as Potential. Find it in the Potential tab."
+    redirect_to lead_action_return_to, notice: "Marked as Potential - moved to Potential."
   rescue ActiveRecord::RecordInvalid => e
     redirect_to @lead, alert: e.record.errors.full_messages.to_sentence
   end
 
   def unmark_potential
     @lead.unmark_potential!
-    redirect_back fallback_location: lead_path(@lead), notice: "Removed from Potential."
+    redirect_to lead_action_return_to, notice: "Removed from Potential - moved to #{lead_destination_tab}."
   rescue ActiveRecord::RecordInvalid => e
     redirect_to @lead, alert: e.record.errors.full_messages.to_sentence
   end
 
   def mark_unsure
     @lead.mark_unsure!
-    redirect_back fallback_location: lead_path(@lead), notice: "Marked as Unsure. Find it in the Unsure tab."
+    redirect_to lead_action_return_to, notice: "Marked as Unsure - moved to Unsure."
   rescue ActiveRecord::RecordInvalid => e
     redirect_to @lead, alert: e.record.errors.full_messages.to_sentence
   end
 
   def unmark_unsure
     @lead.unmark_unsure!
-    redirect_back fallback_location: lead_path(@lead), notice: "Removed from Unsure."
+    redirect_to lead_action_return_to, notice: "Removed from Unsure - moved to #{lead_destination_tab}."
   rescue ActiveRecord::RecordInvalid => e
     redirect_to @lead, alert: e.record.errors.full_messages.to_sentence
   end
@@ -212,5 +221,37 @@ class LeadsController < ApplicationController
       :existing_client_id, :referred_by_client_id, :referred_by_person_id,
       people_attributes: %i[id name email phone role _destroy]
     )
+  end
+
+  def lead_action_return_to
+    safe_leads_return_path(params[:return_to]) || leads_path(tab: "new")
+  end
+
+  def safe_leads_return_path(value)
+    return unless value.present?
+
+    uri = URI.parse(value)
+    return unless uri.relative? && uri.host.nil? && uri.path == leads_path && uri.fragment.nil?
+
+    pairs = URI.decode_www_form(uri.query.to_s)
+    return unless pairs.map(&:first).uniq.length == pairs.length
+    return unless (pairs.map(&:first) - %w[tab q sort]).empty?
+
+    query = pairs.to_h
+    return if query["tab"].present? && !TABS.include?(query["tab"])
+    return if query["sort"].present? && !%w[activity name newest fit].include?(query["sort"])
+
+    leads_path(query)
+  rescue URI::InvalidURIError, ArgumentError
+    nil
+  end
+
+  def lead_destination_tab
+    return "Potential" if @lead.potential?
+    return "Unsure" if @lead.unsure?
+    return "Quoted" if @lead.status == "quoted"
+    return "Archived" if @lead.archived? || @lead.status == "lost"
+
+    "New"
   end
 end

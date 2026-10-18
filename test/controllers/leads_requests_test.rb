@@ -11,12 +11,12 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
   test "marking Potential from New removes the row and updates counts through the redirect" do
     lead = Lead.create!(name: "New traveler to review")
     other = Lead.create!(name: "New traveler still waiting")
-    list_url = leads_url(tab: "new", q: "New traveler", sort: "name")
+    list_url = leads_path(tab: "new", q: "New traveler", sort: "name")
     get list_url
     assert_select "form[action='#{mark_potential_lead_path(lead)}'] button", text: "Mark Potential"
     assert_select "nav.tabs a", text: /New.*2/
 
-    patch mark_potential_lead_path(lead), headers: { "HTTP_REFERER" => list_url }
+    patch mark_potential_lead_path(lead), params: { return_to: list_url }, headers: { "HTTP_REFERER" => "https://evil.example/" }
     assert_redirected_to list_url
     follow_redirect!
     assert_select "h2", text: "New"
@@ -31,7 +31,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     get leads_path(tab: "potential", q: "New traveler", sort: "name")
     assert_select "a", text: lead.name
     assert_select "a", text: other.name, count: 0
-    patch unmark_potential_lead_path(lead), headers: { "HTTP_REFERER" => leads_url(tab: "potential") }
+    patch unmark_potential_lead_path(lead), params: { return_to: leads_path(tab: "potential") }
     follow_redirect!
     assert_select "a", text: lead.name, count: 0
     get list_url
@@ -45,19 +45,52 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     other = Lead.create!(name: "New genuine inquiry")
     get leads_path(tab: "new")
     assert_select "form[action='#{mark_as_spam_lead_path(lead)}'] button", text: "Mark as spam"
-    patch mark_as_spam_lead_path(lead), headers: { "HTTP_REFERER" => leads_url(tab: "new") }
-    assert_redirected_to leads_path(tab: "archived")
+    list_url = leads_path(tab: "new", q: "New", sort: "name")
+    patch mark_as_spam_lead_path(lead), params: { return_to: list_url }
+    assert_redirected_to list_url
     follow_redirect!
-    assert_select "h2", text: "Archived"
-    assert_select "a", text: lead.name
+    assert_select "h2", text: "New"
+    assert_select "a", text: lead.name, count: 0
     assert_select "nav.tabs a", text: /New.*1/
     assert_select "nav.tabs a", text: /Archived.*1/
+    assert_select ".flash-notice", text: /Marked as spam - moved to Archived.*Not spam/
     get leads_path(tab: "new", q: "New", sort: "name")
     assert_select "a", text: lead.name, count: 0
     assert_select "a", text: other.name
-    patch not_spam_lead_path(lead)
+    patch not_spam_lead_path(lead), params: { return_to: leads_path(tab: "archived") }
     get leads_path(tab: "new")
     assert_select "a", text: lead.name
+  end
+
+  test "a lead page marking returns to its supplied Leads tab and unsafe targets fall back to New" do
+    lead = Lead.create!(name: "Record action traveler", status: "quoted")
+    return_to = leads_path(tab: "quoted", q: "traveler", sort: "newest")
+    get lead_path(lead, return_to: return_to)
+    assert_select "a[href=?]", return_to, text: "Leads"
+    assert_select "form[action='#{mark_potential_lead_path(lead)}'] input[name=return_to][value=?]", return_to
+
+    patch mark_potential_lead_path(lead), params: { return_to: return_to }
+    assert_redirected_to return_to
+    assert lead.reload.potential?
+
+    other = Lead.create!(name: "Unsafe target traveler")
+    patch mark_unsure_lead_path(other), params: { return_to: "https://evil.example/leads?tab=archived" },
+      headers: { "HTTP_REFERER" => leads_url(tab: "quoted") }
+    assert_redirected_to leads_path(tab: "new")
+    assert other.reload.unsure?
+  end
+
+  test "changing a lead stage to Quoted returns to its originating list" do
+    lead = Lead.create!(name: "Quote traveler")
+    return_to = leads_path(tab: "new", q: "Quote", sort: "name")
+
+    patch lead_path(lead), params: { return_to: return_to, lead: { status: "quoted" } }
+
+    assert_redirected_to return_to
+    assert_equal "quoted", lead.reload.status
+    follow_redirect!
+    assert_select "h2", text: "New"
+    assert_select ".flash-notice", text: /Marked as Quoted - moved to Quoted/
   end
 
   test "stage changes archive and conversion move New leads to their own sections" do
@@ -66,7 +99,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
       attrs = { status: status }
       attrs[:lost_reason] = "no_reply" if status == "lost"
       patch lead_path(lead), params: { lead: attrs }
-      assert_redirected_to lead_path(lead)
+      assert_redirected_to leads_path(tab: "new")
       (%w[new quoted archived] - [ tab ]).each do |other_tab|
         get leads_path(tab: other_tab)
         assert_select "a", text: lead.name, count: 0
@@ -76,8 +109,10 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     end
 
     archived = Lead.create!(name: "Move to archive")
-    patch archive_lead_path(archived)
+    patch archive_lead_path(archived), params: { return_to: leads_path(tab: "new") }
+    assert_redirected_to leads_path(tab: "new")
     follow_redirect!
+    get leads_path(tab: "archived")
     assert_select "a", text: archived.name
     converted = Lead.create!(name: "Move to converted")
     post convert_lead_path(converted)
@@ -92,7 +127,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     get lead_path(lead)
     assert_select "button", text: "Mark Potential"
     patch mark_potential_lead_path(lead)
-    assert_redirected_to lead_path(lead)
+    assert_redirected_to leads_path(tab: "new")
     assert lead.reload.potential?
     get leads_path(tab: "potential")
     assert_select "nav.tabs a", text: /Potential.*1/
@@ -105,7 +140,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     assert_select "a", text: lead.name, count: 0
     get leads_path(tab: "potential", q: "Potential", sort: "name")
     assert_select "a", text: lead.name
-    patch unmark_potential_lead_path(lead), headers: { "HTTP_REFERER" => leads_url(tab: "potential") }
+    patch unmark_potential_lead_path(lead), params: { return_to: leads_path(tab: "potential") }
     assert_redirected_to leads_path(tab: "potential")
     follow_redirect!
     assert_select ".empty", text: /No potential leads yet/
@@ -131,8 +166,8 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     lead = Lead.create!(name: "Spam inquiry")
     get lead_path(lead)
     assert_select "form[action='#{mark_as_spam_lead_path(lead)}'] button", text: "Mark as spam"
-    patch mark_as_spam_lead_path(lead)
-    assert_redirected_to leads_path(tab: "archived")
+    patch mark_as_spam_lead_path(lead), params: { return_to: leads_path(tab: "new") }
+    assert_redirected_to leads_path(tab: "new")
     assert lead.reload.archived?
     assert lead.spam_marked_at.present?
     get leads_path
@@ -143,8 +178,8 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     get lead_path(lead)
     assert_select "section[aria-label='Spam review']", text: /Marked as spam and archived/
     assert_select "form[action='#{not_spam_lead_path(lead)}'] button", text: "Not spam"
-    patch not_spam_lead_path(lead)
-    assert_redirected_to lead_path(lead)
+    patch not_spam_lead_path(lead), params: { return_to: leads_path(tab: "archived") }
+    assert_redirected_to leads_path(tab: "archived")
     assert_not lead.reload.archived?
     assert_not lead.suspected_spam?
     get leads_path
@@ -241,11 +276,11 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
   test "Unsure moves leads out of New and back, and between Potential and spam" do
     lead = Lead.create!(name: "Voicemail traveler")
     other = Lead.create!(name: "Answering traveler")
-    list_url = leads_url(tab: "new", q: "traveler", sort: "name")
+    list_url = leads_path(tab: "new", q: "traveler", sort: "name")
     get list_url
     assert_select "form[action='#{mark_unsure_lead_path(lead)}'] button[aria-pressed=false]", text: "Mark Unsure"
 
-    patch mark_unsure_lead_path(lead), headers: { "HTTP_REFERER" => list_url }
+    patch mark_unsure_lead_path(lead), params: { return_to: list_url }
     assert_redirected_to list_url
     follow_redirect!
     assert_select "a", text: lead.name, count: 0
@@ -288,7 +323,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     patch not_spam_lead_path(lead)
     patch mark_unsure_lead_path(lead)
     assert lead.reload.unsure?
-    patch unmark_unsure_lead_path(lead), headers: { "HTTP_REFERER" => leads_url(tab: "unsure") }
+    patch unmark_unsure_lead_path(lead), params: { return_to: leads_path(tab: "unsure") }
     follow_redirect!
     assert_select ".empty", text: /No unsure leads/
     get list_url
@@ -432,7 +467,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
   test "edit form stage changes run through Transition" do
     lead = Lead.create!(name: "Staged", source: "manual", status: "new")
     patch lead_path(lead), params: { lead: { name: "Staged", status: "chatting" } }
-    assert_redirected_to lead_path(lead)
+    assert_redirected_to leads_path(tab: "new")
     assert_equal "chatting", lead.reload.status
     assert lead.activity_events.exists?(kind: "stage_change")
 
@@ -441,7 +476,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     assert_equal "chatting", lead.reload.status
 
     patch lead_path(lead), params: { lead: { name: "Staged", status: "lost", lost_reason: "dates" } }
-    assert_redirected_to lead_path(lead)
+    assert_redirected_to leads_path(tab: "new")
     assert_equal "lost", lead.reload.status
     assert_equal "dates", lead.lost_reason
   end
@@ -467,8 +502,8 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
   test "archive lists the lead under the archived tab" do
     lead = Lead.create!(name: "Deleteme", source: "manual", status: "new")
 
-    patch archive_lead_path(lead)
-    assert_redirected_to leads_path(tab: "archived")
+    patch archive_lead_path(lead), params: { return_to: leads_path(tab: "new") }
+    assert_redirected_to leads_path(tab: "new")
     assert lead.reload.archived?
 
     get leads_path(tab: "new")
@@ -484,8 +519,9 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
   test "unarchive restores the previous stage" do
     lead = Lead.create!(name: "Back", source: "manual", status: "quoted")
     lead.archive!
-    patch unarchive_lead_path(lead)
-    assert_redirected_to lead_path(lead)
+    return_to = leads_path(tab: "archived", q: "Back", sort: "name")
+    patch unarchive_lead_path(lead), params: { return_to: return_to }
+    assert_redirected_to return_to
     assert_not lead.reload.archived?
     assert_equal "quoted", lead.status
     get leads_path(tab: "quoted")
@@ -505,7 +541,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     old.archive!
     Lead.create!(name: "New", source: "manual", email: "reuse@example.com")
     patch unarchive_lead_path(old)
-    assert_redirected_to lead_path(old)
+    assert_redirected_to leads_path(tab: "new")
     assert_not old.reload.archived?
     follow_redirect!
     assert_select ".flash-notice", text: /restored/i

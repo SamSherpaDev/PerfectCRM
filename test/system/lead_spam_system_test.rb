@@ -33,14 +33,16 @@ class LeadSpamSystemTest < ApplicationSystemTestCase
         visit lead_path(lead)
         click_button "Mark as spam"
       end
-      assert_selector "h2", text: "Archived"
+      assert_selector "h2", text: "New"
+      assert_no_text lead.name
+      assert lead.reload.archived?
+      assert lead.spam_marked_at
+      assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, width
+      visit leads_path(tab: "archived")
       within("li", text: lead.name) do
         assert_text "Spam"
         assert_button "Not spam"
       end
-      assert lead.reload.archived?
-      assert lead.spam_marked_at
-      assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, width
       visit leads_path
       assert_no_link lead.name
       %w[waiting waiting_them all].each do |tab|
@@ -55,7 +57,8 @@ class LeadSpamSystemTest < ApplicationSystemTestCase
       assert_no_text "Review spam #{width}"
       visit leads_path(tab: "archived")
       within("li", text: lead.name) { click_button "Not spam" }
-      assert_selector "h1", text: lead.name
+      assert_selector "h2", text: "Archived"
+      assert_no_text lead.name
       assert_not lead.reload.archived?
       assert_not lead.suspected_spam?
       assert_equal "Original inquiry", lead.message
@@ -77,10 +80,11 @@ class LeadSpamSystemTest < ApplicationSystemTestCase
     visit lead_path(lead)
     assert_text "Looks like spam"
     within("section[aria-label='Spam review']") { click_button "Not spam" }
-    assert_text "Marked as not spam"
+    assert_text "Not spam - restored to New."
     assert_no_selector "section[aria-label='Spam review']"
     assert_equal 75, lead.reload.spam_score
     assert_not lead.suspected_spam?
+    visit lead_path(lead)
     accept_confirm { click_button "Convert to client" }
     assert_text "Started as a lead"
     visit lead_path(lead)
