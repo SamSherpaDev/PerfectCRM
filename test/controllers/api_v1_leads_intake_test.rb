@@ -391,12 +391,22 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
 
   # -- honeypot -----------------------------------------------------------------
 
-  test "filled honeypot is a 202 with a synthetic reference and no lead" do
-    assert_no_difference("Lead.count") do
-      post_intake intake_body("honeypot" => "http://spam.example")
+  test "filled honeypot is saved to Archived as spam with its reason, no notifications, and a counted catch" do
+    assert_difference("Lead.count", 1) do
+      assert_difference("Leads.honeypot_catches_count", 1) do
+        post_intake intake_body("honeypot" => "http://spam.example", "message" => "Autofilled by my browser")
+      end
     end
     assert_response :accepted
-    assert_match(/\ASH-/, response.parsed_body["reference"])
+    lead = Lead.find(response.parsed_body["id"])
+    assert_equal lead.reference, response.parsed_body["reference"]
+    assert_equal [ "Anna Lindqvist", "anna@example.com", "Autofilled by my browser" ], [ lead.name, lead.email, lead.message ]
+    assert lead.archived?
+    assert lead.spam_marked_at.present?
+    assert lead.suspected_spam?
+    assert_equal "Hidden field filled", lead.spam_reason
+    assert_empty lead.lead_notifications
+    assert_includes lead.activity_events.find_by(kind: "spam_review").summary, "Hidden field filled"
   end
 
   # -- auth -----------------------------------------------------------------------
@@ -504,65 +514,341 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
 
   test "the 4th request for one email in an hour gets 429" do
     with_memory_cache do
-      # Each new submission_id opens its own inquiry, and every attempt
+      # Each distinct inquiry opens its own lead, and every attempt
       # still counts toward the email window.
-      3.times do
-        post_intake intake_body
+      messages = [
+        "Two of us, first time in Nepal, thinking spring.",
+        "Family of four looking for a private cultural tour in Bhutan next October.",
+        "Solo trekker asking about Upper Mustang permits and autumn departure dates."
+      ]
+      messages.each do |msg|
+        post_intake intake_body("message" => msg)
         assert_response :accepted
       end
-      post_intake intake_body
+      post_intake intake_body("message" => "Fourth inquiry within the hour about helicopter charter options.")
       assert_response :too_many_requests
     end
   end
 
-  test "a second inquiry from the same email opens its own lead" do
-    first_body = intake_body
+  # -- duplicate filter -----------------------------------------------------------------
+
+  test "same email with the same normalized message within 24h merges into existing lead as timeline entry" do
+    first_body = intake_body("contact" => { "name" => "Anna Lindqvist", "email" => "Anna@Example.com", "phone_raw" => "" })
     post_intake first_body
+    assert_response :accepted
+    first = response.parsed_body
+    lead = Lead.find(first["id"])
+
+    duplicate_submission_id = SecureRandom.uuid
+    assert_no_difference([ "Lead.count", "LeadNotification.count", "AdConversion.count" ]) do
+      assert_no_enqueued_jobs do
+        post_intake intake_body(
+          "submission_id" => duplicate_submission_id,
+          "contact" => { "name" => "Anna Lindqvist", "email" => "  anna@example.com ", "phone_raw" => "+1 415 555 0134" },
+          "message" => "Two of us, first time in Nepal, thinking spring!"
+        )
+      end
+    end
+    assert_response :ok
+    second = response.parsed_body
+    assert_equal first["id"], second["id"]
+    assert_equal first["reference"], second["reference"]
+
+    lead.reload
+    assert_equal "+14155550134", lead.phone
+    assert_includes lead.metadata["merged_submission_ids"], duplicate_submission_id
+    event = lead.activity_events.find_by(kind: "duplicate_inquiry")
+    assert event.present?
+    assert_includes event.summary, "Duplicate website inquiry merged"
+    assert_equal duplicate_submission_id, event.metadata["submission_id"]
+
+    # Step 2 details submitted under the merged duplicate submission_id still attach to the existing lead.
+    post "/api/v1/leads/intake/details",
+      params: JSON.generate({ schema: "sherpa.inquiry.details.v1", submission_id: duplicate_submission_id, party: { size: 4 } }),
+      headers: { "CONTENT_TYPE" => "application/json", "Origin" => ORIGIN, "X-Sherpa-Site-Key" => @site_key }
+    assert_response :ok
+    assert_equal 4, lead.reload.party_size
+  end
+
+  test "a second inquiry from the same email with a different message or trip opens its own lead" do
+    post_intake intake_body
     assert_response :accepted
     first = response.parsed_body
 
     assert_difference("Lead.count", 1) do
-      post_intake intake_body
+      post_intake intake_body("message" => "Actually we are also interested in a Bhutan cultural tour in autumn for four people.")
     end
     assert_response :accepted
     second = response.parsed_body
     assert_not_equal first["id"], second["id"]
     assert_not_equal first["reference"], second["reference"]
-    assert_equal 2, Lead.where(email: "anna@example.com").count
+
+    assert_difference("Lead.count", 1) do
+      post_intake intake_body("trip" => { "handle" => "everest-base-camp-trek", "title" => "Everest Base Camp Trek" })
+    end
+    assert_response :accepted
+    assert_equal 3, Lead.where(email: "anna@example.com").count
   end
 
-  # -- suspicion scoring -------------------------------------------------------------------
+  test "a near-identical but different message from the same email opens its own lead" do
+    post_intake intake_body(
+      "trip" => {},
+      "message" => "Hi, we are two adults interested in the Everest Base Camp trek in April 2027, please send prices and availability"
+    )
+    assert_response :accepted
+    first = response.parsed_body
 
-  test "a rushed submit is still accepted but flagged suspected_spam" do
+    assert_difference("Lead.count", 1) do
+      post_intake intake_body(
+        "trip" => {},
+        "message" => "Hi, we are two adults interested in the Annapurna Base Camp trek in October 2027, please send prices and availability"
+      )
+    end
+    assert_response :accepted
+    assert_not_equal first["id"], response.parsed_body["id"]
+  end
+
+  test "a duplicate of an inquiry already converted to a client opens a new lead instead of failing" do
+    post_intake intake_body
+    assert_response :accepted
+    converted = Lead.find(response.parsed_body["id"])
+    converted.convert_to_client!
+
+    assert_difference("Lead.count", 1) do
+      post_intake intake_body
+    end
+    assert_response :accepted
+    assert_not_equal converted.id, response.parsed_body["id"]
+  end
+
+  test "replaying a merged duplicate submission id returns the original lead even after the merge window" do
+    post_intake intake_body
+    assert_response :accepted
+    original = response.parsed_body
+    duplicate_body = intake_body
+    post_intake duplicate_body
+    assert_response :ok
+    assert_equal original["id"], response.parsed_body["id"]
+
+    travel 25.hours do
+      assert_no_difference([ "Lead.count", "LeadNotification.count" ]) do
+        post_intake duplicate_body
+      end
+      assert_response :ok
+      assert_equal original["id"], response.parsed_body["id"]
+      assert_equal original["reference"], response.parsed_body["reference"]
+    end
+  end
+
+  test "only an auto-archived resubmission merges into an archived spam lead; flag-only and clean ones open a lead in New" do
+    fast = { "started_at" => "2026-09-14T18:06:40Z", "submitted_at" => "2026-09-14T18:06:41Z" }
+    contact = { "name" => "Pemba", "email" => "pemba@example.com" }
+    post_intake intake_body("contact" => contact, "timing" => fast)
+    assert_response :accepted
+    archived = Lead.find(response.parsed_body["id"])
+    assert archived.archived?
+
+    assert_no_difference("Lead.count") do
+      post_intake intake_body("contact" => contact, "timing" => fast)
+    end
+    assert_response :ok
+    assert_equal archived.id, response.parsed_body["id"]
+
+    assert_difference("Lead.count", 1) do
+      post_intake intake_body("contact" => contact)
+    end
+    assert_response :accepted
+    retry_lead = Lead.find(response.parsed_body["id"])
+    assert_not_equal archived.id, retry_lead.id
+    assert_equal [ "name_matches_email" ], retry_lead.suspicion_hits
+    assert_not retry_lead.archived?
+  end
+
+  test "same email and message after 24 hours opens a new inquiry" do
+    post_intake intake_body
+    assert_response :accepted
+
+    travel 25.hours do
+      assert_difference("Lead.count", 1) do
+        post_intake intake_body
+      end
+      assert_response :accepted
+    end
+  end
+
+  # -- suspicion scoring & high-confidence spam routing ---------------------------------
+
+  test "a rushed submit under 3s is saved but archived and marked spam with its reason" do
     body = intake_body(
       "timing" => { "started_at" => "2026-09-14T18:06:40Z", "submitted_at" => "2026-09-14T18:06:41Z" }
     )
     post_intake body
     assert_response :accepted
     lead = Lead.last
-    assert lead.spam_score.positive?
+    assert_equal 25, lead.spam_score
     assert lead.suspected_spam?
+    assert lead.archived?
+    assert lead.spam_marked_at.present?
     assert_includes lead.metadata["suspicion_hits"], "too_fast"
+    assert_equal "Submitted under 3s", lead.spam_reason
+    assert_empty lead.lead_notifications
+    review = lead.activity_events.find_by(kind: "spam_review")
+    assert review.present?
+    assert_includes review.summary, "Submitted under 3s"
   end
 
-  test "spam flags never reject: disposable domain and link-stuffing still 202" do
+  test "missing, invalid, or non-ISO timing is not a spam signal" do
+    [
+      intake_body.except("timing"),
+      intake_body.merge("timing" => {}),
+      intake_body("timing" => { "started_at" => "not-a-timestamp", "submitted_at" => "2026-09-14T18:06:41Z" }),
+      intake_body("timing" => { "started_at" => "2026-09-14 18:05:58", "submitted_at" => "2026-09-14 18:06:41" })
+    ].each_with_index do |body, idx|
+      body = body.deep_merge("contact" => { "email" => "timing#{idx}@example.com" })
+      post_intake body
+      assert_response :accepted
+      lead = Lead.last
+      assert_equal 0, lead.spam_score
+      assert_not lead.suspected_spam?
+      assert_not lead.archived?
+      assert lead.lead_notifications.exists?(event: "auto_first_reply")
+    end
+  end
+
+  test "lower-confidence suspect with a single moderate signal stays in New and is flagged only" do
+    body = intake_body(
+      "contact" => { "name" => "Anna Lindqvist", "email" => "annalindqvist@example.com" }
+    )
+    post_intake body
+    assert_response :accepted
+    lead = Lead.last
+    assert_equal 25, lead.spam_score
+    assert lead.suspected_spam?
+    assert_not lead.archived?
+    assert_nil lead.spam_marked_at
+    assert_equal [ "name_matches_email" ], lead.metadata["suspicion_hits"]
+    assert_equal "Name matches email", lead.spam_reason
+  end
+
+  test "spam flags never reject: disposable domain and link-stuffing together still 202 and stay flag-only in New" do
     body = intake_body(
       "contact" => { "name" => "Cheap Deals", "email" => "x@mailinator.com" },
       "message" => "see http://a.example http://b.example http://c.example"
     )
     post_intake body
     assert_response :accepted
-    assert Lead.last.suspected_spam?
+    lead = Lead.last
+    assert_equal 50, lead.spam_score
+    assert lead.suspected_spam?
+    assert_not lead.archived?
+    assert_nil lead.spam_marked_at
   end
 
   test "flagged lead email copy carries the check prefix" do
     body = intake_body(
-      "timing" => { "started_at" => "2026-09-14T18:06:40Z", "submitted_at" => "2026-09-14T18:06:41Z" }
+      "contact" => { "name" => "Anna Lindqvist", "email" => "annalindqvist@example.com" }
     )
     post_intake body
     perform_enqueued_jobs only: LeadNotificationJob
     mail = ActionMailer::Base.deliveries.last
     assert_match(/\A\[check\] New inquiry from/, mail.subject)
+  end
+
+  test "end-to-end bot protection: real submission creates a lead and conversion while fast, honeypot, and duplicate submissions do not" do
+    @settings.update!(
+      meta_dataset_id: "123456789012345",
+      meta_access_token: "EAAB-token",
+      meta_terms_accepted: true,
+      google_terms_accepted: true,
+      auto_first_reply_enabled_at: 1.hour.ago
+    )
+    @settings.rotate_google_feed_password!
+
+    observed = Time.current.iso8601
+    ad_acquisition = {
+      "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true, "observed_at" => observed },
+      "last_touch" => { "observed_at" => observed, "gclid" => "Cj0K-real", "fbclid" => "IwAR-real", "utm_source" => "google", "utm_medium" => "cpc" }
+    }
+
+    # 1. Real submission creates an active lead in New and records an ad conversion.
+    real_body = intake_body(
+      "contact" => { "name" => "Clara Jensen", "email" => "clara@gmail.com" },
+      "acquisition" => ad_acquisition
+    )
+    assert_difference("Lead.count", 1) do
+      assert_enqueued_with(job: AdConversions::LeadJob) do
+        post_intake real_body
+      end
+    end
+    assert_response :accepted
+    real_lead = Lead.find(response.parsed_body["id"])
+    assert_not real_lead.archived?
+    assert_not real_lead.suspected_spam?
+    assert real_lead.lead_notifications.exists?(event: "auto_first_reply")
+    assert_difference("AdConversion.count", 1) do
+      AdConversions.record!(real_lead)
+    end
+
+    # 2. Fast submission (< 3s) is saved to Archived as spam, gets no auto first reply, and records no ad conversion.
+    fast_body = intake_body(
+      "contact" => { "name" => "Automated Script", "email" => "bot-runner@gmail.com" },
+      "timing" => { "started_at" => "2026-09-14T18:06:40Z", "submitted_at" => "2026-09-14T18:06:41Z" },
+      "acquisition" => ad_acquisition
+    )
+    assert_difference("Lead.count", 1) do
+      assert_no_enqueued_jobs only: AdConversions::LeadJob do
+        post_intake fast_body
+      end
+    end
+    assert_response :accepted
+    fast_lead = Lead.find(response.parsed_body["id"])
+    assert fast_lead.archived?
+    assert fast_lead.spam_marked_at.present?
+    assert_equal "Submitted under 3s", fast_lead.spam_reason
+    assert_empty fast_lead.lead_notifications
+    assert_no_difference("AdConversion.count") do
+      assert_empty AdConversions.record!(fast_lead)
+    end
+    assert_not_includes AdConversions::GoogleFeed.rows.map(&:lead_id), fast_lead.id
+
+    # 3. Honeypot submission is saved to Archived as spam with no notifications or ad conversion, and is counted as a catch.
+    honeypot_body = intake_body(
+      "contact" => { "name" => "Trap Bot", "email" => "trapbot@gmail.com" },
+      "honeypot" => "https://bot.example",
+      "acquisition" => ad_acquisition
+    )
+    assert_difference("Lead.count", 1) do
+      assert_no_enqueued_jobs only: AdConversions::LeadJob do
+        assert_difference("Leads.honeypot_catches_count", 1) do
+          post_intake honeypot_body
+        end
+      end
+    end
+    assert_response :accepted
+    honeypot_lead = Lead.find(response.parsed_body["id"])
+    assert honeypot_lead.archived?
+    assert honeypot_lead.spam_marked_at.present?
+    assert_equal "Hidden field filled, Name matches email", honeypot_lead.spam_reason
+    assert_empty honeypot_lead.lead_notifications
+    assert_no_difference("AdConversion.count") do
+      assert_empty AdConversions.record!(honeypot_lead)
+    end
+    assert_not_includes AdConversions::GoogleFeed.rows.map(&:lead_id), honeypot_lead.id
+
+    # 4. Duplicate submission within 24h merges into the real lead without creating a second lead, notification, or conversion.
+    duplicate_body = real_body.merge(
+      "submission_id" => SecureRandom.uuid,
+      "contact" => { "name" => "Clara Jensen", "email" => "CLARA@gmail.com" },
+      "message" => "Two of us, first time in Nepal, thinking spring"
+    )
+    assert_no_difference([ "Lead.count", "AdConversion.count", "LeadNotification.count" ]) do
+      assert_no_enqueued_jobs do
+        post_intake duplicate_body
+      end
+    end
+    assert_response :ok
+    assert_equal real_lead.id, response.parsed_body["id"]
+    assert_equal 1, real_lead.activity_events.where(kind: "duplicate_inquiry").count
   end
   test "malformed contact receives field validation errors" do
     [ "invalid", [] ].each do |contact|

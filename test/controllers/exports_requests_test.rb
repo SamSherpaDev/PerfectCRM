@@ -114,6 +114,7 @@ class ExportsRequestsTest < ActionDispatch::IntegrationTest
       message: "=Two travelers, \"spring\"\nFlexible dates", placement: "landing",
       consent: { contact: true, contact_at: "2026-09-14T18:06:40Z", text_version: "2026-09-v2" },
       attribution: { gclid: "click-id", utm_campaign: "nepal-2027" },
+      timing: { started_at: "2026-09-14T18:05:58Z", submitted_at: "2026-09-14T18:06:40Z" },
       page: { url: "https://www.sherpaholidays.com/contact?gclid=click-id" }
     }), headers: headers
     assert_response :accepted

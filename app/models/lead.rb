@@ -160,6 +160,16 @@ class Lead < ApplicationRecord
     spam_marked_at.present? || tags.any? { |tag| tag.name == SUSPECTED_SPAM_TAG }
   end
 
+  def suspicion_hits
+    return [] unless metadata.is_a?(Hash)
+
+    Array(metadata["suspicion_hits"]).map(&:to_s).reject(&:blank?)
+  end
+
+  def spam_reason
+    ::Leads.spam_reason(suspicion_hits)
+  end
+
   def potential?
     potential_marked_at.present? && !archived? && !converted? && !suspected_spam?
   end

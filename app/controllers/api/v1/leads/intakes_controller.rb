@@ -24,10 +24,6 @@ module Api
           email = contact["email"].to_s
           return unless check_rate_limits!(email: email)
 
-          if payload["honeypot"].to_s.present?
-            return honeypot_response
-          end
-
           fields = validate_required(payload)
           unless fields
             return render json: { error: "validation", fields: @validation_fields },
@@ -40,25 +36,71 @@ module Api
             return render json: { error: "validation", fields: { error.message => "invalid" } }, status: :bad_request
           end
           payload["_acquisition"] = acquisition
-          external_ref = "website_form:#{payload['submission_id']}"
+          submission_id = payload["submission_id"].to_s.strip
+          external_ref = "website_form:#{submission_id}"
           lead = build_lead(payload, fields, external_ref, caller_name)
           existing = nil
+          duplicate = nil
           begin
             saved = ::Lead.transaction do
-              existing = ::Lead.find_by(external_ref: external_ref)
+              existing = find_replay(external_ref, submission_id)
               next false if existing
+
+              auto_archived = ::Leads.auto_archive?(lead.suspicion_hits)
+              duplicate = ::Leads.find_recent_duplicate(
+                email: lead.email,
+                message: lead.message,
+                trip_handle: lead.trip_handle,
+                trip_title: lead.trip_title,
+                auto_archived: auto_archived,
+                exclude_external_ref: external_ref
+              )
+              if duplicate
+                ::Leads.merge_duplicate!(
+                  duplicate,
+                  submission_id: submission_id,
+                  fields: {
+                    phone: lead.phone,
+                    phone_raw: lead.phone_raw,
+                    message: lead.message,
+                    trip_handle: lead.trip_handle,
+                    trip_title: lead.trip_title,
+                    placement: lead.placement
+                  },
+                  caller_name: caller_name
+                )
+                next false
+              end
+
               next false unless lead.save
 
-              lead.lead_notifications.create!(event: "email_copy")
-              lead.lead_notifications.create!(event: "lead.created")
-              lead.lead_notifications.create!(event: "auto_first_reply", available_at: 2.minutes.from_now)
+              if auto_archived
+                lead.activity_events.create!(
+                  kind: "spam_review",
+                  summary: "Automatically archived as spam (#{lead.spam_reason})",
+                  occurred_at: lead.received_at || Time.current,
+                  metadata: {
+                    "verdict" => "spam",
+                    "actor" => "automation",
+                    "reasons" => lead.suspicion_hits,
+                    "spam_score" => lead.spam_score
+                  }
+                )
+              else
+                lead.lead_notifications.create!(event: "email_copy")
+                lead.lead_notifications.create!(event: "lead.created")
+                lead.lead_notifications.create!(event: "auto_first_reply", available_at: 2.minutes.from_now)
+              end
               true
             end
           rescue ActiveRecord::RecordNotUnique
-            existing = ::Lead.find_by(external_ref: external_ref)
+            existing = find_replay(external_ref, submission_id)
             raise unless existing
           end
-          existing ||= ::Lead.find_by(external_ref: external_ref) unless saved
+          if duplicate
+            return render json: lead_response(duplicate.reload), status: :ok
+          end
+          existing ||= find_replay(external_ref, submission_id) unless saved
           if existing
             Rails.logger.warn(
               "[intake] replay for #{external_ref} lead=#{existing.id} " \
@@ -90,14 +132,8 @@ module Api
           Rails.logger.error("[intake] ad conversion enqueue failed: #{error.class}")
         end
 
-        def honeypot_response
-          Rails.cache.increment("intake:honeypot:dropped", 1, expires_in: 30.days)
-          render json: {
-            reference: "SH-#{SecureRandom.alphanumeric(4).upcase}",
-            received_at: Time.current.iso8601
-          }, status: :accepted
-        rescue StandardError
-          render json: { error: "server" }, status: :internal_server_error
+        def find_replay(external_ref, submission_id)
+          ::Lead.find_by(external_ref: external_ref) || ::Leads.find_by_merged_submission_id(submission_id)
         end
 
         # Required: contact.name (2..120), contact.email (shaped + MX/A),
@@ -179,8 +215,10 @@ module Api
           score, hits = ::Leads.suspicion_hits(
             name: fields[:name], email: fields[:email],
             message: payload["message"].to_s,
-            seconds_to_submit: seconds_to_submit(payload)
+            seconds_to_submit: seconds_to_submit(payload),
+            honeypot: payload["honeypot"]
           )
+          auto_archived = ::Leads.auto_archive?(hits)
           attribution = attribution.merge("relay" => caller_name) if caller_name != "website_form"
 
           phone_raw = contact["phone_raw"].to_s.presence
@@ -189,6 +227,7 @@ module Api
 
           placement = payload["placement"].to_s.strip.presence
           placement = nil unless ::Lead::PLACEMENTS.include?(placement)
+          now = Time.current
 
           lead = ::Lead.new(
             name: fields[:name],
@@ -208,8 +247,10 @@ module Api
             campaign_name: attribution["utm_campaign"].to_s.strip.presence&.truncate(160),
             external_ref: external_ref,
             spam_score: score,
+            archived_at: (now if auto_archived),
+            spam_marked_at: (now if auto_archived),
             status: "new",
-            received_at: Time.current,
+            received_at: now,
             metadata: {
               "acquisition" => acquisition,
               "attribution" => attribution,

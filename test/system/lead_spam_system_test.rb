@@ -1,5 +1,6 @@
 require "application_system_test_case"
 require_relative "../support/google_sign_in_test_helper"
+require "net/http"
 
 class LeadSpamSystemTest < ApplicationSystemTestCase
   include GoogleSignInTestHelper
@@ -100,5 +101,63 @@ class LeadSpamSystemTest < ApplicationSystemTestCase
     assert_text "Converted leads stay read-only"
     assert_nil lead.reload.spam_marked_at
     assert_not lead.archived?
+  end
+
+  test "fast bot intake lands in Archived with reason and duplicate intake merges onto timeline" do
+    page.current_window.resize_to(1400, 900)
+    settings = Setting.current
+    settings.update!(lead_webhook_url: nil)
+    settings.rotate_site_key!
+    seq = 0
+    post_intake = lambda do |payload|
+      seq += 1
+      uri = URI("#{Capybara.current_session.server.base_url}/api/v1/leads/intake")
+      req = Net::HTTP::Post.new(uri)
+      req["X-Forwarded-For"] = "198.51.100.#{seq}"
+      req["Content-Type"] = "application/json"
+      req["Origin"] = "https://www.sherpaholidays.com"
+      req["X-Sherpa-Site-Key"] = settings.site_key
+      req.body = JSON.generate(payload)
+      Net::HTTP.start(uri.host, uri.port) { |http| http.request(req) }
+    end
+
+    post_intake.call(
+      schema: "sherpa.inquiry.v2", submission_id: "550e8400-e29b-41d4-a716-446655440991", placement: "landing",
+      contact: { name: "Speedy Bot", email: "speedy@example.com" }, message: "Fast bot inquiry",
+      consent: { contact: true, contact_at: "2026-04-17T18:02:11Z", text_version: "v2" },
+      timing: { started_at: "2026-04-17T18:02:10Z", submitted_at: "2026-04-17T18:02:11Z" }, honeypot: ""
+    )
+    post_intake.call(
+      schema: "sherpa.inquiry.v2", submission_id: "550e8400-e29b-41d4-a716-446655440992", placement: "landing",
+      contact: { name: "Maya Sherpa", email: "maya@example.com" }, message: "Planning an October trek for two.",
+      consent: { contact: true, contact_at: "2026-04-17T18:02:25Z", text_version: "v2" },
+      timing: { started_at: "2026-04-17T18:02:00Z", submitted_at: "2026-04-17T18:02:25Z" }, honeypot: ""
+    )
+    post_intake.call(
+      schema: "sherpa.inquiry.v2", submission_id: "550e8400-e29b-41d4-a716-446655440993", placement: "landing",
+      contact: { name: "Maya Sherpa", email: "maya@example.com" }, message: "Planning an October trek for two!",
+      consent: { contact: true, contact_at: "2026-04-17T18:05:25Z", text_version: "v2" },
+      timing: { started_at: "2026-04-17T18:05:00Z", submitted_at: "2026-04-17T18:05:25Z" }, honeypot: ""
+    )
+
+    visit leads_path
+    assert_link "Maya Sherpa", count: 1
+    assert_no_link "Speedy Bot"
+
+    visit leads_path(tab: "archived")
+    within("li", text: "Speedy Bot") do
+      assert_text "Spam"
+      assert_text "Submitted under 3s"
+    end
+
+    click_link "Speedy Bot"
+    within("section[aria-label='Spam review']") do
+      assert_text "Marked as spam"
+      assert_text "Submitted under 3s"
+    end
+
+    visit leads_path
+    click_link "Maya Sherpa"
+    assert_text "Duplicate website inquiry merged: Planning an October trek for two!"
   end
 end

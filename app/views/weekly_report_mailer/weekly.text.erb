@@ -28,6 +28,7 @@ Trips this week:
 Came in from: <%= report_placements(@summary) %>
 Trip, month and party size filled: <%= @summary.details_filled %> of <%= @summary.total.inquiries %>
 <% end %><% if @summary.suspected_spam_count.positive? %>Held back as suspected spam: <%= @summary.suspected_spam_count %>
+<% end %><% if @summary.honeypot_caught_count.positive? %>Caught by the hidden trap field: <%= @summary.honeypot_caught_count %>
 <% end %><%= report_agreement_line(@summary) %>
 
 Your fit (inquiry review Q-fit) = your Strong or Possible judgment for inquiries received this week, no reply required. Separate from platform qualification.

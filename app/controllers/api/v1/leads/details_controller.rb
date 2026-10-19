@@ -28,7 +28,8 @@ module Api
               status: :bad_request
           end
 
-          lead = ::Lead.find_by(external_ref: "website_form:#{submission_id}")
+          lead = ::Lead.find_by(external_ref: "website_form:#{submission_id}") ||
+            ::Leads.find_by_merged_submission_id(submission_id)
           return render json: { error: "not_found" }, status: :not_found unless lead
 
           received = lead.received_at || lead.created_at

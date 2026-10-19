@@ -186,18 +186,36 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     assert_select "a", text: lead.name
   end
 
-  test "automatic flags offer confirm or not spam without changing scoring" do
-    lead = Lead.create!(name: "Flagged inquiry", spam_score: 75, tag_list: Lead::SUSPECTED_SPAM_TAG)
+  test "automatic flags offer confirm or not spam without changing scoring and show spam reason in Archived tab" do
+    lead = Lead.create!(
+      name: "Flagged inquiry",
+      spam_score: 25,
+      tag_list: Lead::SUSPECTED_SPAM_TAG,
+      metadata: { "suspicion_hits" => [ "name_matches_email" ] }
+    )
     get lead_path(lead)
-    assert_select "section[aria-label='Spam review']", text: /Looks like spam/
+    assert_select "section[aria-label='Spam review']", text: /Looks like spam \(Name matches email\)/
     assert_select "form[action='#{mark_as_spam_lead_path(lead)}'] button", text: "Mark as spam"
     assert_select "form[action='#{not_spam_lead_path(lead)}'] button", text: "Not spam"
     patch not_spam_lead_path(lead)
     assert_not lead.reload.suspected_spam?
     assert_not lead.archived?
-    assert_equal 75, lead.spam_score
+    assert_equal 25, lead.spam_score
     get lead_path(lead)
     assert_select "section[aria-label='Spam review']", count: 0
+
+    fast = Lead.create!(
+      name: "Fast bot inquiry",
+      spam_score: 50,
+      archived_at: Time.current,
+      spam_marked_at: Time.current,
+      tag_list: Lead::SUSPECTED_SPAM_TAG,
+      metadata: { "suspicion_hits" => [ "too_fast" ] }
+    )
+    get leads_path(tab: "archived")
+    assert_select "li", text: /Fast bot inquiry.*Spam.*Submitted under 3s/m
+    get lead_path(fast)
+    assert_select "section[aria-label='Spam review']", text: /Marked as spam and archived \(Submitted under 3s\)/
   end
 
   test "converted inquiry spam endpoints preserve the client and inquiry" do
