@@ -681,7 +681,10 @@ Mark as spam on an inquiry or lead row records your verdict, adds the existing
 Inbox, Today's replies and follow-ups, and Not yet called. Find it in Archived;
 Not spam clears your verdict and the tag and restores its previous stage.
 Automatically flagged inquiries show Looks like spam with Mark as spam and
-Not spam choices. These actions preserve the automatic spam score, fit,
+Not spam choices. Website inquiries that fill the hidden trap field or submit
+within 3 seconds arrive already marked as spam in Archived, with their reason
+shown ([intake contract](docs/leads-intake.md#browser-mode-the-storefront-form)).
+These actions preserve the automatic spam score, fit,
 messages, and history; the timeline records who reviewed it. Confirmed spam
 stays excluded from cost-per-inquiry, Monday and monthly reports, and ad
 conversions even if its tag is later edited. Monday's held-back spam count
@@ -1221,7 +1224,8 @@ bookings by channel and campaign, with spend, cost per inquiry, and cost per
 qualified inquiry. Month and year to date, the travelers goal pace, reply
 metrics defined below, trips, landing placement,
 inquiries with trip, month, and party size filled, suspected spam held
-back, and how often the AI fit matched the captain's own calls follow.
+back, hidden trap field catches, and how often the AI fit matched the
+captain's own calls follow.
 Weeks run Monday to Sunday, Pacific time.
 
 Definitions, in `WeeklyReport::Summary`:
