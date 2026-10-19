@@ -112,13 +112,13 @@ module Leads
 
     def create_safety_net_lead!(item)
       score, hits = ::Leads.suspicion_hits(
-        name: item.explicit_name,
+        name: (item.explicit_name if item.website),
         email: item.email,
-        message: item.inquiry_message.to_s,
+        message: (item.inquiry_message.to_s if item.website),
         seconds_to_submit: nil
       )
       score = [ score, item.flagged_spam_score.to_i ].max.clamp(0, 100)
-      flagged = score.positive? || item.message.subject.to_s.match?(/\A\[check\]/i)
+      flagged = score.positive? || (item.website && item.message.subject.to_s.match?(/\A\[check\]/i))
       score = [ score, 25 ].max if flagged && score.zero?
 
       existing_client = Client.find_by("lower(email) = ?", item.email) if item.email.present?

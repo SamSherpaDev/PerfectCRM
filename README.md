@@ -1075,7 +1075,10 @@ linked to that lead (or its converted client) instead of creating a duplicate.
 Otherwise, the check creates a lead in New (`source: "website_form"` or
 `"email"`, filling the name, email, phone, trip, message text, and received time
 from the email and leaving unknowns blank), links the email thread to that lead,
-and applies the existing suspected-spam scoring and `suspected_spam` tag.
+and applies the existing suspected-spam scoring and `suspected_spam` tag to
+website copies; a direct email is flagged only for a disposable sender domain,
+since form-field signals (name matching the address, link count) misfire on
+display names and signatures.
 Safety-net leads never trigger an automatic first reply to the customer and do
 not count as Meta or Google ad conversions while they wait in New; once marked
 Potential or Unsure, quoted, or booked they follow the normal ad conversion

@@ -242,6 +242,7 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
     assert_equal "Hi, can you send details for two hikers?", direct_lead.message
     assert_in_delta (received + 2.hours).to_f, direct_lead.received_at.to_f, 1.0
     assert_equal true, direct_lead.metadata["inquiry_safety_net"]
+    assert_not direct_lead.suspected_spam?, "a display name matching the address is ordinary for direct email"
 
     # Untriaged safety-net leads remain visible on Today until triaged out of New.
     assert_equal [ website.id, direct.id ], Leads::UnlinkedInquiries.new(now: received + 1.day).messages.map(&:id)
@@ -286,6 +287,23 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
     assert_not_equal potential, safety_net_lead
     assert_equal potential.email, safety_net_lead.email
     assert_equal [ message.id ], missing.map(&:id)
+  end
+
+  test "direct emails are flagged only for a disposable sender domain, not for signature links" do
+    signature = ingest_inquiry(from: "Ana Ruiz <ana.ruiz@gmail.com>", subject: "Trip to Nepal",
+      body: "Hello, could you plan ten days for us?\n\nAna Ruiz\nhttps://ana.example\nhttps://instagram.example/ana\nwww.linkedin.example/ana")
+    disposable = ingest_inquiry(from: "Temp Person <temp.person@mailinator.com>", subject: "Bhutan",
+      body: "Please send prices.")
+    [ signature, disposable ].each { |message| message.update_columns(inquiry_headers: nil) }
+
+    assert_difference("Lead.count", 2) { Leads::UnlinkedInquiries.new.resolve! }
+    signature_lead = signature.reload.conversation.linkable
+    assert_not signature_lead.suspected_spam?
+    assert_equal 0, signature_lead.spam_score
+    signature_lead.mark_potential!
+    disposable_lead = disposable.reload.conversation.linkable
+    assert disposable_lead.suspected_spam?
+    assert_equal [ "disposable_domain" ], disposable_lead.metadata["suspicion_hits"]
   end
 
   test "resolve! clamps an out-of-range flagged spam score and one failing message does not block the rest" do
