@@ -52,7 +52,7 @@ curl -X POST https://perfectcrm.sherpaholidays.com/api/v1/leads/intake \
     "honeypot": "",
     "client": { "version": "inquiry-form@1.0.0" }
   }'
-# 202 { "id": 123, "reference": "SH-4K7Q", "received_at": "..." }
+# 202 { "id": 123, "reference": "SH-4K7Q", "received_at": "...", "conversion": true }
 ```
 
 Behavior, in order: schema/size check (`400`); auth (`403`); rate limits
@@ -61,22 +61,28 @@ required fields (`contact.name` 2–120 chars, `contact.email` shaped with MX/A
 records, `consent.contact: true`, nonblank `submission_id` up to 64 chars);
 replay / 24-hour duplicate merge (`200`); and suspicion scoring that never
 rejects (`202`). DNS lookup failures fail open; a completed lookup with no MX or
-A record rejects the address.
+A record rejects the address. Every `200`/`202` intake body returns
+`{ "id", "reference", "received_at", "conversion" }`: `conversion` is `false`
+when this submission was auto-archived as a bot catch or merged as a duplicate
+from a new `submission_id` into an existing lead, and `true` otherwise.
 
 Replays and duplicates pass authentication, rate limits, and required-field
 validation first. Replaying the same `submission_id`, including one that was
-merged as a duplicate, returns `200` with the original reference and re-enqueues
+merged as a duplicate, returns `200` with the original reference and the same
+`conversion` boolean the original submission got (`true` for a real new lead,
+`false` for an auto-archived catch or merged duplicate), and re-enqueues
 pending notifications without replacing the inquiry. A new `submission_id` from
 the same normalized email within 24 hours with the same message (equal after
 lowercasing and collapsing punctuation and whitespace) and no conflicting trip
-merges into the existing lead (`200` with the original `id` and `reference`),
-appending a `duplicate_inquiry` timeline entry without creating a second lead,
-notification, or ad conversion (and Step 2 `/api/v1/leads/intake/details` calls
-with the merged `submission_id` still resolve to that lead). Converted leads are
-never merge targets, and archived or spam leads are merge targets only for a
-submission that is itself auto-archived. Different trips or different messages from the same email
-open a separate inquiry (`202` with its own reference), as do repeat submissions
-after 24 hours.
+merges into the existing lead (`200` with the original `id` and `reference`, and
+`conversion: false`), appending a `duplicate_inquiry` timeline entry without
+creating a second lead, notification, or ad conversion (and Step 2
+`/api/v1/leads/intake/details` calls with the merged `submission_id` still
+resolve to that lead). Converted leads are never merge targets, and archived or
+spam leads are merge targets only for a submission that is itself auto-archived.
+Different trips or different messages from the same email open a separate
+inquiry (`202` with its own reference and `conversion: true` unless
+auto-archived), as do repeat submissions after 24 hours.
 
 Bot and spam scoring (`Leads.suspicion_hits`, `25` points per hit):
 - Auto-archiving hits (`Leads::AUTO_ARCHIVE_HITS`): `honeypot` (the hidden
@@ -84,7 +90,7 @@ Bot and spam scoring (`Leads.suspicion_hits`, `25` points per hit):
   timing.started_at < 3` seconds). The inquiry is saved so nothing is ever
   silently deleted, but routed straight to `Archived` (`archived_at` and
   `spam_marked_at` set, `suspected_spam` tag, and an automated `spam_review`
-  timeline entry). It shows in the `Archived` tab with its reason (`Hidden field
+  timeline entry), returning `202` with `conversion: false`. It shows in the `Archived` tab with its reason (`Hidden field
   filled` or `Submitted under 3s`), sends no notifications (no email copy,
   `lead.created` webhook, or automatic first reply), and is excluded from Meta
   and Google ad conversion uploads and feeds. Settings → Automations and the
