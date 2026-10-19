@@ -90,10 +90,11 @@ Bot and spam scoring (`Leads.suspicion_hits`, `25` points per hit):
   timing.started_at < 3` seconds). The inquiry is saved so nothing is ever
   silently deleted, but routed straight to `Archived` (`archived_at` and
   `spam_marked_at` set, `suspected_spam` tag, and an automated `spam_review`
-  timeline entry), returning `202` with `conversion: false`. It shows in the `Archived` tab with its reason (`Hidden field
-  filled` or `Submitted under 3s`), sends no notifications (no email copy,
-  `lead.created` webhook, or automatic first reply), and is excluded from Meta
-  and Google ad conversion uploads and feeds. Settings → Automations and the
+  timeline entry), returning `202` with `conversion: false`. It shows in the
+  `Archived` tab with its reason (`Hidden field filled` or `Submitted under
+  3s`), sends no notifications (no email copy, `lead.created` webhook, or
+  automatic first reply), and is excluded from Meta and Google ad conversion
+  uploads and feeds. Settings → Automations and the
   Monday weekly ads report count leads whose `suspicion_hits` include
   `honeypot`. Choosing `Not spam` restores the lead to `New`.
 - Flag-only hits: `many_links` (3+ links in `message`), `disposable_domain`
