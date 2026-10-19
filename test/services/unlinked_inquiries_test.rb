@@ -342,7 +342,8 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
   end
 
   test "excludes replies in conversations our side started while keeping other senders and website-form copies" do
-    # 1. Bond/insurance thread started by our side ("Rider request for Seller of Travel bond...").
+    # 1. Bond/insurance thread started by our side ("Rider request for Seller of Travel bond..."); the
+    # reply was imported into its own thread before our message, so only its reply headers link them.
     bond_conv = Conversation.create!(subject: "Rider request for Seller of Travel bond 527400X (name and address update)")
     bond_out = Message.create!(
       conversation: bond_conv,
@@ -356,7 +357,7 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
       sent_at: 10.days.ago
     )
     bond_reply = Message.create!(
-      conversation: bond_conv,
+      conversation: Conversation.create!(subject: "Re: Rider request for Seller of Travel bond 527400X (name and address update)"),
       direction: "in",
       status: "received",
       from_address: "Surety Underwriting <underwriting@suretybonds.example>",
@@ -403,20 +404,10 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
       received_at: 2.days.ago
     )
 
-    # 3. A traveler's first email the captain answered from Outlook before the daily check; the
-    # inquiry predates our reply, so it stays a candidate, as does another sender at the same domain.
+    # 3. A traveler's first email the captain answered from Outlook before the daily check; Sent Items
+    # synced first, but the inquiry predates our reply, so it stays a candidate, as does another
+    # sender at the same domain.
     traveler_conv = Conversation.create!(subject: "Everest Base Camp in April")
-    traveler_inquiry = Message.create!(
-      conversation: traveler_conv,
-      direction: "in",
-      status: "received",
-      from_address: "Jane Walker <jane@comcast.example>",
-      to_addresses: [ "info@sherpaholidays.com" ],
-      subject: traveler_conv.subject,
-      text_body: "Could you plan Everest Base Camp for two in April?",
-      inbound_received_at: 2.days.ago,
-      sent_at: 2.days.ago
-    )
     Message.create!(
       conversation: traveler_conv,
       direction: "out",
@@ -427,6 +418,17 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
       text_body: "Happy to help. Here are some dates.",
       message_id: "traveler-out-1@namprd10.prod.outlook.com",
       sent_at: 1.day.ago
+    )
+    traveler_inquiry = Message.create!(
+      conversation: traveler_conv,
+      direction: "in",
+      status: "received",
+      from_address: "Jane Walker <jane@comcast.example>",
+      to_addresses: [ "info@sherpaholidays.com" ],
+      subject: traveler_conv.subject,
+      text_body: "Could you plan Everest Base Camp for two in April?",
+      inbound_received_at: 2.days.ago,
+      sent_at: 2.days.ago
     )
     neighbor_inquiry = ingest_inquiry(
       from: "bob@comcast.example",

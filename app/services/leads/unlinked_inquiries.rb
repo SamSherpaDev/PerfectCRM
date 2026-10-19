@@ -294,13 +294,11 @@ module Leads
     end
 
     def reply_in_our_conversation?(message)
-      if (cutoff = outbound_cutoff_by_conversation[message.conversation_id])
-        msg_time = message.inbound_received_at || message.sent_at || message.created_at
-        return true if (cutoff[:time] && msg_time && cutoff[:time] <= msg_time) || cutoff[:id] < message.id
-      end
+      cutoff = first_outbound(conversation_id: message.conversation_id)
+      return true if cutoff && (cutoff <=> [ message.inbound_received_at || message.sent_at || message.created_at, message.id ]).negative?
 
-      refs = "#{message.in_reply_to} #{message.references_text}".scan(/[^\s<>]+@[^\s<>]+/).map(&:downcase)
-      refs.any? { |id| own_outbound_message_ids.include?(id) }
+      refs = "#{message.in_reply_to} #{message.references_text}".scan(/[^\s<>]+@[^\s<>]+/).uniq
+      refs.any? && first_outbound(message_id: refs).present?
     end
 
     def known_business_contact?(from)
@@ -332,28 +330,15 @@ module Leads
       end.reject { |dom| PUBLIC_EMAIL_PROVIDERS.include?(dom.split(".").first) }.to_set
     end
 
-    def outbound_cutoff_by_conversation
-      @outbound_cutoff_by_conversation ||= begin
-        cutoffs = {}
-        Message.outbound.where.not(id: Message.automatic_replies.select(:id)).find_each do |msg|
-          next if automated_headers?(msg.inquiry_headers)
-
-          msg_time = msg.sent_at || msg.inbound_received_at || msg.created_at
-          current = cutoffs[msg.conversation_id]
-          if current.nil?
-            cutoffs[msg.conversation_id] = { time: msg_time, id: msg.id }
-          else
-            current[:time] = [ current[:time], msg_time ].compact.min
-            current[:id] = [ current[:id], msg.id ].min
-          end
-        end
-        cutoffs
+    def first_outbound(conditions)
+      @first_outbound ||= {}
+      @first_outbound.fetch(conditions) do
+        @first_outbound[conditions] = Message.outbound.where(conditions)
+          .where.not(id: Message.automatic_replies.select(:id))
+          .pluck(:sent_at, :inbound_received_at, :created_at, :id, :inquiry_headers)
+          .reject { |*, headers| automated_headers?(headers) }
+          .map { |sent_at, received_at, created_at, id, _| [ sent_at || received_at || created_at, id ] }.min
       end
-    end
-
-    def own_outbound_message_ids
-      @own_outbound_message_ids ||= Message.outbound.where.not(message_id: [ nil, "" ])
-        .pluck(:message_id).map { |id| id.to_s.delete("<>").strip.downcase }.to_set
     end
 
     def automated_or_platform?(message, from, text)
