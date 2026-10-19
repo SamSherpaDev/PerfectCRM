@@ -1108,8 +1108,8 @@ sorts them with the normal lead buttons; they never trigger an automatic first
 reply to the customer. One message that cannot be resolved is logged and does
 not stop the rest. Today and the morning digest only read; they never create leads. Ignored
 threads, outbound and own-domain mail, replies in conversations our side started
-or already replied to, known organization/operator or person contacts, senders
-we already correspond with as businesses, and clearly automated, platform, or
+or already replied to (our earlier message must be in the mailbox), known
+organization/operator or person contacts, and clearly automated, platform, or
 bulk mail (automation headers, List-Unsubscribe, bulk/list/junk Precedence,
 platform notification domains, newsletters, receipts, no-reply and notifications
 senders, automatic replies and bounces) stay out even when imported before
