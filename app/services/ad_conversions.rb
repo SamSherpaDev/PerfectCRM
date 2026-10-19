@@ -133,7 +133,9 @@ module AdConversions
     events = { "lead" => { occurred_at: lead.received_at || lead.created_at, value_minor: VALUES_MINOR["lead"] } }
 
     history = lead.activity_events.where(kind: "stage_change").order(:occurred_at, :id).to_a
-    if QUALIFIED_BANDS.include?(lead.fit_band) && (at = qualified_at(history))
+    qualified_times = [ lead.potential_marked_at ]
+    qualified_times << qualified_at(history) if QUALIFIED_BANDS.include?(lead.fit_band)
+    if (at = qualified_times.compact.min)
       events["qualified"] = { occurred_at: at, value_minor: VALUES_MINOR["qualified"] }
     end
 

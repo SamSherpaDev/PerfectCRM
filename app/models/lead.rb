@@ -182,6 +182,7 @@ class Lead < ApplicationRecord
       end
       update!(potential_marked_at: potential_marked_at || Time.current, unsure_marked_at: nil)
     end
+    enqueue_ad_conversion
   end
 
   def unmark_potential!
@@ -472,6 +473,12 @@ class Lead < ApplicationRecord
   def record_spam_review!(verdict, summary)
     activity_events.create!(kind: "spam_review", summary: summary, occurred_at: Time.current,
       metadata: { "verdict" => verdict, "actor" => Current.user_email.presence || "manual" })
+  end
+
+  def enqueue_ad_conversion
+    AdConversions::LeadJob.perform_later(id) if AdConversions.reportable?(self)
+  rescue StandardError => error
+    Rails.logger.error("[lead] ad conversion enqueue failed: #{error.class}")
   end
 
   def lost_reason_required_when_lost

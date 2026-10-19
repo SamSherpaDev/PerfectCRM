@@ -1,6 +1,8 @@
 require "test_helper"
 
 class AdConversionsTest < ActiveSupport::TestCase
+  include ActiveJob::TestHelper
+
   FakeResponse = Struct.new(:code, :body) do
     def is_a?(klass)
       return code.start_with?("2") if klass == Net::HTTPSuccess
@@ -712,5 +714,109 @@ class AdConversionsTest < ActiveSupport::TestCase
       assert_equal prior, row.reload.attributes.slice(*prior.keys)
       assert_match(/review platform history/, row.meta_error)
     end
+  end
+
+  test "marking a lead Potential records and delivers one qualified conversion regardless of fit band" do
+    lead = ad_lead(fit_band: "weak", status: "new")
+    marked_at = @now - 15.minutes
+    assert_enqueued_with(job: AdConversions::LeadJob, args: [ lead.id ]) do
+      travel_to(marked_at) { lead.mark_potential! }
+    end
+
+    with_meta do |fake|
+      AdConversions::LeadJob.perform_now(lead.id)
+      assert_equal 2, fake.requests.size
+      events = fake.requests.map { |req| JSON.parse(req.body)["data"].sole }
+      assert_equal %w[Lead QualifiedLead], events.map { |event| event["event_name"] }
+      qualified_payload = events.last
+      assert_equal marked_at.to_i, qualified_payload["event_time"]
+      assert_equal "sh-lead-#{lead.id}-qualified", qualified_payload["event_id"]
+      assert_equal({ "value" => 1000.0, "currency" => "USD" }, qualified_payload["custom_data"])
+    end
+
+    qualified = lead.ad_conversions.find_by!(event: "qualified")
+    assert_equal marked_at, qualified.occurred_at
+    assert_equal 1_000_00, qualified.value_minor
+    assert qualified.google
+    assert_equal "Qualified inquiry", qualified.google_conversion_name
+    assert_equal "QualifiedLead", qualified.meta_event_name
+    assert_equal "sent", qualified.meta_status
+    assert_equal "accepted", qualified.delivery_status
+
+    travel_to(@now - 5.minutes) { lead.mark_potential! }
+    lead.unmark_potential!
+    travel_to(@now) { lead.mark_potential! }
+    Leads::Transition.call(lead, to: "chatting")
+    verdict(lead, "strong")
+    assert_empty AdConversions.record!(lead, now: @now)
+    with_meta do |fake|
+      AdConversions::LeadJob.perform_now(lead.id)
+      assert_empty fake.requests
+    end
+    assert_equal 1, lead.ad_conversions.where(event: "qualified").count
+    assert_equal marked_at, qualified.reload.occurred_at
+
+    expired = ad_lead(received_at: @now - 12.days)
+    travel_to(@now - 8.days) { expired.mark_potential! }
+    expired_qualified = AdConversions.record!(expired, now: @now).find { |item| item.event == "qualified" }
+    with_meta do |fake|
+      assert_equal :skipped, AdConversions.deliver_meta!(expired_qualified, settings: @settings, now: @now)
+      assert_empty fake.requests
+    end
+  end
+
+  test "qualification uses the earlier of Potential mark and strong or possible stage move once" do
+    chat_first = ad_lead(fit_band: "strong")
+    travel_to(@now - 2.hours) { Leads::Transition.call(chat_first, to: "chatting") }
+    travel_to(@now - 1.hour) { chat_first.mark_potential! }
+    row = AdConversions.record!(chat_first, now: @now).find { |item| item.event == "qualified" }
+    assert_equal @now - 2.hours, row.occurred_at
+    assert_equal 1, chat_first.ad_conversions.where(event: "qualified").count
+
+    potential_first = ad_lead(fit_band: nil)
+    travel_to(@now - 2.hours) { potential_first.mark_potential! }
+    verdict(potential_first, "strong", at: @now - 1.hour)
+    travel_to(@now - 1.hour) { Leads::Transition.call(potential_first, to: "chatting") }
+    row = AdConversions.record!(potential_first, now: @now).find { |item| item.event == "qualified" }
+    assert_equal @now - 2.hours, row.occurred_at
+    assert_equal 1, potential_first.ad_conversions.where(event: "qualified").count
+  end
+
+  test "unmarking Potential does not retract and marking spam before delivery withholds the conversion" do
+    delivered = ad_lead
+    travel_to(@now - 30.minutes) { delivered.mark_potential! }
+    with_meta { AdConversions::LeadJob.perform_now(delivered.id) }
+    qualified = delivered.ad_conversions.find_by!(event: "qualified")
+    delivered.unmark_potential!
+    with_meta do |fake|
+      AdConversions::ExportJob.perform_now(now: @now)
+      assert_empty fake.requests
+    end
+    assert_equal "accepted", qualified.reload.delivery_status
+
+    spam_before_job = ad_lead
+    spam_before_job.mark_potential!
+    spam_before_job.mark_as_spam!
+    with_meta do |fake|
+      AdConversions::LeadJob.perform_now(spam_before_job.id)
+      assert_empty fake.requests
+    end
+    assert_empty spam_before_job.ad_conversions
+    assert_empty AdConversions::GoogleFeed.rows(now: @now)
+
+    spam_before_delivery = ad_lead
+    @settings.update!(meta_dataset_id: nil)
+    @settings.rotate_google_feed_password!
+    AdConversions::LeadJob.perform_now(spam_before_delivery.tap(&:mark_potential!).id)
+    undelivered = spam_before_delivery.ad_conversions.find_by!(event: "qualified")
+    assert_equal "not_sent", undelivered.delivery_status
+    spam_before_delivery.mark_as_spam!
+    @settings.update!(meta_dataset_id: "123456789012345")
+    with_meta do |fake|
+      assert_equal :skipped, AdConversions.deliver_meta!(undelivered, settings: @settings, now: @now)
+      assert_empty fake.requests
+    end
+    assert_equal "not_sent", undelivered.reload.delivery_status
+    assert_not_includes AdConversions::GoogleFeed.rows(now: @now).map(&:id), undelivered.id
   end
 end
