@@ -74,7 +74,7 @@ are only fully matured inquiries; pending inquiries are not failures. Recognized
 revenue and unique returning travelers remain unavailable upstream.
 
 Q-fit is the owner's hand judgment at inquiry. Platform qualification requires
-current strong/possible fit and owner Chatting/Quoted move. Missing historical
+the owner's Potential mark, dated by `potential_marked_at`. Missing historical
 Q-fit must not be backfilled from an AI score or stage change.
 
 ## Reviewed backfill and retention

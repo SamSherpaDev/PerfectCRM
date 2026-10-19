@@ -103,6 +103,7 @@ class SourceReportingTest < ActiveSupport::TestCase
     CallLog.record!(@lead, key: "connected-test", occurred_at: Time.zone.local(2026, 10, 2), outcome: "connected", direction: "outbound")
     CallLog.record!(@lead, key: "connected-test", occurred_at: Time.zone.local(2026, 10, 2), outcome: "connected", direction: "outbound")
     @lead.activity_events.create!(kind: "stage_change", occurred_at: Time.zone.local(2026, 10, 3), summary: "Chat", metadata: { "to" => "chatting", "actor" => "captain" })
+    travel_to(Time.zone.local(2026, 10, 4)) { @lead.mark_potential! }
     expected = nil
     %w[reported paid first].each do |view|
       report = WeeklyReport::Monthly.new(month: Date.new(2026, 10, 1), view: view)

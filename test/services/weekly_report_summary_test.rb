@@ -53,7 +53,7 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
     inquiry("Owner possible", source: "meta_ads", owner_fit_at_inquiry: "possible", fit_band: "weak")
     inquiry("Owner weak", owner_fit_at_inquiry: "weak", fit_band: "strong")
     ai_only = inquiry("AI only", campaign: "EBC", fit_band: "strong")
-    move(ai_only, "chatting", at: Time.zone.local(2026, 9, 16))
+    travel_to(Time.zone.local(2026, 9, 16)) { ai_only.mark_potential! }
     inquiry("Unpaid owner fit", source: "referral", owner_fit_at_inquiry: "possible")
     inquiry("Before week", at: Time.zone.local(2026, 9, 13, 23, 59), owner_fit_at_inquiry: "strong")
     inquiry("After week", at: Time.zone.local(2026, 9, 21), owner_fit_at_inquiry: "strong")
@@ -81,7 +81,7 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
     inquiry("Before the week", at: Time.zone.local(2026, 9, 13, 23))
     inquiry("Archived test").archive!
     inquiry("Spam", tag_list: Lead::SUSPECTED_SPAM_TAG)
-    move(strong, "chatting", at: Time.zone.local(2026, 9, 16, 9))
+    travel_to(Time.zone.local(2026, 9, 16, 9)) { strong.mark_potential! }
     move(auto, "chatting", at: Time.zone.local(2026, 9, 16, 9), actor: :automation)
     AdSpend.record!(week_start: WEEK, source: "google_ads", campaign_name: "ebc_search", amount_dollars: "126")
     AdSpend.record!(week_start: WEEK, source: "meta_ads", campaign_name: "social", amount_dollars: "140")
@@ -303,17 +303,19 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
     assert_equal 3.0, WeeklyReport::Summary.new(week_start: WEEK).median_first_reply_hours
   end
 
-  test "qualification requires an owner move to chatting or quoted" do
-    inquiry("Initial chatting", fit_band: "strong", status: "chatting")
-    converted = inquiry("Converted directly", fit_band: "strong")
-    converted.convert_to_client!
-    nudged = inquiry("Nudged", fit_band: "strong")
-    move(nudged, "nudged", at: Time.zone.local(2026, 9, 16))
-    valid = inquiry("Qualified", fit_band: "possible")
-    move(valid, "chatting", at: Time.zone.local(2026, 9, 16))
-    move(valid, "quoted", at: Time.zone.local(2026, 9, 22))
+  test "qualification follows the owner's Potential mark, dated by the mark" do
+    moved = inquiry("Owner chatting", fit_band: "strong")
+    move(moved, "chatting", at: Time.zone.local(2026, 9, 16))
+    move(moved, "quoted", at: Time.zone.local(2026, 9, 17))
+    unmarked = inquiry("Unmarked", fit_band: "strong")
+    travel_to(Time.zone.local(2026, 9, 16)) { unmarked.mark_potential! }
+    unmarked.unmark_potential!
+    valid = inquiry("Qualified", fit_band: "weak")
+    travel_to(Time.zone.local(2026, 9, 16)) { valid.mark_potential! }
+    later = inquiry("Marked next week")
+    travel_to(Time.zone.local(2026, 9, 22)) { later.mark_potential! }
     assert_equal 1, WeeklyReport::Summary.new(week_start: WEEK).total.qualified
-    assert_equal 0, WeeklyReport::Summary.new(week_start: WEEK + 7).total.qualified
+    assert_equal 1, WeeklyReport::Summary.new(week_start: WEEK + 7).total.qualified
   end
 
   test "the latest owner rejection supersedes an earlier positive judgment" do
@@ -429,7 +431,7 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
     assert_equal({ deadline: Date.new(2026, 10, 31), target: 2, travelers: 2 }, summary.milestone)
     assert_includes summary.flags, "No spend entered for the week"
     lead = inquiry("Expensive", campaign: "EBC", fit_band: "strong")
-    move(lead, "chatting", at: Time.zone.local(2026, 9, 16))
+    travel_to(Time.zone.local(2026, 9, 16)) { lead.mark_potential! }
     AdSpend.record!(week_start: WEEK, source: "google_ads", campaign_name: "EBC", amount_dollars: "301")
     flags = WeeklyReport::Summary.new(week_start: WEEK).flags
     assert_includes flags, "Google EBC cost per qualified inquiry over $300"

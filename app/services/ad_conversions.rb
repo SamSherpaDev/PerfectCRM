@@ -21,7 +21,6 @@ module AdConversions
   # Fixed signal values in cents; booking valuation lives in booking_value_minor.
   VALUES_MINOR = { "lead" => 300_00, "qualified" => 1_000_00, "quote" => 2_000_00 }.freeze
   QUALIFIED_BANDS = %w[strong possible].freeze
-  QUALIFIED_STATUSES = %w[chatting quoted].freeze
   # Scan recent inquiries and older inquiries with recent bound receipts;
   # delivery applies each platform's click/event window independently.
   LOOKBACK = 90.days

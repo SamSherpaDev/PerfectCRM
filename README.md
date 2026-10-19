@@ -944,8 +944,8 @@ answer, otherwise the earliest eligible first touch labeled observed. Unknown
 stays unknown; later purchasing inquiries retain their own source separately.
 
 Inquiry review **Q-fit** is your separately audited `owner_fit_at_inquiry`
-judgment (Strong/Possible), with no reply required. **Platform-qualified** stays
-current strong/possible fit plus your stage move. An AI score is never silently
+judgment (Strong/Possible), with no reply required. **Platform-qualified** is
+a lead you marked Potential, dated by the mark. An AI score is never silently
 substituted for your review count. Unreviewed fit is shown in completeness.
 Cohorts use inquiry dates and mature 30/60/90/180-day denominators; immature
 inquiries show as pending. Cohort bookings and their eventual value/net cash
@@ -1236,8 +1236,8 @@ Definitions, in `WeeklyReport::Summary`:
 
 - **Inquiry**: a lead received in the week, excluding archives, explicit tests
   and suspected spam.
-- **Qualified**: current AI fit strong or possible, and the captain (never an
-  automation) moved the lead to Chatting or Quoted, dated by the first such move.
+- **Qualified**: the captain marked the lead Potential, dated by
+  `potential_marked_at`, the same rule as the platform `Qualified` outcome.
 - **Your fit**: inquiry review [Q-fit](#monthly-source-reports-and-reviewed-backfill)
   among the week's eligible inquiries, shown beside Qual for each source/campaign
   and total. It does not change Qualified or cost per qualified inquiry.
