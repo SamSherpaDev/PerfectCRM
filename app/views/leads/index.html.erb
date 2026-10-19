@@ -55,7 +55,7 @@
                 <% if lead.potential? %><%= badge "Potential", :brand %><% end %>
                 <% if lead.unsure? %><%= badge "Unsure", :neutral %><% end %>
                 <%= status_badge(lead.converted? ? "converted" : lead.status) %>
-                <% if (next_call = lead.next_scheduled_call) %>
+                <% if lead.call_schedulable? && (next_call = lead.next_scheduled_call) %>
                   <%= badge "Call #{next_call.scheduled_at.in_time_zone.strftime('%b %-d, %-I:%M %p')} PT", (next_call.missed? ? :danger : :info), dot: true %>
                 <% end %>
                 <% lead.tags.each do |tag| %>

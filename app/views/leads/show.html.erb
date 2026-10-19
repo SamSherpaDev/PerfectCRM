@@ -27,7 +27,7 @@
       </div>
     </section>
   <% end %>
-  <% if !read_only && (next_call = @lead.next_scheduled_call) %>
+  <% if @lead.call_schedulable? && (next_call = @lead.next_scheduled_call) %>
     <%= render "scheduled_calls/lead_banner",
       lead: @lead,
       scheduled_call: next_call,

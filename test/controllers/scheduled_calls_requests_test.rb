@@ -76,7 +76,7 @@ class ScheduledCallsRequestsTest < ActionDispatch::IntegrationTest
       notes: "Initial call"
     )
 
-    patch scheduled_call_path(call), params: {
+    patch lead_scheduled_call_path(@lead, call), params: {
       return_to: root_path(view: "week", date: "2026-10-21"),
       scheduled_call: {
         scheduled_on: "2026-10-21",
@@ -91,7 +91,7 @@ class ScheduledCallsRequestsTest < ActionDispatch::IntegrationTest
     assert_equal "Moved to afternoon", call.notes
 
     assert_difference -> { @lead.activity_events.where(kind: "call").count }, 1 do
-      post complete_scheduled_call_path(call), params: {
+      post complete_lead_scheduled_call_path(@lead, call), params: {
         outcome: "connected",
         save_key: "scheduled-complete-1",
         return_to: lead_path(@lead)
@@ -110,9 +110,49 @@ class ScheduledCallsRequestsTest < ActionDispatch::IntegrationTest
       scheduled_on: "2026-10-25",
       scheduled_time: "10:00"
     )
-    patch cancel_scheduled_call_path(second_call), params: { return_to: lead_path(@lead) }
+    patch cancel_lead_scheduled_call_path(@lead, second_call), params: { return_to: lead_path(@lead) }
     assert_redirected_to lead_path(@lead)
     assert_equal "cancelled", second_call.reload.status
+  end
+
+  test "a stale outcome or cancel form on a closed call changes nothing" do
+    call = @lead.scheduled_calls.create!(scheduled_on: "2026-10-18", scheduled_time: "09:00")
+    post complete_lead_scheduled_call_path(@lead, call), params: { outcome: "connected", save_key: "first-tap-0001" }
+
+    assert_no_difference -> { @lead.activity_events.where(kind: "call").count } do
+      post complete_lead_scheduled_call_path(@lead, call), params: { outcome: "voicemail", save_key: "stale-tap-0002" }
+    end
+    assert_equal "This call is no longer scheduled", flash[:alert]
+
+    patch cancel_lead_scheduled_call_path(@lead, call)
+    assert_equal "This call is no longer scheduled", flash[:alert]
+    assert_equal [ "completed", "connected" ], [ call.reload.status, call.outcome ]
+  end
+
+  test "logging a call completes today's or a missed scheduled call but never a later booking" do
+    travel_to Time.zone.local(2026, 10, 20, 10, 0) do
+      later = @lead.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 26, 10, 0))
+
+      post lead_calls_path(@lead), params: { save_key: "inbound-call-01", outcome: "connected", direction: "inbound" }
+      assert_equal "scheduled", later.reload.status
+
+      todays = @lead.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 20, 16, 0))
+      post lead_calls_path(@lead), params: { save_key: "today-call-0001", outcome: "voicemail", direction: "outbound" }
+      assert_equal [ "completed", "voicemail" ], [ todays.reload.status, todays.outcome ]
+      assert_equal "scheduled", later.reload.status
+    end
+  end
+
+  test "a double tap on the call buttons completes one scheduled call" do
+    travel_to Time.zone.local(2026, 10, 20, 10, 0) do
+      missed = @lead.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 19, 9, 0))
+      todays = @lead.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 20, 9, 30))
+
+      2.times { post lead_calls_path(@lead), params: { save_key: "double-tap-0001", outcome: "connected", direction: "outbound" } }
+
+      assert_equal "completed", missed.reload.status
+      assert_equal "scheduled", todays.reload.status
+    end
   end
 
   test "Today shows missed, today, and upcoming calls plus week and month calendars with stepping" do
@@ -131,6 +171,7 @@ class ScheduledCallsRequestsTest < ActionDispatch::IntegrationTest
         assert_select "[aria-label='Missed calls']", text: /Missed Mingma/
         assert_select "[aria-label=\"Today's calls\"]", text: /Today Tashi/
         assert_select "[aria-label='Upcoming calls']", text: /Next Week Nima/
+        assert_select ".badge", text: "1 upcoming"
         assert_select "[aria-label='Week calendar']" do
           assert_select "a[href=?]", lead_path(missed_lead), text: "Missed Mingma"
           assert_select "a[href=?]", lead_path(today_lead), text: "Today Tashi"

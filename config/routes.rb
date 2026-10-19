@@ -56,10 +56,9 @@ Rails.application.routes.draw do
   resources :source_answers, only: :create
   resources :leads, except: %i[destroy] do
     resources :calls, only: :create
-    resources :scheduled_calls, only: %i[create update destroy] do
+    resources :scheduled_calls, only: %i[create update] do
       member do
         post :complete
-        patch :complete
         patch :cancel
       end
     end
@@ -79,13 +78,6 @@ Rails.application.routes.draw do
     resources :messages, only: %i[create]
     resource :draft, only: %i[update], controller: "drafts"
     post :draft, to: "drafts#update"
-  end
-  resources :scheduled_calls, only: %i[create update destroy] do
-    member do
-      post :complete
-      patch :complete
-      patch :cancel
-    end
   end
   resources :clients, except: %i[destroy] do
     resources :calls, only: :create

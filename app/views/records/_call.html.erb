@@ -13,7 +13,7 @@
         <% unless lead %>
           <p class="calls-for">For <%= inquiry_name %><% if (trip = inquiry.trip_interest.presence || inquiry.trip_title.presence) %><span class="muted"> · <%= trip %></span><% end %></p>
         <% end %>
-        <% if lead && !record.archived? && !record.converted? && inquiry.next_scheduled_call.present? %>
+        <% if lead && record.call_schedulable? && inquiry.next_scheduled_call.present? %>
           <p class="hint">Next call: <%= scheduled_call_stamp(inquiry.next_scheduled_call) %>. Log the outcome in the scheduled call bar above, or add details below.</p>
         <% else %>
           <%= form_with url: calls_path, class: "call-choices", data: { turbo: false } do |form| %>

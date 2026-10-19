@@ -1,12 +1,14 @@
 class LeadsController < ApplicationController
   include ReplyBox
   include RecordPage
+  include LeadsReturnPath
 
   before_action :set_lead, only: %i[show edit update convert refresh_bookings archive unarchive mark_as_spam not_spam mark_potential unmark_potential mark_unsure unmark_unsure]
   before_action :block_converted_edit, only: %i[edit update]
   before_action :block_archived_edit, only: %i[edit update]
 
   TABS = %w[new potential unsure quoted archived missing_source].freeze
+  SORTS = %w[activity name newest fit].freeze
   # Stages without their own tab: chatting and nudged wait in New until
   # sorted, and lost rests with Archived. Converted leads live on as clients,
   # so the retired Converted tab opens New. Old links land on that home.
@@ -18,7 +20,7 @@ class LeadsController < ApplicationController
     end
     @tab = TABS.include?(params[:tab]) ? params[:tab] : "new"
     @query = params[:q].to_s.strip
-    @sort = %w[activity name newest fit].include?(params[:sort]) ? params[:sort] : "activity"
+    @sort = SORTS.include?(params[:sort]) ? params[:sort] : "activity"
     @lead_action_return_to = leads_path(tab: @tab, q: @query, sort: @sort)
     new_leads = Lead.by_status(%w[new chatting nudged])
       .where.not(id: Lead.potential.select(:id)).where.not(id: Lead.unsure.select(:id))
@@ -225,25 +227,6 @@ class LeadsController < ApplicationController
 
   def lead_action_return_to
     safe_leads_return_path(params[:return_to]) || leads_path(tab: "new")
-  end
-
-  def safe_leads_return_path(value)
-    return unless value.present?
-
-    uri = URI.parse(value)
-    return unless uri.relative? && uri.host.nil? && uri.path == leads_path && uri.fragment.nil?
-
-    pairs = URI.decode_www_form(uri.query.to_s)
-    return unless pairs.map(&:first).uniq.length == pairs.length
-    return unless (pairs.map(&:first) - %w[tab q sort]).empty?
-
-    query = pairs.to_h
-    return if query["tab"].present? && !TABS.include?(query["tab"])
-    return if query["sort"].present? && !%w[activity name newest fit].include?(query["sort"])
-
-    leads_path(query)
-  rescue URI::InvalidURIError, ArgumentError
-    nil
   end
 
   def lead_destination_tab

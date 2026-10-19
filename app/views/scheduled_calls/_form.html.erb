@@ -42,7 +42,7 @@
     </div>
     <div>
       <%= form.label :duration_minutes, "Duration", for: "#{prefix}_duration_minutes", class: "label" %>
-      <%= form.select :duration_minutes, ScheduledCall::DURATIONS.map { |mins| ["#{mins} min", mins] }, { selected: default_duration }, id: "#{prefix}_duration_minutes", class: "select", data: { call_schedule_target: "duration" } %>
+      <%= form.select :duration_minutes, ScheduledCall::DURATIONS.map { |mins| ["#{mins} min", mins] }, { selected: default_duration }, id: "#{prefix}_duration_minutes", class: "select" %>
     </div>
   </div>
 

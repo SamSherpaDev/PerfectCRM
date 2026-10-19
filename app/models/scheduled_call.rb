@@ -23,12 +23,7 @@ class ScheduledCall < ApplicationRecord
   validate :lead_must_be_schedulable, if: :scheduled?
 
   scope :scheduled, -> { where(status: "scheduled") }
-  scope :completed, -> { where(status: "completed") }
-  scope :cancelled, -> { where(status: "cancelled") }
-  scope :open_calls, -> { scheduled }
-  scope :visible, -> {
-    joins(:lead).merge(Lead.active.where(converted_client_id: nil).where.not(id: Lead.spam.select(:id)))
-  }
+  scope :visible, -> { joins(:lead).merge(Lead.active.where(converted_client_id: nil)) }
   scope :missed, ->(now = Time.current) { scheduled.where("scheduled_calls.scheduled_at < ?", now).order(scheduled_at: :asc, id: :asc) }
   scope :upcoming, ->(now = Time.current) { scheduled.where("scheduled_calls.scheduled_at >= ?", now).order(scheduled_at: :asc, id: :asc) }
   scope :between, ->(range_start, range_end) {
@@ -41,14 +36,6 @@ class ScheduledCall < ApplicationRecord
 
   def scheduled?
     status == "scheduled"
-  end
-
-  def completed?
-    status == "completed"
-  end
-
-  def cancelled?
-    status == "cancelled"
   end
 
   def missed?(now = Time.current)
@@ -71,64 +58,50 @@ class ScheduledCall < ApplicationRecord
     scheduled_at&.in_time_zone&.strftime("%H:%M")
   end
 
-  def ends_at
-    return nil unless scheduled_at.present?
+  def self.complete_due_by!(event)
+    lead = event.subject
+    lead.with_lock do
+      next if exists?(activity_event: event)
 
-    scheduled_at + duration_minutes.to_i.minutes
+      call = lead.scheduled_calls.scheduled.first
+      next unless call && call.scheduled_at.in_time_zone.to_date <= event.occurred_at.in_time_zone.to_date
+
+      call.update!(status: "completed", outcome: event.metadata["outcome"], completed_at: event.occurred_at, activity_event: event)
+    end
   end
 
-  def complete!(outcome: "connected", direction: "outbound", duration: nil, occurred_at: Time.current, save_key: nil, notes: nil)
-    normalized = self.class.normalize_outcome(outcome)
-    unless CallLog::OUTCOMES.include?(normalized)
+  def complete!(outcome:, save_key:, occurred_at: Time.current)
+    ensure_scheduled!
+    unless CallLog::OUTCOMES.include?(outcome)
       errors.add(:outcome, "is not included in the list")
       raise ActiveRecord::RecordInvalid, self
     end
 
-    key = save_key.to_s.strip.presence
-    key = "scheduled-call-#{id || SecureRandom.uuid}" unless key&.match?(/\A[\w-]{8,64}\z/)
-
     transaction do
-      event = CallLog.record!(
-        lead,
-        key: key,
-        occurred_at: occurred_at,
-        outcome: normalized,
-        direction: direction.presence || "outbound",
-        duration: duration
-      )
-      updated_notes = notes.nil? ? self.notes : notes.to_s.strip.presence
-      update!(
-        status: "completed",
-        outcome: normalized,
-        completed_at: occurred_at,
-        activity_event: event,
-        notes: updated_notes
-      )
+      event = CallLog.record!(lead, key: save_key, occurred_at: occurred_at, outcome: outcome, direction: "outbound")
+      update!(status: "completed", outcome: outcome, completed_at: occurred_at, activity_event: event)
       event
     end
   end
 
   def cancel!(cancelled_at: Time.current)
+    ensure_scheduled!
     update!(status: "cancelled", cancelled_at: cancelled_at)
   end
 
   def reschedule!(attributes)
-    assign_attributes(attributes)
-    self.status = "scheduled"
-    self.cancelled_at = nil
-    self.completed_at = nil
-    self.outcome = nil
-    save!
-  end
-
-  def self.normalize_outcome(raw)
-    value = raw.to_s.strip
-    return "connected" if value.blank? || value == "answered"
-
-    value
+    ensure_scheduled!
+    update!(attributes)
   end
 
   private
+
+  def ensure_scheduled!
+    return if scheduled?
+
+    errors.add(:base, "This call is no longer scheduled")
+    raise ActiveRecord::RecordInvalid, self
+  end
 
   def combine_date_and_time
     @invalid_schedule_input = false
@@ -147,17 +120,11 @@ class ScheduledCall < ApplicationRecord
     parsed_date = begin
       Date.iso8601(date_str)
     rescue ArgumentError
-      begin
-        Date.parse(date_str)
-      rescue ArgumentError
-        nil
-      end
+      nil
     end
 
-    valid_time_format = time_str.match?(/\A(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?(?:\s*[ap]\.?m\.?)?\z/i)
-    parsed_time = Time.zone.parse("#{parsed_date.iso8601} #{time_str}") if parsed_date && valid_time_format
-    if parsed_date && parsed_time
-      self.scheduled_at = parsed_time
+    if parsed_date && time_str.match?(/\A(?:[01]\d|2[0-3]):[0-5]\d\z/)
+      self.scheduled_at = Time.zone.parse("#{parsed_date.iso8601} #{time_str}")
     else
       @invalid_schedule_input = true
       self.scheduled_at = nil
@@ -171,7 +138,7 @@ class ScheduledCall < ApplicationRecord
   end
 
   def lead_must_be_schedulable
-    return unless lead.present? && (lead.converted? || lead.archived?)
+    return unless lead.present? && !lead.call_schedulable?
 
     errors.add(:base, "Calls can only be scheduled for active, unconverted leads")
   end

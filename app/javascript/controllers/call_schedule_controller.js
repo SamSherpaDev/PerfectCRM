@@ -2,7 +2,7 @@ import { Controller } from "@hotwired/stimulus"
 
 // Quick-pick helpers for the call-scheduling popover form (Pacific dates and times).
 export default class extends Controller {
-  static targets = ["date", "time", "duration"]
+  static targets = ["date", "time"]
 
   pickDate(event) {
     event.preventDefault()
@@ -18,13 +18,5 @@ export default class extends Controller {
     this.timeTarget.value = event.params.time
     this.timeTarget.dispatchEvent(new Event("input", { bubbles: true }))
     this.timeTarget.dispatchEvent(new Event("change", { bubbles: true }))
-  }
-
-  pickDuration(event) {
-    event.preventDefault()
-    if (!this.hasDurationTarget || !event.params.minutes) return
-    this.durationTarget.value = event.params.minutes
-    this.durationTarget.dispatchEvent(new Event("input", { bubbles: true }))
-    this.durationTarget.dispatchEvent(new Event("change", { bubbles: true }))
   }
 }

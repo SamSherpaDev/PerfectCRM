@@ -17,9 +17,8 @@
     </div>
 
     <div class="scheduled-call-banner-actions">
-      <%= form_with url: complete_scheduled_call_path(scheduled_call), method: :post, class: "call-choices scheduled-call-outcomes", data: { turbo: false } do |form| %>
+      <%= form_with url: complete_lead_scheduled_call_path(lead, scheduled_call), method: :post, class: "call-choices scheduled-call-outcomes", data: { turbo: false } do |form| %>
         <%= form.hidden_field :save_key, value: SecureRandom.uuid, id: nil %>
-        <%= form.hidden_field :direction, value: "outbound", id: nil %>
         <% if return_to.present? %>
           <%= form.hidden_field :return_to, value: return_to, id: nil %>
         <% end %>
@@ -37,7 +36,7 @@
         id_prefix: "lead_banner_reschedule_#{scheduled_call.id}" %>
 
       <%= button_to "Cancel call",
-        cancel_scheduled_call_path(scheduled_call),
+        cancel_lead_scheduled_call_path(lead, scheduled_call),
         method: :patch,
         params: { return_to: return_to },
         class: "btn-secondary btn-sm" %>

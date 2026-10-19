@@ -18,7 +18,6 @@ class ScheduledCallTest < ActiveSupport::TestCase
     assert_equal Time.zone.local(2026, 10, 21, 14, 30), call.scheduled_at
     assert_equal "2026-10-21", call.scheduled_on
     assert_equal "14:30", call.scheduled_time
-    assert_equal Time.zone.local(2026, 10, 21, 15, 0), call.ends_at
   end
 
   test "rejects blank or malformed date and time strings" do
@@ -51,9 +50,11 @@ class ScheduledCallTest < ActiveSupport::TestCase
       spam_lead = Lead.create!(name: "Spammer")
       spam_call = spam_lead.scheduled_calls.create!(scheduled_at: 1.hour.from_now)
       spam_lead.mark_as_spam!
+      suspected = Lead.create!(name: "Maybe real", tag_list: Lead::SUSPECTED_SPAM_TAG)
+      suspected_call = suspected.scheduled_calls.create!(scheduled_at: 4.hours.from_now)
 
       assert_equal [ past_call ], ScheduledCall.visible.missed.to_a
-      assert_equal [ future_call ], ScheduledCall.visible.upcoming.to_a
+      assert_equal [ future_call, suspected_call ], ScheduledCall.visible.upcoming.to_a
       assert_not_includes ScheduledCall.visible.to_a, spam_call
       assert past_call.missed?
       assert_not future_call.missed?
@@ -68,7 +69,7 @@ class ScheduledCallTest < ActiveSupport::TestCase
     )
 
     freeze_time do
-      event = call.complete!(outcome: "answered", save_key: "complete-call-key-1")
+      event = call.complete!(outcome: "connected", save_key: "complete-call-key-1")
       assert_equal "completed", call.reload.status
       assert_equal "connected", call.outcome
       assert_equal Time.current, call.completed_at
@@ -94,5 +95,19 @@ class ScheduledCallTest < ActiveSupport::TestCase
     assert_equal "cancelled", call.reload.status
     assert_not_nil call.cancelled_at
     assert_nil @lead.reload.next_scheduled_call
+  end
+
+  test "closed calls cannot be completed, cancelled, or rescheduled" do
+    call = @lead.scheduled_calls.create!(scheduled_on: "2026-10-20", scheduled_time: "09:00")
+    call.cancel!
+
+    assert_raises(ActiveRecord::RecordInvalid) { call.complete!(outcome: "connected", save_key: "closed-call-key-1") }
+    assert_raises(ActiveRecord::RecordInvalid) { call.reschedule!(scheduled_on: "2026-10-22", scheduled_time: "16:00") }
+    assert_equal 0, @lead.activity_events.where(kind: "call").count
+
+    completed = @lead.scheduled_calls.create!(scheduled_on: "2026-10-21", scheduled_time: "09:00")
+    completed.complete!(outcome: "connected", save_key: "closed-call-key-2")
+    assert_raises(ActiveRecord::RecordInvalid) { completed.cancel! }
+    assert_equal "completed", completed.reload.status
   end
 end

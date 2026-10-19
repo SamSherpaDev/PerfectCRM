@@ -8,7 +8,7 @@
         <%= badge "#{summary.missed_calls.size} missed", :danger, dot: true %>
       <% end %>
       <%= badge "#{summary.todays_calls.size} today", :brand, dot: true %>
-      <%= badge "#{summary.upcoming_calls.size} upcoming", :neutral %>
+      <%= badge "#{summary.later_upcoming_calls.size} upcoming", :neutral %>
     </div>
   </div>
   <%= card_caption "Scheduled calls in Pacific time (#{Time.zone.now.strftime('%Z')}). Log the outcome with one tap, reschedule, or step through the calendar." %>

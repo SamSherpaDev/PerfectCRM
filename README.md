@@ -803,7 +803,12 @@ each row in the Leads list (`ScheduledCall`, Pacific date and time, default
 30-minute duration, optional note, with quick picks for Today/Tomorrow/Next Mon
 and common times). Saving keeps the captain on the current page. The lead page
 shows its next scheduled call with one-tap completion (`Talked`, `Voicemail`,
-`No answer` via `CallLog.record!`), rescheduling, and cancellation.
+`No answer` via `CallLog.record!`), rescheduling, and cancellation. Only an open
+call can be completed, rescheduled, or cancelled. A call logged through the
+regular call buttons or Add details also completes the inquiry's earliest open
+scheduled call when that call was due on or before the logged call's Pacific
+day (today's or a missed call); a booking on a later day stays open. A double
+save completes one scheduled call at most.
 
 The [intake contract](docs/leads-intake.md#exact-optional-question-and-stable-answers)
 lists the shared answers and stable codes.

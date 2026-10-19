@@ -388,6 +388,10 @@ class Lead < ApplicationRecord
     email.presence || people.map(&:email).find(&:present?)
   end
 
+  def call_schedulable?
+    !archived? && !converted?
+  end
+
   def open_scheduled_calls
     if association(:scheduled_calls).loaded?
       scheduled_calls.select { |call| call.persisted? && call.scheduled? && call.scheduled_at.present? }
