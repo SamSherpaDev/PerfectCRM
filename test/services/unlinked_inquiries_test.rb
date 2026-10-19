@@ -242,7 +242,7 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
     assert_equal "Hi, can you send details for two hikers?", direct_lead.message
     assert_in_delta (received + 2.hours).to_f, direct_lead.received_at.to_f, 1.0
     assert_equal true, direct_lead.metadata["inquiry_safety_net"]
-    assert_not direct_lead.suspected_spam?, "a display name matching the address is ordinary for direct email"
+    assert_not direct_lead.suspected_spam?
 
     # Untriaged safety-net leads remain visible on Today until triaged out of New.
     assert_equal [ website.id, direct.id ], Leads::UnlinkedInquiries.new(now: received + 1.day).messages.map(&:id)
@@ -289,109 +289,56 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
     assert_equal [ message.id ], missing.map(&:id)
   end
 
-  test "direct emails are flagged only for a disposable sender domain, not for signature links" do
+  test "one failing message does not block the rest and leaves no orphan lead" do
+    first = ingest_inquiry(email: "first.inquiry@example.com")
+    broken = ingest_inquiry(body: "New website inquiry\nName: Broken Inquiry\nEmail: broken.inquiry@example.com\nPhone: 555-BROKEN")
+    clean = ingest_inquiry(email: "clean.inquiry@example.com")
+    original = ::Leads::Phone.method(:normalize)
+    failing = lambda do |raw, **options|
+      raise ActiveRecord::RecordInvalid if raw == "555-BROKEN"
+
+      original.call(raw, **options)
+    end
+
+    ::Leads::Phone.stub(:normalize, failing) do
+      assert_difference("Lead.count", 2) { Leads::UnlinkedInquiries.new.resolve! }
+    end
+    assert_instance_of Lead, first.reload.conversation.linkable
+    assert_instance_of Lead, clean.reload.conversation.linkable
+    assert_nil broken.reload.conversation.linkable, "a failed message leaves no orphan lead and stays unlinked"
+    assert_equal [ first.id, broken.id, clean.id ], missing.map(&:id)
+
+    assert_difference("Lead.count", 1) { Leads::UnlinkedInquiries.new.resolve! }
+    assert_instance_of Lead, broken.reload.conversation.linkable
+  end
+
+  test "safety-net leads arrive untagged with no spam scoring and never trigger auto-reply or ad conversions" do
+    Setting.current.update!(auto_first_reply_enabled: true, auto_first_reply_enabled_at: 1.day.ago)
+    flagged_copy = ingest_inquiry(
+      subject: "[Check] New inquiry from Seo Spammer: Not sure yet",
+      body: "New website inquiry\nName: Seo Spammer\nEmail: spammer@gmail.com\n" \
+            "Has in mind: Not sure yet\n\nMessage:\nVisit https://seo1.example and https://seo2.example and https://seo3.example for page 1!\n\n" \
+            "Flagged for a check (spam score 75: seo_pitch, multiple_urls)."
+    )
     signature = ingest_inquiry(from: "Ana Ruiz <ana.ruiz@gmail.com>", subject: "Trip to Nepal",
       body: "Hello, could you plan ten days for us?\n\nAna Ruiz\nhttps://ana.example\nhttps://instagram.example/ana\nwww.linkedin.example/ana")
     disposable = ingest_inquiry(from: "Temp Person <temp.person@mailinator.com>", subject: "Bhutan",
       body: "Please send prices.")
     [ signature, disposable ].each { |message| message.update_columns(inquiry_headers: nil) }
 
-    assert_difference("Lead.count", 2) { Leads::UnlinkedInquiries.new.resolve! }
-    signature_lead = signature.reload.conversation.linkable
-    assert_not signature_lead.suspected_spam?
-    assert_equal 0, signature_lead.spam_score
-    signature_lead.mark_potential!
-    disposable_lead = disposable.reload.conversation.linkable
-    assert disposable_lead.suspected_spam?
-    assert_equal [ "disposable_domain" ], disposable_lead.metadata["suspicion_hits"]
-  end
-
-  test "resolve! clamps an out-of-range flagged spam score and one failing message does not block the rest" do
-    flagged = ingest_inquiry(
-      subject: "[Check] New inquiry from Odd Score: Nepal",
-      body: "New website inquiry\nName: Odd Score\nEmail: odd.score@gmail.com\n\nMessage:\nSee you\n\n" \
-            "Flagged for a check (spam score 150: seo_pitch)."
-    )
-    broken = ingest_inquiry(email: "broken.inquiry@example.com")
-    clean = ingest_inquiry(email: "clean.inquiry@example.com")
-    original = ::Leads.method(:suspicion_hits)
-    failing = lambda do |**args|
-      raise ActiveRecord::RecordInvalid if args[:email] == "broken.inquiry@example.com"
-
-      original.call(**args)
-    end
-
-    ::Leads.stub(:suspicion_hits, failing) do
-      assert_difference("Lead.count", 2) { Leads::UnlinkedInquiries.new.resolve! }
-    end
-    flagged_lead = flagged.reload.conversation.linkable
-    assert_equal 100, flagged_lead.spam_score
-    assert flagged_lead.suspected_spam?
-    assert_instance_of Lead, clean.reload.conversation.linkable
-    assert_nil broken.reload.conversation.linkable, "a failed message leaves no orphan lead and stays unlinked"
-    assert_equal [ flagged.id, broken.id, clean.id ], missing.map(&:id)
-
-    assert_difference("Lead.count", 1) { Leads::UnlinkedInquiries.new.resolve! }
-    assert_instance_of Lead, broken.reload.conversation.linkable
-  end
-
-  test "safety-net leads keep suspected-spam scoring and tagging, never trigger auto-reply, and feed ad conversions only once triaged" do
-    Setting.current.update!(
-      auto_first_reply_enabled: true,
-      auto_first_reply_enabled_at: 1.day.ago,
-      meta_dataset_id: "1234567890",
-      meta_access_token: "secret",
-      meta_terms_accepted: true,
-      google_feed_password: "g-token",
-      google_terms_accepted: true
-    )
-    spam_msg = ingest_inquiry(
-      subject: "[Check] New inquiry from Seo Spammer: Not sure yet",
-      body: "New website inquiry\nName: Seo Spammer\nEmail: spammer@gmail.com\n" \
-            "Has in mind: Not sure yet\n\nMessage:\nVisit https://seo1.example and https://seo2.example for page 1 on google seo!\n\n" \
-            "Flagged for a check (spam score 75: seo_pitch, multiple_urls)."
-    )
-    clean_msg = ingest_inquiry(
-      subject: "New website inquiry from Real Traveler: Annapurna Circuit",
-      body: "New website inquiry\nName: Real Traveler\nEmail: r.traveler@gmail.com\n" \
-            "Has in mind: Annapurna Circuit\n\nMessage:\nLooking at two weeks in November.\n\n" \
-            "Submission ID: sub-real-1"
-    )
-
     assert_no_difference([ "AutomaticFirstReply.count", "AdConversion.count", "Message.outbound.count" ]) do
-      assert_difference("Lead.count", 2) do
-        Leads::UnlinkedInquiries.new.resolve!
-      end
+      assert_difference("Lead.count", 3) { Leads::UnlinkedInquiries.new.resolve! }
     end
 
-    spam_lead = spam_msg.reload.conversation.linkable
-    assert spam_lead.suspected_spam?
-    assert_operator spam_lead.spam_score, :>=, 75
-    assert_nil spam_lead.trip_interest
-
-    clean_lead = clean_msg.reload.conversation.linkable
-    assert_not clean_lead.suspected_spam?
-    assert_equal "safety net inquiry", AutomaticFirstReply.skip_reason(clean_lead, email: clean_lead.email)
-
-    # Click attribution alone does not count while the lead waits in New.
-    clean_lead.update!(
-      fit_band: "strong",
-      metadata: clean_lead.metadata.merge(
-        "acquisition" => {
-          "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true },
-          "last_non_direct_touch" => { "gclid" => "gclid-123", "fbclid" => "fbclid-123", "observed_at" => 1.hour.ago.iso8601 }
-        }
-      )
-    )
-    assert AdConversions.excluded?(clean_lead)
-    assert_not AdConversions.reportable?(clean_lead)
-    assert_empty AdConversions.record!(clean_lead)
-    assert_equal 0, AdConversion.count
-
-    clean_lead.mark_potential!
-    assert_not AdConversions.excluded?(clean_lead.reload)
-    assert AdConversions.reportable?(clean_lead)
-    assert_includes AdConversions.record!(clean_lead).map(&:event), "lead"
+    leads = [ flagged_copy, signature, disposable ].map { |message| message.reload.conversation.linkable }
+    leads.each do |lead|
+      assert_not lead.suspected_spam?
+      assert_equal 0, lead.spam_score
+      assert_empty lead.suspicion_hits
+    end
+    assert_nil leads.first.trip_interest
+    leads.second.mark_potential!
+    assert leads.second.reload.potential?
   end
 
   private

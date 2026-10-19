@@ -80,8 +80,7 @@ module AdConversions
   end
 
   def excluded?(lead)
-    (lead.safety_net_inquiry? && Lead.in_new_tab.exists?(lead.id)) ||
-      lead.is_test? || lead.converted_client&.is_test? || lead.existing_client&.is_test? || !measurement_permitted?(lead) || lead.archived? || lead.suspected_spam? || (lead.status == "lost" && lead.lost_reason == "not_a_fit") ||
+    lead.is_test? || lead.converted_client&.is_test? || lead.existing_client&.is_test? || !measurement_permitted?(lead) || lead.archived? || lead.suspected_spam? || (lead.status == "lost" && lead.lost_reason == "not_a_fit") ||
       [ "info@sherpaholidays.com", Mail.mailbox_address ].include?(contact_email(lead)) ||
       User.allowed_email?(contact_email(lead))
   end

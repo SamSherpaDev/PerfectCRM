@@ -32,7 +32,7 @@ module Leads
     RECEIPT_SUBJECT = /\b(?:receipt|invoice|payment\s+(?:confirmation|received|failed)|order\s+confirmation|billing\s+statement)\b/i
     BLANK_VALUES = %w[— – - n/a na none null unknown].freeze
     Candidate = Data.define(:message, :website, :name, :explicit_name, :email, :phone_raw, :trip,
-      :inquiry_message, :received_at, :references, :external_refs, :flagged_spam_score)
+      :inquiry_message, :received_at, :references, :external_refs)
 
     def self.own_safety_net_lead?(lead, message)
       lead.is_a?(Lead) && lead.safety_net_inquiry? &&
@@ -111,16 +111,6 @@ module Leads
     end
 
     def create_safety_net_lead!(item)
-      score, hits = ::Leads.suspicion_hits(
-        name: (item.explicit_name if item.website),
-        email: item.email,
-        message: (item.inquiry_message.to_s if item.website),
-        seconds_to_submit: nil
-      )
-      score = [ score, item.flagged_spam_score.to_i ].max.clamp(0, 100)
-      flagged = score.positive? || (item.website && item.message.subject.to_s.match?(/\A\[check\]/i))
-      score = [ score, 25 ].max if flagged && score.zero?
-
       existing_client = Client.find_by("lower(email) = ?", item.email) if item.email.present?
 
       external_ref = item.external_refs.first
@@ -144,14 +134,8 @@ module Leads
         external_ref: external_ref,
         reference: reference,
         existing_client: existing_client,
-        spam_score: score,
-        metadata: {
-          "inquiry_safety_net" => true,
-          "safety_net_message_id" => item.message.id,
-          "suspicion_hits" => hits.map(&:to_s)
-        }.compact_blank
+        metadata: { "inquiry_safety_net" => true, "safety_net_message_id" => item.message.id }
       )
-      lead.tag_list = Lead::SUSPECTED_SPAM_TAG if flagged
       lead.save!
       lead
     end
@@ -186,8 +170,7 @@ module Leads
         received_at: message.inbound_received_at || message.sent_at || message.created_at,
         references: website ? body.scan(/\bReference:\s*(SH-[a-z0-9]+)\b/i).flatten.map(&:upcase) : [],
         external_refs: website ? body.scan(/\bsubmission[ _-]?id["']?\s*[:=]\s*["']?([a-z0-9_-]{1,64})/i)
-          .flatten.map { |id| "website_form:#{id}" } : [],
-        flagged_spam_score: website ? body[/\bspam score\s+(\d{1,3})\b/i, 1]&.to_i : nil
+          .flatten.map { |id| "website_form:#{id}" } : []
       )
     end
 
