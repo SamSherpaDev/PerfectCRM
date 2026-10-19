@@ -13,6 +13,14 @@ class CallsController < ApplicationController
     occurred_at = params[:occurred_at].present? ? Time.zone.parse(params[:occurred_at].to_s) : Time.current
     event = CallLog.record!(inquiry, key: params[:save_key], occurred_at: occurred_at,
       outcome: params[:outcome], direction: params[:direction], duration: params[:duration])
+    if (scheduled_call = inquiry.next_scheduled_call)
+      scheduled_call.update!(
+        status: "completed",
+        outcome: event.metadata["outcome"],
+        completed_at: event.occurred_at,
+        activity_event: event
+      )
+    end
     redirect_to back, notice: "Call logged: #{CallLog::LABELS.fetch(event.metadata['outcome'])}."
   rescue ArgumentError, TypeError
     redirect_to back, alert: "Check the call time, outcome and duration."

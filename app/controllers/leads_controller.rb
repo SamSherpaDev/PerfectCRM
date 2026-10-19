@@ -41,7 +41,7 @@ class LeadsController < ApplicationController
     end
     base = WeeklyReport::Monthly.new.eligible_leads.where(source_answer_state: "not_asked") if @tab == "missing_source"
     scope = @query.present? ? base.search(@query) : base
-    @leads = sort_leads(scope).includes(:tags, :people, :referred_by_organization, :converted_client)
+    @leads = sort_leads(scope).includes(:tags, :people, :referred_by_organization, :converted_client, :scheduled_calls)
   end
 
   def show
@@ -183,7 +183,7 @@ class LeadsController < ApplicationController
   private
 
   def set_lead
-    @lead = Lead.includes(:tags, :people, :referred_by_organization, :converted_client).find(params[:id])
+    @lead = Lead.includes(:tags, :people, :referred_by_organization, :converted_client, :scheduled_calls).find(params[:id])
   end
 
   def block_converted_edit

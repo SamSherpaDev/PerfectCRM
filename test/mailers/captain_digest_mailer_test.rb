@@ -59,4 +59,22 @@ class CaptainDigestMailerTest < ActionMailer::TestCase
       TodayDigestJob.perform_now
     end
   end
+
+  test "morning includes missed and upcoming scheduled calls with lead deep links" do
+    travel_to Time.zone.local(2026, 10, 20, 7, 0) do
+      missed_lead = Lead.create!(name: "Lakpa Sherpa")
+      upcoming_lead = Lead.create!(name: "Dawa Geljen")
+      missed_lead.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 19, 15, 0), notes: "Confirm flights")
+      upcoming_lead.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 20, 11, 30), notes: "Discuss Langtang trek")
+
+      body = CaptainDigestMailer.morning.body.encoded
+      helpers = Rails.application.routes.url_helpers
+      assert_includes body, "Missed calls (1):"
+      assert_includes body, "Lakpa Sherpa · Oct 19 at 3:00 PM PT · Confirm flights"
+      assert_includes body, helpers.lead_url(missed_lead, host: "example.com")
+      assert_includes body, "Scheduled calls (1):"
+      assert_includes body, "Dawa Geljen · Oct 20 at 11:30 AM PT · Discuss Langtang trek"
+      assert_includes body, helpers.lead_url(upcoming_lead, host: "example.com")
+    end
+  end
 end

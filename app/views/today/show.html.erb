@@ -52,6 +52,8 @@
     </aside>
   <% end %>
 
+  <%= render "scheduled_calls/calendar", summary: @summary %>
+
   <section class="card card-pad" aria-labelledby="not-yet-called-heading">
     <div class="card-header">
       <h2 class="card-title" id="not-yet-called-heading">Not yet called</h2>

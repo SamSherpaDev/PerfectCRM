@@ -13,12 +13,16 @@
         <% unless lead %>
           <p class="calls-for">For <%= inquiry_name %><% if (trip = inquiry.trip_interest.presence || inquiry.trip_title.presence) %><span class="muted"> · <%= trip %></span><% end %></p>
         <% end %>
-        <%= form_with url: calls_path, class: "call-choices", data: { turbo: false } do |form| %>
-          <%= form.hidden_field :save_key, value: SecureRandom.uuid, id: nil %>
-          <%= form.hidden_field :direction, value: "outbound", id: nil %>
-          <% unless lead %><%= form.hidden_field :inquiry_id, value: inquiry.id, id: nil %><% end %>
-          <% CallLog::ONE_TAP.each do |outcome| %>
-            <%= button_tag CallLog::LABELS.fetch(outcome), name: "outcome", value: outcome, class: "btn-secondary btn-sm" %>
+        <% if lead && !record.archived? && !record.converted? && inquiry.next_scheduled_call.present? %>
+          <p class="hint">Next call: <%= scheduled_call_stamp(inquiry.next_scheduled_call) %>. Log the outcome in the scheduled call bar above, or add details below.</p>
+        <% else %>
+          <%= form_with url: calls_path, class: "call-choices", data: { turbo: false } do |form| %>
+            <%= form.hidden_field :save_key, value: SecureRandom.uuid, id: nil %>
+            <%= form.hidden_field :direction, value: "outbound", id: nil %>
+            <% unless lead %><%= form.hidden_field :inquiry_id, value: inquiry.id, id: nil %><% end %>
+            <% CallLog::ONE_TAP.each do |outcome| %>
+              <%= button_tag CallLog::LABELS.fetch(outcome), name: "outcome", value: outcome, class: "btn-secondary btn-sm" %>
+            <% end %>
           <% end %>
         <% end %>
         <% recent = inquiry.activity_events.where(kind: "call").order(occurred_at: :desc, id: :desc).limit(3).to_a %>

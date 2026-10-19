@@ -55,6 +55,9 @@
                 <% if lead.potential? %><%= badge "Potential", :brand %><% end %>
                 <% if lead.unsure? %><%= badge "Unsure", :neutral %><% end %>
                 <%= status_badge(lead.converted? ? "converted" : lead.status) %>
+                <% if (next_call = lead.next_scheduled_call) %>
+                  <%= badge "Call #{next_call.scheduled_at.in_time_zone.strftime('%b %-d, %-I:%M %p')} PT", (next_call.missed? ? :danger : :info), dot: true %>
+                <% end %>
                 <% lead.tags.each do |tag| %>
                   <%= badge(tag.name == Lead::SUSPECTED_SPAM_TAG ? (lead.spam_marked_at.present? ? "Spam" : "Looks like spam") : tag.name, :brand) %>
                 <% end %>
@@ -78,6 +81,13 @@
                 <% if lead.converted_client %>
                   <%= link_to "Open client", client_path(lead.converted_client), class: "link-quiet" %>
                 <% else %>
+                  <%= render "scheduled_calls/popover",
+                    lead: lead,
+                    scheduled_call: lead.next_scheduled_call,
+                    return_to: @lead_action_return_to,
+                    trigger_label: (lead.next_scheduled_call ? "Reschedule" : "Schedule call"),
+                    trigger_class: "btn-secondary btn btn-sm",
+                    id_prefix: "index_schedule_call_#{lead.id}" %>
                   <%= render "leads/potential_action", lead: lead %>
                   <%= render "leads/unsure_action", lead: lead %>
                   <%= button_to "Mark as spam", mark_as_spam_lead_path(lead), method: :patch, params: { return_to: @lead_action_return_to }, class: "btn-secondary btn btn-sm" %>
