@@ -57,17 +57,33 @@ curl -X POST https://perfectcrm.sherpaholidays.com/api/v1/leads/intake \
 
 Behavior, in order: schema/size check (`400`); auth (`403`); rate limits
 (10 per IP per 10 minutes, 3 per email per hour - `429` with `Retry-After`);
-filled honeypot (answered `202` with a synthetic reference, stored nowhere);
-required fields (`contact.name` 2–120 chars, `contact.email` shaped with
-MX/A records, `consent.contact: true`, nonblank `submission_id` up to 64 chars);
-suspicion scoring that only flags, never rejects. DNS lookup failures fail open;
-a completed lookup with no MX or A record rejects the address.
+filled honeypot (answered `202` with a synthetic reference, no bot payload stored,
+and counted via `honeypot_drop` events for Settings → Automations and the Monday
+weekly ads report); required fields (`contact.name` 2–120 chars, `contact.email`
+shaped with MX/A records, `consent.contact: true`, nonblank `submission_id` up to
+64 chars); replay / 24-hour duplicate merge (`200`); and suspicion scoring that
+never rejects (`202`). DNS lookup failures fail open; a completed lookup with no
+MX or A record rejects the address.
 
-Replays pass authentication, rate limits, and required-field validation first.
-Replaying the same `submission_id` returns `200` with the original
-reference and re-enqueues pending notifications without replacing the inquiry.
-A new `submission_id` from the same email opens a separate inquiry (`202`
-with its own reference), so repeat visitors can ask about different trips.
+Replays and duplicates pass authentication, rate limits, and required-field
+validation first. Replaying the same `submission_id` returns `200` with the
+original reference and re-enqueues pending notifications without replacing the
+inquiry. A new `submission_id` from the same normalized email within 24 hours
+with the same or near-identical message (`>= 85%` normalized edit or word
+similarity) and no conflicting trip merges into the existing lead (`200` with
+the original `id` and `reference`), appending a `duplicate_inquiry` timeline
+entry without creating a second lead, notification, or ad conversion (and Step 2
+`/api/v1/leads/intake/details` calls with the merged `submission_id` still
+resolve to that lead). Different trips or meaningfully different messages from
+the same email open a separate inquiry (`202` with its own reference), as do
+repeat submissions after 24 hours.
+
+Bot and spam scoring (`Leads.suspicion_hits`):
+- Strong signals (`50` points each): `too_fast` (`timing.submitted_at - timing.started_at < 3` seconds) and `missing_timing` (missing or unparseable ISO-8601 `timing.started_at` / `timing.submitted_at`). Production evidence shows the fastest legitimate human storefront submission is `8.56s` (median `~38s`) and the storefront extension always stamps ISO-8601 `timing`.
+- Moderate signals (`25` points each): `many_links` (3+ links in `message`), `disposable_domain` (known throwaway email domain), and `name_matches_email` (local-part matches normalized name).
+- Thresholds:
+  - `25..49` (single moderate signal): flagged with the `suspected_spam` tag (`Looks like spam`), kept in the `New` tab for review, prefixed `[check]` on the intake email copy, and withheld from automatic first replies and ad conversions until reviewed.
+  - `>= 50` (`Leads::HIGH_CONFIDENCE_SPAM_THRESHOLD`, triggered by a fast submit `< 3s`, missing/invalid timing, or 2+ moderate signals): saved so no inquiry is ever silently deleted, but routed straight to `Archived` (`archived_at` and `spam_marked_at` set, `suspected_spam` tag, and an automated `spam_review` timeline entry). It displays in the `Archived` tab with its human-readable reason (e.g. `Submitted under 3s`, `Missing or invalid timing`), receives no automatic first reply, and is excluded from Meta and Google ad conversion uploads and feeds. Choosing `Not spam` restores the lead to `New`.
 
 Source derivation: `google_ads` on `gclid`/`gbraid`/`wbraid`, or
 `utm_source=google` with a paid medium (`cpc`, `ppc`, `paid`); `meta_ads`

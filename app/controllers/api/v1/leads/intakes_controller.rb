@@ -40,23 +40,70 @@ module Api
             return render json: { error: "validation", fields: { error.message => "invalid" } }, status: :bad_request
           end
           payload["_acquisition"] = acquisition
-          external_ref = "website_form:#{payload['submission_id']}"
+          submission_id = payload["submission_id"].to_s.strip
+          external_ref = "website_form:#{submission_id}"
           lead = build_lead(payload, fields, external_ref, caller_name)
           existing = nil
+          duplicate = nil
           begin
             saved = ::Lead.transaction do
               existing = ::Lead.find_by(external_ref: external_ref)
               next false if existing
+
+              duplicate = ::Leads.find_recent_duplicate(
+                email: lead.email,
+                message: lead.message,
+                trip_handle: lead.trip_handle,
+                trip_title: lead.trip_title,
+                suspected_spam: lead.spam_score.positive?,
+                exclude_external_ref: external_ref
+              )
+              if duplicate
+                ::Leads.merge_duplicate!(
+                  duplicate,
+                  submission_id: submission_id,
+                  fields: {
+                    phone: lead.phone,
+                    phone_raw: lead.phone_raw,
+                    message: lead.message,
+                    trip_handle: lead.trip_handle,
+                    trip_title: lead.trip_title,
+                    placement: lead.placement
+                  },
+                  caller_name: caller_name
+                )
+                next false
+              end
+
               next false unless lead.save
 
+              if ::Leads.high_confidence_spam?(lead.spam_score)
+                reason = lead.spam_reason || "high spam score"
+                lead.activity_events.create!(
+                  kind: "spam_review",
+                  summary: "Automatically archived as spam (#{reason})",
+                  occurred_at: lead.received_at || Time.current,
+                  metadata: {
+                    "verdict" => "spam",
+                    "actor" => "automation",
+                    "reasons" => lead.suspicion_hits,
+                    "spam_score" => lead.spam_score
+                  }
+                )
+              end
               lead.lead_notifications.create!(event: "email_copy")
               lead.lead_notifications.create!(event: "lead.created")
-              lead.lead_notifications.create!(event: "auto_first_reply", available_at: 2.minutes.from_now)
+              unless ::Leads.high_confidence_spam?(lead.spam_score)
+                lead.lead_notifications.create!(event: "auto_first_reply", available_at: 2.minutes.from_now)
+              end
               true
             end
           rescue ActiveRecord::RecordNotUnique
             existing = ::Lead.find_by(external_ref: external_ref)
             raise unless existing
+          end
+          if duplicate
+            return render json: lead_response(duplicate.reload), status: :ok
           end
           existing ||= ::Lead.find_by(external_ref: external_ref) unless saved
           if existing
@@ -91,7 +138,7 @@ module Api
         end
 
         def honeypot_response
-          Rails.cache.increment("intake:honeypot:dropped", 1, expires_in: 30.days)
+          ::Leads.record_honeypot_drop!
           render json: {
             reference: "SH-#{SecureRandom.alphanumeric(4).upcase}",
             received_at: Time.current.iso8601
@@ -156,8 +203,12 @@ module Api
 
         def seconds_to_submit(payload)
           timing = payload["timing"].is_a?(Hash) ? payload["timing"] : {}
-          started = Time.zone.parse(timing["started_at"].to_s) rescue nil
-          submitted = Time.zone.parse(timing["submitted_at"].to_s) rescue nil
+          started_raw = timing["started_at"].to_s.strip
+          submitted_raw = timing["submitted_at"].to_s.strip
+          return nil if started_raw.blank? || submitted_raw.blank?
+
+          started = Time.iso8601(started_raw) rescue nil
+          submitted = Time.iso8601(submitted_raw) rescue nil
           return nil unless started && submitted
 
           submitted - started
@@ -181,6 +232,7 @@ module Api
             message: payload["message"].to_s,
             seconds_to_submit: seconds_to_submit(payload)
           )
+          high_confidence_spam = ::Leads.high_confidence_spam?(score)
           attribution = attribution.merge("relay" => caller_name) if caller_name != "website_form"
 
           phone_raw = contact["phone_raw"].to_s.presence
@@ -189,6 +241,7 @@ module Api
 
           placement = payload["placement"].to_s.strip.presence
           placement = nil unless ::Lead::PLACEMENTS.include?(placement)
+          now = Time.current
 
           lead = ::Lead.new(
             name: fields[:name],
@@ -208,8 +261,10 @@ module Api
             campaign_name: attribution["utm_campaign"].to_s.strip.presence&.truncate(160),
             external_ref: external_ref,
             spam_score: score,
+            archived_at: (now if high_confidence_spam),
+            spam_marked_at: (now if high_confidence_spam),
             status: "new",
-            received_at: Time.current,
+            received_at: now,
             metadata: {
               "acquisition" => acquisition,
               "attribution" => attribution,

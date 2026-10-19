@@ -20,6 +20,7 @@ class LeadFieldsSystemTest < ApplicationSystemTestCase
         contact: { name: "Website Visitor #{index}", email: "visitor#{index}@example.com", phone_raw: raw },
         trip: { handle: "nepal", title: "Nepal journey" }, message: "A spring trip please",
         consent: { contact: true, contact_at: Time.current.iso8601, text_version: "v2" },
+        timing: { started_at: 30.seconds.ago.iso8601, submitted_at: Time.current.iso8601 },
         page: { template: "page.contact", locale: "en-US" }, honeypot: "" }
       response = api_post("/api/v1/leads/intake", body, settings.site_key)
       assert_equal "202", response.code, response.body
@@ -57,6 +58,7 @@ class LeadFieldsSystemTest < ApplicationSystemTestCase
     end
     foreign = api_post("/api/v1/leads/intake", { schema: "sherpa.inquiry.v2", submission_id: SecureRandom.uuid, placement: "landing",
       contact: { name: "UK visitor", email: "uk@example.com", phone_raw: "020 7946 0958", country: "GB" }, message: "Hello",
+      timing: { started_at: 30.seconds.ago.iso8601, submitted_at: Time.current.iso8601 },
       consent: { contact: true, contact_at: Time.current.iso8601, text_version: "v2" }, honeypot: "" }, settings.site_key)
     assert_equal "202", foreign.code
     lead = Lead.find(JSON.parse(foreign.body).fetch("id"))

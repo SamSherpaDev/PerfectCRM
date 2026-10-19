@@ -8,12 +8,13 @@
   <% if @lead.suspected_spam? && !@lead.converted? %>
     <section class="card card-pad mb-5" aria-label="Spam review">
       <div class="flex flex-wrap items-center justify-between gap-3">
+        <% reason_suffix = @lead.spam_reason.present? ? " (#{@lead.spam_reason})" : "" %>
         <% if @lead.spam_marked_at.present? %>
-          <p class="text-sm muted">Marked as spam and archived. Choose Not spam to restore this inquiry.</p>
+          <p class="text-sm muted">Marked as spam and archived<%= reason_suffix %>. Choose Not spam to restore this inquiry.</p>
         <% elsif @lead.archived? %>
-          <p class="text-sm muted">Looks like spam. Confirm your verdict, or choose Not spam to restore this inquiry.</p>
+          <p class="text-sm muted">Looks like spam<%= reason_suffix %>. Confirm your verdict, or choose Not spam to restore this inquiry.</p>
         <% else %>
-          <p class="text-sm muted">Looks like spam. Confirm to archive, or keep this inquiry as a real lead.</p>
+          <p class="text-sm muted">Looks like spam<%= reason_suffix %>. Confirm to archive, or keep this inquiry as a real lead.</p>
         <% end %>
         <% if @lead.spam_marked_at.nil? %>
           <div class="flex flex-wrap gap-2">

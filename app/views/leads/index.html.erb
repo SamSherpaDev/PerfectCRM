@@ -58,6 +58,9 @@
                 <% lead.tags.each do |tag| %>
                   <%= badge(tag.name == Lead::SUSPECTED_SPAM_TAG ? (lead.spam_marked_at.present? ? "Spam" : "Looks like spam") : tag.name, :brand) %>
                 <% end %>
+                <% if lead.suspected_spam? && lead.spam_reason.present? %>
+                  <span><%= lead.spam_reason %></span>
+                <% end %>
               </div>
             </div>
             <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs muted sm:justify-end">

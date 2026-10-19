@@ -40,6 +40,10 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
     assert_equal 1, summary.total.inquiries
     assert_equal 0, summary.suspected_spam_count
     assert_includes WeeklyReport::Monthly.new.eligible_leads, lead
+
+    Leads.record_honeypot_drop!(now: Time.zone.local(2026, 9, 16, 12))
+    Leads.record_honeypot_drop!(now: Time.zone.local(2026, 9, 13, 12))
+    assert_equal 1, WeeklyReport::Summary.new(week_start: WEEK).honeypot_dropped_count
   end
 
   test "owner fit counts the week's eligible inquiries separately from qualification by source and campaign" do
