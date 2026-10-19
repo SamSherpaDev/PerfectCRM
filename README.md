@@ -169,6 +169,8 @@ docked at the bottom of the thread: recipient chips prefilled from the
 thread, `Re:` subject, a plain-text editor, attachments, one-tap template
 chips and the full picker (filled from live data), a booking select when
 several mirrored bookings exist, Save draft per conversation, and Send.
+When every thread recipient is our own mailbox or an automated relay sender
+(a website-form copy), the reply prefills the record's own email instead.
 On a phone, tap Reply or Resume reply to open the composer; Details holds
 recipients, subject, booking choice, and attachments. New message starts a
 separate conversation regardless of subject. Saved attachments accompany
