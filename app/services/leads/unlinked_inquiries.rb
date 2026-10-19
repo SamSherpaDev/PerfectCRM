@@ -2,7 +2,8 @@ require "uri"
 
 module Leads
   # A local, bounded check of imported mail. Website copies left in triage can
-  # match their inquiry by reference or submission, never just a sender's email.
+  # match their inquiry by reference or submission; a shared email alone only
+  # matches a lead still waiting in New.
   class UnlinkedInquiries
     LOOKBACK = 7.days
     RECEIVED_AT = "COALESCE(messages.inbound_received_at, messages.sent_at, messages.created_at)"
@@ -33,16 +34,8 @@ module Leads
     Candidate = Data.define(:message, :website, :name, :explicit_name, :email, :phone_raw, :trip,
       :inquiry_message, :received_at, :references, :external_refs, :flagged_spam_score)
 
-    def self.resolve_message!(message, now: Time.current)
-      scanner = new(now: now)
-      return :safety_net_lead unless scanner.respond_to?(:resolve_message!)
-
-      scanner.resolve_message!(message)
-    end
-
     def self.own_safety_net_lead?(lead, message)
-      lead.is_a?(Lead) && lead.metadata.is_a?(Hash) &&
-        lead.metadata["inquiry_safety_net"] == true &&
+      lead.is_a?(Lead) && lead.safety_net_inquiry? &&
         lead.metadata["safety_net_message_id"].to_i == message.id
     end
 
@@ -51,7 +44,8 @@ module Leads
     end
 
     def messages(unalerted: false)
-      items = candidates_scope(unalerted: unalerted).filter_map { |message| candidate(message) }
+      listed = unlinked_conversations.or(Conversation.where(linkable_type: "Lead", linkable_id: untriaged_safety_net_leads.select(:id)))
+      items = candidates_scope(listed, unalerted: unalerted).filter_map { |message| candidate(message) }
       return [] if items.empty?
 
       references = Lead.where(reference: items.flat_map(&:references)).pluck(:reference, :id)
@@ -65,38 +59,31 @@ module Leads
       end
     end
 
+    # Only unlinked threads are resolved: a thread already on a record never moves.
     def resolve!
-      candidates_scope(unalerted: false, include_safety_net: false)
-        .filter_map { |message| candidate(message) }
-        .each { |item| resolve_candidate!(item) }
-    end
-
-    def resolve_message!(message)
-      item = candidate(message)
-      return :ignored unless item
-
-      resolve_candidate!(item)
+      candidates_scope(unlinked_conversations).filter_map { |message| candidate(message) }.each do |item|
+        resolve_candidate!(item)
+      rescue ActiveRecord::ActiveRecordError => error
+        Rails.logger.error("[inquiry safety net] message #{item.message.id} not resolved: #{error.class}: #{error.message.truncate(200)}")
+      end
     end
 
     private
 
-    def candidates_scope(unalerted: false, include_safety_net: true)
-      excluded_conversations = if include_safety_net
-        Conversation.inquiry_linked.where.not(linkable_type: "Lead", linkable_id: untriaged_safety_net_leads.select(:id))
-      else
-        Conversation.inquiry_linked
-      end
+    def unlinked_conversations
+      Conversation.where(linkable_type: nil)
+    end
 
+    def candidates_scope(conversations, unalerted: false)
       scope = Message.inbound.joins(:conversation).where(conversations: { ignored: false })
-        .where.not(conversation_id: excluded_conversations.select(:id))
+        .where(conversation_id: conversations.select(:id))
         .where("#{RECEIVED_AT} BETWEEN ? AND ?", @now - LOOKBACK, @now)
       scope = scope.where(inquiry_alert_attempted_at: nil) if unalerted
       scope.preload(conversation: :linkable).order(Arel.sql("#{RECEIVED_AT} ASC, messages.id ASC"))
     end
 
     def untriaged_safety_net_leads
-      Lead.by_status("new")
-        .where(potential_marked_at: nil, unsure_marked_at: nil, spam_marked_at: nil)
+      Lead.in_new_tab
         .where("CASE WHEN json_valid(leads.metadata) THEN json_extract(leads.metadata, '$.inquiry_safety_net') END = 1")
     end
 
@@ -106,52 +93,21 @@ module Leads
     end
 
     def resolve_candidate!(item)
-      message = item.message
-      conversation = message.conversation
-      conversation.reload if conversation.persisted?
-      return :ignored if conversation.ignored?
-      return :safety_net_lead if self.class.own_safety_net_lead?(conversation.linkable, message)
-      return :already_linked if Conversation.inquiry_linked.where(id: conversation.id).exists?
+      Lead.transaction do
+        conversation = Conversation.find(item.message.conversation_id)
+        next if conversation.linkable_type || conversation.ignored?
 
-      if (existing = matching_existing_lead(item))
-        target = existing.converted_client || existing
-        conversation.update!(linkable: target, ignored: false)
-        return :linked_existing
+        existing = matching_existing_lead(item)
+        conversation.update!(linkable: existing ? existing.converted_client || existing : create_safety_net_lead!(item))
       end
-
-      lead = create_safety_net_lead!(item)
-      conversation.update!(linkable: lead, ignored: false)
-      :safety_net_lead
     end
 
     def matching_existing_lead(item)
-      own_id = own_safety_net_lead_id(item.message)
-      if item.references.any?
-        found = Lead.where(reference: item.references).order(:id).detect { |lead| lead.id != own_id }
-        return found if found
-      end
-      if item.external_refs.any?
-        found = Lead.where(external_ref: item.external_refs).order(:id).detect { |lead| lead.id != own_id }
-        return found if found
-
-        item.external_refs.each do |ext_ref|
-          merged = ::Leads.find_by_merged_submission_id(ext_ref.delete_prefix("website_form:"))
-          return merged if merged && merged.id != own_id
-        end
-      end
-      if item.email.present?
-        active_leads = Lead.active.where(converted_client_id: nil)
-        found = active_leads.where("lower(email) = ?", item.email)
-          .order(Arel.sql("COALESCE(received_at, created_at) DESC, id DESC"))
-          .detect { |lead| lead.id != own_id }
-        return found if found
-
-        person_lead = Person.includes(:lead).where(lead_id: active_leads.select(:id))
-          .where("lower(email) = ?", item.email).order(:id)
-          .map(&:lead).compact.detect { |lead| lead.id != own_id }
-        return person_lead if person_lead
-      end
-      nil
+      (Lead.where(reference: item.references).order(:id).first if item.references.any?) ||
+        (Lead.where(external_ref: item.external_refs).order(:id).first if item.external_refs.any?) ||
+        item.external_refs.lazy.filter_map { |ref| ::Leads.find_by_merged_submission_id(ref.delete_prefix("website_form:")) }.first ||
+        (Lead.in_new_tab.where("lower(email) = ?", item.email)
+          .order(Arel.sql("COALESCE(received_at, created_at) DESC, id DESC")).first if item.email.present?)
     end
 
     def create_safety_net_lead!(item)
@@ -161,12 +117,11 @@ module Leads
         message: item.inquiry_message.to_s,
         seconds_to_submit: nil
       )
-      score = [ score, item.flagged_spam_score.to_i ].max
+      score = [ score, item.flagged_spam_score.to_i ].max.clamp(0, 100)
       flagged = score.positive? || item.message.subject.to_s.match?(/\A\[check\]/i)
       score = [ score, 25 ].max if flagged && score.zero?
 
-      existing_client = item.message.conversation.linkable if item.message.conversation.linkable.is_a?(Client)
-      existing_client ||= Client.find_by("lower(email) = ?", item.email) if item.email.present?
+      existing_client = Client.find_by("lower(email) = ?", item.email) if item.email.present?
 
       external_ref = item.external_refs.first
       external_ref = nil if external_ref.present? && Lead.exists?(external_ref: external_ref)
@@ -214,7 +169,7 @@ module Leads
       text = "#{message.subject}\n#{body}"
       website = text.match?(WEBSITE)
       unless website
-        return if from.blank? || own_sender?(from) || known_business_contact?(message, from) ||
+        return if from.blank? || own_sender?(from) || known_business_contact?(from) ||
           automated_or_platform?(message, from, text)
       end
 
@@ -339,9 +294,7 @@ module Leads
       from == ::Mail.mailbox_address || from.match?(/@(?:[^@]+\.)?sherpaholidays\.com\z/i)
     end
 
-    def known_business_contact?(message, from)
-      return true if message.conversation.linkable_type == "Organization"
-
+    def known_business_contact?(from)
       match = ::Mail::Matcher.call([ from ])
       return true if match.via == "ignored" || match.via == "person" || match.linkable.is_a?(Organization)
       return true if Organization.where("lower(email) = ?", from).exists? ||

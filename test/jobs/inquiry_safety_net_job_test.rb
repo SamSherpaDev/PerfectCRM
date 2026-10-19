@@ -68,7 +68,10 @@ class InquirySafetyNetJobTest < ActiveSupport::TestCase
 
   test "atomic reservation prevents overlapping scans with stale results from sending twice" do
     message = ingest_inquiry
+    Leads::UnlinkedInquiries.new.resolve!
+    message.reload
     stale_scan = Object.new
+    stale_scan.define_singleton_method(:resolve!) { }
     stale_scan.define_singleton_method(:messages) { |**| [ message ] }
     Leads::UnlinkedInquiries.stub(:new, stale_scan) do
       assert_emails(1) { 2.times { InquirySafetyNetJob.perform_now } }

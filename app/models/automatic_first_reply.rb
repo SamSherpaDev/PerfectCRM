@@ -5,7 +5,7 @@ class AutomaticFirstReply < ApplicationRecord
   belongs_to :message, optional: true
 
   def self.skip_reason(lead, email:, excluding_message: nil)
-    return "safety net inquiry" if lead.metadata.is_a?(Hash) && lead.metadata["inquiry_safety_net"] == true
+    return "safety net inquiry" if lead.safety_net_inquiry?
     setting = Setting.current
     return "setting is off" unless setting.auto_first_reply_enabled?
     return "old inquiry" if lead.created_at <= setting.auto_first_reply_enabled_at

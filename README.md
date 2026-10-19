@@ -1064,26 +1064,31 @@ with icons and counts. Inbox and record timelines offer Load older so complete
 history is reachable, and expanded messages show their full body.
 
 The inquiry safety net checks the last seven days of imported inbound mail at
-7:10am Pacific every day (`InquirySafetyNetJob` in `config/recurring.yml`) and
-when Today loads. Every unlinked human message and website-form inquiry is a
-candidate, regardless of wording. Mail linked to an existing lead or a converted
-inquiry's client is already visible on that record's thread and stays outside the
-safety net. If a candidate matches an existing lead by Reference or submission ID,
-or shares an email address already on an active lead, the safety net links its
-email thread to that lead instead of creating a duplicate. Otherwise, it creates
-a lead in the **New** tab (`source: "website_form"` or `"email"`, filling the
-name, email, phone, trip, message text, and received time from the email and
-leaving unknowns blank), links the email thread to that lead, and applies the
-existing suspected-spam scoring and `suspected_spam` tag. Safety-net leads never
-trigger an automatic first reply to the customer and never count as Meta or
-Google ad conversions. Ignored threads, outbound and own-domain mail, known
-organization/operator or person contacts, and clearly automated, platform, or
-bulk mail (automation headers, List-Unsubscribe, bulk/list/junk Precedence,
-platform notification domains, newsletters, receipts, no-reply and notifications
-senders, automatic replies and bounces) stay out even when imported before
-header capture; website-form copies remain candidates even when sent
-automatically. Classification headers are retained on newly imported mail. The
-check cannot detect a submission that produced neither a lead nor imported mail.
+7:10am Pacific every day (`InquirySafetyNetJob` in `config/recurring.yml`). Every
+unlinked human message and website-form inquiry is a candidate, regardless of
+wording. Mail already linked to any record (a lead, client, or organization) is
+visible on that record's thread and stays outside the safety net; the safety net
+never moves a thread. Unlinked website copies match a saved lead by their
+Reference or submission ID; an unrelated lead sharing the visitor's email is
+insufficient unless that lead is still in the **New** tab. A matched thread is
+linked to that lead (or its converted client) instead of creating a duplicate.
+Otherwise, the check creates a lead in New (`source: "website_form"` or
+`"email"`, filling the name, email, phone, trip, message text, and received time
+from the email and leaving unknowns blank), links the email thread to that lead,
+and applies the existing suspected-spam scoring and `suspected_spam` tag.
+Safety-net leads never trigger an automatic first reply to the customer and do
+not count as Meta or Google ad conversions while they wait in New; once marked
+Potential or Unsure, quoted, or booked they follow the normal ad conversion
+rules. One message that cannot be resolved is logged and does not stop the
+rest. Today and the morning digest only read; they never create leads. Ignored
+threads, outbound and own-domain mail, known organization/operator or person
+contacts, and clearly automated, platform, or bulk mail (automation headers,
+List-Unsubscribe, bulk/list/junk Precedence, platform notification domains,
+newsletters, receipts, no-reply and notifications senders, automatic replies and
+bounces) stay out even when imported before header capture; website-form copies
+remain candidates even when sent automatically. Classification headers are
+retained on newly imported mail. The check cannot detect a submission that
+produced neither a lead nor imported mail.
 
 When safety-net inquiries are added to New, one short email to
 `Setting.captain_email` (the first allowed Google address, falling back to
@@ -1093,9 +1098,10 @@ only linked threads to existing leads sends nothing. Each message is reserved
 before SMTP, so overlapping runs, retries, and an uncertain SMTP acknowledgement
 cannot send the same alert twice. An SMTP failure leaves the reservation in
 place and the job raises the error; Today still shows the inquiry. A small
-**Unlinked inquiries** note on Today lists safety-net leads added to New during
-the seven-day window with links to each lead, and clears once the lead is
-triaged (marked Potential, Unsure, or spam, moved out of New, or archived),
+**Unlinked inquiries** note on Today lists safety-net leads still in New during
+the seven-day window with links to each lead, plus candidates the next daily
+check has not added yet with links to their threads. A lead clears once it
+leaves New (marked Potential, Unsure, or spam, quoted, or archived), is
 re-linked to another record, or its thread is ignored.
 
 Ordinary email attachments are part of the conversation and stay in CRM storage.

@@ -41,8 +41,8 @@
   <% if (unlinked = @summary.unlinked_inquiries).any? %>
     <aside class="callout-warning" aria-label="Unlinked inquiries">
       <details>
-        <summary class="cursor-pointer py-3 text-sm"><strong>Unlinked inquiries: <%= unlinked.size %></strong> · Added to New</summary>
-        <p class="mt-2 text-sm">Recent inquiry mail was added to New and linked to its email thread. Review and triage each lead in New:</p>
+        <summary class="cursor-pointer py-3 text-sm"><strong>Unlinked inquiries: <%= unlinked.size %></strong> · Review</summary>
+        <p class="mt-2 text-sm">Recent inquiry mail the daily check adds to New with its email thread. Review and triage each one:</p>
         <ul class="mt-2 space-y-1 text-sm">
           <% unlinked.each do |message| %>
             <% lead = message.conversation.linkable if message.conversation.linkable.is_a?(Lead) %>

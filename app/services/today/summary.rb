@@ -25,10 +25,7 @@ module Today
     end
 
     def unlinked_inquiries
-      @unlinked_inquiries ||= begin
-        resolve_unlinked_inquiries!
-        inquiry_scanner.messages
-      end
+      @unlinked_inquiries ||= Leads::UnlinkedInquiries.new(now: @now).messages
     end
 
     # Sent or viewed quotes whose valid-until has not passed.
@@ -39,7 +36,6 @@ module Today
 
     # New stage alone does not establish whether an inquiry has been worked.
     def new_leads
-      resolve_unlinked_inquiries!
       Lead.by_status("new").count
     end
 
@@ -106,20 +102,8 @@ module Today
     end
 
     def waiting_threads
-      resolve_unlinked_inquiries!
       Conversation.where(ignored: false).ordered.preload(:linkable, :messages)
         .merge(Conversation.waiting_on_you).linked
-    end
-
-    def inquiry_scanner
-      @inquiry_scanner ||= Leads::UnlinkedInquiries.new(now: @now)
-    end
-
-    def resolve_unlinked_inquiries!
-      return if @resolved_unlinked_inquiries
-
-      @resolved_unlinked_inquiries = true
-      inquiry_scanner.resolve! if inquiry_scanner.respond_to?(:resolve!)
     end
   end
 end

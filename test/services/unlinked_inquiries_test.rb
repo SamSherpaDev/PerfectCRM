@@ -55,20 +55,35 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
   end
 
   test "a previous inquiry from the same email cannot hide a missing website notification" do
-    lead = Lead.create!(name: "Previous trip", email: "traveler@example.com", received_at: 1.month.ago)
+    lead = Lead.create!(name: "Previous trip", email: "traveler@example.com", received_at: 1.month.ago, status: "quoted")
     reference = ingest_inquiry(body: "Website inquiry\nReference: SH-MISSING\nEmail: #{lead.email}")
     submission = ingest_inquiry(body: "Website inquiry\nSubmission ID: missing-new-submission\nEmail: #{lead.email}")
     assert_equal [ reference.id, submission.id ], missing.map(&:id)
+
+    assert_difference("Lead.count", 1) { Leads::UnlinkedInquiries.new.resolve! }
+    safety_net_lead = reference.reload.conversation.linkable
+    assert_not_equal lead, safety_net_lead
+    assert safety_net_lead.safety_net_inquiry?
+    assert_equal "new", safety_net_lead.status
+    assert_equal safety_net_lead, submission.reload.conversation.linkable, "the same email joins the lead still in New"
+    assert_equal [ reference.id ], missing.map(&:id)
     reference.conversation.update!(linkable: lead)
-    assert_equal [ submission.id ], missing.map(&:id), "an explicit link resolves the notice"
+    assert_empty missing, "an explicit link resolves the notice"
   end
 
-  test "an inquiry thread linked only to a client without an inquiry is still missing a lead" do
+  test "an inquiry thread linked to a client stays on that client and is not turned into a lead" do
     client = Client.create!(name: "Returning traveler", email: "client@example.com")
     message = ingest_inquiry(from: client.email, subject: "New Nepal trip",
       body: "Can you quote another tour?")
+    website = ingest_inquiry(body: "New website inquiry\nName: Returning traveler\nEmail: #{client.email}")
+    website.conversation.update!(linkable: client)
     assert_equal client, message.conversation.linkable
-    assert_equal [ message.id ], missing.map(&:id)
+    assert_empty missing
+
+    assert_no_difference("Lead.count") { Leads::UnlinkedInquiries.new.resolve! }
+    assert_equal client, message.reload.conversation.linkable
+    assert_equal client, website.reload.conversation.linkable
+    assert_empty missing
   end
 
   test "finds gmail-style human inquiry without inquiry keywords" do
@@ -235,19 +250,19 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
     assert_empty Leads::UnlinkedInquiries.new(now: received + 1.day).messages
   end
 
-  test "resolve! links to an existing lead by Reference, submission ID, or active lead email instead of creating a duplicate" do
-    by_ref = Lead.create!(name: "Ref Owner")
+  test "resolve! links to an existing lead by Reference, submission ID, or the email of a lead still in New instead of creating a duplicate" do
+    by_ref = Lead.create!(name: "Ref Owner", status: "quoted")
     by_sub = Lead.create!(name: "Submission Owner", external_ref: "website_form:sub-existing-99")
+    by_sub.archive!
     keith = Lead.create!(name: "Keith Almryde", email: "keith.almryde@example.com", status: "new")
-    companion_lead = Lead.create!(name: "Household Lead", email: "primary.lead@example.com", status: "chatting")
-    Person.create!(lead: companion_lead, name: "Companion", email: "companion.lead@example.com")
+    chatting = Lead.create!(name: "Chatting Lead", email: "chatting.lead@example.com", status: "chatting")
 
     ref_msg = ingest_inquiry(body: "Website inquiry\nReference: #{by_ref.reference}\nEmail: other1@example.com")
     sub_msg = ingest_inquiry(body: 'Website inquiry\n"submission_id": "sub-existing-99"\nEmail: other2@example.com')
     keith_web = ingest_inquiry(body: "New website inquiry\nName: Keith Almryde\nEmail: keith.almryde@example.com\nMessage:\nChecking in on dates")
     keith_direct = ingest_inquiry(from: "keith.almryde@example.com", subject: "Quick question", body: "Following up on my inquiry")
     keith_direct.update_columns(inquiry_headers: nil)
-    companion_msg = ingest_inquiry(body: "New website inquiry\nName: Companion\nEmail: companion.lead@example.com\nMessage:\nAdding our dates")
+    chatting_msg = ingest_inquiry(body: "New website inquiry\nName: Chatting Lead\nEmail: chatting.lead@example.com\nMessage:\nAdding our dates")
 
     assert_no_difference("Lead.count") do
       Leads::UnlinkedInquiries.new.resolve!
@@ -257,11 +272,52 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
     assert_equal by_sub, sub_msg.reload.conversation.linkable
     assert_equal keith, keith_web.reload.conversation.linkable
     assert_equal keith, keith_direct.reload.conversation.linkable
-    assert_equal companion_lead, companion_msg.reload.conversation.linkable
+    assert_equal chatting, chatting_msg.reload.conversation.linkable
     assert_empty missing
   end
 
-  test "safety-net leads keep suspected-spam scoring and tagging and never trigger auto-reply or ad conversions" do
+  test "resolve! creates a new lead when the same email belongs only to a lead already triaged out of New" do
+    potential = Lead.create!(name: "Potential Lead", email: "potential.lead@example.com")
+    potential.mark_potential!
+    message = ingest_inquiry(email: potential.email)
+
+    assert_difference("Lead.count", 1) { Leads::UnlinkedInquiries.new.resolve! }
+    safety_net_lead = message.reload.conversation.linkable
+    assert_not_equal potential, safety_net_lead
+    assert_equal potential.email, safety_net_lead.email
+    assert_equal [ message.id ], missing.map(&:id)
+  end
+
+  test "resolve! clamps an out-of-range flagged spam score and one failing message does not block the rest" do
+    flagged = ingest_inquiry(
+      subject: "[Check] New inquiry from Odd Score: Nepal",
+      body: "New website inquiry\nName: Odd Score\nEmail: odd.score@gmail.com\n\nMessage:\nSee you\n\n" \
+            "Flagged for a check (spam score 150: seo_pitch)."
+    )
+    broken = ingest_inquiry(email: "broken.inquiry@example.com")
+    clean = ingest_inquiry(email: "clean.inquiry@example.com")
+    original = ::Leads.method(:suspicion_hits)
+    failing = lambda do |**args|
+      raise ActiveRecord::RecordInvalid if args[:email] == "broken.inquiry@example.com"
+
+      original.call(**args)
+    end
+
+    ::Leads.stub(:suspicion_hits, failing) do
+      assert_difference("Lead.count", 2) { Leads::UnlinkedInquiries.new.resolve! }
+    end
+    flagged_lead = flagged.reload.conversation.linkable
+    assert_equal 100, flagged_lead.spam_score
+    assert flagged_lead.suspected_spam?
+    assert_instance_of Lead, clean.reload.conversation.linkable
+    assert_nil broken.reload.conversation.linkable, "a failed message leaves no orphan lead and stays unlinked"
+    assert_equal [ flagged.id, broken.id, clean.id ], missing.map(&:id)
+
+    assert_difference("Lead.count", 1) { Leads::UnlinkedInquiries.new.resolve! }
+    assert_instance_of Lead, broken.reload.conversation.linkable
+  end
+
+  test "safety-net leads keep suspected-spam scoring and tagging, never trigger auto-reply, and feed ad conversions only once triaged" do
     Setting.current.update!(
       auto_first_reply_enabled: true,
       auto_first_reply_enabled_at: 1.day.ago,
@@ -299,10 +355,9 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
     assert_not clean_lead.suspected_spam?
     assert_equal "safety net inquiry", AutomaticFirstReply.skip_reason(clean_lead, email: clean_lead.email)
 
-    # Even if click attribution metadata were present or the lead advanced, it must never count as an ad conversion.
+    # Click attribution alone does not count while the lead waits in New.
     clean_lead.update!(
       fit_band: "strong",
-      status: "quoted",
       metadata: clean_lead.metadata.merge(
         "acquisition" => {
           "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true },
@@ -314,6 +369,11 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
     assert_not AdConversions.reportable?(clean_lead)
     assert_empty AdConversions.record!(clean_lead)
     assert_equal 0, AdConversion.count
+
+    clean_lead.mark_potential!
+    assert_not AdConversions.excluded?(clean_lead.reload)
+    assert AdConversions.reportable?(clean_lead)
+    assert_includes AdConversions.record!(clean_lead).map(&:event), "lead"
   end
 
   private

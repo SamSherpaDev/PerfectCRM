@@ -20,8 +20,7 @@ class LeadsController < ApplicationController
     @query = params[:q].to_s.strip
     @sort = %w[activity name newest fit].include?(params[:sort]) ? params[:sort] : "activity"
     @lead_action_return_to = leads_path(tab: @tab, q: @query, sort: @sort)
-    new_leads = Lead.by_status(%w[new chatting nudged])
-      .where.not(id: Lead.potential.select(:id)).where.not(id: Lead.unsure.select(:id))
+    new_leads = Lead.in_new_tab
     set_aside = Lead.archived.or(Lead.lost)
 
     @counts = {

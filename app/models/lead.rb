@@ -99,6 +99,7 @@ class Lead < ApplicationRecord
   scope :lost, -> { active.where(status: "lost").where(converted_client_id: nil) }
   scope :converted, -> { where.not(converted_client_id: nil) }
   scope :by_status, ->(status) { active.where(status: status).where(converted_client_id: nil) }
+  scope :in_new_tab, -> { by_status(%w[new chatting nudged]).where.not(id: potential.select(:id)).where.not(id: unsure.select(:id)) }
   scope :stale, -> {
     open.where("COALESCE(last_touch_at, last_activity_at, updated_at, created_at) < ?", STALE_AFTER.ago)
   }
@@ -168,6 +169,10 @@ class Lead < ApplicationRecord
 
   def spam_reason
     ::Leads.spam_reason(suspicion_hits)
+  end
+
+  def safety_net_inquiry?
+    metadata.is_a?(Hash) && metadata["inquiry_safety_net"] == true
   end
 
   def potential?

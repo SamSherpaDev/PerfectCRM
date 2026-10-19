@@ -27,10 +27,8 @@ class Conversation < ApplicationRecord
   }
   scope :linked, -> { where.not(linkable_type: nil) }
   scope :inquiry_linked, -> {
-    where(linkable_type: "Lead")
-      .or(where(linkable_type: "Client", linkable_id: Lead.where.not(converted_client_id: nil).select(:converted_client_id)))
-      .or(where(linkable_type: "Client", linkable_id: Lead.where.not(existing_client_id: nil).select(:existing_client_id)))
-      .or(where(linkable_type: "Client", linkable_id: Quote.where.not(client_id: nil).select(:client_id)))
+    where(linkable_type: "Lead").or(where(linkable_type: "Client",
+      linkable_id: Lead.where.not(converted_client_id: nil).select(:converted_client_id)))
   }
   scope :triage, -> { where(linkable_type: nil, ignored: false) }
   scope :sensitive_documents, -> {
