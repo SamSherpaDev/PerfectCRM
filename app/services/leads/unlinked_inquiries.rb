@@ -39,6 +39,23 @@ module Leads
         lead.metadata["safety_net_message_id"].to_i == message.id
     end
 
+    # Our own mailbox, a website relay, or a no-reply/platform sender: never
+    # the person an inquiry is from, so never the address a reply goes to.
+    def self.relay_sender?(from)
+      address = EmailIdentity.normalized(from)
+      address.present? && (own_sender?(address) || automated_sender_address?(address))
+    end
+
+    def self.own_sender?(from)
+      from == ::Mail.mailbox_address || from.match?(/@(?:[^@]+\.)?sherpaholidays\.com\z/i)
+    end
+
+    def self.automated_sender_address?(from)
+      local, domain = from.split("@", 2)
+      host = domain.to_s.downcase
+      local.to_s.match?(AUTOMATED_SENDER) || PLATFORM_DOMAINS.any? { |entry| host == entry || host.end_with?(".#{entry}") }
+    end
+
     def initialize(now: Time.current)
       @now = now
     end
@@ -269,12 +286,11 @@ module Leads
     end
 
     def automated_sender_address?(from)
-      local, domain = from.split("@", 2)
-      local.to_s.match?(AUTOMATED_SENDER) || platform_domain?(domain)
+      self.class.automated_sender_address?(from)
     end
 
     def own_sender?(from)
-      from == ::Mail.mailbox_address || from.match?(/@(?:[^@]+\.)?sherpaholidays\.com\z/i)
+      self.class.own_sender?(from)
     end
 
     def known_business_contact?(from)
@@ -312,11 +328,6 @@ module Leads
       return true if message.subject.to_s.match?(RECEIPT_SUBJECT)
 
       text.match?(NEWSLETTER) || message.html_body.to_s.match?(/\bunsubscribe\b/i)
-    end
-
-    def platform_domain?(domain)
-      host = domain.to_s.downcase
-      PLATFORM_DOMAINS.any? { |entry| host == entry || host.end_with?(".#{entry}") }
     end
 
     def automated_headers?(raw_headers)
