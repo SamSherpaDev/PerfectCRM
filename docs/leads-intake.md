@@ -73,7 +73,8 @@ merges into the existing lead (`200` with the original `id` and `reference`),
 appending a `duplicate_inquiry` timeline entry without creating a second lead,
 notification, or ad conversion (and Step 2 `/api/v1/leads/intake/details` calls
 with the merged `submission_id` still resolve to that lead). Converted leads are
-never merge targets. Different trips or different messages from the same email
+never merge targets, and archived or spam leads are merge targets only for a
+submission that is itself auto-archived. Different trips or different messages from the same email
 open a separate inquiry (`202` with its own reference), as do repeat submissions
 after 24 hours.
 
@@ -84,11 +85,11 @@ Bot and spam scoring (`Leads.suspicion_hits`, `25` points per hit):
   silently deleted, but routed straight to `Archived` (`archived_at` and
   `spam_marked_at` set, `suspected_spam` tag, and an automated `spam_review`
   timeline entry). It shows in the `Archived` tab with its reason (`Hidden field
-  filled` or `Submitted under 3s`), receives no automatic first reply, and is
-  excluded from Meta and Google ad conversion uploads and feeds. Honeypot
-  catches also send no email copy and are counted via `honeypot_drop` events
-  for Settings → Automations and the Monday weekly ads report. Choosing
-  `Not spam` restores the lead to `New`.
+  filled` or `Submitted under 3s`), sends no notifications (no email copy,
+  `lead.created` webhook, or automatic first reply), and is excluded from Meta
+  and Google ad conversion uploads and feeds. Settings → Automations and the
+  Monday weekly ads report count leads whose `suspicion_hits` include
+  `honeypot`. Choosing `Not spam` restores the lead to `New`.
 - Flag-only hits: `many_links` (3+ links in `message`), `disposable_domain`
   (known throwaway email domain), and `name_matches_email` (local-part matches
   normalized name), alone or combined. The lead is tagged `suspected_spam`
@@ -524,7 +525,7 @@ verdicts and repeated statuses leave stage timing unchanged.
 - **Spam.** Filled honeypots, fast submits, link-stuffed messages, throwaway
   domains, and name-equals-email are scored, tagged `suspected_spam`, and
   counted - never rejected. Honeypot and fast-submit catches go straight to
-  Archived as spam.
+  Archived as spam without an email copy or webhook.
 
 Notification intent is saved in `lead_notifications` in the same transaction
 as the inquiry or details update. Intake and details replays re-check pending

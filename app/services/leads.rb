@@ -14,7 +14,6 @@ module Leads
   FAST_SUBMIT_SECONDS = 3
   AUTO_ARCHIVE_HITS = %i[honeypot too_fast].freeze
   DUPLICATE_WINDOW = 24.hours
-  HONEYPOT_CACHE_KEY = "intake:honeypot:dropped"
 
   SPAM_HIT_LABELS = {
     "honeypot" => "Hidden field filled",
@@ -91,22 +90,12 @@ module Leads
     Array(hits).map(&:to_s).reject(&:blank?).map { |hit| SPAM_HIT_LABELS.fetch(hit, hit.humanize) }.join(", ").presence
   end
 
-  def record_honeypot_drop!(now: Time.current)
-    Rails.cache.increment(HONEYPOT_CACHE_KEY, 1, expires_in: 30.days)
-    ActivityEvent.create!(
-      subject: Setting.current,
-      kind: "honeypot_drop",
-      summary: "Hidden trap field caught a submission",
-      occurred_at: now,
-      metadata: {}
+  def honeypot_catches_count(range = nil)
+    scope = ::Lead.where(
+      "json_valid(leads.metadata) AND EXISTS (SELECT 1 FROM json_each(json_extract(leads.metadata, '$.suspicion_hits')) WHERE json_each.value = 'honeypot')"
     )
-  end
-
-  def honeypot_drops_count(range = nil)
-    scope = ActivityEvent.where(kind: "honeypot_drop")
-    return scope.where(occurred_at: range).count if range
-
-    [ Rails.cache.read(HONEYPOT_CACHE_KEY).to_i, scope.where(occurred_at: 30.days.ago..Time.current).count ].max
+    scope = scope.where("COALESCE(received_at, leads.created_at) BETWEEN ? AND ?", range.first, range.last) if range
+    scope.count
   end
 
   def find_by_merged_submission_id(submission_id)
@@ -118,7 +107,7 @@ module Leads
     ).first
   end
 
-  def find_recent_duplicate(email:, message:, trip_handle: nil, trip_title: nil, suspected_spam: false, exclude_external_ref: nil, now: Time.current)
+  def find_recent_duplicate(email:, message:, trip_handle: nil, trip_title: nil, auto_archived: false, exclude_external_ref: nil, now: Time.current)
     normalized_email = email.to_s.strip.downcase
     return nil if normalized_email.blank?
 
@@ -130,7 +119,7 @@ module Leads
 
     candidates.find do |lead|
       next false if lead.converted?
-      next false if (lead.archived? || lead.spam_marked_at.present?) && !suspected_spam
+      next false if (lead.archived? || lead.spam_marked_at.present?) && !auto_archived
       next false unless same_or_compatible_trip?(lead, trip_handle: trip_handle, trip_title: trip_title, message: message)
 
       normalize_message_for_duplicate(lead.message) == normalize_message_for_duplicate(message)

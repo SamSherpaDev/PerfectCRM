@@ -207,8 +207,8 @@ module WeeklyReport
         .where("COALESCE(received_at, leads.created_at) BETWEEN ? AND ?", range.first, range.last).count
     end
 
-    def honeypot_dropped_count
-      ::Leads.honeypot_drops_count(range)
+    def honeypot_caught_count
+      ::Leads.honeypot_catches_count(range)
     end
 
     # AI fit against the captain's own call over the last four weeks:

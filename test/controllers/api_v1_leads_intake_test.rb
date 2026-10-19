@@ -391,9 +391,9 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
 
   # -- honeypot -----------------------------------------------------------------
 
-  test "filled honeypot is saved to Archived as spam with its reason, no email copy or first reply, and a recorded drop count" do
+  test "filled honeypot is saved to Archived as spam with its reason, no notifications, and a counted catch" do
     assert_difference("Lead.count", 1) do
-      assert_difference("Leads.honeypot_drops_count", 1) do
+      assert_difference("Leads.honeypot_catches_count", 1) do
         post_intake intake_body("honeypot" => "http://spam.example", "message" => "Autofilled by my browser")
       end
     end
@@ -405,7 +405,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     assert lead.spam_marked_at.present?
     assert lead.suspected_spam?
     assert_equal "Hidden field filled", lead.spam_reason
-    assert_equal %w[lead.created], lead.lead_notifications.pluck(:event)
+    assert_empty lead.lead_notifications
     assert_includes lead.activity_events.find_by(kind: "spam_review").summary, "Hidden field filled"
   end
 
@@ -640,6 +640,30 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "only an auto-archived resubmission merges into an archived spam lead; flag-only and clean ones open a lead in New" do
+    fast = { "started_at" => "2026-09-14T18:06:40Z", "submitted_at" => "2026-09-14T18:06:41Z" }
+    contact = { "name" => "Pemba", "email" => "pemba@example.com" }
+    post_intake intake_body("contact" => contact, "timing" => fast)
+    assert_response :accepted
+    archived = Lead.find(response.parsed_body["id"])
+    assert archived.archived?
+
+    assert_no_difference("Lead.count") do
+      post_intake intake_body("contact" => contact, "timing" => fast)
+    end
+    assert_response :ok
+    assert_equal archived.id, response.parsed_body["id"]
+
+    assert_difference("Lead.count", 1) do
+      post_intake intake_body("contact" => contact)
+    end
+    assert_response :accepted
+    retry_lead = Lead.find(response.parsed_body["id"])
+    assert_not_equal archived.id, retry_lead.id
+    assert_equal [ "name_matches_email" ], retry_lead.suspicion_hits
+    assert_not retry_lead.archived?
+  end
+
   test "same email and message after 24 hours opens a new inquiry" do
     post_intake intake_body
     assert_response :accepted
@@ -667,7 +691,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     assert lead.spam_marked_at.present?
     assert_includes lead.metadata["suspicion_hits"], "too_fast"
     assert_equal "Submitted under 3s", lead.spam_reason
-    assert_nil lead.lead_notifications.find_by(event: "auto_first_reply")
+    assert_empty lead.lead_notifications
     review = lead.activity_events.find_by(kind: "spam_review")
     assert review.present?
     assert_includes review.summary, "Submitted under 3s"
@@ -722,7 +746,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
 
   test "flagged lead email copy carries the check prefix" do
     body = intake_body(
-      "timing" => { "started_at" => "2026-09-14T18:06:40Z", "submitted_at" => "2026-09-14T18:06:41Z" }
+      "contact" => { "name" => "Anna Lindqvist", "email" => "annalindqvist@example.com" }
     )
     post_intake body
     perform_enqueued_jobs only: LeadNotificationJob
@@ -781,13 +805,13 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     assert fast_lead.archived?
     assert fast_lead.spam_marked_at.present?
     assert_equal "Submitted under 3s", fast_lead.spam_reason
-    assert_nil fast_lead.lead_notifications.find_by(event: "auto_first_reply")
+    assert_empty fast_lead.lead_notifications
     assert_no_difference("AdConversion.count") do
       assert_empty AdConversions.record!(fast_lead)
     end
     assert_not_includes AdConversions::GoogleFeed.rows.map(&:lead_id), fast_lead.id
 
-    # 3. Honeypot submission is saved to Archived as spam with no email copy, first reply, or ad conversion, and increments the drop counter.
+    # 3. Honeypot submission is saved to Archived as spam with no notifications or ad conversion, and is counted as a catch.
     honeypot_body = intake_body(
       "contact" => { "name" => "Trap Bot", "email" => "trapbot@gmail.com" },
       "honeypot" => "https://bot.example",
@@ -795,7 +819,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     )
     assert_difference("Lead.count", 1) do
       assert_no_enqueued_jobs only: AdConversions::LeadJob do
-        assert_difference("Leads.honeypot_drops_count", 1) do
+        assert_difference("Leads.honeypot_catches_count", 1) do
           post_intake honeypot_body
         end
       end
@@ -805,7 +829,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     assert honeypot_lead.archived?
     assert honeypot_lead.spam_marked_at.present?
     assert_equal "Hidden field filled, Name matches email", honeypot_lead.spam_reason
-    assert_equal %w[lead.created], honeypot_lead.lead_notifications.pluck(:event)
+    assert_empty honeypot_lead.lead_notifications
     assert_no_difference("AdConversion.count") do
       assert_empty AdConversions.record!(honeypot_lead)
     end

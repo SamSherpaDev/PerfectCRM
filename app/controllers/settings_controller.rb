@@ -223,7 +223,7 @@ class SettingsController < ApplicationController
   def load_automation_log
     @automation_events = ActivityEvent.where(kind: "automation").newest_first.limit(50).includes(:subject)
     @webhook_deliveries = LeadWebhookDelivery.newest_first.limit(50).includes(:lead)
-    @honeypot_dropped = ::Leads.honeypot_drops_count
+    @honeypot_caught = ::Leads.honeypot_catches_count
   end
 
   def update_automations

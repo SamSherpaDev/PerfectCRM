@@ -85,7 +85,7 @@
       Trip, month and party size filled: <%= summary.details_filled %> of <%= summary.total.inquiries %><br>
     <% end %>
     <% if summary.suspected_spam_count.positive? %>Held back as suspected spam: <%= summary.suspected_spam_count %><br><% end %>
-    <% if summary.honeypot_dropped_count.positive? %>Caught by the hidden trap field: <%= summary.honeypot_dropped_count %><br><% end %>
+    <% if summary.honeypot_caught_count.positive? %>Caught by the hidden trap field: <%= summary.honeypot_caught_count %><br><% end %>
     <%= report_agreement_line(summary) %>
   </p>
 

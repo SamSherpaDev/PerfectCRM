@@ -41,9 +41,11 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
     assert_equal 0, summary.suspected_spam_count
     assert_includes WeeklyReport::Monthly.new.eligible_leads, lead
 
-    Leads.record_honeypot_drop!(now: Time.zone.local(2026, 9, 16, 12))
-    Leads.record_honeypot_drop!(now: Time.zone.local(2026, 9, 13, 12))
-    assert_equal 1, WeeklyReport::Summary.new(week_start: WEEK).honeypot_dropped_count
+    inquiry("Trap caught", at: Time.zone.local(2026, 9, 16, 12), metadata: { "suspicion_hits" => [ "honeypot" ] })
+    inquiry("Trap caught earlier", at: Time.zone.local(2026, 9, 13, 12), metadata: { "suspicion_hits" => [ "honeypot" ] })
+    inquiry("Fast only", at: Time.zone.local(2026, 9, 16, 12), metadata: { "suspicion_hits" => [ "too_fast" ] })
+    assert_equal 1, WeeklyReport::Summary.new(week_start: WEEK).honeypot_caught_count
+    assert_equal 2, Leads.honeypot_catches_count
   end
 
   test "owner fit counts the week's eligible inquiries separately from qualification by source and campaign" do

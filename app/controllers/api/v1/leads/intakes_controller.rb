@@ -46,13 +46,13 @@ module Api
               existing = find_replay(external_ref, submission_id)
               next false if existing
 
-              honeypot = lead.suspicion_hits.include?("honeypot")
+              auto_archived = ::Leads.auto_archive?(lead.suspicion_hits)
               duplicate = ::Leads.find_recent_duplicate(
                 email: lead.email,
                 message: lead.message,
                 trip_handle: lead.trip_handle,
                 trip_title: lead.trip_title,
-                suspected_spam: lead.spam_score.positive?,
+                auto_archived: auto_archived,
                 exclude_external_ref: external_ref
               )
               if duplicate
@@ -69,14 +69,11 @@ module Api
                   },
                   caller_name: caller_name
                 )
-                ::Leads.record_honeypot_drop! if honeypot
                 next false
               end
 
               next false unless lead.save
 
-              ::Leads.record_honeypot_drop! if honeypot
-              auto_archived = ::Leads.auto_archive?(lead.suspicion_hits)
               if auto_archived
                 lead.activity_events.create!(
                   kind: "spam_review",
@@ -89,10 +86,9 @@ module Api
                     "spam_score" => lead.spam_score
                   }
                 )
-              end
-              lead.lead_notifications.create!(event: "email_copy") unless honeypot
-              lead.lead_notifications.create!(event: "lead.created")
-              unless auto_archived
+              else
+                lead.lead_notifications.create!(event: "email_copy")
+                lead.lead_notifications.create!(event: "lead.created")
                 lead.lead_notifications.create!(event: "auto_first_reply", available_at: 2.minutes.from_now)
               end
               true
