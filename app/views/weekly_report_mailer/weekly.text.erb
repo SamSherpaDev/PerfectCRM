@@ -36,5 +36,5 @@ Your fit (inquiry review Q-fit) = your Strong or Possible judgment for inquiries
 Source database, <%= monthly.month.strftime('%B') %>, as of <%= monthly.as_of.strftime('%b %-d %H:%M %Z') %>: <%= facts[:inquiries] %> inquiries, <%= facts[:connected_calls] %> connected calls, <%= facts[:bookings] %> bookings, <%= facts[:travelers] %> travelers (booker's source). Net received: <%= source_report_money(facts[:net_received]) %>. Discovery confirmed: <%= quality[:confirmed] %> of <%= quality[:inquiries] %>; <%= quality[:unlinked_bookings] %> unlinked bookings.
 Monthly sources and cohorts: <%= settings_weekly_report_url(month: monthly.month.strftime('%Y-%m')) %>
 
-Qualified = AI fit strong or possible and you moved the lead to Chatting or Quoted. Booked = deposit paid.
+Qualified = leads currently marked Potential; ad platforms keep a conversion already sent if you later remove Potential. Booked = deposit paid.
 Open the report: <%= settings_weekly_report_url(week: @summary.week_start.iso8601) %>

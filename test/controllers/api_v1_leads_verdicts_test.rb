@@ -48,39 +48,35 @@ class ApiV1LeadsVerdictsTest < ActionDispatch::IntegrationTest
     assert_equal "chatting", event.metadata["to_status"]
   end
 
-  test "automated qualification waits for an owner transition and uses its time" do
+  test "AI verdicts and stage moves never qualify; the owner's Potential mark does" do
     @lead.update!(received_at: 12.days.ago, metadata: { "attribution" => { "gclid" => "review-click" },
       "acquisition" => { "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true } } })
     post_verdict @lead.id, { "fit_band" => "strong", "status" => "chatting" }
     assert_response :ok
     assert_equal %w[lead], AdConversions.record!(@lead.reload).map(&:event)
-    post_verdict @lead.id, { "fit_band" => "weak" }
     Leads::Transition.call(@lead.reload, to: "quoted")
-    owner_at = @lead.activity_events.where(kind: "stage_change").order(:occurred_at, :id).last.occurred_at
-    Leads::Transition.call(@lead, to: "chatting")
-    travel 8.days
     post_verdict @lead.id, { "fit_band" => "possible" }
     assert_response :ok
-    rows = AdConversions.record!(@lead.reload)
-    assert_equal %w[qualified quote], rows.map(&:event)
-    assert_equal owner_at, rows.first.occurred_at
-    assert rows.last.occurred_at < 7.days.ago
+    assert_equal %w[quote], AdConversions.record!(@lead.reload).map(&:event)
+    travel 1.hour
+    @lead.mark_potential!
+    row = AdConversions.record!(@lead.reload).sole
+    assert_equal "qualified", row.event
+    assert_equal @lead.potential_marked_at, row.occurred_at
   end
 
-  test "the sweep qualifies a weak AI verdict upgraded by the owner" do
+  test "the sweep qualifies a weak AI verdict the owner marks Potential" do
     @settings.update!(google_feed_password: "review-password", meta_dataset_id: nil, google_terms_accepted: true)
     @lead.update!(received_at: 1.day.ago, metadata: { "attribution" => { "gclid" => "review-click" },
       "acquisition" => { "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true } } })
     post_verdict @lead.id, { "fit_band" => "weak" }
     assert_response :ok
-    @lead.reload.update!(fit_band: "possible")
-    Leads::Transition.call(@lead, to: "chatting")
-    owner_at = @lead.activity_events.find_by!(kind: "stage_change").occurred_at
+    @lead.reload.mark_potential!
     travel 1.hour
     AdConversions::ExportJob.perform_now
     row = @lead.ad_conversions.find_by!(event: "qualified")
     assert_equal "QualifiedLead", row.meta_event_name
-    assert_equal owner_at, row.occurred_at
+    assert_equal @lead.reload.potential_marked_at, row.occurred_at
     assert row.google?
     assert_equal [ "weak" ], @lead.activity_events.where(kind: "automation").map { |event| event.metadata["fit_band"] }
   end

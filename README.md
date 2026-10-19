@@ -856,7 +856,7 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
 | Outcome | When | Google conversion action | Meta event | Value |
 |---|---|---|---|---|
 | Inquiry | Lead created | Existing web tag, not in the feed | `Lead`, sent at intake | $300 |
-| Qualified | Current fit band strong or possible, and you moved it to Chatting or Quoted | `Qualified inquiry` | `QualifiedLead` | $1,000 |
+| Qualified | You marked it Potential (`potential_marked_at`) | `Qualified inquiry` | `QualifiedLead` | $1,000 |
 | Quote | Current or recorded past status Quoted, or a CRM quote sent | `Quote sent` | `Quote` | $2,000 |
 | Booked | An explicitly linked or reviewed active PerfectBook booking with an authoritative timestamped first receipt at or after the inquiry | `Booking (deposit paid)` | `Purchase` | USD booking total times the booking value percent (default 35); other currencies report a fixed 2,000 USD |
 
@@ -872,12 +872,16 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
   not export an invented exact Purchase time. Inferred/unresolved links and old
   unbound Purchase rows are withheld. `first_paid_at` remains legacy estimated
   evidence for weekly compatibility only; no new observation dates are stamped.
-  Qualification and quote
-  milestones use activity history; qualification also requires the current
-  fit band to be strong/possible at sweep time, without requiring an AI verdict
-  in history. Its timestamp is the first owner transition to Chatting or Quoted.
-  Lowering the band before the sweep prevents qualification; already recorded
-  outcomes are retained.
+  Marking a lead Potential (`Lead#mark_potential!`) records `Qualified` at
+  `potential_marked_at`, regardless of fit band or stage, and enqueues
+  `AdConversions::LeadJob` right away so the outcome is recorded and sent to Meta
+  without waiting for the nightly sweep. Potential is the only qualification
+  trigger: fit band and moves to Chatting or Quoted do not qualify a lead on
+  their own. Quote milestones use activity history and
+  sent quotes. Removing Potential, lowering the fit band, or later marking spam
+  does not send a retraction once an outcome is delivered, and already recorded
+  outcomes are retained; a lead marked spam before the event is delivered is
+  withheld and never sent.
 - Inquiry, qualification and quote are unique per lead/event. Purchase is unique
   per PerfectBook booking ID (`sh-booking-ID-purchase`), so two inquiries cannot
   export the same booking and a balance payment is not another Purchase. Repeat
@@ -940,8 +944,9 @@ answer, otherwise the earliest eligible first touch labeled observed. Unknown
 stays unknown; later purchasing inquiries retain their own source separately.
 
 Inquiry review **Q-fit** is your separately audited `owner_fit_at_inquiry`
-judgment (Strong/Possible), with no reply required. **Platform-qualified** stays
-current strong/possible fit plus your stage move. An AI score is never silently
+judgment (Strong/Possible), with no reply required. **Platform-qualified** is
+a lead currently marked Potential, dated by its current mark; the ad platforms
+keep a conversion already sent even if you later remove Potential. An AI score is never silently
 substituted for your review count. Unreviewed fit is shown in completeness.
 Cohorts use inquiry dates and mature 30/60/90/180-day denominators; immature
 inquiries show as pending. Cohort bookings and their eventual value/net cash
@@ -1232,8 +1237,9 @@ Definitions, in `WeeklyReport::Summary`:
 
 - **Inquiry**: a lead received in the week, excluding archives, explicit tests
   and suspected spam.
-- **Qualified**: current AI fit strong or possible, and the captain (never an
-  automation) moved the lead to Chatting or Quoted, dated by the first such move.
+- **Qualified**: a lead currently marked Potential, dated by its current
+  mark (`potential_marked_at`). Removing Potential drops it from the report,
+  but the ad platforms keep a `Qualified` conversion already sent.
 - **Your fit**: inquiry review [Q-fit](#monthly-source-reports-and-reviewed-backfill)
   among the week's eligible inquiries, shown beside Qual for each source/campaign
   and total. It does not change Qualified or cost per qualified inquiry.

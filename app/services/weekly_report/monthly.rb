@@ -352,12 +352,7 @@ module WeeklyReport
     end
 
     def platform_ids
-      candidates = eligible_leads.where(fit_band: AdConversions::QUALIFIED_BANDS).pluck(:id)
-      ActivityEvent.where(subject_type: "Lead", subject_id: candidates, kind: "stage_change")
-        .order(:occurred_at, :id).each_with_object({}) do |event, first|
-        next unless AdConversions::QUALIFIED_STATUSES.include?(event.metadata["to"]) && event.metadata["actor"].present? && event.metadata["actor"] != "automation"
-        first[event.subject_id] ||= event.occurred_at
-      end.select { |_, at| range.cover?(at) }.keys
+      eligible_leads.where(potential_marked_at: range).pluck(:id)
     end
 
     def unlinked_calls

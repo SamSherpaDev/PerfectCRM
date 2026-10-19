@@ -162,6 +162,24 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "marking Potential enqueues AdConversions::LeadJob for reportable ad leads only" do
+    ad_lead = Lead.create!(
+      name: "Ad potential lead",
+      metadata: {
+        "attribution" => { "fbclid" => "IwAR-potential", "first_seen_at" => 1.day.ago.iso8601 },
+        "acquisition" => { "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true } }
+      }
+    )
+    direct_lead = Lead.create!(name: "Direct potential lead")
+
+    assert_enqueued_with(job: AdConversions::LeadJob, args: [ ad_lead.id ]) do
+      patch mark_potential_lead_path(ad_lead)
+    end
+    assert_no_enqueued_jobs only: AdConversions::LeadJob do
+      patch mark_potential_lead_path(direct_lead)
+    end
+  end
+
   test "spam action archives the inquiry and archived Not spam restores it" do
     lead = Lead.create!(name: "Spam inquiry")
     get lead_path(lead)

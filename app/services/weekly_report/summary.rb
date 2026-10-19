@@ -12,7 +12,6 @@ module WeeklyReport
     }.freeze
     UNLINKED_LABEL = "Booked outside the CRM"
     QUALIFIED_FITS = %w[strong possible].freeze
-    QUALIFIED_STAGES = %w[chatting quoted].freeze
     WAITING_AFTER = 24.hours
     AGREEMENT_WINDOW = 28.days
     TRAVELERS_GOALS = { 2026 => 10, 2027 => 100 }.freeze
@@ -374,14 +373,7 @@ module WeeklyReport
     end
 
     def qualification_times
-      @qualification_times ||= begin
-        leads = counted_leads.where(fit_band: QUALIFIED_FITS).to_a
-        moves = captain_moves_to(leads.map(&:id), QUALIFIED_STAGES)
-        leads.each_with_object({}) do |lead, times|
-          at = moves[lead.id]
-          times[lead] = at if at
-        end
-      end
+      @qualification_times ||= counted_leads.where.not(potential_marked_at: nil).to_h { |lead| [ lead, lead.potential_marked_at ] }
     end
 
     # First move to Quoted or first quote sent, whichever came first.
@@ -392,7 +384,7 @@ module WeeklyReport
 
     def quote_times
       @quote_times ||= begin
-        moves = captain_moves_to(nil, %w[quoted])
+        moves = captain_moves_to(%w[quoted])
         sent = Quote.where.not(lead_id: nil).where.not(sent_at: nil).group(:lead_id).minimum(:sent_at)
         ids = moves.keys | sent.keys
         counted_leads.where(id: ids).to_a.each_with_object({}) do |lead, times|
@@ -402,10 +394,8 @@ module WeeklyReport
     end
 
     # { lead_id => first time the captain moved it into one of stages }.
-    def captain_moves_to(lead_ids, stages)
-      scope = ActivityEvent.where(subject_type: "Lead", kind: "stage_change")
-      scope = scope.where(subject_id: lead_ids) if lead_ids
-      scope.pluck(:subject_id, :occurred_at, :metadata).each_with_object({}) do |(id, at, metadata), firsts|
+    def captain_moves_to(stages)
+      ActivityEvent.where(subject_type: "Lead", kind: "stage_change").pluck(:subject_id, :occurred_at, :metadata).each_with_object({}) do |(id, at, metadata), firsts|
         data = metadata.is_a?(Hash) ? metadata : JSON.parse(metadata.to_s) rescue {}
         next unless stages.include?(data["to"]) && data["actor"].to_s != "automation"
 
