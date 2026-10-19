@@ -341,6 +341,133 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
     assert leads.second.reload.potential?
   end
 
+  test "excludes replies in conversations our side started while keeping other senders and website-form copies" do
+    # 1. Bond/insurance thread started by our side ("Rider request for Seller of Travel bond..."); the
+    # reply was imported into its own thread before our message, so only its reply headers link them.
+    bond_conv = Conversation.create!(subject: "Rider request for Seller of Travel bond 527400X (name and address update)")
+    bond_out = Message.create!(
+      conversation: bond_conv,
+      direction: "out",
+      status: "received",
+      from_address: "info@sherpaholidays.com",
+      to_addresses: [ "underwriting@suretybonds.example" ],
+      subject: bond_conv.subject,
+      text_body: "Please update our company address on bond 527400X.",
+      message_id: "bond-out-1@namprd10.prod.outlook.com",
+      sent_at: 10.days.ago
+    )
+    bond_reply = Message.create!(
+      conversation: Conversation.create!(subject: "Re: Rider request for Seller of Travel bond 527400X (name and address update)"),
+      direction: "in",
+      status: "received",
+      from_address: "Surety Underwriting <underwriting@suretybonds.example>",
+      to_addresses: [ "info@sherpaholidays.com" ],
+      subject: "Re: Rider request for Seller of Travel bond 527400X (name and address update)",
+      text_body: "Your rider request has been processed.",
+      in_reply_to: bond_out.message_id,
+      references_text: bond_out.message_id,
+      inbound_received_at: 2.days.ago,
+      sent_at: 2.days.ago
+    )
+
+    # 2. Ongoing supplier thread ("Re: Nepal ground handling: private 16 day program, January 2027")
+    # with no Organization record in CRM; a fresh thread from the same supplier domain stays a candidate.
+    supplier_conv = Conversation.create!(subject: "Re: Nepal ground handling: private 16 day program, January 2027")
+    supplier_out = Message.create!(
+      conversation: supplier_conv,
+      direction: "out",
+      status: "received",
+      from_address: "info@sherpaholidays.com",
+      to_addresses: [ "sales@nepalsocialtreks.example" ],
+      subject: supplier_conv.subject,
+      text_body: "Can we adjust day 4 in Pokhara?",
+      message_id: "supplier-out-2@namprd10.prod.outlook.com",
+      sent_at: 12.days.ago
+    )
+    supplier_reply = Message.create!(
+      conversation: supplier_conv,
+      direction: "in",
+      status: "received",
+      from_address: "Nepal Social Treks <sales@nepalsocialtreks.example>",
+      to_addresses: [ "info@sherpaholidays.com" ],
+      subject: "Re: Nepal ground handling: private 16 day program, January 2027",
+      text_body: "Updated private 16 day program attached.",
+      in_reply_to: supplier_out.message_id,
+      references_text: "prewatch-1@namprd10.prod.outlook.com #{supplier_out.message_id}",
+      inbound_received_at: 3.days.ago,
+      sent_at: 3.days.ago
+    )
+    supplier_new_thread = ingest_inquiry(
+      from: "ops@nepalsocialtreks.example",
+      subject: "Private trek for our family",
+      body: "We would like a private Annapurna trek for four in March.",
+      received_at: 2.days.ago
+    )
+
+    # 3. A traveler's first email the captain answered from Outlook before the daily check; Sent Items
+    # synced first, but the inquiry predates our reply, so it stays a candidate, as does another
+    # sender at the same domain.
+    traveler_conv = Conversation.create!(subject: "Everest Base Camp in April")
+    Message.create!(
+      conversation: traveler_conv,
+      direction: "out",
+      status: "received",
+      from_address: "info@sherpaholidays.com",
+      to_addresses: [ "jane@comcast.example" ],
+      subject: "Re: Everest Base Camp in April",
+      text_body: "Happy to help. Here are some dates.",
+      message_id: "traveler-out-1@namprd10.prod.outlook.com",
+      sent_at: 1.day.ago
+    )
+    traveler_inquiry = Message.create!(
+      conversation: traveler_conv,
+      direction: "in",
+      status: "received",
+      from_address: "Jane Walker <jane@comcast.example>",
+      to_addresses: [ "info@sherpaholidays.com" ],
+      subject: traveler_conv.subject,
+      text_body: "Could you plan Everest Base Camp for two in April?",
+      inbound_received_at: 2.days.ago,
+      sent_at: 2.days.ago
+    )
+    neighbor_inquiry = ingest_inquiry(
+      from: "bob@comcast.example",
+      subject: "Bhutan festival tour",
+      body: "Is there a Bhutan festival tour in October?",
+      received_at: 1.day.ago
+    )
+
+    # 4. Reply to our marketing mail sent through a platform (not in the mailbox) quoting our address.
+    newsletter_reply = Message.create!(
+      conversation: Conversation.create!(subject: "Re: Autumn in the Himalaya"),
+      direction: "in",
+      status: "received",
+      from_address: "traveler@icloud.example",
+      to_addresses: [ "info@sherpaholidays.com" ],
+      subject: "Re: Autumn in the Himalaya",
+      text_body: "Please send details on the Annapurna trip.\n\nOn Oct 1, 2026, at 10:15 AM, Sherpa Holidays <info@sherpaholidays.com> wrote:\n> Autumn departures are open.",
+      in_reply_to: "campaign-42@sherpaholidays.com",
+      inbound_received_at: 1.day.ago,
+      sent_at: 1.day.ago
+    )
+
+    # 5. Website-form copy always stays a candidate, even from a supplier address.
+    website_copy = ingest_inquiry(
+      from: "sales@nepalsocialtreks.example",
+      subject: "New website inquiry from Tenzing Sherpa: Everest Base Camp",
+      body: "New website inquiry - reply to answer them directly.\n\n" \
+            "Name: Tenzing Sherpa\nEmail: sales@nepalsocialtreks.example\nHas in mind: Everest Base Camp\n\n" \
+            "Message:\nTesting website inquiry form."
+    )
+
+    candidates = [ supplier_new_thread, traveler_inquiry, neighbor_inquiry, newsletter_reply, website_copy ]
+    assert_equal candidates.map(&:id).sort, missing.map(&:id).sort
+    assert_difference("Lead.count", candidates.size) { Leads::UnlinkedInquiries.new.resolve! }
+    assert_nil bond_reply.reload.conversation.linkable
+    assert_nil supplier_reply.reload.conversation.linkable
+    candidates.each { |message| assert_instance_of Lead, message.reload.conversation.linkable }
+  end
+
   private
 
   def missing

@@ -26,7 +26,7 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     assert_select ".stat", text: /Active clients/
   end
 
-  test "Today lists unlinked inquiry notifications without creating leads, then links each lead the daily check adds to New" do
+  test "Today lists unlinked inquiry notifications without creating leads, then labels resolved leads Added to New from email" do
     messages = [ ingest_inquiry(html: true), ingest_inquiry ]
     assert messages.all? { |message| message.conversation.triage? }
     assert_equal 0, Lead.count
@@ -34,6 +34,7 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     get root_path
     assert_response :success
     assert_equal 0, Lead.count
+    assert_select "[aria-label='Added to New from email']", count: 0
     assert_select "[aria-label='Unlinked inquiries']" do
       assert_select "strong", "Unlinked inquiries: 2"
       messages.each { |message| assert_select "a[href=?]", inbox_thread_path(message.conversation) }
@@ -44,8 +45,9 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal 2, Lead.by_status("new").count
     assert_equal "2", stat_value("New leads")
-    assert_select "[aria-label='Unlinked inquiries']" do
-      assert_select "strong", "Unlinked inquiries: 2"
+    assert_select "[aria-label='Unlinked inquiries']", count: 0
+    assert_select "[aria-label='Added to New from email']" do
+      assert_select "strong", "Added to New from email: 2"
       messages.each do |message|
         lead = message.reload.conversation.linkable
         assert_instance_of Lead, lead
@@ -56,6 +58,7 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     messages.last.conversation.update!(ignored: true)
     get root_path
     assert_response :success
+    assert_select "[aria-label='Added to New from email']", count: 0
     assert_select "[aria-label='Unlinked inquiries']", count: 0
   end
 

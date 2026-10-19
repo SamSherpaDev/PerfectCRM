@@ -170,8 +170,8 @@ module Leads
       text = "#{message.subject}\n#{body}"
       website = text.match?(WEBSITE)
       unless website
-        return if from.blank? || own_sender?(from) || known_business_contact?(from) ||
-          automated_or_platform?(message, from, text)
+        return if from.blank? || own_sender?(from) || reply_in_our_conversation?(message) ||
+          known_business_contact?(from) || automated_or_platform?(message, from, text)
       end
 
       parsed = extract_fields(message, body, from: from, website: website)
@@ -293,6 +293,14 @@ module Leads
       self.class.own_sender?(from)
     end
 
+    def reply_in_our_conversation?(message)
+      cutoff = first_outbound(conversation_id: message.conversation_id)
+      return true if cutoff && (cutoff <=> [ message.inbound_received_at || message.sent_at || message.created_at, message.id ]).negative?
+
+      refs = "#{message.in_reply_to} #{message.references_text}".scan(/[^\s<>]+@[^\s<>]+/).uniq
+      refs.any? && first_outbound(message_id: refs).present?
+    end
+
     def known_business_contact?(from)
       match = ::Mail::Matcher.call([ from ])
       return true if match.via == "ignored" || match.via == "person" || match.linkable.is_a?(Organization)
@@ -320,6 +328,17 @@ module Leads
         end
         [ mail_domain, site_host ].compact
       end.reject { |dom| PUBLIC_EMAIL_PROVIDERS.include?(dom.split(".").first) }.to_set
+    end
+
+    def first_outbound(conditions)
+      @first_outbound ||= {}
+      @first_outbound.fetch(conditions) do
+        @first_outbound[conditions] = Message.outbound.where(conditions)
+          .where.not(id: Message.automatic_replies.select(:id))
+          .pluck(:sent_at, :inbound_received_at, :created_at, :id, :inquiry_headers)
+          .reject { |*, headers| automated_headers?(headers) }
+          .map { |sent_at, received_at, created_at, id, _| [ sent_at || received_at || created_at, id ] }.min
+      end
     end
 
     def automated_or_platform?(message, from, text)

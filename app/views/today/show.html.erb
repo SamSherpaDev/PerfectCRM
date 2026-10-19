@@ -38,15 +38,29 @@
     </div>
   </section>
 
-  <% if (unlinked = @summary.unlinked_inquiries).any? %>
+  <% added_from_email, unlinked = @summary.unlinked_inquiries.partition { |message| message.conversation.linkable.is_a?(Lead) } %>
+  <% if added_from_email.any? %>
+    <aside class="callout-warning" aria-label="Added to New from email">
+      <details>
+        <summary class="cursor-pointer py-3 text-sm"><strong>Added to New from email: <%= added_from_email.size %></strong> · Review</summary>
+        <p class="mt-2 text-sm">Recent inquiry mail added to New with its email thread. Review and triage each lead:</p>
+        <ul class="mt-2 space-y-1 text-sm">
+          <% added_from_email.each do |message| %>
+            <% lead = message.conversation.linkable %>
+            <li><%= link_to message.subject.presence || lead.name.presence || "(no subject)", lead_path(lead), class: "link break-words" %></li>
+          <% end %>
+        </ul>
+      </details>
+    </aside>
+  <% end %>
+  <% if unlinked.any? %>
     <aside class="callout-warning" aria-label="Unlinked inquiries">
       <details>
         <summary class="cursor-pointer py-3 text-sm"><strong>Unlinked inquiries: <%= unlinked.size %></strong> · Review</summary>
-        <p class="mt-2 text-sm">Recent inquiry mail the daily check adds to New with its email thread. Review and triage each one:</p>
+        <p class="mt-2 text-sm">Recent inquiry mail waiting for the daily check to add to New:</p>
         <ul class="mt-2 space-y-1 text-sm">
           <% unlinked.each do |message| %>
-            <% lead = message.conversation.linkable if message.conversation.linkable.is_a?(Lead) %>
-            <li><%= link_to message.subject.presence || lead&.name.presence || "(no subject)", lead ? lead_path(lead) : inbox_thread_path(message.conversation), class: "link break-words" %></li>
+            <li><%= link_to message.subject.presence || "(no subject)", inbox_thread_path(message.conversation), class: "link break-words" %></li>
           <% end %>
         </ul>
       </details>
