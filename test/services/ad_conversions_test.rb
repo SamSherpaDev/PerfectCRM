@@ -118,11 +118,12 @@ class AdConversionsTest < ActiveSupport::TestCase
     assert_equal 300_00, row.value_minor
   end
 
-  test "qualified needs a current strong or possible band and the owner's chatting or quoted" do
-    lead = ad_lead(fit_band: "weak", status: "chatting")
-    assert_equal %w[lead], AdConversions.record!(lead, now: @now).map(&:event)
+  test "only the owner's Potential mark qualifies, never a strong band and the owner's chatting move" do
+    lead = ad_lead(fit_band: "strong", status: "chatting")
+    with_meta { AdConversions::ExportJob.perform_now(now: @now) }
+    assert_equal %w[lead], lead.ad_conversions.pluck(:event)
 
-    verdict(lead, "possible")
+    lead.mark_potential!
     rows = AdConversions.record!(lead, now: @now)
     assert_equal %w[qualified], rows.map(&:event)
     assert rows.first.google
@@ -130,40 +131,9 @@ class AdConversionsTest < ActiveSupport::TestCase
     assert_equal 1_000_00, rows.first.value_minor
   end
 
-  test "owner fit edits before the sweep prevent qualification without retracting recorded outcomes" do
-    lead = ad_lead(fit_band: "strong")
-    lead.update!(fit_band: "weak")
-    Leads::Transition.call(lead, to: "chatting")
-    with_meta { AdConversions::ExportJob.perform_now(now: @now) }
-    assert_equal %w[lead], lead.ad_conversions.pluck(:event)
-
-    lead.update!(fit_band: "possible")
-    with_meta { AdConversions::ExportJob.perform_now(now: @now) }
-    qualified = lead.ad_conversions.find_by!(event: "qualified")
-    assert_equal "sent", qualified.meta_status
-    lead.update!(fit_band: "weak")
-    with_meta { AdConversions::ExportJob.perform_now(now: @now) }
-    assert_equal "sent", qualified.reload.meta_status
-    assert_equal 1, lead.ad_conversions.where(event: "qualified").count
-
-    other = ad_lead(fit_band: "strong", status: "chatting")
-    other.update!(fit_band: "weak")
-    assert_equal %w[lead], AdConversions.record!(other).map(&:event)
-  end
-
-  test "qualification does not require any automation verdict history" do
-    lead = ad_lead
-    lead.update!(fit_band: "strong")
-    travel_to(@now - 1.hour) { Leads::Transition.call(lead, to: "chatting") }
-    Leads::Transition.call(lead, to: "quoted")
-    with_meta { AdConversions::ExportJob.perform_now(now: @now) }
-    row = lead.ad_conversions.find_by!(event: "qualified")
-    assert_equal @now - 1.hour, row.occurred_at
-    assert_equal "sent", row.meta_status
-  end
-
   test "each outcome is recorded once even when the status moves back and forth" do
-    lead = ad_lead(fit_band: "strong", status: "quoted")
+    lead = ad_lead(status: "quoted")
+    lead.mark_potential!
     assert_equal %w[lead qualified quote], AdConversions.record!(lead, now: @now).map(&:event)
     lead.update!(status: "chatting")
     lead.update!(status: "quoted")
@@ -335,7 +305,8 @@ class AdConversionsTest < ActiveSupport::TestCase
   end
 
   test "the Google feed lists click conversions with hashed contact data in Pacific time" do
-    lead = ad_lead(fit_band: "strong", status: "quoted", stage_changed_at: Time.utc(2026, 10, 11, 20, 30))
+    lead = ad_lead(status: "quoted", stage_changed_at: Time.utc(2026, 10, 11, 20, 30))
+    travel_to(Time.utc(2026, 10, 11, 20, 30)) { lead.mark_potential! }
     AdConversions.record!(lead, now: @now)
     rows = AdConversions::GoogleFeed.rows(now: @now)
     assert_equal %w[qualified quote], rows.map(&:event)
@@ -350,7 +321,8 @@ class AdConversionsTest < ActiveSupport::TestCase
   end
 
   test "accepted Google rows never replay and expired clicks stay withheld" do
-    lead = ad_lead(fit_band: "strong", status: "chatting")
+    lead = ad_lead
+    lead.mark_potential!
     AdConversions.record!(lead, now: @now)
     AdConversions::GoogleFeed.serve!(settings: @settings, now: @now)
     row = lead.ad_conversions.find_by(event: "qualified")
@@ -361,17 +333,20 @@ class AdConversionsTest < ActiveSupport::TestCase
     assert_equal "accepted", row.reload.delivery_status
     assert_empty AdConversions::GoogleFeed.rows(now: @now + 4.days)
 
-    old = ad_lead(fit_band: "strong", status: "chatting", received_at: @now - 91.days)
+    old = ad_lead(received_at: @now - 91.days)
+    old.mark_potential!
     AdConversions.record!(old, now: @now)
     assert_not AdConversions::GoogleFeed.rows(now: @now).map(&:lead_id).include?(old.id)
   end
 
   test "rows without a gclid need contact data and the 63-day window" do
-    lead = ad_lead(attribution: { "gbraid" => "braid" }, fit_band: "strong", status: "chatting", received_at: @now - 70.days)
+    lead = ad_lead(attribution: { "gbraid" => "braid" }, received_at: @now - 70.days)
+    lead.mark_potential!
     AdConversions.record!(lead, now: @now)
     assert_empty AdConversions::GoogleFeed.rows(now: @now)
 
-    recent = ad_lead(attribution: { "wbraid" => "braid" }, fit_band: "strong", status: "chatting")
+    recent = ad_lead(attribution: { "wbraid" => "braid" })
+    recent.mark_potential!
     AdConversions.record!(recent, now: @now)
     row = AdConversions::GoogleFeed.rows(now: @now).sole
     assert_nil AdConversions::GoogleFeed.line(row).first
@@ -380,7 +355,7 @@ class AdConversionsTest < ActiveSupport::TestCase
   test "the nightly export records, sends, and writes a one-line result" do
     @settings.update!(meta_dataset_id: "123456789012345")
     @settings.rotate_google_feed_password!
-    ad_lead(fit_band: "strong", status: "chatting", created_at: @now - 1.day)
+    ad_lead(created_at: @now - 1.day).mark_potential!
     with_meta do
       AdConversions::ExportJob.perform_now(now: @now)
     end
@@ -399,7 +374,7 @@ class AdConversionsTest < ActiveSupport::TestCase
     assert_nil @settings.reload.ad_export_last_run_at
   end
 
-  test "automation, nudging, and conversion alone do not qualify a lead" do
+  test "automation, nudging, and conversion do not qualify a lead" do
     lead = ad_lead
     verdict(lead, "strong")
     Leads::Transition.call(lead, to: "chatting", actor: :automation)
@@ -418,23 +393,6 @@ class AdConversionsTest < ActiveSupport::TestCase
     assert_equal @now - 1.day, row.occurred_at
   end
 
-  test "qualification uses the owner transition time and checks the current band" do
-    lead = ad_lead(received_at: @now - 12.days)
-    travel_to(@now - 10.days) { Leads::Transition.call(lead, to: "chatting") }
-    verdict(lead, "possible")
-    row = AdConversions.record!(lead).find { |item| item.event == "qualified" }
-    assert_equal @now - 10.days, row.occurred_at
-    with_meta { assert_equal :skipped, AdConversions.deliver_meta!(row) }
-
-    other = ad_lead(received_at: @now - 12.days)
-    verdict(other, "strong", at: @now - 10.days)
-    verdict(other, "weak", at: @now - 9.days)
-    Leads::Transition.call(other, to: "chatting")
-    assert_not_includes AdConversions.record!(other).map(&:event), "qualified"
-    verdict(other, "possible")
-    assert_equal @now, AdConversions.record!(other).sole.occurred_at
-  end
-
   test "business and owner tests are excluded from recording and delivery" do
     old_emails = ENV["ALLOWED_GOOGLE_EMAILS"]
     ENV["ALLOWED_GOOGLE_EMAILS"] = " Captain@example.com , owner@example.com "
@@ -442,7 +400,8 @@ class AdConversionsTest < ActiveSupport::TestCase
       lead = ad_lead(email: email)
       assert_empty AdConversions.record!(lead)
     end
-    lead = ad_lead(fit_band: "strong", status: "chatting")
+    lead = ad_lead
+    lead.mark_potential!
     rows = AdConversions.record!(lead)
     lead.update!(email: "captain@example.com")
     with_meta do |fake|
@@ -765,21 +724,13 @@ class AdConversionsTest < ActiveSupport::TestCase
     end
   end
 
-  test "qualification uses the earlier of Potential mark and strong or possible stage move once" do
-    chat_first = ad_lead(fit_band: "strong")
-    travel_to(@now - 2.hours) { Leads::Transition.call(chat_first, to: "chatting") }
-    travel_to(@now - 1.hour) { chat_first.mark_potential! }
-    row = AdConversions.record!(chat_first, now: @now).find { |item| item.event == "qualified" }
-    assert_equal @now - 2.hours, row.occurred_at
-    assert_equal 1, chat_first.ad_conversions.where(event: "qualified").count
-
-    potential_first = ad_lead(fit_band: nil)
-    travel_to(@now - 2.hours) { potential_first.mark_potential! }
-    verdict(potential_first, "strong", at: @now - 1.hour)
-    travel_to(@now - 1.hour) { Leads::Transition.call(potential_first, to: "chatting") }
-    row = AdConversions.record!(potential_first, now: @now).find { |item| item.event == "qualified" }
-    assert_equal @now - 2.hours, row.occurred_at
-    assert_equal 1, potential_first.ad_conversions.where(event: "qualified").count
+  test "qualification is dated by the Potential mark even after an earlier strong chatting move" do
+    lead = ad_lead(fit_band: "strong")
+    travel_to(@now - 2.hours) { Leads::Transition.call(lead, to: "chatting") }
+    travel_to(@now - 1.hour) { lead.mark_potential! }
+    row = AdConversions.record!(lead, now: @now).find { |item| item.event == "qualified" }
+    assert_equal @now - 1.hour, row.occurred_at
+    assert_equal 1, lead.ad_conversions.where(event: "qualified").count
   end
 
   test "unmarking Potential does not retract and marking spam before delivery withholds the conversion" do

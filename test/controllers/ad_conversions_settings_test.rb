@@ -30,13 +30,10 @@ class AdConversionsSettingsTest < ActionDispatch::IntegrationTest
 
   test "Google pulls the CSV with the feed password and the pull is logged" do
     password = @settings.rotate_google_feed_password!
-    lead = Lead.create!(name: "Anna Lindqvist", email: "anna@example.com", source: "google_ads",
-      status: "chatting", fit_band: "strong", received_at: 1.day.ago,
+    lead = Lead.create!(name: "Anna Lindqvist", email: "anna@example.com", source: "google_ads", received_at: 1.day.ago,
       metadata: { "attribution" => { "gclid" => "Cj0K-click", "first_seen_at" => 1.day.ago.iso8601 },
         "acquisition" => { "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true } } })
-    Leads::Transition.call(lead, to: "chatting")
-    lead.activity_events.create!(kind: "automation", summary: "AI verdict", occurred_at: Time.current,
-      metadata: { "fit_band" => "strong" })
+    lead.mark_potential!
     AdConversions.record!(lead)
 
     get google_conversions_feed_path, headers: basic("sherpaholidays", password)

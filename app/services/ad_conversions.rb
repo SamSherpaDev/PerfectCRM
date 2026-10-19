@@ -132,13 +132,11 @@ module AdConversions
   def detect(lead, now)
     events = { "lead" => { occurred_at: lead.received_at || lead.created_at, value_minor: VALUES_MINOR["lead"] } }
 
-    history = lead.activity_events.where(kind: "stage_change").order(:occurred_at, :id).to_a
-    qualified_times = [ lead.potential_marked_at ]
-    qualified_times << qualified_at(history) if QUALIFIED_BANDS.include?(lead.fit_band)
-    if (at = qualified_times.compact.min)
-      events["qualified"] = { occurred_at: at, value_minor: VALUES_MINOR["qualified"] }
+    if lead.potential_marked_at
+      events["qualified"] = { occurred_at: lead.potential_marked_at, value_minor: VALUES_MINOR["qualified"] }
     end
 
+    history = lead.activity_events.where(kind: "stage_change").order(:occurred_at, :id).to_a
     quote_times = history.filter_map do |event|
       event.occurred_at if event.kind == "stage_change" && event.metadata["to"] == "quoted"
     end
@@ -149,14 +147,6 @@ module AdConversions
     end
 
     events
-  end
-
-  def qualified_at(history)
-    history.find do |event|
-      data = event.metadata
-      QUALIFIED_STATUSES.include?(data["to"]) &&
-        data["actor"].present? && data["actor"] != "automation"
-    end&.occurred_at
   end
 
   # Only explicit/reviewed bindings with actual timestamp evidence can export.
