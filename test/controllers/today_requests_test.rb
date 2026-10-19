@@ -26,18 +26,33 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     assert_select ".stat", text: /Active clients/
   end
 
-  test "Today exposes HTML-only and plain inquiry notifications stranded in triage" do
+  test "Today lists unlinked inquiry notifications without creating leads, then links each lead the daily check adds to New" do
     messages = [ ingest_inquiry(html: true), ingest_inquiry ]
     assert messages.all? { |message| message.conversation.triage? }
     assert_equal 0, Lead.count
 
     get root_path
     assert_response :success
+    assert_equal 0, Lead.count
     assert_select "[aria-label='Unlinked inquiries']" do
       assert_select "strong", "Unlinked inquiries: 2"
       messages.each { |message| assert_select "a[href=?]", inbox_thread_path(message.conversation) }
     end
-    messages.first.conversation.update!(linkable: Lead.create!(name: "Recovered"))
+
+    InquirySafetyNetJob.perform_now
+    get root_path
+    assert_response :success
+    assert_equal 2, Lead.by_status("new").count
+    assert_equal "2", stat_value("New leads")
+    assert_select "[aria-label='Unlinked inquiries']" do
+      assert_select "strong", "Unlinked inquiries: 2"
+      messages.each do |message|
+        lead = message.reload.conversation.linkable
+        assert_instance_of Lead, lead
+        assert_select "a[href=?]", lead_path(lead)
+      end
+    end
+    messages.first.reload.conversation.linkable.mark_potential!
     messages.last.conversation.update!(ignored: true)
     get root_path
     assert_response :success

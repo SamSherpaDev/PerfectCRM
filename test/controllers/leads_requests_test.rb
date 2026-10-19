@@ -1,8 +1,10 @@
 require "test_helper"
 require_relative "../support/google_sign_in_test_helper"
+require_relative "../support/inquiry_mail_test_helper"
 
 class LeadsRequestsTest < ActionDispatch::IntegrationTest
   include GoogleSignInTestHelper
+  include InquiryMailTestHelper
 
   setup do
     sign_in
@@ -695,6 +697,19 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
       patch lead_path(lead), params: { lead: { owner_fit_at_inquiry: "strong" } }
       assert_redirected_to lead_path(lead)
       assert_equal "possible", lead.reload.owner_fit_at_inquiry
+    end
+  end
+
+  test "the composer on a website-copy safety-net lead addresses the visitor, not the copy's relay sender" do
+    [ "crm@perfectcrm.sherpaholidays.com", "notifications@example.com" ].each do |relay|
+      message = ingest_inquiry(from: relay, email: "visitor-#{relay.split("@").first}@example.com")
+      Leads::UnlinkedInquiries.new.resolve!
+      lead = message.conversation.reload.linkable
+
+      get lead_path(lead)
+      assert_response :success
+      assert_select "input[name='message[to]'][value=?]", lead.email
+      assert_select "[data-reply-box-target=recipientSummary]", lead.email
     end
   end
 end

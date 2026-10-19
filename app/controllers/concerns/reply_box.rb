@@ -71,7 +71,14 @@ module ReplyBox
     @reply_to = if @reply_draft.persisted?
       @reply_draft.to_addrs
     elsif @reply_conversation
-      @reply_conversation.thread_parent&.recipients&.join(", ")
+      recipients = @reply_conversation.thread_parent&.recipients
+      # A website-form copy comes from our relay, not the visitor: answer
+      # the record's own address instead.
+      if recipients.present? && recipients.all? { |address| Leads::UnlinkedInquiries.relay_sender?(address) }
+        (@reply_owner.try(:display_email) || @reply_owner.try(:email)).presence || recipients.join(", ")
+      else
+        recipients&.join(", ")
+      end
     else
       @reply_owner.try(:display_email) || @reply_owner.try(:email)
     end

@@ -4,6 +4,6 @@ class InquirySafetyNetMailer < ApplicationMailer
     headers["Auto-Submitted"] = "auto-generated"
     headers["X-Auto-Response-Suppress"] = "All"
     mail(to: Setting.captain_email,
-      subject: "Unlinked inquiries: #{messages.size} to review")
+      subject: "Unlinked inquiries: #{messages.size} added to New")
   end
 end

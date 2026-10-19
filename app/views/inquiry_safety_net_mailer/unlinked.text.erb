@@ -1,9 +1,10 @@
-<%= pluralize(@messages.size, "possible inquiry") %> from the last 7 days may be missing a lead.
-Review each thread and link or create a lead if needed:
+<%= pluralize(@messages.size, "inquiry") %> from the last 7 days <%= @messages.one? ? "was" : "were" %> added to New and linked to <%= @messages.one? ? "its" : "their" %> email <%= "thread".pluralize(@messages.size) %>.
+Review and triage each lead in New:
 <% @messages.each do |message| %>
+<% lead = message.conversation.linkable %>
 
-<%= (message.inbound_received_at || message.sent_at || message.created_at).in_time_zone.strftime("%b %-d") %> - <%= message.subject.presence || "(no subject)" %>
-<%= inbox_thread_url(message.conversation) %>
+<%= (message.inbound_received_at || message.sent_at || message.created_at).in_time_zone.strftime("%b %-d") %> - <%= message.subject.presence || lead.name %>
+<%= lead_url(lead) %>
 <% end %>
 
-Unlinked messages remain on Today during the 7-day lookback. Each message is emailed only once.
+Safety-net leads remain noted on Today during the 7-day lookback until triaged. Each inquiry is emailed only once.
