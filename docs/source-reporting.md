@@ -73,8 +73,10 @@ Campaign detail is retained in the disclosure. Cohort conversion denominators
 are only fully matured inquiries; pending inquiries are not failures. Recognized
 revenue and unique returning travelers remain unavailable upstream.
 
-Q-fit is the owner's hand judgment at inquiry. Platform qualification requires
-the owner's Potential mark, dated by `potential_marked_at`. Missing historical
+Q-fit is the owner's hand judgment at inquiry. Platform qualification counts
+leads currently marked Potential, dated by the current `potential_marked_at`;
+the ad platforms keep a conversion already sent even if the lead is later
+unmarked. Missing historical
 Q-fit must not be backfilled from an AI score or stage change.
 
 ## Reviewed backfill and retention

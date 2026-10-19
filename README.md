@@ -945,7 +945,8 @@ stays unknown; later purchasing inquiries retain their own source separately.
 
 Inquiry review **Q-fit** is your separately audited `owner_fit_at_inquiry`
 judgment (Strong/Possible), with no reply required. **Platform-qualified** is
-a lead you marked Potential, dated by the mark. An AI score is never silently
+a lead currently marked Potential, dated by its current mark; the ad platforms
+keep a conversion already sent even if you later remove Potential. An AI score is never silently
 substituted for your review count. Unreviewed fit is shown in completeness.
 Cohorts use inquiry dates and mature 30/60/90/180-day denominators; immature
 inquiries show as pending. Cohort bookings and their eventual value/net cash
@@ -1236,8 +1237,9 @@ Definitions, in `WeeklyReport::Summary`:
 
 - **Inquiry**: a lead received in the week, excluding archives, explicit tests
   and suspected spam.
-- **Qualified**: the captain marked the lead Potential, dated by
-  `potential_marked_at`, the same rule as the platform `Qualified` outcome.
+- **Qualified**: a lead currently marked Potential, dated by its current
+  mark (`potential_marked_at`). Removing Potential drops it from the report,
+  but the ad platforms keep a `Qualified` conversion already sent.
 - **Your fit**: inquiry review [Q-fit](#monthly-source-reports-and-reviewed-backfill)
   among the week's eligible inquiries, shown beside Qual for each source/campaign
   and total. It does not change Qualified or cost per qualified inquiry.

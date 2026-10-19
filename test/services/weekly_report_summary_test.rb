@@ -303,7 +303,7 @@ class WeeklyReportSummaryTest < ActiveSupport::TestCase
     assert_equal 3.0, WeeklyReport::Summary.new(week_start: WEEK).median_first_reply_hours
   end
 
-  test "qualification follows the owner's Potential mark, dated by the mark" do
+  test "qualification counts leads currently marked Potential, dated by the current mark" do
     moved = inquiry("Owner chatting", fit_band: "strong")
     move(moved, "chatting", at: Time.zone.local(2026, 9, 16))
     move(moved, "quoted", at: Time.zone.local(2026, 9, 17))
