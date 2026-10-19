@@ -98,6 +98,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     assert_response :accepted
     json = response.parsed_body
     assert json["reference"].match?(/\ASH-[A-Z2-9]{4}\z/)
+    assert_equal true, json["conversion"]
     assert_equal 1, Lead.where("external_ref LIKE 'website_form:%'").count
 
     lead = Lead.last
@@ -376,17 +377,50 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
 
   # -- replay -----------------------------------------------------------------
 
-  test "replay of the same submission id returns 200 with the original reference" do
+  test "replay of the same submission id returns 200 with the original reference and conversion true" do
     body = intake_body
     post_intake body
     assert_response :accepted
     reference = response.parsed_body["reference"]
+    assert_equal true, response.parsed_body["conversion"]
 
     assert_no_difference("Lead.count") do
       post_intake body
     end
     assert_response :ok
     assert_equal reference, response.parsed_body["reference"]
+    assert_equal true, response.parsed_body["conversion"]
+  end
+
+  test "replay of an auto-archived submission returns 200 with conversion false" do
+    honeypot_body = intake_body("honeypot" => "http://spam.example", "message" => "Autofilled by my browser")
+    post_intake honeypot_body
+    assert_response :accepted
+    honeypot_ref = response.parsed_body["reference"]
+    assert_equal false, response.parsed_body["conversion"]
+
+    assert_no_difference("Lead.count") do
+      post_intake honeypot_body
+    end
+    assert_response :ok
+    assert_equal honeypot_ref, response.parsed_body["reference"]
+    assert_equal false, response.parsed_body["conversion"]
+
+    fast_body = intake_body(
+      "contact" => { "name" => "Speed Bot", "email" => "speedbot@example.com" },
+      "timing" => { "started_at" => "2026-09-14T18:06:40Z", "submitted_at" => "2026-09-14T18:06:41Z" }
+    )
+    post_intake fast_body
+    assert_response :accepted
+    fast_ref = response.parsed_body["reference"]
+    assert_equal false, response.parsed_body["conversion"]
+
+    assert_no_difference("Lead.count") do
+      post_intake fast_body
+    end
+    assert_response :ok
+    assert_equal fast_ref, response.parsed_body["reference"]
+    assert_equal false, response.parsed_body["conversion"]
   end
 
   # -- honeypot -----------------------------------------------------------------
@@ -398,6 +432,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
       end
     end
     assert_response :accepted
+    assert_equal false, response.parsed_body["conversion"]
     lead = Lead.find(response.parsed_body["id"])
     assert_equal lead.reference, response.parsed_body["reference"]
     assert_equal [ "Anna Lindqvist", "anna@example.com", "Autofilled by my browser" ], [ lead.name, lead.email, lead.message ]
@@ -537,6 +572,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     post_intake first_body
     assert_response :accepted
     first = response.parsed_body
+    assert_equal true, first["conversion"]
     lead = Lead.find(first["id"])
 
     duplicate_submission_id = SecureRandom.uuid
@@ -553,6 +589,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     second = response.parsed_body
     assert_equal first["id"], second["id"]
     assert_equal first["reference"], second["reference"]
+    assert_equal false, second["conversion"]
 
     lead.reload
     assert_equal "+14155550134", lead.phone
@@ -574,6 +611,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     post_intake intake_body
     assert_response :accepted
     first = response.parsed_body
+    assert_equal true, first["conversion"]
 
     assert_difference("Lead.count", 1) do
       post_intake intake_body("message" => "Actually we are also interested in a Bhutan cultural tour in autumn for four people.")
@@ -582,11 +620,13 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     second = response.parsed_body
     assert_not_equal first["id"], second["id"]
     assert_not_equal first["reference"], second["reference"]
+    assert_equal true, second["conversion"]
 
     assert_difference("Lead.count", 1) do
       post_intake intake_body("trip" => { "handle" => "everest-base-camp-trek", "title" => "Everest Base Camp Trek" })
     end
     assert_response :accepted
+    assert_equal true, response.parsed_body["conversion"]
     assert_equal 3, Lead.where(email: "anna@example.com").count
   end
 
@@ -625,10 +665,12 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     post_intake intake_body
     assert_response :accepted
     original = response.parsed_body
+    assert_equal true, original["conversion"]
     duplicate_body = intake_body
     post_intake duplicate_body
     assert_response :ok
     assert_equal original["id"], response.parsed_body["id"]
+    assert_equal false, response.parsed_body["conversion"]
 
     travel 25.hours do
       assert_no_difference([ "Lead.count", "LeadNotification.count" ]) do
@@ -637,6 +679,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
       assert_response :ok
       assert_equal original["id"], response.parsed_body["id"]
       assert_equal original["reference"], response.parsed_body["reference"]
+      assert_equal false, response.parsed_body["conversion"]
     end
   end
 
@@ -645,6 +688,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     contact = { "name" => "Pemba", "email" => "pemba@example.com" }
     post_intake intake_body("contact" => contact, "timing" => fast)
     assert_response :accepted
+    assert_equal false, response.parsed_body["conversion"]
     archived = Lead.find(response.parsed_body["id"])
     assert archived.archived?
 
@@ -653,11 +697,13 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     end
     assert_response :ok
     assert_equal archived.id, response.parsed_body["id"]
+    assert_equal false, response.parsed_body["conversion"]
 
     assert_difference("Lead.count", 1) do
       post_intake intake_body("contact" => contact)
     end
     assert_response :accepted
+    assert_equal true, response.parsed_body["conversion"]
     retry_lead = Lead.find(response.parsed_body["id"])
     assert_not_equal archived.id, retry_lead.id
     assert_equal [ "name_matches_email" ], retry_lead.suspicion_hits
@@ -667,12 +713,14 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
   test "same email and message after 24 hours opens a new inquiry" do
     post_intake intake_body
     assert_response :accepted
+    assert_equal true, response.parsed_body["conversion"]
 
     travel 25.hours do
       assert_difference("Lead.count", 1) do
         post_intake intake_body
       end
       assert_response :accepted
+      assert_equal true, response.parsed_body["conversion"]
     end
   end
 
@@ -684,6 +732,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     )
     post_intake body
     assert_response :accepted
+    assert_equal false, response.parsed_body["conversion"]
     lead = Lead.last
     assert_equal 25, lead.spam_score
     assert lead.suspected_spam?
@@ -721,6 +770,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     )
     post_intake body
     assert_response :accepted
+    assert_equal true, response.parsed_body["conversion"]
     lead = Lead.last
     assert_equal 25, lead.spam_score
     assert lead.suspected_spam?
@@ -737,6 +787,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     )
     post_intake body
     assert_response :accepted
+    assert_equal true, response.parsed_body["conversion"]
     lead = Lead.last
     assert_equal 50, lead.spam_score
     assert lead.suspected_spam?
@@ -781,6 +832,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
       end
     end
     assert_response :accepted
+    assert_equal true, response.parsed_body["conversion"]
     real_lead = Lead.find(response.parsed_body["id"])
     assert_not real_lead.archived?
     assert_not real_lead.suspected_spam?
@@ -801,6 +853,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
       end
     end
     assert_response :accepted
+    assert_equal false, response.parsed_body["conversion"]
     fast_lead = Lead.find(response.parsed_body["id"])
     assert fast_lead.archived?
     assert fast_lead.spam_marked_at.present?
@@ -825,6 +878,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
       end
     end
     assert_response :accepted
+    assert_equal false, response.parsed_body["conversion"]
     honeypot_lead = Lead.find(response.parsed_body["id"])
     assert honeypot_lead.archived?
     assert honeypot_lead.spam_marked_at.present?
@@ -848,6 +902,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     end
     assert_response :ok
     assert_equal real_lead.id, response.parsed_body["id"]
+    assert_equal false, response.parsed_body["conversion"]
     assert_equal 1, real_lead.activity_events.where(kind: "duplicate_inquiry").count
   end
   test "malformed contact receives field validation errors" do

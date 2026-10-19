@@ -98,7 +98,7 @@ module Api
             raise unless existing
           end
           if duplicate
-            return render json: lead_response(duplicate.reload), status: :ok
+            return render json: lead_response(duplicate.reload, conversion: false), status: :ok
           end
           existing ||= find_replay(external_ref, submission_id) unless saved
           if existing
@@ -107,7 +107,8 @@ module Api
               "body_matches=#{replay_body_matches?(existing, payload, fields)}"
             )
             LeadNotification.enqueue_pending(existing.id)
-            return render json: lead_response(existing), status: :ok
+            conversion = existing.external_ref == external_ref && !::Leads.auto_archive?(existing.suspicion_hits)
+            return render json: lead_response(existing, conversion: conversion), status: :ok
           end
 
           if saved
@@ -292,11 +293,12 @@ module Api
             lead.message.to_s == payload["message"].to_s.strip
         end
 
-        def lead_response(lead)
+        def lead_response(lead, conversion: !::Leads.auto_archive?(lead.suspicion_hits))
           {
             id: lead.id,
             reference: lead.reference,
-            received_at: (lead.received_at || lead.created_at)&.iso8601
+            received_at: (lead.received_at || lead.created_at)&.iso8601,
+            conversion: conversion
           }
         end
       end
