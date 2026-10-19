@@ -264,6 +264,17 @@ class PipelineSystemTest < ApplicationSystemTestCase
     lead.update_columns(last_touch_at: 9.days.ago)
     page.current_window.resize_to(1400, 900)
     visit pipeline_path
+    assert page.evaluate_script(<<~JS), "Stale badge and Nudge must fit inside the card"
+      (() => {
+        const card = document.querySelector('article.kcard-stale')
+        const bounds = card.getBoundingClientRect()
+        const visible = Array.from(card.querySelectorAll('.badge, a')).filter(el => el.checkVisibility())
+        return visible.length > 0 && visible.every(el => {
+          const rect = el.getBoundingClientRect()
+          return rect.left >= bounds.left && rect.right <= bounds.right
+        })
+      })()
+    JS
     within "article.kcard-stale", text: lead.name do
       find("summary", text: "Move").click
       click_link "Chatting", exact: true
@@ -280,7 +291,9 @@ class PipelineSystemTest < ApplicationSystemTestCase
     choose "Note", allow_label_click: true
     fill_in "Add a note", with: "Traveler replied about dates"
     click_button "Save note"
+    assert_text "Note saved."
     visit pipeline_path
+    assert_selector "article.kcard", text: lead.name
     assert_no_selector "article.kcard-stale", text: lead.name
   end
 

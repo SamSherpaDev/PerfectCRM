@@ -63,8 +63,11 @@
   </div>
 
   <% if stale %>
-    <div class="mt-1 flex items-center justify-between gap-2">
-      <%= badge "Stale · #{time_ago_in_words(record.last_touch)} quiet", :warning %>
+    <div class="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+      <span class="inline-flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] muted">
+        <%= badge "Stale", :warning %>
+        <%= time_ago_in_words(record.last_touch) %> quiet
+      </span>
       <%= link_to "Nudge", lead_path(record, template: pipeline_nudge_template&.id, nudge: 1), class: "link text-[12px]", title: "Open the lead to write the follow-up" %>
     </div>
   <% end %>
