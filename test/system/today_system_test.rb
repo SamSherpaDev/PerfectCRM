@@ -1,14 +1,18 @@
 require "application_system_test_case"
 require_relative "../support/google_sign_in_test_helper"
+require_relative "../support/inquiry_mail_test_helper"
 
 # Today is the first screen on the phone: two tiles per row, check rows
 # completable with one tap, and no sideways scrolling at 390px.
 class TodaySystemTest < ApplicationSystemTestCase
   include GoogleSignInTestHelper
+  include InquiryMailTestHelper
 
   test "today at 390px completes a follow-up with one tap" do
     client = Client.create!(name: "Maya", email: "maya@example.com")
     client.tasks.create!(title: "Nudge Maya about the deposit", due_on: Date.current)
+    ingest_inquiry(subject: "New inquiry from Pemba Sherpa: Annapurna Circuit Trek")
+    InquirySafetyNetJob.perform_now
 
     OmniAuth.config.mock_auth[:google_oauth2] = OmniAuth::AuthHash.new(
       provider: "google_oauth2", uid: "google-captain",
@@ -20,6 +24,13 @@ class TodaySystemTest < ApplicationSystemTestCase
     end
     page.current_window.resize_to(390, 844)
     page.evaluate_async_script("const done = arguments[0]; Promise.all(document.getAnimations().map(a => a.finished.catch(() => {}))).then(done)")
+
+    assert_no_selector "[aria-label='Unlinked inquiries']"
+    within("[aria-label='Added to New from email']") do
+      assert_text "Added to New from email: 1 · Review"
+      find("summary").click
+      assert_link "New inquiry from Pemba Sherpa: Annapurna Circuit Trek"
+    end
 
     %w[departing returned].each do |section|
       empty_state = find("section[aria-labelledby='#{section}-heading'] .empty-inline")

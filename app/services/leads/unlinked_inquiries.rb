@@ -170,8 +170,8 @@ module Leads
       text = "#{message.subject}\n#{body}"
       website = text.match?(WEBSITE)
       unless website
-        return if from.blank? || own_sender?(from) || known_business_contact?(from) ||
-          automated_or_platform?(message, from, text)
+        return if from.blank? || own_sender?(from) || reply_in_our_conversation?(message, body) ||
+          known_business_contact?(from) || automated_or_platform?(message, from, text)
       end
 
       parsed = extract_fields(message, body, from: from, website: website)
@@ -293,11 +293,34 @@ module Leads
       self.class.own_sender?(from)
     end
 
+    def reply_in_our_conversation?(message, body)
+      if (cutoff = outbound_cutoff_by_conversation[message.conversation_id])
+        msg_time = message.inbound_received_at || message.sent_at || message.created_at
+        return true if (cutoff[:time] && msg_time && cutoff[:time] <= msg_time) || cutoff[:id] < message.id
+      end
+
+      return false unless message.in_reply_to.present? || message.references_text.present? ||
+        message.subject.to_s.match?(/\A\s*(?:re|fwd?)\s*:/i)
+
+      refs = "#{message.in_reply_to} #{message.references_text}".scan(/[^\s<>]+@[^\s<>]+/).map(&:downcase)
+      return true if refs.any? { |id| own_sender?(id) || own_outbound_message_ids.include?(id) }
+
+      own_quoted_sender?(body)
+    end
+
+    def own_quoted_sender?(body)
+      mailbox = Regexp.escape(::Mail.mailbox_address)
+      own_addr = /(?:#{mailbox}|[a-z0-9._%+-]+@(?:[^@\s>]+\.)?sherpaholidays\.com)/i
+      body.match?(/^[ \t>*]*From:\s*[^\r\n]*#{own_addr}/im) ||
+        body.match?(/\bOn\b[\s\S]{1,240}#{own_addr}[\s\S]{0,60}\bwrote:/i)
+    end
+
     def known_business_contact?(from)
       match = ::Mail::Matcher.call([ from ])
       return true if match.via == "ignored" || match.via == "person" || match.linkable.is_a?(Organization)
       return true if Organization.where("lower(email) = ?", from).exists? ||
         Person.where("lower(email) = ?", from).exists?
+      return true if business_correspondent_emails.include?(from)
 
       domain = from.split("@", 2).last.to_s
       organization_domain?(domain)
@@ -311,15 +334,107 @@ module Leads
     end
 
     def organization_domains
-      @organization_domains ||= Organization.pluck(:email, :website).flat_map do |email, website|
-        mail_domain = email.to_s.split("@", 2).last.to_s.downcase.presence
-        site_host = begin
-          URI.parse(website.to_s).host.to_s.downcase.sub(/\Awww\./, "").presence if website.present?
-        rescue URI::InvalidURIError
-          nil
+      @organization_domains ||= begin
+        org_entries = Organization.pluck(:email, :website).flat_map do |email, website|
+          mail_domain = email.to_s.split("@", 2).last.to_s.downcase.presence
+          site_host = begin
+            URI.parse(website.to_s).host.to_s.downcase.sub(/\Awww\./, "").presence if website.present?
+          rescue URI::InvalidURIError
+            nil
+          end
+          [ mail_domain, site_host ].compact
         end
-        [ mail_domain, site_host ].compact
-      end.reject { |dom| PUBLIC_EMAIL_PROVIDERS.include?(dom.split(".").first) }.to_set
+        correspondent_domains = business_correspondent_emails.filter_map { |email| email.split("@", 2).last.to_s.downcase.presence }
+        (org_entries + correspondent_domains).reject { |dom| PUBLIC_EMAIL_PROVIDERS.include?(dom.split(".").first) }.to_set
+      end
+    end
+
+    def outbound_cutoff_by_conversation
+      @outbound_cutoff_by_conversation ||= begin
+        cutoffs = {}
+        non_automated_outbound_messages.each do |msg|
+          next if automated_headers?(msg.inquiry_headers)
+
+          msg_time = msg.sent_at || msg.inbound_received_at || msg.created_at
+          current = cutoffs[msg.conversation_id]
+          if current.nil?
+            cutoffs[msg.conversation_id] = { time: msg_time, id: msg.id }
+          else
+            current[:time] = [ current[:time], msg_time ].compact.min
+            current[:id] = [ current[:id], msg.id ].min
+          end
+        end
+        cutoffs
+      end
+    end
+
+    def own_outbound_message_ids
+      @own_outbound_message_ids ||= Message.outbound.where.not(message_id: [ nil, "" ])
+        .pluck(:message_id).map { |id| id.to_s.delete("<>").strip.downcase }.to_set
+    end
+
+    def business_correspondent_emails
+      @business_correspondent_emails ||= begin
+        safety_lead_msg_ids = safety_net_leads_scope.pluck(:id, :metadata).to_h do |lead_id, meta|
+          parsed = meta.is_a?(Hash) ? meta : (JSON.parse(meta.to_s) rescue {})
+          [ lead_id, parsed["safety_net_message_id"].to_i ]
+        end
+        emails = Set.new
+        non_automated_outbound_messages.each do |msg|
+          next if automated_headers?(msg.inquiry_headers)
+
+          conv = msg.conversation
+          next unless conv && !conv.ignored?
+
+          case conv.linkable_type
+          when nil, "Organization"
+            # Unlinked or organization threads where our side sent mail are business correspondence.
+          when "Lead"
+            safety_msg_id = safety_lead_msg_ids[conv.linkable_id]
+            next unless safety_msg_id && safety_msg_id.positive? && msg.id < safety_msg_id
+          else
+            next
+          end
+
+          (Array(msg.to_addresses) + Array(msg.cc_addresses)).each do |raw|
+            addr = EmailIdentity.normalized(raw)
+            next if addr.blank? || own_sender?(addr) || automated_sender_address?(addr)
+            next if internal_emails.include?(addr) || customer_emails.include?(addr)
+
+            emails << addr
+          end
+        end
+        emails
+      end
+    end
+
+    def non_automated_outbound_messages
+      @non_automated_outbound_messages ||= Message.outbound
+        .where.not(id: Message.automatic_replies.select(:id))
+        .preload(:conversation).to_a
+    end
+
+    def safety_net_leads_scope
+      Lead.where("CASE WHEN json_valid(leads.metadata) THEN json_extract(leads.metadata, '$.inquiry_safety_net') END = 1")
+    end
+
+    def internal_emails
+      @internal_emails ||= (
+        ENV.fetch("ALLOWED_GOOGLE_EMAILS", "").split(/[,\s]+/) +
+        [ Setting.captain_email, Setting.current.weekly_report_to ] +
+        User.pluck(:email)
+      ).compact.map { |email| EmailIdentity.normalized(email) }.reject(&:blank?).to_set
+    end
+
+    def customer_emails
+      @customer_emails ||= begin
+        non_safety_leads = Lead.where("CASE WHEN json_valid(leads.metadata) THEN json_extract(leads.metadata, '$.inquiry_safety_net') END IS NOT 1")
+        (
+          Client.where.not(email: [ nil, "" ]).pluck(:email) +
+          non_safety_leads.where.not(email: [ nil, "" ]).pluck(:email) +
+          Person.where.not(email: [ nil, "" ]).pluck(:email)
+        ).map { |email| EmailIdentity.normalized(email) }.reject(&:blank?).to_set
+      end
     end
 
     def automated_or_platform?(message, from, text)

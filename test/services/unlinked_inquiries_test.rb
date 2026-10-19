@@ -341,6 +341,114 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
     assert leads.second.reload.potential?
   end
 
+  test "excludes replies in conversations our side started and mail from business correspondents while keeping website-form copies" do
+    # 1. Bond/insurance thread started by our side ("Rider request for Seller of Travel bond...").
+    bond_conv = Conversation.create!(subject: "Rider request for Seller of Travel bond 527400X (name and address update)")
+    bond_Conv_out = Message.create!(
+      conversation: bond_conv,
+      direction: "out",
+      status: "received",
+      from_address: "info@sherpaholidays.com",
+      to_addresses: [ "underwriting@suretybonds.example" ],
+      subject: bond_conv.subject,
+      text_body: "Please update our company address on bond 527400X.",
+      message_id: "bond-out-1@namprd10.prod.outlook.com",
+      sent_at: 10.days.ago
+    )
+    bond_reply = Message.create!(
+      conversation: bond_conv,
+      direction: "in",
+      status: "received",
+      from_address: "Surety Underwriting <underwriting@suretybonds.example>",
+      to_addresses: [ "info@sherpaholidays.com" ],
+      subject: "Re: Rider request for Seller of Travel bond 527400X (name and address update)",
+      text_body: "Your rider request has been processed.",
+      in_reply_to: bond_Conv_out.message_id,
+      references_text: bond_Conv_out.message_id,
+      inbound_received_at: 2.days.ago,
+      sent_at: 2.days.ago
+    )
+
+    # 2. Ongoing supplier thread ("Re: Nepal ground handling: private 16 day program, January 2027")
+    # with no Organization record in CRM, plus a pre-watch reply quoting our mailbox and a fresh thread
+    # from another address at the same supplier domain.
+    supplier_conv = Conversation.create!(subject: "Re: Nepal ground handling: private 16 day program, January 2027")
+    Message.create!(
+      conversation: supplier_conv,
+      direction: "in",
+      status: "received",
+      from_address: "sales@nepalsocialtreks.example",
+      to_addresses: [ "info@sherpaholidays.com" ],
+      subject: supplier_conv.subject,
+      text_body: "Here is the first draft.\n\nOn Sep 18, 2026, at 9:00 AM, Sherpa Holidays <info@sherpaholidays.com> wrote:\n> Please quote ground handling for two.",
+      in_reply_to: "prewatch-1@namprd10.prod.outlook.com",
+      references_text: "prewatch-1@namprd10.prod.outlook.com",
+      sent_at: 20.days.ago
+    )
+    supplier_out = Message.create!(
+      conversation: supplier_conv,
+      direction: "out",
+      status: "received",
+      from_address: "info@sherpaholidays.com",
+      to_addresses: [ "sales@nepalsocialtreks.example" ],
+      subject: supplier_conv.subject,
+      text_body: "Can we adjust day 4 in Pokhara?",
+      message_id: "supplier-out-2@namprd10.prod.outlook.com",
+      sent_at: 12.days.ago
+    )
+    supplier_reply = Message.create!(
+      conversation: supplier_conv,
+      direction: "in",
+      status: "received",
+      from_address: "Nepal Social Treks <sales@nepalsocialtreks.example>",
+      to_addresses: [ "info@sherpaholidays.com" ],
+      subject: "Re: Nepal ground handling: private 16 day program, January 2027",
+      text_body: "Updated private 16 day program attached.\n\nFrom: Sherpa Holidays <info@sherpaholidays.com>\nCan we adjust day 4 in Pokhara?",
+      in_reply_to: supplier_out.message_id,
+      references_text: "prewatch-1@namprd10.prod.outlook.com #{supplier_out.message_id}",
+      inbound_received_at: 3.days.ago,
+      sent_at: 3.days.ago
+    )
+    supplier_new_thread = ingest_inquiry(
+      from: "ops@nepalsocialtreks.example",
+      subject: "2027 hotel contract rates",
+      body: "Sharing our updated B2B tariff sheet for 2027."
+    )
+    supplier_new_thread.update_columns(inquiry_headers: nil)
+
+    # 3. Pre-watch thread where only the inbound reply was imported and it quotes our mailbox.
+    prewatch_conv = Conversation.create!(subject: "Re: Golden Triangle ground handling: private program for two, January 2027")
+    prewatch_reply = Message.create!(
+      conversation: prewatch_conv,
+      direction: "in",
+      status: "received",
+      from_address: "info@indiatraveletc.example",
+      to_addresses: [ "info@sherpaholidays.com" ],
+      subject: prewatch_conv.subject,
+      text_body: "Please find the revised Golden Triangle quote.\n\nOn Oct 1, 2026, at 10:15 AM, <info@sherpaholidays.com> wrote:\n> Please send net rates.",
+      in_reply_to: "prewatch-india@namprd10.prod.outlook.com",
+      inbound_received_at: 1.day.ago,
+      sent_at: 1.day.ago
+    )
+
+    # 4. Website-form copy always stays a candidate, even if the email matches a business correspondent.
+    website_copy = ingest_inquiry(
+      from: "sales@nepalsocialtreks.example",
+      subject: "New website inquiry from Tenzing Sherpa: Everest Base Camp",
+      body: "New website inquiry - reply to answer them directly.\n\n" \
+            "Name: Tenzing Sherpa\nEmail: sales@nepalsocialtreks.example\nHas in mind: Everest Base Camp\n\n" \
+            "Message:\nTesting website inquiry form."
+    )
+
+    assert_equal [ website_copy.id ], missing.map(&:id)
+    assert_difference("Lead.count", 1) { Leads::UnlinkedInquiries.new.resolve! }
+    assert_nil bond_reply.reload.conversation.linkable
+    assert_nil supplier_reply.reload.conversation.linkable
+    assert_nil supplier_new_thread.reload.conversation.linkable
+    assert_nil prewatch_reply.reload.conversation.linkable
+    assert_instance_of Lead, website_copy.reload.conversation.linkable
+  end
+
   private
 
   def missing
