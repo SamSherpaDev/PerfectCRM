@@ -12,22 +12,13 @@ module Leads
   ].freeze
   URL_PATTERN = %r{https?://|www\.}i.freeze
   FAST_SUBMIT_SECONDS = 3
-  HIGH_CONFIDENCE_SPAM_THRESHOLD = 50
+  AUTO_ARCHIVE_HITS = %i[honeypot too_fast].freeze
   DUPLICATE_WINDOW = 24.hours
-  NEAR_IDENTICAL_SIMILARITY = 0.85
   HONEYPOT_CACHE_KEY = "intake:honeypot:dropped"
 
-  SPAM_HIT_WEIGHTS = {
-    too_fast: 50,
-    missing_timing: 50,
-    many_links: 25,
-    disposable_domain: 25,
-    name_matches_email: 25
-  }.freeze
-
   SPAM_HIT_LABELS = {
+    "honeypot" => "Hidden field filled",
     "too_fast" => "Submitted under 3s",
-    "missing_timing" => "Missing or invalid timing",
     "many_links" => "Too many links",
     "disposable_domain" => "Disposable email domain",
     "name_matches_email" => "Name matches email"
@@ -78,28 +69,22 @@ module Leads
   end
 
   # Never a rejection: returns [ score 0..100, symbols of hit reasons ].
-  # Strong bot signals (:too_fast under 3s, :missing_timing when timing is
-  # missing or unparseable) carry 50 points; moderate signals carry 25 points.
-  # Scores >= 50 are high-confidence spam (routed straight to Archived and
-  # marked spam); scores 25..49 stay in New with the suspected_spam tag.
-  def suspicion_hits(name:, email:, message:, seconds_to_submit:)
+  # A filled hidden field (:honeypot) or a submit under 3s (:too_fast)
+  # routes the lead straight to Archived as spam; other hits only flag it.
+  def suspicion_hits(name:, email:, message:, seconds_to_submit:, honeypot: nil)
     hits = []
-    if seconds_to_submit.nil?
-      hits << :missing_timing
-    elsif seconds_to_submit < FAST_SUBMIT_SECONDS
-      hits << :too_fast
-    end
+    hits << :honeypot if honeypot.to_s.present?
+    hits << :too_fast if seconds_to_submit && seconds_to_submit < FAST_SUBMIT_SECONDS
     hits << :many_links if message.to_s.scan(URL_PATTERN).size > 2
     local = email.to_s.split("@").first.to_s.downcase
     hits << :name_matches_email if local.present? &&
       name.to_s.strip.downcase.delete(" ") == local.delete("._-")
     hits << :disposable_domain if DISPOSABLE_DOMAINS.include?(email.to_s.split("@").last.to_s.downcase)
-    score = hits.sum { |hit| SPAM_HIT_WEIGHTS.fetch(hit, 25) }
-    [ [ score, 100 ].min, hits ]
+    [ [ hits.size * 25, 100 ].min, hits ]
   end
 
-  def high_confidence_spam?(score)
-    score.to_i >= HIGH_CONFIDENCE_SPAM_THRESHOLD
+  def auto_archive?(hits)
+    Array(hits).any? { |hit| AUTO_ARCHIVE_HITS.include?(hit.to_sym) }
   end
 
   def spam_reason(hits)
@@ -111,7 +96,7 @@ module Leads
     ActivityEvent.create!(
       subject: Setting.current,
       kind: "honeypot_drop",
-      summary: "Honeypot trap dropped a bot submission",
+      summary: "Hidden trap field caught a submission",
       occurred_at: now,
       metadata: {}
     )
@@ -144,10 +129,11 @@ module Leads
     candidates = candidates.order(Arel.sql("COALESCE(received_at, created_at) DESC, id DESC"))
 
     candidates.find do |lead|
+      next false if lead.converted?
       next false if (lead.archived? || lead.spam_marked_at.present?) && !suspected_spam
       next false unless same_or_compatible_trip?(lead, trip_handle: trip_handle, trip_title: trip_title, message: message)
 
-      near_identical_message?(lead.message, message)
+      normalize_message_for_duplicate(lead.message) == normalize_message_for_duplicate(message)
     end
   end
 
@@ -171,27 +157,6 @@ module Leads
 
   def normalize_message_for_duplicate(text)
     text.to_s.downcase.gsub(/[^[:alnum:]\s]/, " ").squish
-  end
-
-  def near_identical_message?(first, second)
-    norm_a = normalize_message_for_duplicate(first)
-    norm_b = normalize_message_for_duplicate(second)
-    return true if norm_a == norm_b
-    return false if norm_a.blank? || norm_b.blank?
-
-    max_len = [ norm_a.length, norm_b.length ].max
-    distance = DidYouMean::Levenshtein.distance(norm_a, norm_b)
-    return true if (1.0 - (distance.to_f / max_len)) >= NEAR_IDENTICAL_SIMILARITY
-
-    words_a = norm_a.split
-    words_b = norm_b.split
-    if words_a.size >= 4 && words_b.size >= 4
-      union = (words_a | words_b).size
-      intersection = (words_a & words_b).size
-      return true if union.positive? && (intersection.to_f / union) >= NEAR_IDENTICAL_SIMILARITY
-    end
-
-    false
   end
 
   def merge_duplicate!(lead, submission_id:, fields:, caller_name:, now: Time.current)

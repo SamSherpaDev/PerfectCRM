@@ -223,7 +223,7 @@
         </div>
       <% end %>
       <% if @honeypot_dropped.to_i.positive? %>
-        <p class="hint mt-3"><%= @honeypot_dropped %> spam-bot submission<%= "s" unless @honeypot_dropped.to_i == 1 %> quietly dropped at the door.</p>
+        <p class="hint mt-3"><%= @honeypot_dropped %> submission<%= "s" unless @honeypot_dropped.to_i == 1 %> caught by the hidden trap field and archived as spam.</p>
       <% end %>
     </div>
   </section>

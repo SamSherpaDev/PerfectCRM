@@ -24,10 +24,6 @@ module Api
           email = contact["email"].to_s
           return unless check_rate_limits!(email: email)
 
-          if payload["honeypot"].to_s.present?
-            return honeypot_response
-          end
-
           fields = validate_required(payload)
           unless fields
             return render json: { error: "validation", fields: @validation_fields },
@@ -47,9 +43,10 @@ module Api
           duplicate = nil
           begin
             saved = ::Lead.transaction do
-              existing = ::Lead.find_by(external_ref: external_ref)
+              existing = find_replay(external_ref, submission_id)
               next false if existing
 
+              honeypot = lead.suspicion_hits.include?("honeypot")
               duplicate = ::Leads.find_recent_duplicate(
                 email: lead.email,
                 message: lead.message,
@@ -72,16 +69,18 @@ module Api
                   },
                   caller_name: caller_name
                 )
+                ::Leads.record_honeypot_drop! if honeypot
                 next false
               end
 
               next false unless lead.save
 
-              if ::Leads.high_confidence_spam?(lead.spam_score)
-                reason = lead.spam_reason || "high spam score"
+              ::Leads.record_honeypot_drop! if honeypot
+              auto_archived = ::Leads.auto_archive?(lead.suspicion_hits)
+              if auto_archived
                 lead.activity_events.create!(
                   kind: "spam_review",
-                  summary: "Automatically archived as spam (#{reason})",
+                  summary: "Automatically archived as spam (#{lead.spam_reason})",
                   occurred_at: lead.received_at || Time.current,
                   metadata: {
                     "verdict" => "spam",
@@ -91,21 +90,21 @@ module Api
                   }
                 )
               end
-              lead.lead_notifications.create!(event: "email_copy")
+              lead.lead_notifications.create!(event: "email_copy") unless honeypot
               lead.lead_notifications.create!(event: "lead.created")
-              unless ::Leads.high_confidence_spam?(lead.spam_score)
+              unless auto_archived
                 lead.lead_notifications.create!(event: "auto_first_reply", available_at: 2.minutes.from_now)
               end
               true
             end
           rescue ActiveRecord::RecordNotUnique
-            existing = ::Lead.find_by(external_ref: external_ref)
+            existing = find_replay(external_ref, submission_id)
             raise unless existing
           end
           if duplicate
             return render json: lead_response(duplicate.reload), status: :ok
           end
-          existing ||= ::Lead.find_by(external_ref: external_ref) unless saved
+          existing ||= find_replay(external_ref, submission_id) unless saved
           if existing
             Rails.logger.warn(
               "[intake] replay for #{external_ref} lead=#{existing.id} " \
@@ -137,14 +136,8 @@ module Api
           Rails.logger.error("[intake] ad conversion enqueue failed: #{error.class}")
         end
 
-        def honeypot_response
-          ::Leads.record_honeypot_drop!
-          render json: {
-            reference: "SH-#{SecureRandom.alphanumeric(4).upcase}",
-            received_at: Time.current.iso8601
-          }, status: :accepted
-        rescue StandardError
-          render json: { error: "server" }, status: :internal_server_error
+        def find_replay(external_ref, submission_id)
+          ::Lead.find_by(external_ref: external_ref) || ::Leads.find_by_merged_submission_id(submission_id)
         end
 
         # Required: contact.name (2..120), contact.email (shaped + MX/A),
@@ -203,12 +196,8 @@ module Api
 
         def seconds_to_submit(payload)
           timing = payload["timing"].is_a?(Hash) ? payload["timing"] : {}
-          started_raw = timing["started_at"].to_s.strip
-          submitted_raw = timing["submitted_at"].to_s.strip
-          return nil if started_raw.blank? || submitted_raw.blank?
-
-          started = Time.iso8601(started_raw) rescue nil
-          submitted = Time.iso8601(submitted_raw) rescue nil
+          started = Time.zone.parse(timing["started_at"].to_s) rescue nil
+          submitted = Time.zone.parse(timing["submitted_at"].to_s) rescue nil
           return nil unless started && submitted
 
           submitted - started
@@ -230,9 +219,10 @@ module Api
           score, hits = ::Leads.suspicion_hits(
             name: fields[:name], email: fields[:email],
             message: payload["message"].to_s,
-            seconds_to_submit: seconds_to_submit(payload)
+            seconds_to_submit: seconds_to_submit(payload),
+            honeypot: payload["honeypot"]
           )
-          high_confidence_spam = ::Leads.high_confidence_spam?(score)
+          auto_archived = ::Leads.auto_archive?(hits)
           attribution = attribution.merge("relay" => caller_name) if caller_name != "website_form"
 
           phone_raw = contact["phone_raw"].to_s.presence
@@ -261,8 +251,8 @@ module Api
             campaign_name: attribution["utm_campaign"].to_s.strip.presence&.truncate(160),
             external_ref: external_ref,
             spam_score: score,
-            archived_at: (now if high_confidence_spam),
-            spam_marked_at: (now if high_confidence_spam),
+            archived_at: (now if auto_archived),
+            spam_marked_at: (now if auto_archived),
             status: "new",
             received_at: now,
             metadata: {

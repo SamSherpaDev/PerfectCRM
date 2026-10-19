@@ -391,18 +391,22 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
 
   # -- honeypot -----------------------------------------------------------------
 
-  test "filled honeypot is a 202 with a synthetic reference, no lead, and a recorded drop count" do
-    assert_no_difference("Lead.count") do
+  test "filled honeypot is saved to Archived as spam with its reason, no email copy or first reply, and a recorded drop count" do
+    assert_difference("Lead.count", 1) do
       assert_difference("Leads.honeypot_drops_count", 1) do
-        post_intake intake_body("honeypot" => "http://spam.example", "message" => "BotSecretPayload")
+        post_intake intake_body("honeypot" => "http://spam.example", "message" => "Autofilled by my browser")
       end
     end
     assert_response :accepted
-    assert_match(/\ASH-/, response.parsed_body["reference"])
-    drop_event = ActivityEvent.where(kind: "honeypot_drop").last
-    assert drop_event.present?
-    assert_equal({}, drop_event.metadata)
-    assert_not_includes drop_event.to_json, "BotSecretPayload"
+    lead = Lead.find(response.parsed_body["id"])
+    assert_equal lead.reference, response.parsed_body["reference"]
+    assert_equal [ "Anna Lindqvist", "anna@example.com", "Autofilled by my browser" ], [ lead.name, lead.email, lead.message ]
+    assert lead.archived?
+    assert lead.spam_marked_at.present?
+    assert lead.suspected_spam?
+    assert_equal "Hidden field filled", lead.spam_reason
+    assert_equal %w[lead.created], lead.lead_notifications.pluck(:event)
+    assert_includes lead.activity_events.find_by(kind: "spam_review").summary, "Hidden field filled"
   end
 
   # -- auth -----------------------------------------------------------------------
@@ -528,7 +532,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
 
   # -- duplicate filter -----------------------------------------------------------------
 
-  test "same email with same or near-identical message within 24h merges into existing lead as timeline entry" do
+  test "same email with the same normalized message within 24h merges into existing lead as timeline entry" do
     first_body = intake_body("contact" => { "name" => "Anna Lindqvist", "email" => "Anna@Example.com", "phone_raw" => "" })
     post_intake first_body
     assert_response :accepted
@@ -586,6 +590,56 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     assert_equal 3, Lead.where(email: "anna@example.com").count
   end
 
+  test "a near-identical but different message from the same email opens its own lead" do
+    post_intake intake_body(
+      "trip" => {},
+      "message" => "Hi, we are two adults interested in the Everest Base Camp trek in April 2027, please send prices and availability"
+    )
+    assert_response :accepted
+    first = response.parsed_body
+
+    assert_difference("Lead.count", 1) do
+      post_intake intake_body(
+        "trip" => {},
+        "message" => "Hi, we are two adults interested in the Annapurna Base Camp trek in October 2027, please send prices and availability"
+      )
+    end
+    assert_response :accepted
+    assert_not_equal first["id"], response.parsed_body["id"]
+  end
+
+  test "a duplicate of an inquiry already converted to a client opens a new lead instead of failing" do
+    post_intake intake_body
+    assert_response :accepted
+    converted = Lead.find(response.parsed_body["id"])
+    converted.convert_to_client!
+
+    assert_difference("Lead.count", 1) do
+      post_intake intake_body
+    end
+    assert_response :accepted
+    assert_not_equal converted.id, response.parsed_body["id"]
+  end
+
+  test "replaying a merged duplicate submission id returns the original lead even after the merge window" do
+    post_intake intake_body
+    assert_response :accepted
+    original = response.parsed_body
+    duplicate_body = intake_body
+    post_intake duplicate_body
+    assert_response :ok
+    assert_equal original["id"], response.parsed_body["id"]
+
+    travel 25.hours do
+      assert_no_difference([ "Lead.count", "LeadNotification.count" ]) do
+        post_intake duplicate_body
+      end
+      assert_response :ok
+      assert_equal original["id"], response.parsed_body["id"]
+      assert_equal original["reference"], response.parsed_body["reference"]
+    end
+  end
+
   test "same email and message after 24 hours opens a new inquiry" do
     post_intake intake_body
     assert_response :accepted
@@ -607,7 +661,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     post_intake body
     assert_response :accepted
     lead = Lead.last
-    assert_equal 50, lead.spam_score
+    assert_equal 25, lead.spam_score
     assert lead.suspected_spam?
     assert lead.archived?
     assert lead.spam_marked_at.present?
@@ -619,23 +673,21 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     assert_includes review.summary, "Submitted under 3s"
   end
 
-  test "missing or invalid timing counts as a strong spam signal and archives the lead as spam" do
+  test "missing, invalid, or non-ISO timing is not a spam signal" do
     [
       intake_body.except("timing"),
       intake_body.merge("timing" => {}),
-      intake_body("timing" => { "started_at" => "not-a-timestamp", "submitted_at" => "2026-09-14T18:06:41Z" })
+      intake_body("timing" => { "started_at" => "not-a-timestamp", "submitted_at" => "2026-09-14T18:06:41Z" }),
+      intake_body("timing" => { "started_at" => "2026-09-14 18:05:58", "submitted_at" => "2026-09-14 18:06:41" })
     ].each_with_index do |body, idx|
-      body = body.deep_merge("contact" => { "email" => "missingtiming#{idx}@example.com" })
+      body = body.deep_merge("contact" => { "email" => "timing#{idx}@example.com" })
       post_intake body
       assert_response :accepted
       lead = Lead.last
-      assert_equal 50, lead.spam_score
-      assert lead.suspected_spam?
-      assert lead.archived?
-      assert lead.spam_marked_at.present?
-      assert_includes lead.metadata["suspicion_hits"], "missing_timing"
-      assert_equal "Missing or invalid timing", lead.spam_reason
-      assert_nil lead.lead_notifications.find_by(event: "auto_first_reply")
+      assert_equal 0, lead.spam_score
+      assert_not lead.suspected_spam?
+      assert_not lead.archived?
+      assert lead.lead_notifications.exists?(event: "auto_first_reply")
     end
   end
 
@@ -654,7 +706,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     assert_equal "Name matches email", lead.spam_reason
   end
 
-  test "spam flags never reject: disposable domain and link-stuffing still 202 and route to Archived" do
+  test "spam flags never reject: disposable domain and link-stuffing together still 202 and stay flag-only in New" do
     body = intake_body(
       "contact" => { "name" => "Cheap Deals", "email" => "x@mailinator.com" },
       "message" => "see http://a.example http://b.example http://c.example"
@@ -664,8 +716,8 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     lead = Lead.last
     assert_equal 50, lead.spam_score
     assert lead.suspected_spam?
-    assert lead.archived?
-    assert lead.spam_marked_at.present?
+    assert_not lead.archived?
+    assert_nil lead.spam_marked_at
   end
 
   test "flagged lead email copy carries the check prefix" do
@@ -735,20 +787,29 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     end
     assert_not_includes AdConversions::GoogleFeed.rows.map(&:lead_id), fast_lead.id
 
-    # 3. Honeypot submission creates neither a lead nor an ad conversion, and increments the drop counter.
+    # 3. Honeypot submission is saved to Archived as spam with no email copy, first reply, or ad conversion, and increments the drop counter.
     honeypot_body = intake_body(
       "contact" => { "name" => "Trap Bot", "email" => "trapbot@gmail.com" },
       "honeypot" => "https://bot.example",
       "acquisition" => ad_acquisition
     )
-    assert_no_difference([ "Lead.count", "AdConversion.count", "LeadNotification.count" ]) do
-      assert_no_enqueued_jobs do
+    assert_difference("Lead.count", 1) do
+      assert_no_enqueued_jobs only: AdConversions::LeadJob do
         assert_difference("Leads.honeypot_drops_count", 1) do
           post_intake honeypot_body
         end
       end
     end
     assert_response :accepted
+    honeypot_lead = Lead.find(response.parsed_body["id"])
+    assert honeypot_lead.archived?
+    assert honeypot_lead.spam_marked_at.present?
+    assert_equal "Hidden field filled, Name matches email", honeypot_lead.spam_reason
+    assert_equal %w[lead.created], honeypot_lead.lead_notifications.pluck(:event)
+    assert_no_difference("AdConversion.count") do
+      assert_empty AdConversions.record!(honeypot_lead)
+    end
+    assert_not_includes AdConversions::GoogleFeed.rows.map(&:lead_id), honeypot_lead.id
 
     # 4. Duplicate submission within 24h merges into the real lead without creating a second lead, notification, or conversion.
     duplicate_body = real_body.merge(
