@@ -174,6 +174,148 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
     assert_empty missing
   end
 
+  test "resolve! turns website and direct email candidates into New leads linked to their threads and is idempotent" do
+    received = Time.zone.local(2026, 10, 15, 9, 30)
+    website = ingest_inquiry(
+      received_at: received,
+      subject: "New website inquiry from Priya Sharma: Bhutan Cultural Trek",
+      body: "New website inquiry - reply to answer them directly.\n\n" \
+            "Name: Priya Sharma\nEmail: priya@example.com\nPhone: (415) 555-0142\n" \
+            "Has in mind: Bhutan Cultural Trek\n\nMessage:\nWe want to travel in April for 10 days.\n\n" \
+            "Reference: SH-PRIYA\nSubmission ID: sub-priya-1"
+    )
+    direct = ingest_inquiry(
+      received_at: received + 2.hours,
+      from: " Maya Lin <maya.lin@gmail.com> ",
+      subject: "Everest Base Camp in November",
+      body: "Hi, can you send details for two hikers?"
+    )
+    direct.update_columns(inquiry_headers: nil)
+
+    assert_difference("Lead.count", 2) do
+      Leads::UnlinkedInquiries.new(now: received + 1.day).resolve!
+    end
+    assert_no_difference("Lead.count") do
+      Leads::UnlinkedInquiries.new(now: received + 1.day).resolve!
+    end
+
+    website_lead = website.reload.conversation.linkable
+    assert_instance_of Lead, website_lead
+    assert_equal "new", website_lead.status
+    assert_equal "website_form", website_lead.source
+    assert_equal "Priya Sharma", website_lead.name
+    assert_equal "priya@example.com", website_lead.email
+    assert_equal "(415) 555-0142", website_lead.phone_raw
+    assert_equal "+14155550142", website_lead.phone
+    assert_equal "Bhutan Cultural Trek", website_lead.trip_title
+    assert_equal "Bhutan Cultural Trek", website_lead.trip_interest
+    assert_equal "We want to travel in April for 10 days.", website_lead.message
+    assert_in_delta received.to_f, website_lead.received_at.to_f, 1.0
+    assert_equal "SH-PRIYA", website_lead.reference
+    assert_equal "website_form:sub-priya-1", website_lead.external_ref
+    assert_equal true, website_lead.metadata["inquiry_safety_net"]
+
+    direct_lead = direct.reload.conversation.linkable
+    assert_instance_of Lead, direct_lead
+    assert_equal "new", direct_lead.status
+    assert_equal "email", direct_lead.source
+    assert_equal "Maya Lin", direct_lead.name
+    assert_equal "maya.lin@gmail.com", direct_lead.email
+    assert_nil direct_lead.phone_raw
+    assert_nil direct_lead.phone
+    assert_nil direct_lead.trip_interest
+    assert_equal "Hi, can you send details for two hikers?", direct_lead.message
+    assert_in_delta (received + 2.hours).to_f, direct_lead.received_at.to_f, 1.0
+    assert_equal true, direct_lead.metadata["inquiry_safety_net"]
+
+    # Untriaged safety-net leads remain visible on Today until triaged out of New.
+    assert_equal [ website.id, direct.id ], Leads::UnlinkedInquiries.new(now: received + 1.day).messages.map(&:id)
+    website_lead.mark_potential!
+    direct_lead.mark_as_spam!
+    assert_empty Leads::UnlinkedInquiries.new(now: received + 1.day).messages
+  end
+
+  test "resolve! links to an existing lead by Reference, submission ID, or active lead email instead of creating a duplicate" do
+    by_ref = Lead.create!(name: "Ref Owner")
+    by_sub = Lead.create!(name: "Submission Owner", external_ref: "website_form:sub-existing-99")
+    keith = Lead.create!(name: "Keith Almryde", email: "keith.almryde@example.com", status: "new")
+    companion_lead = Lead.create!(name: "Household Lead", email: "primary.lead@example.com", status: "chatting")
+    Person.create!(lead: companion_lead, name: "Companion", email: "companion.lead@example.com")
+
+    ref_msg = ingest_inquiry(body: "Website inquiry\nReference: #{by_ref.reference}\nEmail: other1@example.com")
+    sub_msg = ingest_inquiry(body: 'Website inquiry\n"submission_id": "sub-existing-99"\nEmail: other2@example.com')
+    keith_web = ingest_inquiry(body: "New website inquiry\nName: Keith Almryde\nEmail: keith.almryde@example.com\nMessage:\nChecking in on dates")
+    keith_direct = ingest_inquiry(from: "keith.almryde@example.com", subject: "Quick question", body: "Following up on my inquiry")
+    keith_direct.update_columns(inquiry_headers: nil)
+    companion_msg = ingest_inquiry(body: "New website inquiry\nName: Companion\nEmail: companion.lead@example.com\nMessage:\nAdding our dates")
+
+    assert_no_difference("Lead.count") do
+      Leads::UnlinkedInquiries.new.resolve!
+    end
+
+    assert_equal by_ref, ref_msg.reload.conversation.linkable
+    assert_equal by_sub, sub_msg.reload.conversation.linkable
+    assert_equal keith, keith_web.reload.conversation.linkable
+    assert_equal keith, keith_direct.reload.conversation.linkable
+    assert_equal companion_lead, companion_msg.reload.conversation.linkable
+    assert_empty missing
+  end
+
+  test "safety-net leads keep suspected-spam scoring and tagging and never trigger auto-reply or ad conversions" do
+    Setting.current.update!(
+      auto_first_reply_enabled: true,
+      auto_first_reply_enabled_at: 1.day.ago,
+      meta_dataset_id: "1234567890",
+      meta_access_token: "secret",
+      meta_terms_accepted: true,
+      google_feed_password: "g-token",
+      google_terms_accepted: true
+    )
+    spam_msg = ingest_inquiry(
+      subject: "[Check] New inquiry from Seo Spammer: Not sure yet",
+      body: "New website inquiry\nName: Seo Spammer\nEmail: spammer@gmail.com\n" \
+            "Has in mind: Not sure yet\n\nMessage:\nVisit https://seo1.example and https://seo2.example for page 1 on google seo!\n\n" \
+            "Flagged for a check (spam score 75: seo_pitch, multiple_urls)."
+    )
+    clean_msg = ingest_inquiry(
+      subject: "New website inquiry from Real Traveler: Annapurna Circuit",
+      body: "New website inquiry\nName: Real Traveler\nEmail: r.traveler@gmail.com\n" \
+            "Has in mind: Annapurna Circuit\n\nMessage:\nLooking at two weeks in November.\n\n" \
+            "Submission ID: sub-real-1"
+    )
+
+    assert_no_difference([ "AutomaticFirstReply.count", "AdConversion.count", "Message.outbound.count" ]) do
+      assert_difference("Lead.count", 2) do
+        Leads::UnlinkedInquiries.new.resolve!
+      end
+    end
+
+    spam_lead = spam_msg.reload.conversation.linkable
+    assert spam_lead.suspected_spam?
+    assert_operator spam_lead.spam_score, :>=, 75
+    assert_nil spam_lead.trip_interest
+
+    clean_lead = clean_msg.reload.conversation.linkable
+    assert_not clean_lead.suspected_spam?
+    assert_equal "safety net inquiry", AutomaticFirstReply.skip_reason(clean_lead, email: clean_lead.email)
+
+    # Even if click attribution metadata were present or the lead advanced, it must never count as an ad conversion.
+    clean_lead.update!(
+      fit_band: "strong",
+      status: "quoted",
+      metadata: clean_lead.metadata.merge(
+        "acquisition" => {
+          "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true },
+          "last_non_direct_touch" => { "gclid" => "gclid-123", "fbclid" => "fbclid-123", "observed_at" => 1.hour.ago.iso8601 }
+        }
+      )
+    )
+    assert AdConversions.excluded?(clean_lead)
+    assert_not AdConversions.reportable?(clean_lead)
+    assert_empty AdConversions.record!(clean_lead)
+    assert_equal 0, AdConversion.count
+  end
+
   private
 
   def missing

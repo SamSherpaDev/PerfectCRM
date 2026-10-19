@@ -15,39 +15,54 @@ class InquirySafetyNetJobTest < ActiveSupport::TestCase
     ENV["ALLOWED_GOOGLE_EMAILS"] = @old_allowlist
   end
 
-  test "daily check sends one short owner-only alert with each missing inquiry's CRM link" do
+  test "daily check creates New leads linked to their threads and sends one owner-only alert with each lead's CRM link" do
     messages = [ ingest_inquiry(html: true), ingest_inquiry ]
-    assert_no_difference([ "Lead.count", "Client.count", "Message.outbound.count" ]) do
-      assert_emails(1) { InquirySafetyNetJob.perform_now }
+    assert_no_difference([ "Client.count", "Message.outbound.count", "AutomaticFirstReply.count", "AdConversion.count" ]) do
+      assert_difference("Lead.count", 2) do
+        assert_emails(1) { InquirySafetyNetJob.perform_now }
+      end
     end
     mail = ActionMailer::Base.deliveries.last
     assert_equal [ "owner@example.com" ], mail.to
     assert_nil mail.cc
     assert_nil mail.bcc
-    assert_equal "Unlinked inquiries: 2 to review", mail.subject
+    assert_equal "Unlinked inquiries: 2 added to New", mail.subject
     assert_equal "auto-generated", mail["Auto-Submitted"].value
     assert_equal "All", mail["X-Auto-Response-Suppress"].value
     body = mail.body.decoded
-    assert_includes body, "2 possible inquiries"
+    assert_includes body, "2 inquiries from the last 7 days were added to New"
     messages.each do |message|
-      assert_includes body, "http://example.com/inbox/#{message.conversation_id}"
-      assert message.reload.inquiry_alert_attempted_at
+      lead = message.reload.conversation.linkable
+      assert_instance_of Lead, lead
+      assert_equal "new", lead.status
+      assert_includes body, "http://example.com/leads/#{lead.id}"
+      assert message.inquiry_alert_attempted_at
     end
     assert_operator body.length, :<, 700
     assert_empty mail.attachments
-    assert_emails(0) { InquirySafetyNetJob.perform_now }
+    assert_no_difference("Lead.count") do
+      assert_emails(0) { InquirySafetyNetJob.perform_now }
+    end
     assert_equal 2, Today::Summary.new.unlinked_inquiries.size
     new_message = ingest_inquiry
-    assert_emails(1) { InquirySafetyNetJob.perform_now }
-    assert_includes ActionMailer::Base.deliveries.last.body.decoded, "/inbox/#{new_message.conversation_id}"
-    assert_includes ActionMailer::Base.deliveries.last.subject, "1 to review"
+    assert_difference("Lead.count", 1) do
+      assert_emails(1) { InquirySafetyNetJob.perform_now }
+    end
+    new_lead = new_message.reload.conversation.linkable
+    assert_includes ActionMailer::Base.deliveries.last.body.decoded, "/leads/#{new_lead.id}"
+    assert_includes ActionMailer::Base.deliveries.last.subject, "1 added to New"
   end
 
-  test "a clear check or a linked inquiry sends no email" do
+  test "a clear check, a linked inquiry, or a candidate matching an existing lead sends no email and creates no duplicate" do
     assert_emails(0) { InquirySafetyNetJob.perform_now }
     message = ingest_inquiry
     message.conversation.update!(linkable: Lead.create!(name: "Linked"))
-    assert_emails(0) { InquirySafetyNetJob.perform_now }
+    existing = Lead.create!(name: "Keith Almryde", email: "keith@example.com", status: "new")
+    duplicate_candidate = ingest_inquiry(email: "keith@example.com")
+    assert_no_difference("Lead.count") do
+      assert_emails(0) { InquirySafetyNetJob.perform_now }
+    end
+    assert_equal existing, duplicate_candidate.reload.conversation.linkable
     assert_nil message.reload.inquiry_alert_attempted_at
   end
 

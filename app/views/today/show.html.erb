@@ -41,11 +41,12 @@
   <% if (unlinked = @summary.unlinked_inquiries).any? %>
     <aside class="callout-warning" aria-label="Unlinked inquiries">
       <details>
-        <summary class="cursor-pointer py-3 text-sm"><strong>Unlinked inquiries: <%= unlinked.size %></strong> · Review</summary>
-        <p class="mt-2 text-sm">Recent mail may be missing a lead. Review and link each inquiry if needed.</p>
+        <summary class="cursor-pointer py-3 text-sm"><strong>Unlinked inquiries: <%= unlinked.size %></strong> · Added to New</summary>
+        <p class="mt-2 text-sm">Recent inquiry mail was added to New and linked to its email thread. Review and triage each lead in New:</p>
         <ul class="mt-2 space-y-1 text-sm">
           <% unlinked.each do |message| %>
-            <li><%= link_to message.subject.presence || "(no subject)", inbox_thread_path(message.conversation), class: "link break-words" %></li>
+            <% lead = message.conversation.linkable if message.conversation.linkable.is_a?(Lead) %>
+            <li><%= link_to message.subject.presence || lead&.name.presence || "(no subject)", lead ? lead_path(lead) : inbox_thread_path(message.conversation), class: "link break-words" %></li>
           <% end %>
         </ul>
       </details>
