@@ -222,4 +222,26 @@ class ScheduledCallsRequestsTest < ActionDispatch::IntegrationTest
       assert_select "a[aria-label='Next month'][href=?]", root_path(view: "month", date: "2026-11-01")
     end
   end
+  test "Today's call rows load lead tags once however many calls are listed" do
+    travel_to Time.zone.local(2026, 10, 20, 10, 0) do
+      tag_queries = lambda do
+        count = 0
+        counter = ->(*, payload) { count += 1 if payload[:sql].match?(/FROM "tags"/) }
+        ActiveSupport::Notifications.subscribed(counter, "sql.active_record") { get root_path }
+        assert_response :success
+        count
+      end
+
+      @lead.scheduled_calls.create!(scheduled_on: "2026-10-20", scheduled_time: "15:00")
+      one_row = tag_queries.call
+
+      %w[Ang Lhakpa Nima].each_with_index do |name, i|
+        lead = Lead.create!(name: "#{name} Sherpa", email: "#{name.downcase}@example.com")
+        lead.mark_potential!
+        lead.scheduled_calls.create!(scheduled_on: "2026-10-2#{i + 1}", scheduled_time: "11:00")
+      end
+
+      assert_equal one_row, tag_queries.call
+    end
+  end
 end

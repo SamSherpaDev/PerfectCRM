@@ -95,22 +95,22 @@ module Today
     end
 
     def missed_calls
-      @missed_calls ||= ScheduledCall.visible.missed(@now).includes(:lead).to_a
+      @missed_calls ||= ScheduledCall.visible.missed(@now).includes(lead: :tags).to_a
     end
 
     def todays_calls
       @todays_calls ||= ScheduledCall.visible.scheduled.for_day(@today)
-        .where("scheduled_calls.scheduled_at >= ?", @now).includes(:lead).to_a
+        .where("scheduled_calls.scheduled_at >= ?", @now).includes(lead: :tags).to_a
     end
 
     def upcoming_calls
-      @upcoming_calls ||= ScheduledCall.visible.upcoming(@now).includes(:lead).to_a
+      @upcoming_calls ||= ScheduledCall.visible.upcoming(@now).includes(lead: :tags).to_a
     end
 
     def later_upcoming_calls
       @later_upcoming_calls ||= ScheduledCall.visible.scheduled
         .where("scheduled_calls.scheduled_at > ?", @today.in_time_zone.end_of_day)
-        .order(scheduled_at: :asc, id: :asc).includes(:lead).to_a
+        .order(scheduled_at: :asc, id: :asc).includes(lead: :tags).to_a
     end
 
     def week_start

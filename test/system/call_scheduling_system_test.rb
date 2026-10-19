@@ -130,4 +130,27 @@ class CallSchedulingSystemTest < ApplicationSystemTestCase
     width = page.evaluate_script("document.documentElement.scrollWidth")
     assert_operator width, :<=, 390, "Lead show with open reschedule form overflows 390px (#{width}px)"
   end
+  test "phone month calendar shows a tappable call count per day that opens that week" do
+    lead = Lead.create!(name: "Tenzing Dorje", email: "tenzing@example.com")
+    lead.mark_potential!
+    day = Time.zone.today + 1.day
+    lead.scheduled_calls.create!(scheduled_on: day.iso8601, scheduled_time: "10:00")
+    lead.scheduled_calls.create!(scheduled_on: day.iso8601, scheduled_time: "11:30")
+
+    page.current_window.resize_to(390, 844)
+    visit root_path(view: "month", date: day.iso8601)
+
+    within("[aria-label='Month calendar'] [data-date='#{day.iso8601}']") do
+      assert_no_link "Tenzing Dorje"
+      count = find_link("2 calls on #{day.strftime('%b %-d')}, open week")
+      assert_equal "2", count.text
+      assert_operator count.native.size.height, :>=, 44
+      count.click
+    end
+
+    assert_selector "[aria-label='Week calendar'] [data-date='#{day.iso8601}']", text: "Tenzing Dorje", count: 1
+    within("[aria-label='Week calendar'] [data-date='#{day.iso8601}']") do
+      assert_link "Tenzing Dorje", count: 2
+    end
+  end
 end

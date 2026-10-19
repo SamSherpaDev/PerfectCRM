@@ -90,6 +90,10 @@
           <div class="cal-month-cell<%= ' cal-month-outside' if outside %><%= ' cal-day-today' if day == summary.today %><%= ' cal-day-has-calls' if day_calls.any? %>" data-date="<%= day.iso8601 %>">
             <div class="cal-month-date"><%= day.day %></div>
             <% if day_calls.any? %>
+              <%# Phones show a tappable call count that opens the day's week instead of chips too narrow to read. %>
+              <%= link_to root_path(view: "week", date: day.iso8601), class: "cal-month-count#{' cal-month-count-missed' if day_calls.any? { |call| call.missed?(summary.now) }}", aria: { label: "#{pluralize(day_calls.size, 'call')} on #{day.strftime('%b %-d')}, open week" } do %>
+                <span class="cal-month-count-dot" aria-hidden="true"></span><%= day_calls.size %>
+              <% end %>
               <ul class="cal-month-events">
                 <% day_calls.each do |call| %>
                   <li class="cal-event<%= ' cal-event-missed' if call.missed?(summary.now) %>">
