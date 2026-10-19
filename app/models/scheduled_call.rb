@@ -46,6 +46,10 @@ class ScheduledCall < ApplicationRecord
     scheduled_at.present? && scheduled_at.in_time_zone.to_date == today
   end
 
+  def due_by?(time)
+    scheduled_at.in_time_zone.to_date <= time.in_time_zone.to_date
+  end
+
   def scheduled_on
     return @scheduled_on if defined?(@scheduled_on) && !@scheduled_on.nil?
 
@@ -64,13 +68,14 @@ class ScheduledCall < ApplicationRecord
       next if exists?(activity_event: event)
 
       call = lead.scheduled_calls.scheduled.first
-      next unless call && call.scheduled_at.in_time_zone.to_date <= event.occurred_at.in_time_zone.to_date
+      next unless call&.due_by?(event.occurred_at)
 
       call.update!(status: "completed", outcome: event.metadata["outcome"], completed_at: event.occurred_at, activity_event: event)
     end
   end
 
   def complete!(outcome:, save_key:, occurred_at: Time.current)
+    return activity_event if activity_event && activity_event.idempotency_key == save_key
     ensure_scheduled!
     unless CallLog::OUTCOMES.include?(outcome)
       errors.add(:outcome, "is not included in the list")

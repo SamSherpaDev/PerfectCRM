@@ -129,6 +129,31 @@ class ScheduledCallsRequestsTest < ActionDispatch::IntegrationTest
     assert_equal [ "completed", "connected" ], [ call.reload.status, call.outcome ]
   end
 
+  test "a double tap on a scheduled call outcome logs once and confirms" do
+    call = @lead.scheduled_calls.create!(scheduled_on: "2026-10-18", scheduled_time: "09:00")
+
+    assert_difference -> { @lead.activity_events.where(kind: "call").count }, 1 do
+      2.times { post complete_lead_scheduled_call_path(@lead, call), params: { outcome: "connected", save_key: "double-tap-0002" } }
+    end
+    assert_equal "Call logged: Talked.", flash[:notice]
+    assert_equal "completed", call.reload.status
+  end
+
+  test "the lead page swaps its call buttons for the scheduled call bar only while the call is due" do
+    travel_to Time.zone.local(2026, 10, 20, 10, 0) do
+      call = @lead.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 26, 10, 0))
+
+      get lead_path(@lead)
+      assert_select "form.call-choices[action=?]", lead_calls_path(@lead), count: 1
+      assert_select ".calls .hint", text: /Next call/, count: 0
+
+      call.reschedule!(scheduled_on: "2026-10-20", scheduled_time: "16:00")
+      get lead_path(@lead)
+      assert_select "form.call-choices[action=?]", lead_calls_path(@lead), count: 0
+      assert_select ".calls .hint", text: /Next call/
+    end
+  end
+
   test "logging a call completes today's or a missed scheduled call but never a later booking" do
     travel_to Time.zone.local(2026, 10, 20, 10, 0) do
       later = @lead.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 26, 10, 0))
