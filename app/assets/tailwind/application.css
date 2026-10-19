@@ -3323,6 +3323,10 @@
   background-color: var(--pb-paper-2);
   overflow: hidden;
 }
+.cal-month-cell.cal-day-today {
+  border-color: var(--pb-seal);
+  background-color: var(--pb-paper);
+}
 .cal-month-outside {
   opacity: 0.55;
 }
@@ -3348,6 +3352,7 @@
   .call-schedule-quick button,
   .call-schedule-pop > summary,
   .scheduled-call-outcomes button,
+  .scheduled-call-banner-actions .btn-sm,
   .scheduled-call-row-actions .btn-xs,
   .call-calendar-bar .btn-xs {
     min-height: 44px;

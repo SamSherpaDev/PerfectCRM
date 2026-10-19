@@ -17,7 +17,7 @@
     </div>
 
     <div class="scheduled-call-banner-actions">
-      <%= form_with url: complete_lead_scheduled_call_path(lead, scheduled_call), method: :post, class: "call-choices scheduled-call-outcomes", data: { turbo: false } do |form| %>
+      <%= form_with url: complete_lead_scheduled_call_path(lead, scheduled_call), method: :post, class: "scheduled-call-outcomes", data: { turbo: false } do |form| %>
         <%= form.hidden_field :save_key, value: SecureRandom.uuid, id: nil %>
         <% if return_to.present? %>
           <%= form.hidden_field :return_to, value: return_to, id: nil %>

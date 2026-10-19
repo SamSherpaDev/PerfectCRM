@@ -512,7 +512,7 @@ files while another process is using them.
 
 Today (the root route) is the captain's morning screen: six tiles
 (Waiting on you, Follow-ups due, Quotes out, Overdue, New leads, Active
-clients), then Not yet called, Replies waiting, Follow-ups as one-tap check rows,
+clients), then Scheduled calls, Not yet called, Replies waiting, Follow-ups as one-tap check rows,
 Departing soon (trips leaving in the next 14 days), and Back from the
 mountains (returned in the last 7 days). Returned bookings linked to a
 local record offer Create review ask. Waiting on you counts linked threads
@@ -572,10 +572,10 @@ and conversion. Its task mapping is owned by
 [`app/services/tasks/on_stage_change.rb`](app/services/tasks/on_stage_change.rb);
 the empty mapping currently proposes no tasks.
 
-Today also includes a **Scheduled calls** section right below the counts strip:
-missed (past, not completed) calls, today's calls, and upcoming calls are listed
-near the top with one-tap outcome logging (`Talked`, `Voicemail`, `No answer`),
-rescheduling, and cancellation, followed by a Pacific week or month calendar
+**Scheduled calls** lists missed (past, not completed) calls, today's
+remaining calls, and the next ten calls on later days, with one-tap outcome
+logging (`Talked`, `Voicemail`, `No answer`), rescheduling, and cancellation,
+followed by a Pacific week or month calendar
 (`/?view=week|month&date=YYYY-MM-DD`) linking each scheduled call to its lead.
 
 The production 7am Pacific digest (`TodayDigestJob` + `CaptainDigestMailer`,

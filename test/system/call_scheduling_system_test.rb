@@ -153,4 +153,44 @@ class CallSchedulingSystemTest < ApplicationSystemTestCase
       assert_link "Tenzing Dorje", count: 2
     end
   end
+
+  test "month calendar marks today like the week calendar does" do
+    today = Time.zone.today
+    other = today.day == 1 ? today + 1.day : today - 1.day
+    cell_style = lambda do |grid, day|
+      page.evaluate_script(<<~JS)
+        (() => { const s = getComputedStyle(document.querySelector("[aria-label='#{grid}'] [data-date='#{day.iso8601}']")); return [s.borderTopColor, s.backgroundColor] })()
+      JS
+    end
+
+    visit root_path(view: "week")
+    week_today = cell_style.call("Week calendar", today)
+    visit root_path(view: "month")
+    assert_equal week_today, cell_style.call("Month calendar", today)
+    assert_not_equal cell_style.call("Month calendar", today), cell_style.call("Month calendar", other)
+  end
+
+  test "lead banner actions share one row on desktop and 44px touch targets on phone" do
+    lead = Lead.create!(name: "Nima Sherpa", email: "nima@example.com")
+    lead.scheduled_calls.create!(scheduled_on: (Time.zone.today + 3.days).iso8601, scheduled_time: "10:00")
+    actions = [ "Talked", "Voicemail", "No answer", "Reschedule", "Cancel call" ]
+    banner_boxes = lambda do
+      page.evaluate_script(<<~JS)
+        Array.from(document.querySelectorAll("#scheduled-call button, #scheduled-call summary"))
+          .filter(el => el.offsetParent && #{actions.to_json}.includes(el.textContent.trim()))
+          .map(el => { const r = el.getBoundingClientRect(); return [el.textContent.trim(), Math.round(r.top), Math.round(r.height)] })
+      JS
+    end
+
+    visit lead_path(lead)
+    desktop = banner_boxes.call
+    assert_equal actions.sort, desktop.map(&:first).sort
+    assert_equal 1, desktop.map { |_, top, _| top }.uniq.size, "Banner actions sit at different heights: #{desktop.inspect}"
+
+    page.current_window.resize_to(390, 844)
+    visit lead_path(lead)
+    banner_boxes.call.each do |label, _, height|
+      assert_operator height, :>=, 44, "#{label} is #{height}px tall on phone"
+    end
+  end
 end
