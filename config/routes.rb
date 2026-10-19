@@ -56,6 +56,12 @@ Rails.application.routes.draw do
   resources :source_answers, only: :create
   resources :leads, except: %i[destroy] do
     resources :calls, only: :create
+    resources :scheduled_calls, only: %i[create update] do
+      member do
+        post :complete
+        patch :cancel
+      end
+    end
     member do
       post :convert
       patch :archive

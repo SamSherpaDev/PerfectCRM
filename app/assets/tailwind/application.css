@@ -3041,3 +3041,358 @@
     transition: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Call scheduling & Today calendar (crm-call-scheduling)
+ * ------------------------------------------------------------------------- */
+.call-schedule-pop {
+  display: inline-block;
+  max-width: 100%;
+}
+.call-schedule-pop[open] {
+  flex-basis: 100%;
+  width: 100%;
+}
+.call-schedule-pop > summary {
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+.call-schedule-pop > summary::-webkit-details-marker {
+  display: none;
+}
+.call-schedule-sheet {
+  margin-top: 10px;
+  width: 100%;
+  max-width: 460px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--pb-rule);
+  background-color: var(--pb-paper);
+  background-image: var(--pb-grain);
+  box-shadow: var(--pb-raise-sm);
+  color: var(--pb-ink);
+  text-align: left;
+}
+.call-schedule-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.call-schedule-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.call-schedule-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pb-ink);
+}
+.call-schedule-tz {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--pb-seal-text);
+}
+.call-schedule-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.call-schedule-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.call-schedule-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.scheduled-call-banner {
+  border-left: 3px solid var(--pb-seal);
+}
+.scheduled-call-banner-missed {
+  border-left-color: var(--pb-bad);
+}
+.scheduled-call-banner-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.scheduled-call-banner-info {
+  min-width: 0;
+  flex: 1 1 240px;
+}
+.scheduled-call-when {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--pb-ink);
+  font-variant-numeric: tabular-nums;
+}
+.scheduled-call-note {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--pb-ink-2);
+  overflow-wrap: anywhere;
+}
+.scheduled-call-banner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.scheduled-call-outcomes {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.scheduled-calls-group {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--pb-rule-2);
+}
+.scheduled-calls-group-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--pb-ink-2);
+  margin-bottom: 6px;
+}
+.scheduled-call-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 0;
+}
+.scheduled-call-row-main {
+  min-width: 0;
+  flex: 1 1 220px;
+}
+.scheduled-call-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.call-calendar {
+  padding-top: 14px;
+  border-top: 1px solid var(--pb-rule-2);
+}
+.call-calendar-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.call-calendar-range {
+  font-size: 13.5px;
+  min-width: 0;
+}
+.call-calendar-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.call-calendar-nav,
+.call-calendar-views {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.cal-week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+.cal-day {
+  min-width: 0;
+  min-height: 92px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid var(--pb-rule-2);
+  background-color: var(--pb-paper-2);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cal-day-today {
+  border-color: var(--pb-seal);
+  background-color: var(--pb-paper);
+}
+.cal-day-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--pb-rule-2);
+}
+.cal-day-name {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--pb-ink-2);
+}
+.cal-day-num {
+  font-size: 11px;
+  color: var(--pb-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.cal-day-empty {
+  font-size: 11.5px;
+  color: var(--pb-ink-4);
+}
+.cal-day-events,
+.cal-month-events {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.cal-event {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background-color: var(--pb-paper);
+  border-left: 2px solid var(--pb-seal);
+  font-size: 11.5px;
+  min-width: 0;
+  overflow: hidden;
+}
+.cal-event-missed {
+  border-left-color: var(--pb-bad);
+}
+.cal-event-time {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--pb-ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.cal-event-lead {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.cal-event-note {
+  font-size: 10.5px;
+  color: var(--pb-ink-3);
+  overflow-wrap: anywhere;
+}
+
+.cal-month-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--pb-ink-3);
+  text-align: center;
+}
+.cal-month {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+.cal-month-cell {
+  min-width: 0;
+  min-height: 68px;
+  padding: 6px;
+  border-radius: 8px;
+  border: 1px solid var(--pb-rule-2);
+  background-color: var(--pb-paper-2);
+  overflow: hidden;
+}
+.cal-month-cell.cal-day-today {
+  border-color: var(--pb-seal);
+  background-color: var(--pb-paper);
+}
+.cal-month-outside {
+  opacity: 0.55;
+}
+.cal-month-date {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--pb-ink-3);
+  margin-bottom: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.cal-month-count {
+  display: none;
+}
+
+@media (max-width: 749px) {
+  .call-schedule-sheet {
+    max-width: 100%;
+    padding: 12px;
+  }
+  .call-schedule-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .call-schedule-quick button,
+  .call-schedule-pop > summary,
+  .scheduled-call-outcomes button,
+  .scheduled-call-banner-actions .btn-sm,
+  .scheduled-call-row-actions .btn-xs,
+  .call-calendar-bar .btn-xs {
+    min-height: 44px;
+  }
+  .cal-week {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cal-day {
+    min-height: auto;
+  }
+  .cal-month-cell {
+    position: relative;
+    min-height: 52px;
+    padding: 3px;
+  }
+  .cal-month-events {
+    display: none;
+  }
+  .cal-month-count {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 3px;
+    padding-bottom: 6px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--pb-ink-2);
+    font-variant-numeric: tabular-nums;
+  }
+  .cal-month-count-dot {
+    width: 6px;
+    height: 6px;
+    margin-bottom: 4px;
+    border-radius: 999px;
+    background-color: var(--pb-seal);
+  }
+  .cal-month-count-missed .cal-month-count-dot {
+    background-color: var(--pb-bad);
+  }
+}

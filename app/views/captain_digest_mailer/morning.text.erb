@@ -11,7 +11,15 @@ Today (<%= @summary.followups_due.count %>):
   <%= polymorphic_url(task.subject) %>
 <% end %><% else %>- No follow-ups due today.
 <% end %>
-Replies waiting: <%= @summary.waiting_on_you %>.
+<% if @summary.missed_calls.any? %>Missed calls (<%= @summary.missed_calls.size %>):
+<% @summary.missed_calls.each do |call| %>- <%= call.lead.name %> · <%= call.scheduled_at.in_time_zone.strftime("%-b %-d at %-I:%M %p PT") %><%= " · #{call.notes}" if call.notes.present? %>
+  <%= lead_url(call.lead) %>
+<% end %>
+<% end %><% if @summary.upcoming_calls.any? %>Scheduled calls (<%= @summary.upcoming_calls.size %>):
+<% @summary.upcoming_calls.each do |call| %>- <%= call.lead.name %> · <%= call.scheduled_at.in_time_zone.strftime("%-b %-d at %-I:%M %p PT") %><%= " · #{call.notes}" if call.notes.present? %>
+  <%= lead_url(call.lead) %>
+<% end %>
+<% end %>Replies waiting: <%= @summary.waiting_on_you %>.
 Not yet called: <%= @summary.not_yet_called.count %>.
 <% if @summary.departing_soon.any? %>
 Departing soon:

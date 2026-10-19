@@ -1,0 +1,138 @@
+<%# locals: (summary:) %>
+<% return_to = root_path({ view: (summary.calendar_view if summary.calendar_view != "week"), date: (summary.calendar_date.iso8601 if summary.calendar_date != summary.today) }.compact) %>
+<section class="card card-pad" id="scheduled-calls-section" aria-labelledby="scheduled-calls-heading">
+  <div class="card-header">
+    <h2 class="card-title" id="scheduled-calls-heading">Scheduled calls</h2>
+    <div class="flex flex-wrap items-center gap-1.5">
+      <% if summary.missed_calls.any? %>
+        <%= badge "#{summary.missed_calls.size} missed", :danger, dot: true %>
+      <% end %>
+      <%= badge "#{summary.todays_calls.size} today", :brand, dot: true %>
+      <%= badge "#{summary.later_upcoming_calls.size} upcoming", :neutral %>
+    </div>
+  </div>
+  <%= card_caption "Scheduled calls in Pacific time (#{Time.zone.now.strftime('%Z')}). Log the outcome with one tap, reschedule, or step through the calendar." %>
+
+  <% if summary.missed_calls.any? %>
+    <div class="scheduled-calls-group scheduled-calls-missed" aria-label="Missed calls">
+      <h3 class="scheduled-calls-group-title text-bad">Missed calls (<%= summary.missed_calls.size %>)</h3>
+      <ul class="divide-y divide-rule-2">
+        <% summary.missed_calls.each do |call| %>
+          <%= render "scheduled_calls/today_row", scheduled_call: call, return_to: return_to %>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <% if summary.todays_calls.any? %>
+    <div class="scheduled-calls-group" aria-label="Today's calls">
+      <h3 class="scheduled-calls-group-title">Today's calls (<%= summary.todays_calls.size %>)</h3>
+      <ul class="divide-y divide-rule-2">
+        <% summary.todays_calls.each do |call| %>
+          <%= render "scheduled_calls/today_row", scheduled_call: call, return_to: return_to %>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <% if summary.later_upcoming_calls.any? %>
+    <div class="scheduled-calls-group" aria-label="Upcoming calls">
+      <h3 class="scheduled-calls-group-title">Upcoming calls (<%= summary.later_upcoming_calls.size %>)</h3>
+      <ul class="divide-y divide-rule-2">
+        <% summary.later_upcoming_calls.first(10).each do |call| %>
+          <%= render "scheduled_calls/today_row", scheduled_call: call, return_to: return_to %>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <% if summary.missed_calls.empty? && summary.upcoming_calls.empty? %>
+    <p class="mt-2 text-xs muted">No calls scheduled yet. Use "Schedule call" on any lead to put a call on the calendar.</p>
+  <% end %>
+
+  <div class="call-calendar mt-4" id="call-calendar" aria-label="Call calendar">
+    <div class="call-calendar-bar">
+      <div class="call-calendar-range">
+        <% if summary.calendar_view == "month" %>
+          <span class="font-medium text-ink"><%= summary.month_start.strftime("%B %Y") %></span>
+        <% else %>
+          <span class="font-medium text-ink"><%= date_range(summary.week_start, summary.week_end) %></span>
+        <% end %>
+        <span class="text-xs muted">· Pacific (<%= Time.zone.now.strftime("%Z") %>)</span>
+      </div>
+
+      <div class="call-calendar-controls">
+        <div class="call-calendar-nav" role="group" aria-label="Calendar navigation">
+          <% prev_label = summary.calendar_view == "month" ? "Previous month" : "Previous week" %>
+          <% next_label = summary.calendar_view == "month" ? "Next month" : "Next week" %>
+          <%= link_to "← Prev", root_path(view: summary.calendar_view, date: summary.prev_calendar_date.iso8601), class: "btn-secondary btn-xs", aria: { label: prev_label } %>
+          <%= link_to "Today", root_path(view: summary.calendar_view), class: "btn-secondary btn-xs" %>
+          <%= link_to "Next →", root_path(view: summary.calendar_view, date: summary.next_calendar_date.iso8601), class: "btn-secondary btn-xs", aria: { label: next_label } %>
+        </div>
+
+        <div class="call-calendar-views" role="group" aria-label="Calendar view">
+          <%= link_to "Week", root_path(view: "week", date: summary.calendar_date.iso8601), class: "#{summary.calendar_view == 'week' ? 'btn-primary' : 'btn-secondary'} btn-xs", aria: ({ current: "true" } if summary.calendar_view == "week") %>
+          <%= link_to "Month", root_path(view: "month", date: summary.calendar_date.iso8601), class: "#{summary.calendar_view == 'month' ? 'btn-primary' : 'btn-secondary'} btn-xs", aria: ({ current: "true" } if summary.calendar_view == "month") %>
+        </div>
+      </div>
+    </div>
+
+    <% if summary.calendar_view == "month" %>
+      <div class="cal-month-weekdays" aria-hidden="true">
+        <% %w[Mon Tue Wed Thu Fri Sat Sun].each do |day_name| %>
+          <div><%= day_name %></div>
+        <% end %>
+      </div>
+      <div class="cal-month" role="region" aria-label="Month calendar">
+        <% summary.month_days.each do |day| %>
+          <% day_calls = summary.calendar_calls_by_day.fetch(day, []) %>
+          <% outside = day.month != summary.month_start.month %>
+          <div class="cal-month-cell<%= ' cal-month-outside' if outside %><%= ' cal-day-today' if day == summary.today %><%= ' cal-day-has-calls' if day_calls.any? %>" data-date="<%= day.iso8601 %>">
+            <div class="cal-month-date"><%= day.day %></div>
+            <% if day_calls.any? %>
+              <%# Phones show a tappable call count that opens the day's week instead of chips too narrow to read. %>
+              <%= link_to root_path(view: "week", date: day.iso8601), class: "cal-month-count#{' cal-month-count-missed' if day_calls.any? { |call| call.missed?(summary.now) }}", aria: { label: "#{pluralize(day_calls.size, 'call')} on #{day.strftime('%b %-d')}, open week" } do %>
+                <span class="cal-month-count-dot" aria-hidden="true"></span><%= day_calls.size %>
+              <% end %>
+              <ul class="cal-month-events">
+                <% day_calls.each do |call| %>
+                  <li class="cal-event<%= ' cal-event-missed' if call.missed?(summary.now) %>">
+                    <time datetime="<%= call.scheduled_at.iso8601 %>" class="cal-event-time"><%= scheduled_call_time_label(call) %></time>
+                    <%= link_to call.lead.name, lead_path(call.lead), class: "cal-event-lead link" %>
+                  </li>
+                <% end %>
+              </ul>
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+    <% else %>
+      <div class="cal-week" role="region" aria-label="Week calendar">
+        <% summary.week_days.each do |day| %>
+          <% day_calls = summary.calendar_calls_by_day.fetch(day, []) %>
+          <div class="cal-day<%= ' cal-day-today' if day == summary.today %><%= ' cal-day-has-calls' if day_calls.any? %>" data-date="<%= day.iso8601 %>">
+            <div class="cal-day-head">
+              <span class="cal-day-name"><%= day.strftime("%a") %></span>
+              <span class="cal-day-num"><%= day.strftime("%b %-d") %></span>
+            </div>
+            <% if day_calls.any? %>
+              <ul class="cal-day-events">
+                <% day_calls.each do |call| %>
+                  <li class="cal-event<%= ' cal-event-missed' if call.missed?(summary.now) %>">
+                    <time datetime="<%= call.scheduled_at.iso8601 %>" class="cal-event-time"><%= scheduled_call_time_label(call) %></time>
+                    <%= link_to call.lead.name, lead_path(call.lead), class: "cal-event-lead link" %>
+                    <% if call.notes.present? %>
+                      <span class="cal-event-note"><%= call.notes %></span>
+                    <% end %>
+                  </li>
+                <% end %>
+              </ul>
+            <% else %>
+              <p class="cal-day-empty">—</p>
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+</section>

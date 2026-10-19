@@ -27,5 +27,11 @@
       </div>
     </section>
   <% end %>
+  <% if @lead.call_schedulable? && (next_call = @lead.next_scheduled_call) %>
+    <%= render "scheduled_calls/lead_banner",
+      lead: @lead,
+      scheduled_call: next_call,
+      return_to: lead_path(@lead, { return_to: params[:return_to].presence }.compact) %>
+  <% end %>
   <%= render "records/record", record: @lead, read_only: read_only %>
 </div>

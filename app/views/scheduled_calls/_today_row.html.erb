@@ -1,0 +1,55 @@
+<%# locals: (scheduled_call:, return_to:) %>
+<% lead = scheduled_call.lead %>
+<li class="scheduled-call-row<%= ' scheduled-call-row-missed' if scheduled_call.missed? %>" id="scheduled_call_<%= scheduled_call.id %>">
+  <div class="scheduled-call-row-main">
+    <div class="flex flex-wrap items-center gap-2">
+      <%= link_to lead.name, lead_path(lead), class: "link font-medium" %>
+      <% if lead.potential? %><%= badge "Potential", :brand %><% end %>
+      <% if scheduled_call.missed? %>
+        <%= badge "Missed", :danger, dot: true %>
+      <% elsif scheduled_call.today? %>
+        <%= badge "Today", :info, dot: true %>
+      <% end %>
+    </div>
+    <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs muted">
+      <time datetime="<%= scheduled_call.scheduled_at.iso8601 %>" class="font-medium text-ink-2">
+        <%= scheduled_call_stamp(scheduled_call) %>
+      </time>
+      <% if lead.display_phone.present? %>
+        <span><%= lead.display_phone %></span>
+      <% end %>
+      <% if (trip = lead.trip_interest.presence || lead.trip_title.presence) %>
+        <span><%= trip %></span>
+      <% end %>
+    </div>
+    <% if scheduled_call.notes.present? %>
+      <p class="mt-1 text-xs text-ink-2"><%= scheduled_call.notes %></p>
+    <% end %>
+  </div>
+
+  <div class="scheduled-call-row-actions">
+    <%= form_with url: complete_lead_scheduled_call_path(lead, scheduled_call), method: :post, class: "scheduled-call-outcomes", data: { turbo: false } do |form| %>
+      <%= form.hidden_field :save_key, value: SecureRandom.uuid, id: nil %>
+      <% if return_to.present? %>
+        <%= form.hidden_field :return_to, value: return_to, id: nil %>
+      <% end %>
+      <% CallLog::ONE_TAP.each do |outcome| %>
+        <%= button_tag CallLog::LABELS.fetch(outcome), name: "outcome", value: outcome, class: "btn-secondary btn-xs" %>
+      <% end %>
+    <% end %>
+
+    <%= render "scheduled_calls/popover",
+      lead: lead,
+      scheduled_call: scheduled_call,
+      return_to: return_to,
+      trigger_label: "Reschedule",
+      trigger_class: "btn-secondary btn-xs",
+      id_prefix: "today_reschedule_#{scheduled_call.id}" %>
+
+    <%= button_to "Cancel",
+      cancel_lead_scheduled_call_path(lead, scheduled_call),
+      method: :patch,
+      params: { return_to: return_to },
+      class: "btn-secondary btn-xs" %>
+  </div>
+</li>

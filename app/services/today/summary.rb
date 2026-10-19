@@ -11,9 +11,13 @@ module Today
     DEPARTING_WITHIN = 14.days
     RETURNED_WITHIN = 7.days
 
-    def initialize(now: Time.current, today: now.to_date)
+    attr_reader :today, :now, :calendar_view, :calendar_date
+
+    def initialize(now: Time.current, today: now.to_date, calendar_date: nil, calendar_view: nil)
       @today = today
       @now = now
+      @calendar_view = %w[week month].include?(calendar_view.to_s) ? calendar_view.to_s : "week"
+      @calendar_date = parse_calendar_date(calendar_date) || @today
     end
     # Threads still needing a personal response (automatic greetings do not clear them).
     def waiting_on_you
@@ -90,7 +94,86 @@ module Today
       Tasks::Automatic.subject_for(booking)
     end
 
+    def missed_calls
+      @missed_calls ||= ScheduledCall.visible.missed(@now).includes(lead: :tags).to_a
+    end
+
+    def todays_calls
+      @todays_calls ||= ScheduledCall.visible.scheduled.for_day(@today)
+        .where("scheduled_calls.scheduled_at >= ?", @now).includes(lead: :tags).to_a
+    end
+
+    def upcoming_calls
+      @upcoming_calls ||= ScheduledCall.visible.upcoming(@now).includes(lead: :tags).to_a
+    end
+
+    def later_upcoming_calls
+      @later_upcoming_calls ||= ScheduledCall.visible.scheduled
+        .where("scheduled_calls.scheduled_at > ?", @today.in_time_zone.end_of_day)
+        .order(scheduled_at: :asc, id: :asc).includes(lead: :tags).to_a
+    end
+
+    def week_start
+      @calendar_date.beginning_of_week(:monday)
+    end
+
+    def week_end
+      @calendar_date.end_of_week(:monday)
+    end
+
+    def week_days
+      (week_start..week_end).to_a
+    end
+
+    def month_start
+      @calendar_date.beginning_of_month
+    end
+
+    def month_end
+      @calendar_date.end_of_month
+    end
+
+    def month_grid_start
+      month_start.beginning_of_week(:monday)
+    end
+
+    def month_grid_end
+      month_end.end_of_week(:monday)
+    end
+
+    def month_days
+      (month_grid_start..month_grid_end).to_a
+    end
+
+    def prev_calendar_date
+      @calendar_view == "month" ? (month_start - 1.month) : (week_start - 7.days)
+    end
+
+    def next_calendar_date
+      @calendar_view == "month" ? (month_start + 1.month) : (week_start + 7.days)
+    end
+
+    def calendar_calls_by_day
+      @calendar_calls_by_day ||= begin
+        range_start = @calendar_view == "month" ? month_grid_start : week_start
+        range_end = @calendar_view == "month" ? month_grid_end : week_end
+        calls = ScheduledCall.visible.scheduled
+          .between(range_start.in_time_zone.beginning_of_day, range_end.in_time_zone.end_of_day)
+          .includes(:lead).to_a
+        calls.group_by { |call| call.scheduled_at.in_time_zone.to_date }
+      end
+    end
+
     private
+
+    def parse_calendar_date(raw)
+      return nil if raw.blank?
+      return raw.to_date if raw.respond_to?(:to_date) && !raw.is_a?(String)
+
+      Date.iso8601(raw.to_s)
+    rescue ArgumentError
+      nil
+    end
 
     def one_business_day_ago
       as_of = @now

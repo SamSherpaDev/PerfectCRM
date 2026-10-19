@@ -28,6 +28,7 @@ class Lead < ApplicationRecord
   has_many :activity_events, as: :subject, dependent: :destroy
   has_many :conversations, as: :linkable, dependent: :destroy
   has_many :ad_conversions, dependent: :destroy
+  has_many :scheduled_calls, -> { order(:scheduled_at, :id) }, dependent: :destroy, inverse_of: :lead
 
   accepts_nested_attributes_for :people, allow_destroy: true,
     reject_if: proc { |attrs| attrs["name"].blank? && attrs["email"].blank? && attrs["phone"].blank? }
@@ -386,6 +387,23 @@ class Lead < ApplicationRecord
 
   def display_email
     email.presence || people.map(&:email).find(&:present?)
+  end
+
+  def call_schedulable?
+    !archived? && !converted?
+  end
+
+  def open_scheduled_calls
+    if association(:scheduled_calls).loaded?
+      scheduled_calls.select { |call| call.persisted? && call.scheduled? && call.scheduled_at.present? }
+        .sort_by { |call| [ call.scheduled_at.to_i, call.id.to_i ] }
+    else
+      scheduled_calls.scheduled.order(:scheduled_at, :id).to_a
+    end
+  end
+
+  def next_scheduled_call
+    open_scheduled_calls.first
   end
 
   def touch_activity!

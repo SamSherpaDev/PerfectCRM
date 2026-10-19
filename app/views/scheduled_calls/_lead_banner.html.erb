@@ -1,0 +1,45 @@
+<%# locals: (lead:, scheduled_call:, return_to:) %>
+<section class="card card-pad mb-5 scheduled-call-banner<%= ' scheduled-call-banner-missed' if scheduled_call.missed? %>" id="scheduled-call" aria-label="Next scheduled call">
+  <div class="scheduled-call-banner-body">
+    <div class="scheduled-call-banner-info">
+      <div class="flex flex-wrap items-center gap-2">
+        <%= scheduled_call.missed? ? badge("Missed call", :danger, dot: true) : badge("Next call", :brand, dot: true) %>
+        <time datetime="<%= scheduled_call.scheduled_at.iso8601 %>" class="scheduled-call-when">
+          <%= scheduled_call_stamp(scheduled_call) %>
+        </time>
+        <% if lead.display_phone.present? %>
+          <span class="muted text-xs">· <%= lead.display_phone %></span>
+        <% end %>
+      </div>
+      <% if scheduled_call.notes.present? %>
+        <p class="scheduled-call-note"><%= scheduled_call.notes %></p>
+      <% end %>
+    </div>
+
+    <div class="scheduled-call-banner-actions">
+      <%= form_with url: complete_lead_scheduled_call_path(lead, scheduled_call), method: :post, class: "scheduled-call-outcomes", data: { turbo: false } do |form| %>
+        <%= form.hidden_field :save_key, value: SecureRandom.uuid, id: nil %>
+        <% if return_to.present? %>
+          <%= form.hidden_field :return_to, value: return_to, id: nil %>
+        <% end %>
+        <% CallLog::ONE_TAP.each do |outcome| %>
+          <%= button_tag CallLog::LABELS.fetch(outcome), name: "outcome", value: outcome, class: "btn-secondary btn-sm" %>
+        <% end %>
+      <% end %>
+
+      <%= render "scheduled_calls/popover",
+        lead: lead,
+        scheduled_call: scheduled_call,
+        return_to: return_to,
+        trigger_label: "Reschedule",
+        trigger_class: "btn-secondary btn-sm",
+        id_prefix: "lead_banner_reschedule_#{scheduled_call.id}" %>
+
+      <%= button_to "Cancel call",
+        cancel_lead_scheduled_call_path(lead, scheduled_call),
+        method: :patch,
+        params: { return_to: return_to },
+        class: "btn-secondary btn-sm" %>
+    </div>
+  </div>
+</section>

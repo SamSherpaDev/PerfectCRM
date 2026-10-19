@@ -13,6 +13,12 @@
 <% else %>
   <%= link_to "Edit", lead ? edit_lead_path(record, return_to: @lead_action_return_to) : edit_client_path(record), class: "btn-secondary btn btn-sm" %>
   <% if lead %>
+    <%= render "scheduled_calls/popover",
+      lead: record,
+      return_to: lead_path(record, { return_to: params[:return_to].presence }.compact),
+      trigger_label: "Schedule call",
+      trigger_class: "btn-secondary btn btn-sm",
+      id_prefix: "header_schedule_call_#{record.id}" %>
     <%= render "leads/potential_action", lead: record %>
     <%= render "leads/unsure_action", lead: record %>
     <% unless record.suspected_spam? %>

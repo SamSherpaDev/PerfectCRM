@@ -512,7 +512,7 @@ files while another process is using them.
 
 Today (the root route) is the captain's morning screen: six tiles
 (Waiting on you, Follow-ups due, Quotes out, Overdue, New leads, Active
-clients), then Not yet called, Replies waiting, Follow-ups as one-tap check rows,
+clients), then Scheduled calls, Not yet called, Replies waiting, Follow-ups as one-tap check rows,
 Departing soon (trips leaving in the next 14 days), and Back from the
 mountains (returned in the last 7 days). Returned bookings linked to a
 local record offer Create review ask. Waiting on you counts linked threads
@@ -572,11 +572,17 @@ and conversion. Its task mapping is owned by
 [`app/services/tasks/on_stage_change.rb`](app/services/tasks/on_stage_change.rb);
 the empty mapping currently proposes no tasks.
 
+**Scheduled calls** lists missed (past, not completed) calls, today's
+remaining calls, and the next ten calls on later days, with one-tap outcome
+logging (`Talked`, `Voicemail`, `No answer`), rescheduling, and cancellation,
+followed by a Pacific week or month calendar
+(`/?view=week|month&date=YYYY-MM-DD`) linking each scheduled call to its lead.
+
 The production 7am Pacific digest (`TodayDigestJob` + `CaptainDigestMailer`,
-same schedule file) emails today's follow-ups, overdue items, replies
-waiting, the Not yet called count, and departures. Task links open their
-records, and Open Today opens the morning screen. It goes to the first
-allowlisted address.
+same schedule file) emails today's follow-ups, overdue items, missed and
+upcoming scheduled calls, replies waiting, the Not yet called count, and
+departures. Task and call links open their records, and Open Today opens the
+morning screen. It goes to the first allowlisted address.
 Settings → Morning digest toggles it; it is enabled by default.
 
 ## Clients
@@ -791,6 +797,21 @@ an earlier time, the Attempted outcome or a duration. Talked is stored as
 task. Double saves with the same save UUID produce one event. Client calls
 always name an inquiry (one row of buttons per inquiry); no unbound calls are
 counted as inquiry outcomes.
+
+Active, unconverted leads also offer **Schedule call** on the lead page and on
+each row in the Leads list (`ScheduledCall`, Pacific date and time, default
+30-minute duration, optional note, with quick picks for Today/Tomorrow/Next Mon
+and common times). Saving keeps the captain on the current page. The lead page
+shows its next scheduled call with one-tap completion (`Talked`, `Voicemail`,
+`No answer` via `CallLog.record!`), rescheduling, and cancellation. While that
+call is due (today's or a missed call) it replaces the regular one-tap call
+buttons; for a booking on a later day the regular buttons stay and leave the
+booking open. A double tap on the bar logs and completes once. Only an open
+call can be completed, rescheduled, or cancelled. A call logged through the
+regular call buttons or Add details also completes the inquiry's earliest open
+scheduled call when that call was due on or before the logged call's Pacific
+day (today's or a missed call); a booking on a later day stays open. A double
+save completes one scheduled call at most.
 
 The [intake contract](docs/leads-intake.md#exact-optional-question-and-stable-answers)
 lists the shared answers and stable codes.

@@ -5,7 +5,7 @@ module DemoSeed
   DEMO_DOMAIN = "demo.example.test".freeze
 
   RECORD_TYPES = %w[
-    QuoteLine QuoteView Quote Message Conversation Task Note ActivityEvent
+    QuoteLine QuoteView Quote Message Conversation ScheduledCall Task Note ActivityEvent
     Person Tagging Lead Client Organization Tag PerfectBook::Departure
     PerfectBook::Trip PerfectBook::Booking PerfectBook::Contact
   ].freeze

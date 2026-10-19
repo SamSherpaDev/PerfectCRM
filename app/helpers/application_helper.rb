@@ -268,4 +268,18 @@ module ApplicationHelper
     PerfectBook::Booking.where(perfectbook_contact_id: contact_id)
       .order(Arel.sql("start_date IS NULL, start_date ASC"))
   end
+
+  def scheduled_call_time_label(call)
+    return "—" unless call&.scheduled_at.present?
+
+    time = call.scheduled_at.in_time_zone
+    "#{time.strftime('%-I:%M %p')} PT"
+  end
+
+  def scheduled_call_stamp(call)
+    return "—" unless call&.scheduled_at.present?
+
+    time = call.scheduled_at.in_time_zone
+    "#{time.strftime('%a, %b %-d')} · #{time.strftime('%-I:%M %p')} PT · #{call.duration_minutes} min"
+  end
 end

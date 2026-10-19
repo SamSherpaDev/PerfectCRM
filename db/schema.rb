@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_17_230332) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_19_182028) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -787,6 +787,24 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_17_230332) do
     t.index ["provider_message_id"], name: "index_reply_alert_reservations_on_provider_message_id", unique: true
   end
 
+  create_table "scheduled_calls", force: :cascade do |t|
+    t.integer "activity_event_id"
+    t.datetime "cancelled_at"
+    t.datetime "completed_at"
+    t.datetime "created_at", null: false
+    t.integer "duration_minutes", default: 30, null: false
+    t.integer "lead_id", null: false
+    t.text "notes"
+    t.string "outcome"
+    t.datetime "scheduled_at", null: false
+    t.string "status", default: "scheduled", null: false
+    t.datetime "updated_at", null: false
+    t.index ["activity_event_id"], name: "index_scheduled_calls_on_activity_event_id"
+    t.index ["lead_id", "status", "scheduled_at"], name: "index_scheduled_calls_on_lead_id_and_status_and_scheduled_at"
+    t.index ["lead_id"], name: "index_scheduled_calls_on_lead_id"
+    t.index ["status", "scheduled_at"], name: "index_scheduled_calls_on_status_and_scheduled_at"
+  end
+
   create_table "settings", force: :cascade do |t|
     t.integer "ad_booking_value_percent", default: 35, null: false
     t.datetime "ad_export_last_run_at"
@@ -947,6 +965,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_17_230332) do
   add_foreign_key "quotes", "leads"
   add_foreign_key "quotes", "quotes", column: "parent_id"
   add_foreign_key "reply_alert_reservations", "messages", on_delete: :nullify
+  add_foreign_key "scheduled_calls", "activity_events", on_delete: :nullify
+  add_foreign_key "scheduled_calls", "leads", on_delete: :cascade
   add_foreign_key "taggings", "tags"
   add_foreign_key "tasks", "templates"
 
