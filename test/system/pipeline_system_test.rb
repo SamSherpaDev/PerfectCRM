@@ -280,7 +280,9 @@ class PipelineSystemTest < ApplicationSystemTestCase
     choose "Note", allow_label_click: true
     fill_in "Add a note", with: "Traveler replied about dates"
     click_button "Save note"
+    assert_text "Note saved."
     visit pipeline_path
+    assert_selector "article.kcard", text: lead.name
     assert_no_selector "article.kcard-stale", text: lead.name
   end
 
