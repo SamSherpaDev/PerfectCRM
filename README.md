@@ -882,9 +882,9 @@ missing/denied collection is unknown, not direct. When `last_touch` is
 unavailable on a permission-allowed inquiry, compatibility attribution,
 `/channels/cost-per-inquiry`, and `AdConversions` fall back to
 `submission_page.landing_url` (utm/ad parameters) so Meta inquiries carrying an
-`ad_id` in the landing URL count as `meta_ads` and send their `Lead` and
-`QualifiedLead` (`Potential`) conversion events. `fbclid` alone is not paid
-Meta. Legacy broad source remains compatible, not proven first discovery.
+`ad_id` in the landing URL count as `meta_ads` and are reported under
+[Ad conversions](#ad-conversions). `fbclid` alone is not paid Meta. Legacy
+broad source remains compatible, not proven first discovery.
 
 The additive payload and exact field contract are in
 [docs/leads-intake.md](docs/leads-intake.md#source-database-contract-v1).
@@ -930,7 +930,8 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
 | Booked | An explicitly linked or reviewed active PerfectBook booking with an authoritative timestamped first receipt at or after the inquiry | `Booking (deposit paid)` | `Purchase` | USD booking total times the booking value percent (default 35); other currencies report a fixed 2,000 USD |
 
 - Only leads that arrived with a click ID (`gclid`, `gbraid`, `wbraid`, or
-  `fbclid`, with `fbclid` also read from the landing URL) are reported: the form drops
+  `fbclid`, with `fbclid` also read from the landing URL), or Meta-sourced leads
+  whose attribution carries an `ad_id`, are reported: the form drops
   click IDs when marketing consent is off. Explicit allowed measurement/sharing
   permission and no opt-out are required at recording and delivery; missing
   legacy permission is withheld. Archived, suspected-spam, explicit `is_test`,

@@ -219,6 +219,21 @@ sales activity. Each repaired inquiry, client, or person's owner refreshes its
 existing search projection so recovered phone tails are searchable, without
 changing activity timestamps. No production execution is part of this change.
 
+To apply the `submission_page.landing_url` source fallback to inquiries saved
+before it existed, run once after deploying, or safely repeat:
+
+```sh
+RAILS_ENV=production bin/rails leads:backfill_attribution
+```
+
+It prints only numeric counts as JSON: `leads_updated`, `conversions_queued`.
+It touches only permission-allowed inquiries whose `last_touch` was
+`unavailable` and whose landing URL carries utm/ad/click parameters. It changes
+`source` only from `website_form`, fills a blank `campaign_name`, adds missing
+attribution keys without overwriting present ones, and refreshes search without
+activity. Each updated reportable inquiry queues `AdConversions::LeadJob`, so
+platform event windows still apply. Repeating it makes no further writes.
+
 ## Details follow-up (optional step two)
 
 Posted after a successful send, with the same `submission_id`:
