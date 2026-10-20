@@ -3,8 +3,8 @@
 # Waiting-on-you threads mirror the Inbox "Waiting on you" tab (linked
 # owners only; unknown senders wait in triage). Quotes-out counts live
 # sent and viewed quotes whose valid-until has not passed.
-# New leads and active clients reuse the models' own vocabulary: the New
-# stage of Lead::STATUSES, and every client that is not archived.
+# New leads and active clients reuse the models' own vocabulary: the
+# Leads "New" tab (Lead.in_new_tab), and every client that is not archived.
 # Departure windows read the mirrored PerfectBook bookings.
 module Today
   class Summary
@@ -38,9 +38,9 @@ module Today
         .where.not(id: Quote.where(lead_id: Lead.archived.or(Lead.not_interested).select(:id)).select(:id)).count
     end
 
-    # New stage alone does not establish whether an inquiry has been worked.
+    # Matches the Leads "New" tab: untriaged active leads in New, Chatting, or Nudged.
     def new_leads
-      Lead.by_status("new").where(not_interested_marked_at: nil).count
+      Lead.in_new_tab.count
     end
 
     # One full weekday without a successful personal reply or logged call.
