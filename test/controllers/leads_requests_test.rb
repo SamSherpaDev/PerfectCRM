@@ -773,7 +773,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     assert_empty board.columns.flat_map(&:records).select { |r| r == lead }
     assert_equal 0, Pipeline::Report.new.pipeline_total
 
-    # Automatic first reply, automatic tasks, template merge sends, and external automation skip it
+    # Automatic first reply, automatic tasks, and template merge sends skip it
     Setting.current.update!(auto_first_reply_enabled: true, auto_first_reply_enabled_at: 10.days.ago)
     assert_equal "not interested", AutomaticFirstReply.skip_reason(lead, email: lead.email)
 
@@ -783,9 +783,10 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     assert_equal 1, batch.errors.size
     assert_match(/not interested/i, batch.errors.first.problem)
 
-    assert_raises(ActiveRecord::RecordInvalid) do
-      Leads::Transition.call(lead, to: "chatting", actor: :automation)
-    end
+    # External automation still records stages without contacting the lead
+    Leads::Transition.call(lead, to: "chatting", actor: :automation)
+    assert_equal "chatting", lead.reload.status
+    assert lead.not_interested?
 
     # Lead show page renders warning banner and explicit confirm on reply box and call buttons
     get lead_path(lead)

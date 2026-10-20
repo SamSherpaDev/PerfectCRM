@@ -293,4 +293,15 @@ class ApiV1LeadsVerdictsTest < ActionDispatch::IntegrationTest
     assert_equal "new", @lead.reload.status
     assert_nil @lead.fit_score
   end
+
+  test "not-interested leads still take verdicts and stay not interested" do
+    @lead.mark_not_interested!
+    post_verdict @lead.id, { "fit_score" => 90, "fit_band" => "strong", "status" => "chatting" }
+    assert_response :ok
+    @lead.reload
+    assert_equal "chatting", @lead.status
+    assert_equal 90, @lead.fit_score
+    assert @lead.not_interested?
+    assert_empty @lead.tasks
+  end
 end

@@ -696,8 +696,8 @@ pipeline columns, totals, and stale/nudge indicators, from task/document nudge
 prefills, from automatic first replies (`AutomaticFirstReply`), automatic
 booking follow-up proposals (`Tasks::Automatic`), stage-change follow-up hooks
 (`Tasks::OnStageChange`), and group-departure template merges (`MergeBatch` and
-`TemplatesController`), and from external automation verdicts/transitions
-(`Api::V1::Leads::VerdictsController` and `Leads::Transition`). Any open
+`TemplatesController`). External automation verdicts still record fit scores
+and stages, since they contact no one, and the lead stays not interested. Any open
 scheduled call on the lead is cancelled when marked not interested, recording a
 `scheduled_call` timeline note (`Scheduled call for … cancelled (marked not interested)`).
 On the lead detail page, a prominent `Not interested - do not contact` alert

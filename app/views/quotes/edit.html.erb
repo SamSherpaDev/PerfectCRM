@@ -85,7 +85,7 @@
             <dt class="muted">Guests</dt>
             <dd><%= form.number_field :party_size, min: 1, class: "input w-24 text-right", data: { party_size: true, action: "input->quote-builder#changePartySize" } %>
               <% @quote.errors.full_messages_for(:party_size).each do |message| %>
-                <p class="mt-1 text-xs text-danger" role="alert"><%= message %></p>
+                <p class="mt-1 text-xs text-bad" role="alert"><%= message %></p>
               <% end %>
             </dd>
           </div>
@@ -101,7 +101,7 @@
             <dt class="muted">Valid until</dt>
             <dd><%= form.date_field :valid_until, class: "input w-40" %>
               <% @quote.errors.full_messages_for(:valid_until).each do |message| %>
-                <p class="mt-1 text-xs text-danger" role="alert"><%= message %></p>
+                <p class="mt-1 text-xs text-bad" role="alert"><%= message %></p>
               <% end %>
             </dd>
           </div>
