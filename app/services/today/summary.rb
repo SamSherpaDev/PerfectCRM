@@ -54,29 +54,32 @@ module Today
 
     # Daily call list in priority order:
     # (a) new inquiries with a phone and no call yet, oldest first;
-    # (b) leads with a phone whose last call was voicemail or no_answer and
-    #     that are due another try (attempt 2 due 1 day after attempt 1;
-    #     attempt 3 due 2 days after attempt 2; at most 3 attempts).
+    # (b) leads with a phone whose calls never connected (Attempted,
+    #     Voicemail, or No answer) and that are due another try (attempt 2
+    #     due 1 day after attempt 1; attempt 3 due 2 days after attempt 2;
+    #     at most 3 attempts).
     # Leads drop off once a call connects, they are marked Not interested,
     # spam or archived, have a scheduled call, or have used 3 attempts.
+    # Leads flagged as suspected spam stay on the list for a check.
     def call_entries
       @call_entries ||= begin
+        called = ActivityEvent.where(subject_type: "Lead", kind: "call").where("activity_events.subject_id = leads.id")
         candidates = Lead.open
-          .where(not_interested_marked_at: nil)
-          .where.not(id: Lead.spam.select(:id))
+          .where(not_interested_marked_at: nil, spam_marked_at: nil)
+          .where("TRIM(COALESCE(leads.phone, '')) <> '' OR TRIM(COALESCE(leads.phone_raw, '')) <> ''")
+          .where("leads.status = 'new' OR EXISTS (#{called.select(:id).to_sql})")
           .where.not(id: ScheduledCall.scheduled.select(:lead_id))
-          .includes(:activity_events, :tags)
+          .includes(:tags)
+          .to_a
+        calls_by_lead = ActivityEvent.where(subject_type: "Lead", kind: "call", subject_id: candidates.map(&:id))
+          .order(:occurred_at, :id).group_by(&:subject_id)
 
         uncalled = []
         retries = []
 
         candidates.each do |lead|
-          next if lead.display_phone.blank?
-
           waited_since = lead.received_at || lead.created_at
-          calls = lead.activity_events
-            .select { |event| event.kind == "call" && event.occurred_at >= waited_since }
-            .sort_by { |event| [ event.occurred_at, event.id ] }
+          calls = calls_by_lead.fetch(lead.id, []).select { |event| event.occurred_at >= waited_since }
 
           if calls.empty?
             next unless lead.status == "new"
@@ -95,8 +98,6 @@ module Today
           next if calls.any? { |call| call_connected?(call) }
 
           last_call = calls.last
-          next unless call_outcome(last_call).in?(%w[voicemail no_answer])
-
           attempt = calls.size + 1
           days_wait = attempt == 2 ? 1 : 2
           due = last_call.occurred_at <= @now - days_wait.days ||
@@ -235,15 +236,6 @@ module Today
       Date.iso8601(raw.to_s)
     rescue ArgumentError
       nil
-    end
-
-    def one_business_day_ago
-      as_of = @now
-      # Freeze elapsed business time at Saturday midnight throughout the weekend.
-      as_of = as_of.beginning_of_week(:monday) + 5.days if as_of.saturday? || as_of.sunday?
-      cutoff = as_of - 1.day
-      cutoff -= 1.day while cutoff.saturday? || cutoff.sunday?
-      cutoff
     end
 
     def waiting_threads

@@ -123,6 +123,27 @@ class AcquisitionTest < ActiveSupport::TestCase
     assert_equal "meta_ads", Leads.derive_source(result)
   end
 
+  test "landing URL fallback labels only Meta sources with an ad_id as meta_ads" do
+    observed = Time.current.iso8601
+    {
+      "https://www.sherpaholidays.com/?utm_source=youtube&utm_medium=paid&ad_id=1" => "youtube",
+      "https://www.sherpaholidays.com/?utm_source=tiktok&utm_medium=paid&ad_id=1&adset_id=2" => "tiktok"
+    }.each do |landing_url, channel|
+      acquisition = Leads::Acquisition.parse({
+        "acquisition" => {
+          "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true, "opted_out" => false, "observed_at" => observed },
+          "first_touch" => { "unknown_reason" => "unavailable" },
+          "last_touch" => { "unknown_reason" => "unavailable" },
+          "submission_page" => { "url" => landing_url }
+        }
+      })
+      result = Leads::Acquisition.legacy_attribution({}, acquisition: acquisition)
+      assert_equal "1", result["ad_id"]
+      assert_equal "website_form", Leads.derive_source(result), landing_url
+      assert_equal channel, Leads::Acquisition.classify(result), landing_url
+    end
+  end
+
   test "backfill_unavailable_touches! is idempotent and only fills missing attribution on unavailable-touch leads" do
     observed = Time.current.iso8601
     landing_url = "https://www.sherpaholidays.com/pages/private-nepal-tours?utm_source=fb&utm_medium=paid&utm_campaign=sh_us_cold_cbo&campaign_id=52666579688338&adset_id=52666579688138&ad_id=52669753271538"

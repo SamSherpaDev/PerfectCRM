@@ -196,6 +196,42 @@ class TodaySummaryTest < ActiveSupport::TestCase
     end
   end
 
+  test "an Attempted call is an unanswered try that continues the Day 0, Day 1, Day 3 cadence" do
+    travel_to Time.zone.local(2026, 10, 20, 10) do
+      lead = inquiry("Attempted traveler", 15.minutes.ago)
+
+      CallLog.record!(lead, key: "attempted-1", occurred_at: Time.current, outcome: "attempted", direction: "outbound")
+      assert_empty Today::Summary.new.call_entries
+
+      travel 1.day
+      entry = Today::Summary.new.call_entries.sole
+      assert_equal [ lead, 2, "2nd try", "attempted" ],
+        [ entry.lead, entry.attempt, entry.attempt_label, entry.last_call.metadata["outcome"] ]
+
+      CallLog.record!(lead, key: "attempted-2", occurred_at: Time.current, outcome: "attempted", direction: "outbound")
+      travel 2.days
+      entry = Today::Summary.new.call_entries.sole
+      assert_equal [ lead, 3, "3rd try" ], [ entry.lead, entry.attempt, entry.attempt_label ]
+
+      CallLog.record!(lead, key: "attempted-3", occurred_at: Time.current, outcome: "attempted", direction: "outbound")
+      travel 5.days
+      assert_empty Today::Summary.new.call_entries
+    end
+  end
+
+  test "a flagged but unreviewed inquiry stays on the call list until confirmed as spam" do
+    travel_to Time.zone.local(2026, 10, 20, 10) do
+      flagged = Lead.create!(name: "Anna Lindqvist", email: "annalindqvist@gmail.com", phone_raw: "+1 415 555 0199",
+        received_at: 1.hour.ago, spam_score: 25, tag_list: Lead::SUSPECTED_SPAM_TAG)
+      assert flagged.suspected_spam?
+
+      assert_equal [ flagged ], Today::Summary.new.not_yet_called
+
+      flagged.mark_as_spam!
+      assert_empty Today::Summary.new.not_yet_called
+    end
+  end
+
   private
 
   def inquiry(name, received_at, phone: "+1 415 555 0134")

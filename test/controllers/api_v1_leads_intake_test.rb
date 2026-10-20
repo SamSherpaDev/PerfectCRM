@@ -818,14 +818,25 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     assert_nil lead.spam_marked_at
   end
 
-  test "flagged spam lead withholds the instant call alert email while real inquiry sends it immediately" do
+  test "flagged real-looking inquiry gets a check-first call alert while a clean inquiry gets call now" do
     body = intake_body(
-      "contact" => { "name" => "Anna Lindqvist", "email" => "annalindqvist@example.com" }
+      "contact" => { "name" => "Anna Lindqvist", "email" => "annalindqvist@gmail.com", "phone_raw" => "+1 415 555 0199" }
     )
     post_intake body
-    assert_no_emails do
+    flagged = Lead.last
+    assert flagged.suspected_spam?
+    assert flagged.lead_notifications.exists?(event: "email_copy")
+    assert_emails 1 do
       perform_enqueued_jobs only: LeadNotificationJob
     end
+    check = ActionMailer::Base.deliveries.last
+    assert_equal "Check, then call: Anna - Private Nepal tour", check.subject
+    check_lines = check.body.to_s.lines.first(4).map(&:strip)
+    assert_equal "Call now: tel:+14155550199 (+1 415 555 0199)", check_lines[0]
+    assert_equal "Check first: flagged as possible spam (Name matches email), suspicion score 25.", check_lines[1]
+    assert_equal "Reference: #{flagged.reference}", check_lines[2]
+    assert_match(%r{\ALead page: https?://.+/leads/#{flagged.id}\z}, check_lines[3])
+    assert_includes Today::Summary.new.call_entries.map(&:lead), flagged
 
     real_body = intake_body(
       "contact" => { "name" => "Clara Jensen", "email" => "clara@example.com", "phone_raw" => "+1 415 555 0134" }
@@ -835,7 +846,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
       perform_enqueued_jobs only: LeadNotificationJob
     end
     mail = ActionMailer::Base.deliveries.last
-    assert_equal "Call now: Clara — Private Nepal tour", mail.subject
+    assert_equal "Call now: Clara - Private Nepal tour", mail.subject
     assert_includes mail.body.to_s.lines.first, "tel:+14155550134"
   end
 

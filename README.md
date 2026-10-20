@@ -532,12 +532,13 @@ counts clients that are not archived.
 Not yet called is the daily call list in priority order: first, active new
 inquiries with a phone number and no logged call yet, oldest receipt first
 (creation time if no receipt is recorded), showing how long they have waited;
-second, open leads with a phone number whose last call was `Voicemail` or
-`No answer` and that are due another try (attempt 2 due 1 day after attempt 1,
-attempt 3 due 2 days after attempt 2 — Day 0, Day 1, Day 3, up to 3 attempts).
-Each row shows its attempt badge (`1st try`, `2nd try`, or `3rd try`), wait
-time, and one-tap `Talked` / `Voicemail` / `No answer` logging plus
-`Schedule call`. Leads drop off the list once a call connects (`Talked`), they
+second, open leads with a phone number whose calls never connected
+(`Attempted`, `Voicemail`, or `No answer`) and that are due another try
+(attempt 2 due 1 day after attempt 1, attempt 3 due 2 days after attempt 2 -
+Day 0, Day 1, Day 3, up to 3 attempts). Each row shows its attempt badge
+(`1st try`, `2nd try`, or `3rd try`), a `Check` marker on inquiries flagged as
+looking like spam, wait time, and one-tap `Talked` / `Voicemail` / `No answer`
+logging plus `Schedule call`. Leads drop off the list once a call connects (`Talked`), they
 are marked `Not interested`, `spam`, or `archived`, have an open scheduled call,
 or have used 3 attempts.
 

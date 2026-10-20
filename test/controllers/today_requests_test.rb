@@ -124,6 +124,21 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "not yet called keeps a flagged inquiry with a Check marker and drops it once confirmed as spam" do
+    flagged = Lead.create!(name: "Anna Lindqvist", email: "annalindqvist@gmail.com", phone_raw: "+1 415 555 0199",
+      received_at: 1.hour.ago, spam_score: 25, tag_list: Lead::SUSPECTED_SPAM_TAG)
+    clean = Lead.create!(name: "Clara Jensen", phone_raw: "+1 415 555 0134", received_at: 2.hours.ago)
+
+    get root_path
+    assert_select "#call_list_lead_#{flagged.id} .badge", text: "Check"
+    assert_select "#call_list_lead_#{clean.id} .badge", text: "Check", count: 0
+
+    flagged.mark_as_spam!
+    get root_path
+    assert_select "#call_list_lead_#{flagged.id}", count: 0
+    assert_select "#call_list_lead_#{clean.id}"
+  end
+
   test "automatic-only inquiry shows the unanswered inbound preview until a call is logged" do
     lead = Lead.create!(name: "Demo inquiry", email: "demo@example.com")
     thread = Conversation.create!(linkable: lead, subject: "Trip")

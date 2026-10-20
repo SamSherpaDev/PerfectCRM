@@ -17,7 +17,7 @@ class LeadIntakeMailerTest < ActionMailer::TestCase
     assert_equal [ "info@sherpaholidays.com" ], mail.to
     assert_equal [ "anna@example.com" ], mail.reply_to
     assert_equal [ ENV.fetch("MAIL_FROM", "info@sherpaholidays.com") ], mail.from
-    assert_equal "Call now: Anna — Private Nepal tour", mail.subject
+    assert_equal "Call now: Anna - Private Nepal tour", mail.subject
 
     body = mail.body.to_s
     first_lines = body.lines.first(3).map(&:strip)
@@ -38,8 +38,31 @@ class LeadIntakeMailerTest < ActionMailer::TestCase
     assert_not_includes body, "Cj0K-secret"
   end
 
-  test "never sends call alert for suspected spam, archived bot, or safety-net leads" do
-    spam = Lead.create!(name: "Spammer", email: "spam@example.com", source: "website_form", spam_score: 25, tag_list: "suspected_spam")
+  test "flagged inquiry still gets the call alert, marked check first with its reason" do
+    lead = Lead.create!(name: "Anna Lindqvist", email: "annalindqvist@gmail.com", source: "website_form",
+      trip_title: "Private Nepal tour", phone_raw: "+1 415 555 0134", spam_score: 25, tag_list: "suspected_spam",
+      metadata: { "suspicion_hits" => [ "name_matches_email" ] })
+
+    assert LeadIntakeMailer.real_inquiry?(lead)
+    assert_emails 1 do
+      LeadIntakeEmailJob.perform_now(lead.id)
+    end
+    mail = ActionMailer::Base.deliveries.last
+    assert_equal "Check, then call: Anna - Private Nepal tour", mail.subject
+    lines = mail.body.to_s.lines.first(4).map(&:strip)
+    assert_equal "Call now: tel:+14155550134 (+1 415 555 0134)", lines[0]
+    assert_equal "Check first: flagged as possible spam (Name matches email), suspicion score 25.", lines[1]
+    assert_equal "Reference: #{lead.reference}", lines[2]
+    assert_match(%r{\ALead page: https?://.+/leads/#{lead.id}\z}, lines[3])
+  end
+
+  test "clean inquiry alert carries no check line" do
+    lead = Lead.create!(name: "Anna Lindqvist", email: "anna@example.com", source: "website_form")
+    assert_not_includes LeadIntakeMailer.inquiry_copy(lead).body.to_s, "Check first"
+  end
+
+  test "never sends call alert for confirmed spam, archived bot, or safety-net leads" do
+    spam = Lead.create!(name: "Spammer", email: "spam@example.com", source: "website_form", spam_score: 25, tag_list: "suspected_spam", spam_marked_at: Time.current)
     archived = Lead.create!(name: "Bot", email: "bot@example.com", source: "website_form", archived_at: Time.current)
     safety_net = Lead.create!(name: "Fallback", email: "fb@example.com", source: "email", capture_channel: "email", external_ref: "mail_message:99", metadata: { "inquiry_safety_net" => true })
 
@@ -55,7 +78,7 @@ class LeadIntakeMailerTest < ActionMailer::TestCase
   test "missing trip falls back to not sure yet" do
     lead = Lead.create!(name: "Anna Lindqvist", email: "anna@example.com", source: "website_form")
     mail = LeadIntakeMailer.inquiry_copy(lead)
-    assert_equal "Call now: Anna — not sure yet", mail.subject
+    assert_equal "Call now: Anna - not sure yet", mail.subject
   end
 
   test "displayed page URL omits tracking parameters without changing metadata" do

@@ -5,8 +5,7 @@ class LeadIntakeMailer < ApplicationMailer
   def self.real_inquiry?(lead)
     lead.present? &&
       !lead.archived? &&
-      !lead.suspected_spam? &&
-      !lead.spam_score.to_i.positive? &&
+      lead.spam_marked_at.nil? &&
       !lead.safety_net_inquiry? &&
       !lead.external_ref.to_s.start_with?("mail_message:")
   end
@@ -18,10 +17,11 @@ class LeadIntakeMailer < ApplicationMailer
     @page_url = displayed_page_url(lead)
     @phone = lead.phone_raw.presence || lead.phone.presence
     @tel_href = lead.phone.presence || @phone.to_s.gsub(/[^\d+]/, "").presence
+    @check_first = lead.spam_score.to_i.positive? || lead.suspected_spam?
 
     first_name = lead.name.to_s.split.first.presence || lead.name.to_s.strip.presence || "New inquiry"
     trip = lead.trip_title.presence || lead.trip_interest.presence || lead.trip_handle.presence || "not sure yet"
-    subject = "Call now: #{first_name} — #{trip}"
+    subject = "#{@check_first ? 'Check, then call' : 'Call now'}: #{first_name} - #{trip}"
 
     headers["Auto-Submitted"] = "auto-generated"
     headers["X-Auto-Response-Suppress"] = "All"

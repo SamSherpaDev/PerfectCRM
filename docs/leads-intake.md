@@ -100,18 +100,20 @@ Bot and spam scoring (`Leads.suspicion_hits`, `25` points per hit):
 - Flag-only hits: `many_links` (3+ links in `message`), `disposable_domain`
   (known throwaway email domain), and `name_matches_email` (local-part matches
   normalized name), alone or combined. The lead is tagged `suspected_spam`
-  (`Looks like spam`), kept in the `New` tab for review, and withheld from the
-  instant `Call now:` email alert, automatic first replies, and ad conversions
-  until reviewed.
+  (`Looks like spam`), kept in the `New` tab and on the Today call list (with a
+  `Check` marker) for review, alerted with a `Check, then call:` subject, and
+  withheld from automatic first replies and ad conversions until reviewed.
 - Missing or unparseable `timing` is not a hit; such inquiries are scored on the
   remaining signals only.
 
 Instant call alert (`LeadIntakeMailer#inquiry_copy`): sent immediately to
-`info@sherpaholidays.com` (with `Reply-To` set to the visitor) only for real
-inquiries (never spam, bot, duplicate, or safety-net copies). Subject starts
-with `Call now: <First name> — <Trip>`, and the first three lines carry a
-tap-to-call `tel:` link, `Reference: SH-XXXX`, and a direct link to the lead
-page.
+`info@sherpaholidays.com` (with `Reply-To` set to the visitor) for every new
+inquiry except confirmed spam, bot traps, duplicates, and safety-net copies.
+Subject starts with `Call now: <First name> - <Trip>`, or
+`Check, then call: <First name> - <Trip>` when the inquiry has a flag-only
+suspicion hit. The first lines carry a tap-to-call `tel:` link, the suspicion
+reason for flagged inquiries, `Reference: SH-XXXX`, and a direct link to the
+lead page.
 
 Source derivation: `google_ads` on `gclid`/`gbraid`/`wbraid`, or
 `utm_source=google` with a paid medium (`cpc`, `ppc`, `paid`, `paid_social`,
@@ -525,8 +527,8 @@ verdicts and repeated statuses leave stage timing unchanged.
   [README, Leads](../README.md#leads).
 - **Email copy.** A background job mails the inquiry to
   `info@sherpaholidays.com`, Reply-To the visitor, From the app's `MAIL_FROM`
-  (default `info@sherpaholidays.com`). Suspected spam prefixes
-  the subject with `[check]`. Attribution metadata is omitted, and the
+  (default `info@sherpaholidays.com`). Suspected spam starts
+  the subject with `Check, then call:`. Attribution metadata is omitted, and the
   displayed page URL strips `gclid`, `gbraid`, `wbraid`, and `utm_*` query
   parameters. A mail failure never touches the lead. If a website-form copy or
   fallback email arrives in the mailbox without a saved intake lead, the daily

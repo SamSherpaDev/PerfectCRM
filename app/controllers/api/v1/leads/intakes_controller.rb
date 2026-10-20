@@ -87,7 +87,7 @@ module Api
                   }
                 )
               else
-                lead.lead_notifications.create!(event: "email_copy") if LeadIntakeMailer.real_inquiry?(lead)
+                lead.lead_notifications.create!(event: "email_copy")
                 lead.lead_notifications.create!(event: "lead.created")
                 lead.lead_notifications.create!(event: "auto_first_reply", available_at: 2.minutes.from_now)
               end

@@ -3,6 +3,9 @@ Call now: tel:<%= @tel_href %><%= @phone && @phone != @tel_href ? " (#{@phone})"
 <% else -%>
 Call now: no phone provided (reply to <%= @lead.email %>)
 <% end -%>
+<% if @check_first -%>
+Check first: flagged as possible spam<%= @lead.spam_reason ? " (#{@lead.spam_reason})" : "" %>, suspicion score <%= @lead.spam_score %>.
+<% end -%>
 Reference: <%= @lead.reference %>
 Lead page: <%= lead_url(@lead) %>
 

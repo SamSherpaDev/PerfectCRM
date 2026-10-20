@@ -60,7 +60,7 @@
       <h2 class="card-title" id="not-yet-called-heading">Not yet called</h2>
       <%= badge @summary.not_yet_called.count, :neutral %>
     </div>
-    <%= card_caption "New inquiries with a phone (oldest first), then voicemail or no-answer retries due on Day 1 (2nd try) and Day 3 (3rd try), up to 3 attempts." %>
+    <%= card_caption "New inquiries with a phone (oldest first), then unanswered calls due a retry on Day 1 (2nd try) and Day 3 (3rd try), up to 3 attempts." %>
     <% entries = @summary.call_entries %>
     <% if entries.any? %>
       <ul class="divide-y divide-rule-2">
@@ -72,6 +72,7 @@
                 <%= link_to lead.name, lead_path(lead), class: "link font-medium" %>
                 <%= badge entry.attempt_label, entry.attempt > 1 ? :warning : :neutral %>
                 <% if lead.potential? %><%= badge "Potential", :brand %><% end %>
+                <% if lead.suspected_spam? %><%= badge "Check", :danger %><% end %>
               </div>
               <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs muted">
                 <% if lead.display_phone.present? %>
