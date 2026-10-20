@@ -662,7 +662,7 @@
     @apply relative flex min-h-40 flex-col gap-5 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between;
   }
   .page-header .page-actions {
-    @apply relative z-[1] flex flex-wrap items-center gap-2 sm:justify-end;
+    @apply relative z-[1] flex flex-wrap items-center gap-2 sm:ml-auto sm:justify-end;
   }
 
   /* Navigation: the rail stays ink in both schemes */

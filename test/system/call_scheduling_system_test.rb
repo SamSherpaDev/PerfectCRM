@@ -252,6 +252,10 @@ class CallSchedulingSystemTest < ApplicationSystemTestCase
     heading_width_before = page.evaluate_script("Math.round(document.querySelector('h1').getBoundingClientRect().width)")
     assert_operator heading_before, :<=, 60, "Lead heading wrapped across lines before opening Schedule call"
     assert_operator heading_width_before, :>=, 200
+    actions_gap = page.evaluate_script(<<~JS)
+      Math.round(document.querySelector(".page-header").getBoundingClientRect().right - document.querySelector(".page-header .page-actions").getBoundingClientRect().right)
+    JS
+    assert_operator actions_gap.abs, :<=, 1, "Lead page actions must sit at the right edge of the header"
 
     within(".page-actions") do
       find("summary", text: "Schedule call").click
