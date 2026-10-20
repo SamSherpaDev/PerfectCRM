@@ -74,15 +74,22 @@ export default class extends Controller {
     const tabbar = document.querySelector(".tabbar")
     const tabbarVisible = tabbar && getComputedStyle(tabbar).display !== "none"
     const bottomLimit = (tabbarVisible ? tabbar.getBoundingClientRect().top : window.innerHeight) - 16
+    const header = document.querySelector("header.sticky")
+    const headerVisible = header && getComputedStyle(header).display !== "none"
+    const topLimit = (headerVisible ? header.getBoundingClientRect().bottom : 0) + 16
     if (finalRect.bottom > bottomLimit) {
-      window.scrollBy({ top: finalRect.bottom - bottomLimit + 12, behavior: "instant" })
-    } else {
-      const header = document.querySelector("header.sticky")
-      const headerVisible = header && getComputedStyle(header).display !== "none"
-      const topLimit = (headerVisible ? header.getBoundingClientRect().bottom : 0) + 16
-      if (finalRect.top < topLimit) {
-        window.scrollBy({ top: finalRect.top - topLimit, behavior: "instant" })
+      const detailsTop = this.details.getBoundingClientRect().top
+      if (finalRect.bottom - detailsTop > bottomLimit - topLimit) {
+        // Too tall for the space between the bars: keep the trigger and title
+        // below the top bar and scroll inside the form instead.
+        this.sheet.style.maxHeight = `${bottomLimit - topLimit - (finalRect.top - detailsTop)}px`
+        this.sheet.style.overflowY = "auto"
+        window.scrollBy({ top: detailsTop - topLimit, behavior: "instant" })
+      } else {
+        window.scrollBy({ top: finalRect.bottom - bottomLimit + 12, behavior: "instant" })
       }
+    } else if (finalRect.top < topLimit) {
+      window.scrollBy({ top: finalRect.top - topLimit, behavior: "instant" })
     }
   }
 
@@ -91,6 +98,8 @@ export default class extends Controller {
     this.sheet.style.bottom = ""
     this.sheet.style.left = ""
     this.sheet.style.right = ""
+    this.sheet.style.maxHeight = ""
+    this.sheet.style.overflowY = ""
   }
 
   handleOutsideClick(event) {

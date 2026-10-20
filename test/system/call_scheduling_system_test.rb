@@ -279,6 +279,51 @@ class CallSchedulingSystemTest < ApplicationSystemTestCase
     assert_operator phone_sheet_bottom, :<=, 781, "Phone schedule sheet should scroll above the bottom navigation bar"
   end
 
+  test "a phone Reschedule form taller than the screen keeps its title below the top bar and scrolls inside" do
+    lead = Lead.create!(name: "Madatovian Vahan", email: "madatovian@example.com", last_activity_at: 1.hour.ago)
+    lead.mark_potential!
+    lead.scheduled_calls.create!(scheduled_on: (Time.zone.today + 2.days).iso8601, scheduled_time: "12:00")
+
+    %w[paper night].each do |appearance|
+      Setting.current.update!(appearance: appearance)
+      page.current_window.resize_to(390, 844)
+      visit leads_path(tab: "potential")
+      assert_selector "html[data-scheme=#{appearance}]"
+      within("li", text: "Madatovian Vahan") do
+        find("summary", text: "Reschedule").click
+        assert_selector ".call-schedule-sheet", visible: true
+      end
+
+      layout = settled_layout(<<~JS) { |l| l["summaryTop"] >= l["headerBottom"] && l["sheetBottom"] <= l["tabbarTop"] }
+        (() => {
+          const pop = document.querySelector(".call-schedule-pop[open]");
+          const sheet = pop.querySelector(".call-schedule-sheet");
+          const submit = sheet.querySelector("[type=submit]");
+          const top = { summary: pop.querySelector("summary").getBoundingClientRect().top, title: sheet.querySelector(".call-schedule-title").getBoundingClientRect().top };
+          sheet.scrollTop = sheet.scrollHeight;
+          const sheetRect = sheet.getBoundingClientRect();
+          const submitRect = submit.getBoundingClientRect();
+          return {
+            headerBottom: Math.round(document.querySelector("header.sticky").getBoundingClientRect().bottom),
+            tabbarTop: Math.round(document.querySelector(".tabbar").getBoundingClientRect().top),
+            summaryTop: Math.round(top.summary),
+            titleTop: Math.round(top.title),
+            sheetBottom: Math.round(sheetRect.bottom),
+            submitTop: Math.round(submitRect.top),
+            submitBottom: Math.round(submitRect.bottom),
+            scrollsInside: sheet.scrollHeight > sheet.clientHeight
+          };
+        })()
+      JS
+      assert_operator layout["summaryTop"], :>=, layout["headerBottom"], "Reschedule trigger is under the #{appearance} top bar: #{layout.inspect}"
+      assert_operator layout["titleTop"], :>=, layout["headerBottom"], "Form title is under the #{appearance} top bar: #{layout.inspect}"
+      assert_operator layout["sheetBottom"], :<=, layout["tabbarTop"], "Form runs under the #{appearance} tab bar: #{layout.inspect}"
+      assert layout["scrollsInside"], "The #{appearance} form taller than the space between the bars must scroll inside: #{layout.inspect}"
+      assert_operator layout["submitTop"], :>=, layout["headerBottom"], "Submit is not reachable in #{appearance}: #{layout.inspect}"
+      assert_operator layout["submitBottom"], :<=, layout["sheetBottom"], "Submit is not reachable in #{appearance}: #{layout.inspect}"
+    end
+  end
+
   test "an open Schedule call sheet scrolls under the sticky top bar below desktop width" do
     16.times do |i|
       Lead.create!(name: "Potential Lead #{i}", email: "potential#{i}@example.com", last_activity_at: (i + 1).hours.ago).mark_potential!
@@ -320,7 +365,7 @@ class CallSchedulingSystemTest < ApplicationSystemTestCase
       assert_selector ".call-schedule-sheet", visible: true
     end
 
-    layout = page.evaluate_script(<<~JS)
+    layout = settled_layout(<<~JS) { |l| l["sheetBottom"] <= l["viewportHeight"] - 16 }
       (() => {
         const sheet = document.querySelector(".call-schedule-pop[open] .call-schedule-sheet").getBoundingClientRect();
         return {
@@ -339,6 +384,19 @@ class CallSchedulingSystemTest < ApplicationSystemTestCase
   end
 
   private
+    # The sheet is positioned from the async details toggle event, so retry the
+    # measurement until it settles, then return the last one for the assertions.
+    def settled_layout(script)
+      layout = nil
+      page.document.synchronize do
+        layout = page.evaluate_script(script)
+        raise Capybara::ExpectationNotMet, "Schedule call sheet has not settled yet" unless yield(layout)
+      end
+      layout
+    rescue Capybara::ExpectationNotMet
+      layout
+    end
+
     def open_sheet_bounds(max_bottom:)
       bounds = nil
       page.document.synchronize do
