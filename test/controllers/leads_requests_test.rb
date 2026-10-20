@@ -701,7 +701,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
   end
 
   test "the composer on a website-copy safety-net lead addresses the visitor, not the copy's relay sender" do
-    [ "crm@perfectcrm.sherpaholidays.com", "notifications@example.com" ].each do |relay|
+    [ "crm@perfectcrm.sherpaholidays.com", "mailer@shopify.com" ].each do |relay|
       message = ingest_inquiry(from: relay, email: "visitor-#{relay.split("@").first}@example.com")
       Leads::UnlinkedInquiries.new.resolve!
       lead = message.conversation.reload.linkable

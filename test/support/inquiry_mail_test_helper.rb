@@ -2,7 +2,7 @@ module InquiryMailTestHelper
   # Synthetic fallback mail: intake failed before a reference was allocated.
   # Exercise real MIME parsing and ingestion, including HTML-only notifications.
   def ingest_inquiry(subject: "New inquiry from Synthetic Traveler: Nepal tour", html: false,
-    from: "notifications@example.com", email: nil, headers: {}, body: nil, received_at: 1.hour.ago, provider_id: SecureRandom.uuid)
+    from: "no-reply@sherpaholidays.com", email: nil, headers: {}, body: nil, received_at: 1.hour.ago, provider_id: SecureRandom.uuid)
     email ||= "traveler-#{provider_id.to_s.tr('^a-zA-Z0-9', '').first(12).downcase}@example.com"
     body ||= if html
       "<h1>Website inquiry - CRM fallback</h1><p><strong>Name:</strong> Synthetic Traveler</p>" \

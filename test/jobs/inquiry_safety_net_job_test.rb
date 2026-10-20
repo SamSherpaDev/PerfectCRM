@@ -53,16 +53,27 @@ class InquirySafetyNetJobTest < ActiveSupport::TestCase
     assert_includes ActionMailer::Base.deliveries.last.subject, "1 added to New"
   end
 
-  test "a clear check, a linked inquiry, or a candidate matching an existing lead sends no email and creates no duplicate" do
+  test "a clear check, a linked inquiry, a candidate matching an existing lead, or ordinary email, vendor pitch, and reply sends no email and creates no lead" do
     assert_emails(0) { InquirySafetyNetJob.perform_now }
     message = ingest_inquiry
     message.conversation.update!(linkable: Lead.create!(name: "Linked"))
     existing = Lead.create!(name: "Keith Almryde", email: "keith@example.com", status: "new")
     duplicate_candidate = ingest_inquiry(email: "keith@example.com")
+    ordinary = ingest_inquiry(from: "Maya Lin <maya.lin@gmail.com>", subject: "Everest Base Camp in November",
+      body: "Hi, can you send details for two hikers?")
+    vendor = ingest_inquiry(from: "Apex Digital <hello@apexdigital.example>",
+      subject: "SEO services for your website contact form",
+      body: "We help travel companies get more website inquiries.")
+    reply = ingest_inquiry(from: "traveler@example.com", subject: "Re: Nepal trip",
+      headers: { "In-Reply-To" => "<earlier@example.com>" }, body: "Thanks for the info!")
     assert_no_difference("Lead.count") do
       assert_emails(0) { InquirySafetyNetJob.perform_now }
     end
     assert_equal existing, duplicate_candidate.reload.conversation.linkable
+    [ ordinary, vendor, reply ].each do |non_website|
+      assert_nil non_website.reload.conversation.linkable
+      assert_nil non_website.inquiry_alert_attempted_at
+    end
     assert_nil message.reload.inquiry_alert_attempted_at
   end
 
