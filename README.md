@@ -1094,7 +1094,9 @@ history is reachable, and expanded messages show their full body.
 The inquiry safety net checks the last seven days of imported inbound mail at
 7:10am Pacific every day (`InquirySafetyNetJob` in `config/recurring.yml`). Only
 unlinked website-form copies (the form's notification or fallback email for a
-website submission) are candidates; ordinary inbound emails (human emails,
+website submission, sent from our own domain, the form's Shopify relay, or a
+no-reply/notifications address) are candidates; mail from any other sender is
+ordinary however it is laid out. Ordinary inbound emails (human emails,
 vendor pitches, replies) stay in the inbox as threads and never become leads,
 raise alerts, or appear as missing inquiries, whatever their wording. Mail
 already linked to any record (a lead, client, or organization) is visible on

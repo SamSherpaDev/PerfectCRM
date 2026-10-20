@@ -2,8 +2,9 @@ require "uri"
 
 module Leads
   # A local, bounded check of imported mail. Only unlinked website-form copies
-  # (notification or fallback emails for website submissions) are candidates;
-  # ordinary inbound emails stay in the inbox as threads. Website copies left in
+  # (notification or fallback emails for website submissions, sent by our own
+  # systems or the form's relay) are candidates; ordinary inbound emails stay in
+  # the inbox as threads, however they are laid out. Website copies left in
   # triage can match their inquiry by reference or submission; a shared email
   # alone only matches a lead still waiting in New.
   class UnlinkedInquiries
@@ -26,6 +27,8 @@ module Leads
       simplefin.org
       tripadvisor.com
     ].freeze
+    # Website-form relays that send form notifications from a personal-looking address.
+    WEBSITE_RELAY_DOMAINS = %w[shopify.com shopifyemail.com].freeze
     AUTOMATED_SENDER = /(?:\A|[._-])(?:do[._-]?not[._-]?reply|no[._-]?reply|notifications?|alerts?|bounces?|auto(?:mated|[._-]?confirm)|news(?:letters?)?|updates?|digest|receipts?|billing|invoices?|orders?|security|quarantine|system)(?:\z|[+._-])/i
     BLANK_VALUES = %w[— – - n/a na none null unknown].freeze
     Candidate = Data.define(:message, :name, :explicit_name, :email, :phone_raw, :trip,
@@ -49,8 +52,19 @@ module Leads
 
     def self.automated_sender_address?(from)
       local, domain = from.split("@", 2)
+      local.to_s.match?(AUTOMATED_SENDER) || domain_in?(domain, PLATFORM_DOMAINS)
+    end
+
+    # Our own mailbox or domain, the form's relay, or a no-reply/notification
+    # address: only these send website-form copies.
+    def self.website_form_sender?(from)
+      local, domain = from.split("@", 2)
+      own_sender?(from) || local.to_s.match?(AUTOMATED_SENDER) || domain_in?(domain, WEBSITE_RELAY_DOMAINS)
+    end
+
+    def self.domain_in?(domain, entries)
       host = domain.to_s.downcase
-      local.to_s.match?(AUTOMATED_SENDER) || PLATFORM_DOMAINS.any? { |entry| host == entry || host.end_with?(".#{entry}") }
+      entries.any? { |entry| host == entry || host.end_with?(".#{entry}") }
     end
 
     def initialize(now: Time.current)
@@ -162,6 +176,7 @@ module Leads
       from = EmailIdentity.normalized(message.from_address)
       return if message.subject.to_s.match?(AUTOMATIC) ||
         from.match?(/\A(?:mailer-daemon|postmaster)@/i) ||
+        !self.class.website_form_sender?(from) ||
         reply_message?(message)
 
       body = body_text(message)

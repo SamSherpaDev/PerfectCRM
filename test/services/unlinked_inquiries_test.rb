@@ -464,20 +464,41 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
       sent_at: 1.day.ago
     )
 
-    website_copy = ingest_inquiry(
+    supplier_form_layout = ingest_inquiry(
       from: "sales@nepalsocialtreks.example",
       subject: "New website inquiry from Tenzing Sherpa: Everest Base Camp",
       body: "New website inquiry - reply to answer them directly.\n\n" \
             "Name: Tenzing Sherpa\nEmail: sales@nepalsocialtreks.example\nHas in mind: Everest Base Camp\n\n" \
             "Message:\nTesting website inquiry form."
     )
+    website_copy = ingest_inquiry
 
     assert_equal [ website_copy.id ], missing.map(&:id)
     assert_difference("Lead.count", 1) { Leads::UnlinkedInquiries.new.resolve! }
-    [ bond_reply, supplier_reply, supplier_new_thread, traveler_inquiry, neighbor_inquiry, newsletter_reply ].each do |message|
+    [ bond_reply, supplier_reply, supplier_new_thread, traveler_inquiry, neighbor_inquiry, newsletter_reply,
+      supplier_form_layout ].each do |message|
       assert_nil message.reload.conversation.linkable
     end
     assert_instance_of Lead, website_copy.reload.conversation.linkable
+  end
+
+  test "a cold email laid out like a website-form copy is ordinary mail unless our systems or the form relay sent it" do
+    cold = ingest_inquiry(
+      from: "Bob Seo <bob@seo.example>",
+      subject: "Contact form submission",
+      body: "Name: Bob Seo\nEmail: bob@seo.example\nMessage: We offer SEO packages"
+    )
+    own_mailer = ingest_inquiry(from: "PerfectCRM <crm@perfectcrm.sherpaholidays.com>", email: "own.mailer@example.com")
+    shopify = ingest_inquiry(from: "Shopify <mailer@shopify.com>", subject: "New customer message on October 15, 2026",
+      body: "You received a new message from your online store's contact form.\n\n" \
+            "Name: Shopify Visitor\nEmail: shopify.visitor@example.com\nMessage:\nCan you plan Bhutan for two?")
+
+    assert_equal [ own_mailer.id, shopify.id ], missing.map(&:id)
+    assert_difference("Lead.count", 2) { Leads::UnlinkedInquiries.new.resolve! }
+    assert_nil cold.reload.conversation.linkable
+    assert cold.conversation.triage?
+    assert_equal "shopify.visitor@example.com", shopify.reload.conversation.linkable.email
+    assert_equal "website_form", own_mailer.reload.conversation.linkable.source
   end
 
   private
