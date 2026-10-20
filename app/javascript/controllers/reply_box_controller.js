@@ -165,4 +165,20 @@ export default class extends Controller {
   setStatus(text) {
     if (this.hasStatusTarget) this.statusTarget.textContent = text
   }
+
+  confirmSend(event) {
+    const button = event.currentTarget
+    const message = button.dataset.turboConfirm
+    if (message) {
+      if (!window.confirm(message)) {
+        event.preventDefault()
+        return
+      }
+      delete button.dataset.turboConfirm
+      setTimeout(() => { button.dataset.turboConfirm = message }, 0)
+    }
+    if (this.hasDetailsTarget && !this.detailsTarget.open && this.detailsTarget.querySelector(":invalid")) {
+      this.detailsTarget.open = true
+    }
+  }
 }

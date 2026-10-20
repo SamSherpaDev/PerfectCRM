@@ -92,17 +92,20 @@ class Lead < ApplicationRecord
     flagged = Tagging.joins(:tag).where(taggable_type: "Lead", tags: { name: SUSPECTED_SPAM_TAG }).select(:taggable_id)
     where.not(spam_marked_at: nil).or(where(id: flagged))
   }
-  scope :potential, -> { active.where(converted_client_id: nil).where.not(potential_marked_at: nil).where.not(id: spam.select(:id)) }
+  scope :potential, -> { active.where(converted_client_id: nil, not_interested_marked_at: nil).where.not(potential_marked_at: nil).where.not(id: spam.select(:id)) }
   # Unsure holds leads the captain cannot call yet (voicemail, no reply):
   # not clearly Potential, not clearly spam. Suspected spam may wait here.
-  scope :unsure, -> { active.where(converted_client_id: nil, spam_marked_at: nil).where.not(unsure_marked_at: nil) }
+  scope :unsure, -> { active.where(converted_client_id: nil, spam_marked_at: nil, not_interested_marked_at: nil).where.not(unsure_marked_at: nil) }
+  # Not interested sets a lead aside from every call/email list and automation
+  # while keeping its stage and Potential/Unsure marks intact for undo.
+  scope :not_interested, -> { active.where(converted_client_id: nil, spam_marked_at: nil).where.not(not_interested_marked_at: nil) }
   scope :open, -> { active.where(converted_client_id: nil).where.not(status: "lost") }
   scope :lost, -> { active.where(status: "lost").where(converted_client_id: nil) }
   scope :converted, -> { where.not(converted_client_id: nil) }
   scope :by_status, ->(status) { active.where(status: status).where(converted_client_id: nil) }
-  scope :in_new_tab, -> { by_status(%w[new chatting nudged]).where.not(id: potential.select(:id)).where.not(id: unsure.select(:id)) }
+  scope :in_new_tab, -> { by_status(%w[new chatting nudged]).where(not_interested_marked_at: nil).where.not(id: potential.select(:id)).where.not(id: unsure.select(:id)) }
   scope :stale, -> {
-    open.where("COALESCE(last_touch_at, last_activity_at, updated_at, created_at) < ?", STALE_AFTER.ago)
+    open.where(not_interested_marked_at: nil).where("COALESCE(last_touch_at, last_activity_at, updated_at, created_at) < ?", STALE_AFTER.ago)
   }
   scope :ordered, -> { order(Arel.sql("COALESCE(last_activity_at, updated_at) DESC")) }
   scope :by_name, -> { order(:name) }
@@ -177,7 +180,7 @@ class Lead < ApplicationRecord
   end
 
   def potential?
-    potential_marked_at.present? && !archived? && !converted? && !suspected_spam?
+    potential_marked_at.present? && !not_interested? && !archived? && !converted? && !suspected_spam?
   end
 
   def mark_potential!
@@ -186,7 +189,7 @@ class Lead < ApplicationRecord
         errors.add(:base, "Only active, non-spam leads can be marked Potential")
         raise ActiveRecord::RecordInvalid, self
       end
-      update!(potential_marked_at: potential_marked_at || Time.current, unsure_marked_at: nil)
+      update!(potential_marked_at: potential_marked_at || Time.current, unsure_marked_at: nil, not_interested_marked_at: nil)
     end
     enqueue_ad_conversion
   end
@@ -202,7 +205,7 @@ class Lead < ApplicationRecord
   end
 
   def unsure?
-    unsure_marked_at.present? && spam_marked_at.nil? && !archived? && !converted?
+    unsure_marked_at.present? && !not_interested? && spam_marked_at.nil? && !archived? && !converted?
   end
 
   def mark_unsure!
@@ -211,7 +214,7 @@ class Lead < ApplicationRecord
         errors.add(:base, "Only active leads not marked as spam can be marked Unsure")
         raise ActiveRecord::RecordInvalid, self
       end
-      update!(unsure_marked_at: unsure_marked_at || Time.current, potential_marked_at: nil)
+      update!(unsure_marked_at: unsure_marked_at || Time.current, potential_marked_at: nil, not_interested_marked_at: nil)
     end
   end
 
@@ -225,12 +228,39 @@ class Lead < ApplicationRecord
     end
   end
 
+  def not_interested?
+    not_interested_marked_at.present? && spam_marked_at.nil? && !archived? && !converted?
+  end
+
+  def mark_not_interested!
+    with_lock do
+      if archived? || converted? || spam_marked_at.present?
+        errors.add(:base, "Only active leads not marked as spam can be marked Not interested")
+        raise ActiveRecord::RecordInvalid, self
+      end
+      now = Time.current
+      update!(not_interested_marked_at: not_interested_marked_at || now)
+      cancel_open_scheduled_calls!(at: now)
+    end
+  end
+
+  def unmark_not_interested!
+    with_lock do
+      if archived? || converted?
+        errors.add(:base, "Only active leads can be changed")
+        raise ActiveRecord::RecordInvalid, self
+      end
+      update!(not_interested_marked_at: nil)
+    end
+  end
+
   def mark_as_spam!
     with_lock do
       reject_converted_spam_review!
       tags << Tag.find_or_create_by!(name: SUSPECTED_SPAM_TAG) unless tags.exists?(name: SUSPECTED_SPAM_TAG)
       self.potential_marked_at = nil
       self.unsure_marked_at = nil
+      self.not_interested_marked_at = nil
       self.spam_marked_at ||= Time.current
       archive!
       record_spam_review!("spam", "Marked as spam and archived")
@@ -395,7 +425,7 @@ class Lead < ApplicationRecord
   end
 
   def call_schedulable?
-    !archived? && !converted?
+    !archived? && !converted? && !not_interested?
   end
 
   def open_scheduled_calls
@@ -430,7 +460,7 @@ class Lead < ApplicationRecord
   end
 
   def stale?
-    return false if converted? || status == "lost"
+    return false if converted? || status == "lost" || not_interested?
 
     (last_touch || Time.current) < STALE_AFTER.ago
   end
@@ -496,6 +526,24 @@ class Lead < ApplicationRecord
   def record_spam_review!(verdict, summary)
     activity_events.create!(kind: "spam_review", summary: summary, occurred_at: Time.current,
       metadata: { "verdict" => verdict, "actor" => Current.user_email.presence || "manual" })
+  end
+
+  def cancel_open_scheduled_calls!(at: Time.current)
+    scheduled_calls.scheduled.order(:scheduled_at, :id).each do |call|
+      call.cancel!(cancelled_at: at)
+      stamp = call.scheduled_at.in_time_zone.strftime("%b %-d, %-l:%M %p").strip
+      activity_events.create!(
+        kind: "scheduled_call",
+        summary: "Scheduled call for #{stamp} cancelled (marked not interested)",
+        occurred_at: at,
+        metadata: {
+          "scheduled_call_id" => call.id,
+          "scheduled_at" => call.scheduled_at.iso8601,
+          "reason" => "not_interested",
+          "actor" => Current.user_email.presence || "manual"
+        }
+      )
+    end
   end
 
   def enqueue_ad_conversion

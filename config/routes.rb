@@ -70,6 +70,8 @@ Rails.application.routes.draw do
       patch :unmark_potential
       patch :mark_unsure
       patch :unmark_unsure
+      patch :mark_not_interested
+      patch :unmark_not_interested
       patch :mark_as_spam
       patch :not_spam
       post :refresh_bookings

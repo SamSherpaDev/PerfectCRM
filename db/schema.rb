@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_19_182028) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_20_012348) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -369,6 +369,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_19_182028) do
     t.text "message"
     t.text "metadata"
     t.string "name", null: false
+    t.datetime "not_interested_marked_at"
     t.integer "notes_count", default: 0, null: false
     t.integer "origin_lead_id"
     t.string "owner_fit_at_inquiry"
@@ -521,6 +522,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_19_182028) do
     t.string "country"
     t.datetime "created_at", null: false
     t.string "email"
+    t.text "email_redirects", default: "{}", null: false
     t.string "kind", default: "other", null: false
     t.datetime "last_activity_at"
     t.string "name", null: false
@@ -577,6 +579,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_19_182028) do
     t.string "deep_link"
     t.integer "departure_id"
     t.string "departure_place"
+    t.datetime "deposit_seen_at"
     t.text "documents_json", default: "{}", null: false
     t.date "end_date"
     t.datetime "first_paid_at"
@@ -844,7 +847,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_19_182028) do
     t.integer "singleton_key", default: 1, null: false
     t.string "site_key"
     t.datetime "site_key_last_used_at"
+    t.integer "travelers_goal"
     t.datetime "updated_at", null: false
+    t.boolean "weekly_report_enabled", default: true, null: false
     t.string "weekly_report_recipient", default: "", null: false
     t.index ["singleton_key"], name: "index_settings_on_singleton_key", unique: true
     t.index ["site_key"], name: "index_settings_on_site_key", unique: true, where: "site_key IS NOT NULL AND site_key != ''"

@@ -1,7 +1,7 @@
 # Report definitions and deferred metrics: README.md, "Pipeline".
 class Pipeline::Report
   def value_by_stage
-    sums = Lead.active.where(converted_client_id: nil).group(:status).sum(:expected_value_minor)
+    sums = Lead.active.where(converted_client_id: nil, not_interested_marked_at: nil).group(:status).sum(:expected_value_minor)
     values = Pipeline::Board::STAGES.index_with do |stage|
       Pipeline::Board::LEAD_STAGES.include?(stage) ? { "USD" => sums.fetch(stage, 0).to_i } : {}
     end
@@ -15,7 +15,7 @@ class Pipeline::Report
   end
 
   def pipeline_total
-    Lead.open.sum(:expected_value_minor).to_i
+    Lead.open.where(not_interested_marked_at: nil).sum(:expected_value_minor).to_i
   end
 
   # Reserved integration point for first-response reporting.
@@ -44,7 +44,7 @@ class Pipeline::Report
   end
 
   def digest_line
-    counts = Lead.active.where(converted_client_id: nil).group(:status).count
+    counts = Lead.active.where(converted_client_id: nil, not_interested_marked_at: nil).group(:status).count
     open = counts.except("lost").values.sum
     stale = Lead.stale.count
     won_month = Lead.converted.where("converted_at >= ?", Time.current.beginning_of_month).count

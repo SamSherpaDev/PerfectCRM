@@ -1,0 +1,8 @@
+<%# locals: (lead:) %>
+<% if !lead.archived? && !lead.converted? && lead.spam_marked_at.nil? %>
+  <% if lead.not_interested? %>
+    <%= button_to "Interested again", unmark_not_interested_lead_path(lead), method: :patch, params: { return_to: @lead_action_return_to }, class: "btn-secondary btn btn-sm", aria: { label: "Interested again", pressed: true } %>
+  <% else %>
+    <%= button_to "Mark not interested", mark_not_interested_lead_path(lead), method: :patch, params: { return_to: @lead_action_return_to }, class: "btn-secondary btn btn-sm", aria: { label: "Mark not interested", pressed: false } %>
+  <% end %>
+<% end %>

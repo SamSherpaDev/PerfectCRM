@@ -287,7 +287,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     get leads_path
     assert_response :success
     assert_select "h1", "Leads"
-    assert_equal %w[New Potential Unsure Quoted Archived],
+    assert_equal [ "New", "Potential", "Unsure", "Quoted", "Not interested", "Archived" ],
       css_select("nav.tabs a").map { |tab| tab.at_css("span").text }
     assert_select "nav.tabs a", text: /New.*2/
     assert_select "a", text: "Chatty"
@@ -391,7 +391,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     follow_redirect!
     assert_select "h2", text: "New"
     assert_select "nav.tabs a", text: /Converted/, count: 0
-    %w[new potential unsure quoted archived].each do |tab|
+    %w[new potential unsure quoted not_interested archived].each do |tab|
       get leads_path(tab: tab)
       assert_select "a", text: "Won", count: 0
     end
@@ -711,5 +711,99 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
       assert_select "input[name='message[to]'][value=?]", lead.email
       assert_select "[data-reply-box-target=recipientSummary]", lead.email
     end
+  end
+
+  test "Not interested moves leads to the tab, cancels scheduled calls, excludes from all call/email/nudge lists and automations, and undo restores" do
+    lead = Lead.create!(
+      name: "Declined Traveler", email: "declined@gmail.com", source: "website_form",
+      capture_channel: "website_form", external_ref: "website_form:declined-1",
+      status: "new", expected_value_minor: 450_000, received_at: 3.days.ago
+    )
+    lead.update_columns(created_at: 3.days.ago, last_touch_at: 10.days.ago, last_activity_at: 10.days.ago)
+    lead.mark_potential!
+    open_call = lead.scheduled_calls.create!(scheduled_at: 2.hours.from_now.change(sec: 0), duration_minutes: 30)
+    task = lead.tasks.create!(title: "Call Declined Traveler", kind: "call", due_on: Date.current, created_by: "captain")
+    convo = lead.conversations.create!(subject: "Everest trek", last_message_at: 1.hour.ago, unread_count: 1)
+    convo.messages.create!(direction: "in", from_address: lead.email, to_addresses: [ "info@sherpaholidays.com" ],
+      subject: "Everest trek", text_body: "Please do not contact me", sent_at: 1.hour.ago, status: "received")
+
+    list_url = leads_path(tab: "potential", q: "Declined", sort: "name")
+    get list_url
+    assert_select "form[action='#{mark_not_interested_lead_path(lead)}'] button[aria-pressed=false]", text: "Mark not interested"
+
+    patch mark_not_interested_lead_path(lead), params: { return_to: list_url }
+    assert_redirected_to list_url
+    follow_redirect!
+    assert_select "a", text: lead.name, count: 0
+    assert_select "nav.tabs a", text: /Potential.*0/
+    assert_select "nav.tabs a", text: /Not interested.*1/
+
+    lead.reload
+    assert lead.not_interested?
+    assert_equal "cancelled", open_call.reload.status
+    assert lead.activity_events.where(kind: "scheduled_call").where("summary LIKE ?", "%cancelled (marked not interested)%").exists?
+
+    # Appears in Not interested tab with Interested again button and no Schedule call button
+    get leads_path(tab: "not_interested")
+    assert_select "h2", text: "Not interested"
+    assert_select "a", text: lead.name
+    assert_select "li .badge", text: "Not interested"
+    assert_select "button[aria-pressed=true]", text: "Interested again"
+    assert_select "li summary", text: /Schedule call|Reschedule/, count: 0
+
+    # Excluded from Today lists, morning digest, Inbox waiting, Pipeline board/report/stale
+    summary = Today::Summary.new
+    assert_not_includes summary.not_yet_called.to_a, lead
+    assert_not_includes summary.overdue.to_a, task
+    assert_not_includes summary.followups_due.to_a, task
+    assert_not_includes summary.followups.to_a, task
+    assert_not_includes summary.replies_waiting, convo
+    assert_equal 0, summary.waiting_on_you
+    assert_equal 0, summary.new_leads
+    assert_not_includes summary.todays_calls.map(&:lead), lead
+    assert_not_includes summary.upcoming_calls.map(&:lead), lead
+
+    mail = CaptainDigestMailer.morning
+    assert_no_match(/Declined Traveler/, mail.body.encoded)
+
+    get inbox_path(tab: "waiting")
+    assert_select "a", text: /Declined Traveler/, count: 0
+
+    board = Pipeline::Board.new
+    assert_empty board.columns.flat_map(&:records).select { |r| r == lead }
+    assert_equal 0, Pipeline::Report.new.pipeline_total
+
+    # Automatic first reply, automatic tasks, template merge sends, and external automation skip it
+    Setting.current.update!(auto_first_reply_enabled: true, auto_first_reply_enabled_at: 10.days.ago)
+    assert_equal "not interested", AutomaticFirstReply.skip_reason(lead, email: lead.email)
+
+    template = Template.create!(name: "Group update", purpose: "custom", subject: "Hi {{first_name}}", body: "Hello {{first_name}}")
+    batch = MergeBatch.build(template: template, recipient_lines: "Declined Traveler <#{lead.email}>")
+    assert_not batch.complete?
+    assert_equal 1, batch.errors.size
+    assert_match(/not interested/i, batch.errors.first.problem)
+
+    assert_raises(ActiveRecord::RecordInvalid) do
+      Leads::Transition.call(lead, to: "chatting", actor: :automation)
+    end
+
+    # Lead show page renders warning banner and explicit confirm on reply box and call buttons
+    get lead_path(lead)
+    assert_response :success
+    assert_select "[role=alert][aria-label='Not interested warning']", text: /Not interested - do not contact/
+    assert_select "input[type=submit][value=Send][data-turbo-confirm*='marked not interested']"
+    assert_select ".call-choices button[data-turbo-confirm*='marked not interested']", count: 3
+    assert_select "input[type=submit][value='Save call'][data-turbo-confirm*='marked not interested']"
+
+    # Undo ("Interested again") returns it to Potential
+    patch unmark_not_interested_lead_path(lead), params: { return_to: leads_path(tab: "not_interested") }
+    assert_redirected_to leads_path(tab: "not_interested")
+    follow_redirect!
+    assert_select ".flash-notice", text: /Interested again - moved to Potential/
+    assert_not lead.reload.not_interested?
+    assert lead.potential?
+    assert_includes Lead.potential, lead
+    assert_includes Today::Summary.new.followups_due.to_a, task
+    assert_includes Today::Summary.new.replies_waiting, convo
   end
 end

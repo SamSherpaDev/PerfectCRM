@@ -161,4 +161,55 @@ class LeadTest < ActiveSupport::TestCase
     old.unarchive!
     assert_not old.reload.archived?
   end
+
+  test "mark_not_interested! moves lead to not_interested, cancels open scheduled calls with a timeline note, and undo restores previous tab without touching spam or ad conversions" do
+    lead = Lead.create!(name: "No Thanks", source: "google_ads", status: "chatting", email: "nothanks@example.com")
+    lead.mark_potential!
+    conversion = lead.ad_conversions.create!(
+      event: "qualified", event_id: "google-test-1", occurred_at: 1.hour.ago,
+      delivery_status: "accepted", meta_status: "sent", value_minor: 0
+    )
+    open_call = lead.scheduled_calls.create!(scheduled_at: 2.days.from_now.change(hour: 11, min: 0), duration_minutes: 30, notes: "Check dates")
+    completed_call = lead.scheduled_calls.create!(scheduled_at: 1.day.ago.change(hour: 9, min: 0), duration_minutes: 30, status: "completed", outcome: "connected", completed_at: 1.day.ago)
+    lead.update_columns(last_touch_at: 20.days.ago, last_activity_at: 20.days.ago, updated_at: 20.days.ago)
+    assert lead.stale?
+
+    lead.mark_not_interested!
+    lead.reload
+    assert lead.not_interested?
+    assert_not lead.potential?
+    assert_not lead.call_schedulable?
+    assert_not lead.stale?
+    assert_includes Lead.not_interested, lead
+    assert_not_includes Lead.potential, lead
+    assert_not_includes Lead.in_new_tab, lead
+    assert_not_includes Lead.stale, lead
+
+    # Open scheduled call is cancelled with a timeline note; completed call is untouched.
+    assert_equal "cancelled", open_call.reload.status
+    assert_not_nil open_call.cancelled_at
+    assert_equal "completed", completed_call.reload.status
+    cancel_event = lead.activity_events.where(kind: "scheduled_call").order(:id).last
+    assert_not_nil cancel_event
+    assert_match(/Scheduled call for .* cancelled \(marked not interested\)/, cancel_event.summary)
+    assert_equal open_call.id, cancel_event.metadata["scheduled_call_id"]
+    assert_equal "not_interested", cancel_event.metadata["reason"]
+
+    # Not interested is not spam and does not alter ad conversions already sent.
+    assert_nil lead.spam_marked_at
+    assert_not lead.suspected_spam?
+    assert_not_includes Lead.spam, lead
+    assert_equal "accepted", conversion.reload.delivery_status
+    assert_equal "sent", conversion.meta_status
+    assert_equal 1, lead.ad_conversions.count
+
+    # Undo ("Interested again") restores the lead to its previous Potential mark and stage.
+    lead.unmark_not_interested!
+    lead.reload
+    assert_not lead.not_interested?
+    assert lead.potential?
+    assert_equal "chatting", lead.status
+    assert_includes Lead.potential, lead
+    assert_not_includes Lead.not_interested, lead
+  end
 end

@@ -89,7 +89,7 @@
       <p class="mt-1.5 text-xs muted">
         <% if booking.outstanding_count.positive? %>
           <%= pluralize(booking.outstanding_count, "document") %> missing.
-          <% if booking.missing_lines.present? && !read_only %>
+          <% if booking.missing_lines.present? && !read_only && !(lead && record.not_interested?) %>
             <%= link_to "Nudge for missing documents", polymorphic_path(record, nudge_booking_id: booking.id, anchor: "reply-heading"), class: "link", title: "Open the composer with the document request for this booking" %>
           <% end %>
         <% else %>

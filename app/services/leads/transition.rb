@@ -33,6 +33,11 @@ class Leads::Transition
       raise ActiveRecord::RecordInvalid, @lead
     end
 
+    if @actor == :automation && @lead.not_interested?
+      @lead.errors.add(:base, "Not interested leads are skipped by automations.")
+      raise ActiveRecord::RecordInvalid, @lead
+    end
+
     if @actor == :automation && !Lead::AUTOMATION_STATUSES.include?(@to)
       @lead.errors.add(:status, AUTOMATION_ONLY_ERROR)
       raise ActiveRecord::RecordInvalid, @lead

@@ -35,12 +35,12 @@ module Today
     # Sent or viewed quotes whose valid-until has not passed.
     def quotes_out
       Quote.live.where.not(id: Quote.expired.select(:id))
-        .where.not(id: Quote.where(lead_id: Lead.archived.select(:id)).select(:id)).count
+        .where.not(id: Quote.where(lead_id: Lead.archived.or(Lead.not_interested).select(:id)).select(:id)).count
     end
 
     # New stage alone does not establish whether an inquiry has been worked.
     def new_leads
-      Lead.by_status("new").count
+      Lead.by_status("new").where(not_interested_marked_at: nil).count
     end
 
     # One full weekday without a successful personal reply or logged call.
@@ -54,7 +54,8 @@ module Today
       called = ActivityEvent.where(subject_type: "Lead", kind: "call")
         .where("activity_events.subject_id = leads.id AND occurred_at >= #{since_inquiry}")
 
-      Lead.by_status("new").where("#{since_inquiry} < ?", one_business_day_ago)
+      Lead.by_status("new").where(not_interested_marked_at: nil)
+        .where("#{since_inquiry} < ?", one_business_day_ago)
         .where("NOT EXISTS (#{replied.select(:id).to_sql})")
         .where("NOT EXISTS (#{called.select(:id).to_sql})")
         .order(Arel.sql("#{since_inquiry} ASC, leads.id ASC"))

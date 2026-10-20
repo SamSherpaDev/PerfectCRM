@@ -8,7 +8,7 @@ module Outbound
       normalized = email.to_s.strip.downcase
       return nil if normalized.blank?
 
-      candidates = [ Client.all, Lead.open ].flat_map do |scope|
+      candidates = [ Client.all, Lead.open.where(not_interested_marked_at: nil) ].flat_map do |scope|
         person_ids = Person.where("lower(email) = ?", normalized)
           .select(Person.arel_table["#{scope.klass.model_name.singular}_id"])
         history = scope.where(<<~SQL, email: normalized)
