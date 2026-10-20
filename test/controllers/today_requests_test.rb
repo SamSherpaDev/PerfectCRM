@@ -26,9 +26,11 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     assert_select ".stat", text: /Active clients/
   end
 
-  test "Today lists unlinked inquiry notifications without creating leads, then labels resolved leads Added to New from email" do
+  test "Today lists unlinked website inquiry notifications without creating leads, then labels resolved leads Added to New from email while ignoring ordinary emails" do
     messages = [ ingest_inquiry(html: true), ingest_inquiry ]
-    assert messages.all? { |message| message.conversation.triage? }
+    ordinary = ingest_inquiry(from: "human@gmail.com", subject: "Everest trek", body: "Can you plan a trip for two?")
+    vendor = ingest_inquiry(from: "sales@vendor.example", subject: "Marketing services", body: "We saw your contact form.")
+    assert (messages + [ ordinary, vendor ]).all? { |message| message.conversation.triage? }
     assert_equal 0, Lead.count
 
     get root_path
@@ -38,6 +40,8 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     assert_select "[aria-label='Unlinked inquiries']" do
       assert_select "strong", "Unlinked inquiries: 2"
       messages.each { |message| assert_select "a[href=?]", inbox_thread_path(message.conversation) }
+      assert_select "a[href=?]", inbox_thread_path(ordinary.conversation), count: 0
+      assert_select "a[href=?]", inbox_thread_path(vendor.conversation), count: 0
     end
 
     InquirySafetyNetJob.perform_now
@@ -54,6 +58,8 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
         assert_select "a[href=?]", lead_path(lead)
       end
     end
+    assert_nil ordinary.reload.conversation.linkable
+    assert_nil vendor.reload.conversation.linkable
     messages.first.reload.conversation.linkable.mark_potential!
     messages.last.conversation.update!(ignored: true)
     get root_path

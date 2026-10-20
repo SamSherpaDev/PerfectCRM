@@ -519,7 +519,10 @@ verdicts and repeated statuses leave stage timing unchanged.
   (default `info@sherpaholidays.com`). Suspected spam prefixes
   the subject with `[check]`. Attribution metadata is omitted, and the
   displayed page URL strips `gclid`, `gbraid`, `wbraid`, and `utm_*` query
-  parameters. A mail failure never touches the lead.
+  parameters. A mail failure never touches the lead. If a website-form copy or
+  fallback email arrives in the mailbox without a saved intake lead, the daily
+  inquiry safety net turns that website-form copy (and never ordinary inbound
+  email) into a New lead; see [README, Mail](../README.md#mail).
 - **Webhooks.** `lead.created` and `lead.details_added` are POSTed as
   `{ "event", "lead": { public fields plus attribution } }` to the single URL in
   Settings, signed with the relay secret in the same `X-Sherpa-Signature`

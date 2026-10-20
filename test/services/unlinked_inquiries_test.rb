@@ -19,15 +19,27 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
     end
   end
 
-  test "finds plain and HTML inquiry-like info mail and existing explicit new-inquiry triage" do
+  test "ignores ordinary human emails, vendor pitches, and explicit new-inquiry triage regardless of wording" do
     plain = ingest_inquiry(from: "direct@example.com", subject: "Nepal itinerary",
       body: "We would like to plan a trip for two. What dates are available?")
     html = ingest_inquiry(from: "html@example.com", subject: "A question", html: true,
       body: "<p>Can you quote a trek to Everest for our family?</p>")
     triaged = ingest_inquiry(from: "triaged@example.com", subject: "Following up", body: "Please call me")
     triaged.conversation.update!(ai_triage: "new_inquiry")
-    explicit = ingest_inquiry(from: "enquiry@example.com", subject: "An enquiry", body: "Please call to discuss our plans")
-    assert_equal [ plain.id, html.id, triaged.id, explicit.id ], missing.map(&:id)
+    explicit = ingest_inquiry(from: "enquiry@example.com", subject: "New trip inquiry",
+      body: "Please call to discuss our plans")
+    vendor_pitch = ingest_inquiry(
+      from: "Rank Boosters <sales@rankboosters.example>",
+      subject: "More leads from your website contact form",
+      body: "Hi team, we tested your contact form and can send 50 new website inquiries a month.\n\nEmail: sales@rankboosters.example"
+    )
+
+    assert_empty missing
+    assert_no_difference("Lead.count") { Leads::UnlinkedInquiries.new.resolve! }
+    [ plain, html, triaged, explicit, vendor_pitch ].each do |message|
+      assert message.reload.conversation.triage?
+      assert_nil message.conversation.linkable
+    end
   end
 
   test "linked archived, lost, and converted inquiries already have a lead" do
@@ -86,21 +98,24 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
     assert_empty missing
   end
 
-  test "finds gmail-style human inquiry without inquiry keywords" do
+  test "ignores gmail-style human mail without website-form fields" do
     message = ingest_inquiry(from: "family.traveler@gmail.com", subject: "Holiday in Bhutan",
       body: "Could you arrange ten days for our family?")
-    assert_equal [ message.id ], missing.map(&:id)
+    assert_empty missing
+    assert_no_difference("Lead.count") { Leads::UnlinkedInquiries.new.resolve! }
+    assert_nil message.reload.conversation.linkable
   end
 
-  test "website copies survive automation headers and human auto-submitted no remains eligible" do
+  test "website copies survive automation headers while human mail is ignored" do
     website = ingest_inquiry(from: "noreply@example.com", headers: { "Auto-Submitted" => "auto-generated",
       "List-Unsubscribe" => "<https://example.com/unsubscribe>" })
     human = ingest_inquiry(from: "human@gmail.com", subject: "Hello", body: "Please call",
       headers: { "Auto-Submitted" => "no" })
-    assert_equal [ website.id, human.id ], missing.map(&:id)
+    assert_equal [ website.id ], missing.map(&:id)
+    assert_nil human.reload.conversation.linkable
   end
 
-  test "ignores automated and bulk mail, organizations, people, platform notifications, newsletters, receipts, and outbound mail" do
+  test "ignores automated and bulk mail, organizations, people, platform notifications, newsletters, receipts, outbound mail, and direct human mail" do
     [ { "List-Unsubscribe" => "<https://example.com/unsubscribe>" },
       { "Auto-Submitted" => "auto-generated" }, { "Precedence" => "bulk" },
       { "X-Autoreply" => "yes" } ].each do |headers|
@@ -158,12 +173,11 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
     ingest_inquiry(from: "mailer-daemon@example.com", subject: "Failure", body: "Failed")
     outbound = ingest_inquiry
     outbound.update!(direction: "out", to_addresses: [ "traveler@example.com" ])
-    assert_empty missing
 
     gmail_human = ingest_inquiry(from: "real.traveler@gmail.com", subject: "Everest trek in October",
       body: "Hi, my partner and I want to trek to Everest Base Camp this autumn.")
     gmail_human.update_columns(inquiry_headers: nil)
-    assert_equal [ gmail_human.id ], missing.map(&:id)
+    assert_empty missing
   end
 
   test "uses received time with sent and created fallbacks and excludes old or future mail" do
@@ -189,7 +203,7 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
     assert_empty missing
   end
 
-  test "resolve! turns website and direct email candidates into New leads linked to their threads and is idempotent" do
+  test "resolve! turns a website-form copy into a New lead while ordinary emails, vendor pitches, and replies create none" do
     received = Time.zone.local(2026, 10, 15, 9, 30)
     website = ingest_inquiry(
       received_at: received,
@@ -205,9 +219,28 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
       subject: "Everest Base Camp in November",
       body: "Hi, can you send details for two hikers?"
     )
-    direct.update_columns(inquiry_headers: nil)
+    vendor = ingest_inquiry(
+      received_at: received + 3.hours,
+      from: "Apex Digital <hello@apexdigital.example>",
+      subject: "SEO services for your website",
+      body: "We help travel companies rank #1 on Google and Meta."
+    )
+    reply = Message.create!(
+      conversation: Conversation.create!(subject: "Re: New inquiry from Priya Sharma: Bhutan Cultural Trek"),
+      direction: "in",
+      status: "received",
+      from_address: "Other Person <other@example.com>",
+      to_addresses: [ "info@sherpaholidays.com" ],
+      subject: "Re: New inquiry from Priya Sharma: Bhutan Cultural Trek",
+      text_body: "Thanks!\n\n> New website inquiry\n> Name: Other Person\n> Email: other@example.com",
+      in_reply_to: "some-earlier-msg@example.com",
+      inbound_received_at: received + 4.hours,
+      sent_at: received + 4.hours
+    )
+    [ direct, vendor ].each { |msg| msg.update_columns(inquiry_headers: nil) }
 
-    assert_difference("Lead.count", 2) do
+    assert_equal [ website.id ], Leads::UnlinkedInquiries.new(now: received + 1.day).messages.map(&:id)
+    assert_difference("Lead.count", 1) do
       Leads::UnlinkedInquiries.new(now: received + 1.day).resolve!
     end
     assert_no_difference("Lead.count") do
@@ -230,24 +263,13 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
     assert_equal "website_form:sub-priya-1", website_lead.external_ref
     assert_equal true, website_lead.metadata["inquiry_safety_net"]
 
-    direct_lead = direct.reload.conversation.linkable
-    assert_instance_of Lead, direct_lead
-    assert_equal "new", direct_lead.status
-    assert_equal "email", direct_lead.source
-    assert_equal "Maya Lin", direct_lead.name
-    assert_equal "maya.lin@gmail.com", direct_lead.email
-    assert_nil direct_lead.phone_raw
-    assert_nil direct_lead.phone
-    assert_nil direct_lead.trip_interest
-    assert_equal "Hi, can you send details for two hikers?", direct_lead.message
-    assert_in_delta (received + 2.hours).to_f, direct_lead.received_at.to_f, 1.0
-    assert_equal true, direct_lead.metadata["inquiry_safety_net"]
-    assert_not direct_lead.suspected_spam?
+    [ direct, vendor, reply ].each do |message|
+      assert_nil message.reload.conversation.linkable
+    end
 
-    # Untriaged safety-net leads remain visible on Today until triaged out of New.
-    assert_equal [ website.id, direct.id ], Leads::UnlinkedInquiries.new(now: received + 1.day).messages.map(&:id)
+    # Untriaged safety-net website leads remain visible on Today until triaged out of New.
+    assert_equal [ website.id ], Leads::UnlinkedInquiries.new(now: received + 1.day).messages.map(&:id)
     website_lead.mark_potential!
-    direct_lead.mark_as_spam!
     assert_empty Leads::UnlinkedInquiries.new(now: received + 1.day).messages
   end
 
@@ -320,17 +342,16 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
             "Has in mind: Not sure yet\n\nMessage:\nVisit https://seo1.example and https://seo2.example and https://seo3.example for page 1!\n\n" \
             "Flagged for a check (spam score 75: seo_pitch, multiple_urls)."
     )
-    signature = ingest_inquiry(from: "Ana Ruiz <ana.ruiz@gmail.com>", subject: "Trip to Nepal",
-      body: "Hello, could you plan ten days for us?\n\nAna Ruiz\nhttps://ana.example\nhttps://instagram.example/ana\nwww.linkedin.example/ana")
-    disposable = ingest_inquiry(from: "Temp Person <temp.person@mailinator.com>", subject: "Bhutan",
-      body: "Please send prices.")
-    [ signature, disposable ].each { |message| message.update_columns(inquiry_headers: nil) }
+    disposable_copy = ingest_inquiry(
+      subject: "New inquiry from Temp Person: Bhutan",
+      body: "New website inquiry\nName: Temp Person\nEmail: temp.person@mailinator.com\nHas in mind: Bhutan\n\nMessage:\nPlease send prices."
+    )
 
     assert_no_difference([ "AutomaticFirstReply.count", "AdConversion.count", "Message.outbound.count" ]) do
-      assert_difference("Lead.count", 3) { Leads::UnlinkedInquiries.new.resolve! }
+      assert_difference("Lead.count", 2) { Leads::UnlinkedInquiries.new.resolve! }
     end
 
-    leads = [ flagged_copy, signature, disposable ].map { |message| message.reload.conversation.linkable }
+    leads = [ flagged_copy, disposable_copy ].map { |message| message.reload.conversation.linkable }
     leads.each do |lead|
       assert_not lead.suspected_spam?
       assert_equal 0, lead.spam_score
@@ -341,9 +362,7 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
     assert leads.second.reload.potential?
   end
 
-  test "excludes replies in conversations our side started while keeping other senders and website-form copies" do
-    # 1. Bond/insurance thread started by our side ("Rider request for Seller of Travel bond..."); the
-    # reply was imported into its own thread before our message, so only its reply headers link them.
+  test "excludes replies, supplier threads, and ordinary human emails while keeping website-form copies" do
     bond_conv = Conversation.create!(subject: "Rider request for Seller of Travel bond 527400X (name and address update)")
     bond_out = Message.create!(
       conversation: bond_conv,
@@ -370,8 +389,6 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
       sent_at: 2.days.ago
     )
 
-    # 2. Ongoing supplier thread ("Re: Nepal ground handling: private 16 day program, January 2027")
-    # with no Organization record in CRM; a fresh thread from the same supplier domain stays a candidate.
     supplier_conv = Conversation.create!(subject: "Re: Nepal ground handling: private 16 day program, January 2027")
     supplier_out = Message.create!(
       conversation: supplier_conv,
@@ -404,9 +421,6 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
       received_at: 2.days.ago
     )
 
-    # 3. A traveler's first email the captain answered from Outlook before the daily check; Sent Items
-    # synced first, but the inquiry predates our reply, so it stays a candidate, as does another
-    # sender at the same domain.
     traveler_conv = Conversation.create!(subject: "Everest Base Camp in April")
     Message.create!(
       conversation: traveler_conv,
@@ -437,7 +451,6 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
       received_at: 1.day.ago
     )
 
-    # 4. Reply to our marketing mail sent through a platform (not in the mailbox) quoting our address.
     newsletter_reply = Message.create!(
       conversation: Conversation.create!(subject: "Re: Autumn in the Himalaya"),
       direction: "in",
@@ -451,7 +464,6 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
       sent_at: 1.day.ago
     )
 
-    # 5. Website-form copy always stays a candidate, even from a supplier address.
     website_copy = ingest_inquiry(
       from: "sales@nepalsocialtreks.example",
       subject: "New website inquiry from Tenzing Sherpa: Everest Base Camp",
@@ -460,12 +472,12 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
             "Message:\nTesting website inquiry form."
     )
 
-    candidates = [ supplier_new_thread, traveler_inquiry, neighbor_inquiry, newsletter_reply, website_copy ]
-    assert_equal candidates.map(&:id).sort, missing.map(&:id).sort
-    assert_difference("Lead.count", candidates.size) { Leads::UnlinkedInquiries.new.resolve! }
-    assert_nil bond_reply.reload.conversation.linkable
-    assert_nil supplier_reply.reload.conversation.linkable
-    candidates.each { |message| assert_instance_of Lead, message.reload.conversation.linkable }
+    assert_equal [ website_copy.id ], missing.map(&:id)
+    assert_difference("Lead.count", 1) { Leads::UnlinkedInquiries.new.resolve! }
+    [ bond_reply, supplier_reply, supplier_new_thread, traveler_inquiry, neighbor_inquiry, newsletter_reply ].each do |message|
+      assert_nil message.reload.conversation.linkable
+    end
+    assert_instance_of Lead, website_copy.reload.conversation.linkable
   end
 
   private

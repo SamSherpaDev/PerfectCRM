@@ -1092,32 +1092,32 @@ with icons and counts. Inbox and record timelines offer Load older so complete
 history is reachable, and expanded messages show their full body.
 
 The inquiry safety net checks the last seven days of imported inbound mail at
-7:10am Pacific every day (`InquirySafetyNetJob` in `config/recurring.yml`). Every
-unlinked human message and website-form inquiry is a candidate, regardless of
-wording. Mail already linked to any record (a lead, client, or organization) is
-visible on that record's thread and stays outside the safety net; the safety net
-never moves a thread. Unlinked website copies match a saved lead by their
-Reference or submission ID; an unrelated lead sharing the visitor's email is
-insufficient unless that lead is still in the **New** tab. A matched thread is
-linked to that lead (or its converted client) instead of creating a duplicate.
-Otherwise, the check creates a lead in New (`source: "website_form"` or
-`"email"`, filling the name, email, phone, trip, message text, and received time
-from the email and leaving unknowns blank), and links the email thread to that
-lead. Safety-net leads arrive untagged, with no spam scoring, so the captain
-sorts them with the normal lead buttons; they never trigger an automatic first
-reply to the customer. One message that cannot be resolved is logged and does
-not stop the rest. Today and the morning digest only read; they never create leads. Ignored
-threads, outbound and own-domain mail, replies in conversations our side started
-or already replied to (our earlier message must be in the mailbox), known
-organization/operator or person contacts, and clearly automated, platform, or
-bulk mail (automation headers, List-Unsubscribe, bulk/list/junk Precedence,
-platform notification domains, newsletters, receipts, no-reply and notifications
-senders, automatic replies and bounces) stay out even when imported before
-header capture; website-form copies remain candidates even when sent
-automatically. Classification headers are retained on newly imported mail. The
-check cannot detect a submission that produced neither a lead nor imported mail.
+7:10am Pacific every day (`InquirySafetyNetJob` in `config/recurring.yml`). Only
+unlinked website-form copies (the form's notification or fallback email for a
+website submission) are candidates; ordinary inbound emails (human emails,
+vendor pitches, replies) stay in the inbox as threads and never become leads,
+raise alerts, or appear as missing inquiries, whatever their wording. Mail
+already linked to any record (a lead, client, or organization) is visible on
+that record's thread and stays outside the safety net; the safety net never
+moves a thread. Unlinked website copies match a saved lead by their Reference
+or submission ID; an unrelated lead sharing the visitor's email is insufficient
+unless that lead is still in the **New** tab. A matched thread is linked to
+that lead (or its converted client) instead of creating a duplicate. Otherwise,
+the check creates a lead in New (`source: "website_form"`, filling the name,
+email, phone, trip, message text, and received time from the website-form copy
+and leaving unknowns blank), and links the email thread to that lead.
+Safety-net leads arrive untagged, with no spam scoring, so the captain sorts
+them with the normal lead buttons; they never trigger an automatic first reply
+to the customer. One message that cannot be resolved is logged and does not
+stop the rest. Today and the morning digest only read; they never create leads.
+Ignored threads, outbound mail, automatic replies and bounces, and replies
+(`Re:`/`Fwd:` subjects, `In-Reply-To`/`References` headers, or messages in
+conversations our side started or already replied to) stay out; website-form
+copies remain candidates even when sent from an automated or no-reply address.
+Classification headers are retained on newly imported mail. The check cannot
+detect a submission that produced neither a lead nor imported mail.
 
-When safety-net inquiries are added to New, one short email to
+When missing website-form submissions are added to New, one short email to
 `Setting.captain_email` (the first allowed Google address, falling back to
 info@, independently of the morning-digest toggle) reports that the inquiries
 were added to New and links directly to each lead. A clear check or a run that
@@ -1125,12 +1125,12 @@ only linked threads to existing leads sends nothing. Each message is reserved
 before SMTP, so overlapping runs, retries, and an uncertain SMTP acknowledgement
 cannot send the same alert twice. An SMTP failure leaves the reservation in
 place and the job raises the error; Today still shows the inquiry. A small
-**Added to New from email** note on Today lists safety-net leads still in New
-during the seven-day window with links to each lead, while any candidates the
-next daily check has not added yet appear under **Unlinked inquiries** with
-links to their threads. A lead clears once it leaves New (marked Potential,
-Unsure, or spam, quoted, or archived), is re-linked to another record, or its
-thread is ignored.
+**Added to New from email** note on Today lists website-form safety-net leads
+still in New during the seven-day window with links to each lead, while any
+website-form copies the next daily check has not added yet appear under
+**Unlinked inquiries** with links to their threads. A lead clears once it
+leaves New (marked Potential, Unsure, or spam, quoted, or archived), is
+re-linked to another record, or its thread is ignored.
 
 Ordinary email attachments are part of the conversation and stay in CRM storage.
 There is no attachment-count cap. On import, files over 25 MB are skipped with a visible
