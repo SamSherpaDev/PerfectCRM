@@ -3051,7 +3051,7 @@
   max-width: 100%;
 }
 .call-schedule-pop[open] {
-  z-index: 30;
+  z-index: 10;
 }
 .call-schedule-pop > summary {
   list-style: none;
@@ -3071,7 +3071,6 @@
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  z-index: 30;
   width: 460px;
   max-width: calc(100vw - 32px);
   padding: 14px;
@@ -3366,10 +3365,6 @@
     max-width: 100%;
     padding: 12px;
     box-shadow: var(--pb-raise-sm);
-  }
-  .page-actions .call-schedule-sheet {
-    left: auto;
-    right: auto;
   }
   .call-schedule-grid {
     grid-template-columns: minmax(0, 1fr);

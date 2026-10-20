@@ -48,7 +48,7 @@ export default class extends Controller {
     this.sheet.style.left = ""
     this.sheet.style.right = ""
 
-    if (window.innerWidth >= 750) {
+    if (getComputedStyle(this.sheet).position === "absolute") {
       const vw = document.documentElement.clientWidth
       const rect = this.sheet.getBoundingClientRect()
       if (rect.right > vw - 16) {
@@ -62,7 +62,9 @@ export default class extends Controller {
     }
 
     const finalRect = this.sheet.getBoundingClientRect()
-    const bottomLimit = window.innerHeight - (window.innerWidth < 750 ? 76 : 16)
+    const tabbar = document.querySelector(".tabbar")
+    const tabbarVisible = tabbar && getComputedStyle(tabbar).display !== "none"
+    const bottomLimit = (tabbarVisible ? tabbar.getBoundingClientRect().top : window.innerHeight) - 16
     if (finalRect.bottom > bottomLimit) {
       window.scrollBy({ top: finalRect.bottom - bottomLimit + 12, behavior: "instant" })
     }

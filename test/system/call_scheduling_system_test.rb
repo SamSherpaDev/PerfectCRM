@@ -236,12 +236,7 @@ class CallSchedulingSystemTest < ApplicationSystemTestCase
     assert_equal before_metrics["summaryLeft"], after_metrics["summaryLeft"],
       "Opening Schedule call on desktop must not jump the trigger button horizontally"
 
-    sheet_bounds = page.evaluate_script(<<~JS)
-      (() => {
-        const r = document.querySelector(".call-schedule-pop[open] .call-schedule-sheet").getBoundingClientRect();
-        return { left: Math.round(r.left), right: Math.round(r.right), bottom: Math.round(r.bottom), width: Math.round(r.width) };
-      })()
-    JS
+    sheet_bounds = open_sheet_bounds(max_bottom: 900)
     assert_operator sheet_bounds["left"], :>=, 8
     assert_operator sheet_bounds["right"], :<=, 1392
     assert_operator sheet_bounds["bottom"], :<=, 900
@@ -275,9 +270,51 @@ class CallSchedulingSystemTest < ApplicationSystemTestCase
       assert_selector ".call-schedule-sheet", visible: true
     end
     assert_no_selector ".reply-pill", visible: true
-    phone_sheet_bottom = page.evaluate_script(
-      "Math.round(document.querySelector('.call-schedule-pop[open] .call-schedule-sheet').getBoundingClientRect().bottom)"
-    )
+    phone_sheet_bottom = open_sheet_bounds(max_bottom: 781)["bottom"]
     assert_operator phone_sheet_bottom, :<=, 781, "Phone schedule sheet should scroll above the bottom navigation bar"
   end
+
+  test "an open Schedule call sheet scrolls under the sticky top bar below desktop width" do
+    16.times do |i|
+      Lead.create!(name: "Potential Lead #{i}", email: "potential#{i}@example.com", last_activity_at: (i + 1).hours.ago).mark_potential!
+    end
+
+    page.current_window.resize_to(900, 700)
+    visit leads_path(tab: "potential")
+    first("summary", text: "Schedule call").click
+    assert_selector ".call-schedule-pop[open] .call-schedule-sheet", visible: true
+
+    covered = page.evaluate_script(<<~JS)
+      (() => {
+        const header = document.querySelector("header.sticky");
+        const sheet = document.querySelector(".call-schedule-pop[open] .call-schedule-sheet");
+        window.scrollBy(0, sheet.getBoundingClientRect().top + 20 - header.getBoundingClientRect().bottom);
+        const headerRect = header.getBoundingClientRect();
+        const sheetRect = sheet.getBoundingClientRect();
+        const x = Math.round((sheetRect.left + sheetRect.right) / 2);
+        const y = Math.round(headerRect.bottom - 4);
+        return {
+          overlaps: sheetRect.top < y && sheetRect.bottom > y && sheetRect.left < x && sheetRect.right > x,
+          headerOnTop: header.contains(document.elementFromPoint(x, y))
+        };
+      })()
+    JS
+    assert covered["overlaps"], "Test setup should scroll the open sheet under the sticky top bar"
+    assert covered["headerOnTop"], "Open Schedule call sheet must not paint over the sticky top bar"
+  end
+
+  private
+    def open_sheet_bounds(max_bottom:)
+      bounds = nil
+      page.document.synchronize do
+        bounds = page.evaluate_script(<<~JS)
+          (() => {
+            const r = document.querySelector(".call-schedule-pop[open] .call-schedule-sheet").getBoundingClientRect();
+            return { left: Math.round(r.left), right: Math.round(r.right), bottom: Math.round(r.bottom), width: Math.round(r.width) };
+          })()
+        JS
+        raise Capybara::ExpectationNotMet, "Schedule call sheet has not scrolled into view yet" if bounds["bottom"] > max_bottom
+      end
+      bounds
+    end
 end
