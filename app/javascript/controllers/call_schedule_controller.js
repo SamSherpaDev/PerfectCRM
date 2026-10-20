@@ -26,10 +26,7 @@ export default class extends Controller {
   handleToggle() {
     if (!this.details?.open) {
       this.removeDocumentListeners()
-      if (this.sheet) {
-        this.sheet.style.left = ""
-        this.sheet.style.right = ""
-      }
+      if (this.sheet) this.resetSheetPosition()
       return
     }
 
@@ -45,10 +42,22 @@ export default class extends Controller {
   positionSheet() {
     if (!this.sheet) return
 
-    this.sheet.style.left = ""
-    this.sheet.style.right = ""
+    this.resetSheetPosition()
 
     if (getComputedStyle(this.sheet).position === "absolute") {
+      // Open upward when dropping down would hang past the end of the page,
+      // which stretches the document and cuts the sticky rail short.
+      const page = this.details.closest("main")
+      if (page) {
+        const pageRect = page.getBoundingClientRect()
+        const sheetHeight = this.sheet.getBoundingClientRect().height
+        const roomAbove = this.details.getBoundingClientRect().top - pageRect.top
+        if (this.sheet.getBoundingClientRect().bottom > pageRect.bottom && roomAbove >= sheetHeight + 8) {
+          this.sheet.style.top = "auto"
+          this.sheet.style.bottom = "calc(100% + 8px)"
+        }
+      }
+
       const vw = document.documentElement.clientWidth
       const rect = this.sheet.getBoundingClientRect()
       if (rect.right > vw - 16) {
@@ -67,7 +76,21 @@ export default class extends Controller {
     const bottomLimit = (tabbarVisible ? tabbar.getBoundingClientRect().top : window.innerHeight) - 16
     if (finalRect.bottom > bottomLimit) {
       window.scrollBy({ top: finalRect.bottom - bottomLimit + 12, behavior: "instant" })
+    } else {
+      const header = document.querySelector("header.sticky")
+      const headerVisible = header && getComputedStyle(header).display !== "none"
+      const topLimit = (headerVisible ? header.getBoundingClientRect().bottom : 0) + 16
+      if (finalRect.top < topLimit) {
+        window.scrollBy({ top: finalRect.top - topLimit, behavior: "instant" })
+      }
     }
+  }
+
+  resetSheetPosition() {
+    this.sheet.style.top = ""
+    this.sheet.style.bottom = ""
+    this.sheet.style.left = ""
+    this.sheet.style.right = ""
   }
 
   handleOutsideClick(event) {

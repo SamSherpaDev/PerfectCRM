@@ -242,8 +242,9 @@ class CallSchedulingSystemTest < ApplicationSystemTestCase
     assert_operator sheet_bounds["bottom"], :<=, 900
     assert_operator sheet_bounds["width"], :>=, 360
 
+    # The open sheet can cover the other row's trigger, so reach it by keyboard.
     within("li", text: "Madatovian Vahan") do
-      find("summary", text: "Reschedule").click
+      find("summary", text: "Reschedule").send_keys(:enter)
     end
     assert_selector ".call-schedule-pop[open]", count: 1
 
@@ -305,6 +306,36 @@ class CallSchedulingSystemTest < ApplicationSystemTestCase
     JS
     assert covered["overlaps"], "Test setup should scroll the open sheet under the sticky top bar"
     assert covered["headerOnTop"], "Open Schedule call sheet must not paint over the sticky top bar"
+  end
+
+  test "Schedule call on the last Potential row stays inside the page on desktop" do
+    8.times do |i|
+      Lead.create!(name: "Potential Lead #{i}", email: "potential#{i}@example.com", last_activity_at: (i + 1).hours.ago).mark_potential!
+    end
+
+    page.current_window.resize_to(1400, 900)
+    visit leads_path(tab: "potential")
+    within(all("li", text: "Potential Lead").last) do
+      find("summary", text: "Schedule call").click
+      assert_selector ".call-schedule-sheet", visible: true
+    end
+
+    layout = page.evaluate_script(<<~JS)
+      (() => {
+        const sheet = document.querySelector(".call-schedule-pop[open] .call-schedule-sheet").getBoundingClientRect();
+        return {
+          railBottom: Math.round(document.querySelector("aside.rail").getBoundingClientRect().bottom),
+          sheetTop: Math.round(sheet.top),
+          sheetBottom: Math.round(sheet.bottom),
+          viewportHeight: window.innerHeight,
+          scrollY: Math.round(window.scrollY),
+          maxScroll: document.documentElement.scrollHeight - window.innerHeight
+        };
+      })()
+    JS
+    assert_equal layout["viewportHeight"], layout["railBottom"], "The rail must still reach the bottom of the window: #{layout.inspect}"
+    assert_operator layout["sheetTop"], :>=, 16, "Schedule call sheet must start inside the window: #{layout.inspect}"
+    assert_operator layout["sheetBottom"], :<=, layout["viewportHeight"] - 16, "Schedule call sheet must keep a margin above the window bottom: #{layout.inspect}"
   end
 
   private
