@@ -33,7 +33,7 @@ class NotYetCalledSystemTest < ApplicationSystemTestCase
       inquiry("Converted", 3.days.ago).convert_to_client!
 
       browser_sign_in
-      expected = [ oldest.name, recent.name, second_try.name, third_try.name ]
+      expected = [ recent.name, second_try.name, third_try.name, oldest.name ]
       assert_equal expected, inquiry_links
 
       within("#call_list_lead_#{oldest.id}") do

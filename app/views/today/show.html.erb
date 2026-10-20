@@ -60,7 +60,7 @@
       <h2 class="card-title" id="not-yet-called-heading">Not yet called</h2>
       <%= badge @summary.not_yet_called.count, :neutral %>
     </div>
-    <%= card_caption "New inquiries with a phone (oldest first), then unanswered calls due a retry on Day 1 (2nd try) and Day 3 (3rd try), up to 3 attempts." %>
+    <%= card_caption "Last 24 hours of new inquiries with a phone (newest first), then unanswered calls due a retry on Day 1 (2nd try) and Day 3 (3rd try), then older first tries up to 14 days old." %>
     <% entries = @summary.call_entries %>
     <% if entries.any? %>
       <ul class="divide-y divide-rule-2">
@@ -110,7 +110,7 @@
       <div class="empty-inline">
         <%= sketch :enso, class: "enso" %>
         <p class="text-sm text-ink">No inquiries waiting for first contact.</p>
-        <p class="text-xs muted">New inquiries with a phone and due 2nd or 3rd call tries appear here.</p>
+        <p class="text-xs muted">New inquiries with a phone from the last 14 days and due 2nd or 3rd call tries appear here.</p>
       </div>
     <% end %>
   </section>

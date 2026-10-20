@@ -21,7 +21,9 @@ class LeadIntakeMailer < ApplicationMailer
 
     first_name = lead.name.to_s.split.first.presence || lead.name.to_s.strip.presence || "New inquiry"
     trip = lead.trip_title.presence || lead.trip_interest.presence || lead.trip_handle.presence || "not sure yet"
-    subject = "#{@check_first ? 'Check, then call' : 'Call now'}: #{first_name} - #{trip}"
+    verb = @tel_href.present? ? "call" : "reply"
+    prefix = @check_first ? "Check, then #{verb}" : "#{verb.capitalize} now"
+    subject = "#{prefix}: #{first_name} - #{trip}"
 
     headers["Auto-Submitted"] = "auto-generated"
     headers["X-Auto-Response-Suppress"] = "All"

@@ -144,6 +144,13 @@ class AcquisitionTest < ActiveSupport::TestCase
     end
   end
 
+  test "social paid mediums are not paid Google mediums" do
+    %w[paid_social paidsocial].each do |medium|
+      assert_equal "website_form", Leads.derive_source("utm_source" => "google", "utm_medium" => medium), medium
+    end
+    assert_equal "meta_ads", Leads.derive_source("utm_source" => "fb", "utm_medium" => "paid_social", "ad_id" => "1")
+  end
+
   test "backfill_unavailable_touches! is idempotent and only fills missing attribution on unavailable-touch leads" do
     observed = Time.current.iso8601
     landing_url = "https://www.sherpaholidays.com/pages/private-nepal-tours?utm_source=fb&utm_medium=paid&utm_campaign=sh_us_cold_cbo&campaign_id=52666579688338&adset_id=52666579688138&ad_id=52669753271538"

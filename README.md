@@ -529,18 +529,21 @@ passed, New leads counts the leads in the Leads New tab (untriaged leads in
 New, Chatting, or Nudged), and Active clients
 counts clients that are not archived.
 
-Not yet called is the daily call list in priority order: first, active new
-inquiries with a phone number and no logged call yet, oldest receipt first
-(creation time if no receipt is recorded), showing how long they have waited;
-second, open leads with a phone number whose calls never connected
-(`Attempted`, `Voicemail`, or `No answer`) and that are due another try
-(attempt 2 due 1 day after attempt 1, attempt 3 due 2 days after attempt 2 -
-Day 0, Day 1, Day 3, up to 3 attempts). Each row shows its attempt badge
-(`1st try`, `2nd try`, or `3rd try`), a `Check` marker on inquiries flagged as
-looking like spam, wait time, and one-tap `Talked` / `Voicemail` / `No answer`
-logging plus `Schedule call`. Leads drop off the list once a call connects (`Talked`), they
-are marked `Not interested`, `spam`, or `archived`, have an open scheduled call,
-or have used 3 attempts.
+Not yet called is the daily call list in priority order (receipt time, or
+creation time if no receipt is recorded): first, active new inquiries from the
+last 24 hours with a phone number and no logged call yet, newest first; second,
+open leads with a phone number whose calls never connected (`Attempted`,
+`Voicemail`, or `No answer`) and that are due another try (attempt 2 due 1 day
+after attempt 1, attempt 3 due 2 days after attempt 2 - Day 0, Day 1, Day 3, up
+to 3 attempts); third, older uncalled inquiries up to 14 days old, oldest
+first. Uncalled inquiries over 14 days old and leads whose latest call is over
+14 days old stay off the list; logging a new call starts a fresh cadence. Each
+row shows its attempt badge (`1st try`, `2nd try`, or `3rd try`), a `Check`
+marker on inquiries flagged as looking like spam, wait time, and one-tap
+`Talked` / `Voicemail` / `No answer` logging plus `Schedule call`. Leads drop
+off the list once a call connects (`Talked`), they are marked
+`Not interested`, `spam`, or `archived`, have an open scheduled call, or have
+used 3 attempts.
 
 Tasks belong to clients, leads, or organizations. Today lists overdue tasks
 and those due through the next 7 days, using the Pacific date. Tap the

@@ -4,7 +4,7 @@
 # docs/leads-intake.md): relay HMAC
 # verification, source derivation, suspicion scoring, and rate limiting.
 module Leads
-  PAID_MEDIUMS = %w[cpc ppc paid paid_social paidsocial].freeze
+  PAID_MEDIUMS = %w[cpc ppc paid].freeze
   META_SOURCES = %w[facebook instagram meta fb ig].freeze
   DISPOSABLE_DOMAINS = %w[
     mailinator.com guerrillamail.com 10minutemail.com tempmail.com

@@ -111,15 +111,16 @@ Instant call alert (`LeadIntakeMailer#inquiry_copy`): sent immediately to
 inquiry except confirmed spam, bot traps, duplicates, and safety-net copies.
 Subject starts with `Call now: <First name> - <Trip>`, or
 `Check, then call: <First name> - <Trip>` when the inquiry has a flag-only
-suspicion hit. The first lines carry a tap-to-call `tel:` link, the suspicion
-reason for flagged inquiries, `Reference: SH-XXXX`, and a direct link to the
-lead page.
+suspicion hit. Without a phone number it starts with `Reply now:` (or
+`Check, then reply:`) instead. The first lines carry a tap-to-call `tel:` link
+(or a `mailto:` reply link when there is no phone), the suspicion reason for
+flagged inquiries, `Reference: SH-XXXX`, and a direct link to the lead page.
 
 Source derivation: `google_ads` on `gclid`/`gbraid`/`wbraid`, or
-`utm_source=google` with a paid medium (`cpc`, `ppc`, `paid`, `paid_social`,
-`paidsocial`); `meta_ads` on `facebook`/`instagram`/`meta`/`fb`/`ig` with a
-paid medium or `ad_id`; `trade_show` on `utm_medium=event` (travel show booth
-links and QR codes); else `website_form`. `campaign_name` copies `utm_campaign`.
+`utm_source=google` with a paid medium (`cpc`, `ppc`, `paid`); `meta_ads` on
+`facebook`/`instagram`/`meta`/`fb`/`ig` with a paid medium or `ad_id`;
+`trade_show` on `utm_medium=event` (travel show booth links and QR codes); else
+`website_form`. `campaign_name` copies `utm_campaign`.
 With `acquisition`, this compatibility projection uses the eligible
 last-non-direct touch, falling back to the eligible last touch, and when
 `last_touch` is `unavailable` on a permission-allowed submission, falling back
@@ -528,7 +529,7 @@ verdicts and repeated statuses leave stage timing unchanged.
 - **Email copy.** A background job mails the inquiry to
   `info@sherpaholidays.com`, Reply-To the visitor, From the app's `MAIL_FROM`
   (default `info@sherpaholidays.com`). Suspected spam starts
-  the subject with `Check, then call:`. Attribution metadata is omitted, and the
+  the subject with `Check, then call:` (`Check, then reply:` without a phone). Attribution metadata is omitted, and the
   displayed page URL strips `gclid`, `gbraid`, `wbraid`, and `utm_*` query
   parameters. A mail failure never touches the lead. If a website-form copy or
   fallback email arrives in the mailbox without a saved intake lead, the daily

@@ -105,7 +105,7 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
       assert_response :success
       assert_select "section[aria-labelledby='not-yet-called-heading']" do
         assert_select "a", count: 3 do |links|
-          assert_equal [ "Older inquiry", "Newer inquiry", "Second try inquiry" ], links.map(&:text)
+          assert_equal [ "Newer inquiry", "Second try inquiry", "Older inquiry" ], links.map(&:text)
         end
         assert_select "#call_list_lead_#{older.id} .badge", text: "1st try"
         assert_select "#call_list_lead_#{retry_two.id} .badge", text: "2nd try"

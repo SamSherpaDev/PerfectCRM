@@ -76,9 +76,26 @@ class LeadIntakeMailerTest < ActionMailer::TestCase
   end
 
   test "missing trip falls back to not sure yet" do
-    lead = Lead.create!(name: "Anna Lindqvist", email: "anna@example.com", source: "website_form")
+    lead = Lead.create!(name: "Anna Lindqvist", email: "anna@example.com", source: "website_form", phone_raw: "+1 415 555 0134")
     mail = LeadIntakeMailer.inquiry_copy(lead)
     assert_equal "Call now: Anna - not sure yet", mail.subject
+  end
+
+  test "inquiry without a phone asks for a reply and leads with the reply link" do
+    lead = Lead.create!(name: "Anna Lindqvist", email: "anna@example.com", source: "website_form", trip_title: "Private Nepal tour")
+    mail = LeadIntakeMailer.inquiry_copy(lead)
+    assert_equal "Reply now: Anna - Private Nepal tour", mail.subject
+    lines = mail.body.to_s.lines.first(3).map(&:strip)
+    assert_equal "Reply now: mailto:anna@example.com", lines[0]
+    assert_equal "Reference: #{lead.reference}", lines[1]
+    assert_match(%r{\ALead page: https?://.+/leads/#{lead.id}\z}, lines[2])
+    assert_not_includes mail.body.to_s, "tel:"
+
+    flagged = Lead.create!(name: "Anna Lindqvist", email: "annalindqvist@gmail.com", source: "website_form",
+      trip_title: "Private Nepal tour", spam_score: 25, tag_list: "suspected_spam", metadata: { "suspicion_hits" => [ "name_matches_email" ] })
+    flagged_mail = LeadIntakeMailer.inquiry_copy(flagged)
+    assert_equal "Check, then reply: Anna - Private Nepal tour", flagged_mail.subject
+    assert_equal "Reply now: mailto:annalindqvist@gmail.com", flagged_mail.body.to_s.lines.first.strip
   end
 
   test "displayed page URL omits tracking parameters without changing metadata" do
