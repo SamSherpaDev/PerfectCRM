@@ -18,6 +18,16 @@ class MailboxSettingsTest < ActionDispatch::IntegrationTest
     assert_no_match(/App passwords/, response.body)
   end
 
+  test "mailbox notices link to Import history only while a notice is shown" do
+    get edit_settings_path
+    assert_select "a[href=?]", new_mail_import_path, count: 0
+
+    MailSyncState.record_notice!("inbox", "Sync paused for a long gap. Import history since 2026-10-01 brings back mail.")
+    get edit_settings_path
+    assert_select "p", text: "Worth a look"
+    assert_select "a[href=?]", new_mail_import_path, text: "Import history", count: 1
+  end
+
   # The rendered page is the contract the browser acts on, and Turbo's
   # documented opt-out is what makes the browser submit natively. Without it
   # Turbo Drive follows the cross-origin 302 below with fetch, CORS rejects

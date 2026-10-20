@@ -77,7 +77,10 @@
     </dl>
     <% if @mailbox_notices.any? %>
       <div class="mt-4">
-        <p class="text-sm font-medium text-ink">Worth a look</p>
+        <div class="flex flex-wrap items-baseline justify-between gap-2">
+          <p class="text-sm font-medium text-ink">Worth a look</p>
+          <%= link_to "Import history", new_mail_import_path, class: "link text-sm" %>
+        </div>
         <ul class="mt-1 space-y-1 text-sm text-ink-2">
           <% @mailbox_notices.each do |state| %>
             <li><%= state.last_notice %> <span class="muted"><%= time_24_12(state.last_notice_at) %></span></li>
