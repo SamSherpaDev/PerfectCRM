@@ -10,14 +10,12 @@ class TaskReviewRegressionsTest < ActionDispatch::IntegrationTest
       body: "Hi {{full_name}}, how was {{trip}}?", purpose: :review_ask)
   end
 
-  test "Today nudges open personalized approval drafts for every subject type" do
+  test "task nudge URLs open personalized approval drafts for every subject type" do
     [ Client, Lead, Organization ].each do |model|
       subject = model.create!(name: "Tashi & friends", email: "#{model.name.downcase}@example.com")
       task = subject.tasks.create!(title: "Review #{model.name}", due_on: Date.current, template: @template)
-      get root_path
-      link = css_select("li").find { |row| row.text.include?(task.title) }.at_css("a.check-link")
-      assert_equal polymorphic_path(subject, template: @template.id, task: task.id), link["href"]
-      get link["href"]
+      assert_includes Today::Summary.new.followups.to_a, task
+      get polymorphic_path(subject, template: @template.id, task: task.id)
       assert_response :success
       if model == Organization
         assert_select "h2", "Suggested message"
@@ -102,8 +100,7 @@ class TaskReviewRegressionsTest < ActionDispatch::IntegrationTest
     manual_task = Task.find_by!(idempotency_key: "review-ask:#{manual_booking.perfectbook_id}")
     assert_equal client, manual_task.subject
     get client_path(client)
-    assert_select "form[action=?]", complete_task_path(automatic_task)
-    assert_select "form[action=?]", complete_task_path(manual_task)
+    assert_response :success
     [ automatic_task, manual_task ].each do |task|
       patch complete_task_path(task)
       assert client.activity_events.exists?(kind: "task", metadata: { "task_id" => task.id, "kind" => task.kind })

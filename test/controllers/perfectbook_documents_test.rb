@@ -52,7 +52,7 @@ class PerfectBookDocumentsTest < ActionDispatch::IntegrationTest
     PerfectBook::Booking.create!(perfectbook_id: 12, perfectbook_contact_id: 8, departure_id: 20, synced_at: Time.current)
     assert_equal booking.perfectbook_id, TemplateContext.for_reply(to: @client.email, owner: @client)[:selected_booking_id]
     get client_path(@client)
-    assert_select ".upcoming", text: /Everest Base Camp/
+    assert_select ".trip", text: /Everest Base Camp/
     empty = Object.new
     empty.define_singleton_method(:list_contact_bookings) { |*| { data: [], not_modified: false } }
     PerfectBook::SyncBookingsJob.perform_now(perfectbook_contact_id: 7, client: empty)
@@ -191,12 +191,13 @@ class PerfectBookDocumentsTest < ActionDispatch::IntegrationTest
     assert_no_match(/we still need/, response.body)
   end
 
-  test "today departing-soon rows show the missing count when present" do
+  test "departing-soon summary bookings retain the missing count when present" do
     booking = make_booking(ref: "BK-11")
     booking.update!(start_date: Date.current + 5.days, end_date: Date.current + 12.days)
     get root_path
     assert_response :success
-    assert_includes response.body, "4 documents missing"
+    assert_equal [ booking ], Today::Summary.new.departing_soon.to_a
+    assert_equal 4, Today::Summary.new.departing_soon.first.outstanding_count
   end
 
   # -- Send to PerfectBook hand-off --

@@ -53,14 +53,15 @@ configuration lives in `config/environments/development.rb`.
 
 On desktop, hover or focus the icon rail to reveal navigation labels and Sign
 out. On mobile, use Open menu to show the drawer. The rail holds **Today**
-(root), **Inbox**, **Leads**, **Clients**, **Pipeline**, **Quotes**, **Templates**,
-**Channels** (in the Settings group), and **Settings**. See [Today and follow-ups](#today-and-follow-ups), [Mail](#mail),
+(root), **Inbox**, **Leads**, **Clients**, and **Settings**. **Pipeline**
+(`/pipeline`), **Quotes** (`/quotes`), **Templates** (`/templates`), and
+**Channels** (`/channels`) are hidden from primary navigation and remain
+reachable by direct URL. See [Today and follow-ups](#today-and-follow-ups), [Mail](#mail),
 [Replying](#replying), [Templates](#templates), [Pipeline](#pipeline), and [Quotes](#quotes) for the live features. Settings provides appearance,
-morning and pipeline digests, the [weekly ads report](#weekly-ads-report), connections, history import, automation settings, email sender settings, and export controls.
+connections, automation settings (including a direct link to edit the First reply template), ad conversions, email sender settings, and a footer export link; morning and pipeline digests, the [weekly ads report](#weekly-ads-report) (`/settings/weekly_report`), history import, and AI assistance cards are hidden from the Settings UI while their routes and background jobs remain active.
 
 On phones (under 750px) a bottom tab bar holds **Today**, **Inbox**,
-**Leads**, **Clients**, and **More** (Pipeline, Quotes, Templates,
-Channels, Settings) while the rail hides. Signed-in builders can preview every
+**Leads**, **Clients**, and **Settings** directly while the rail hides. Signed-in builders can preview every
 component of the kit at `/design` (listed nowhere in the rail) in Paper
 and Night.
 
@@ -512,12 +513,8 @@ files while another process is using them.
 
 ## Today and follow-ups
 
-Today (the root route) is the captain's morning screen: six tiles
-(Waiting on you, Follow-ups due, Quotes out, Overdue, New leads, Active
-clients), then Scheduled calls, Not yet called, Replies waiting, Follow-ups as one-tap check rows,
-Departing soon (trips leaving in the next 14 days), and Back from the
-mountains (returned in the last 7 days). Returned bookings linked to a
-local record offer Create review ask. Waiting on you counts linked threads
+Today (the root route) is the captain's morning screen: three tiles
+(Waiting on you, New leads, Active clients), then Scheduled calls, Not yet called, and Replies waiting (Follow-ups due, Quotes out, Overdue, Follow-ups, Departing soon, and Back from the mountains are hidden from the Today view while their data and queries remain in `Today::Summary`). Waiting on you counts linked threads
 where the client wrote last (same rule as the Inbox tab; unknown senders
 wait in triage). Inquiry threads ignore automatic first replies and failed
 personal email; they stay waiting until a successful personal reply or a
@@ -593,15 +590,15 @@ Settings → Morning digest toggles it; it is enabled by default.
 Clients own people, tags, notes, and a timeline. The record page keeps
 three columns on a desktop: Details (facts, travelers, tags) on the left,
 the composer and the one timeline of every email, note, quote, and
-automated step in the middle, Upcoming dates and Files on the right with
-a compact read-only Trip in PerfectBook. On a phone the same cards sit
+automated step in the middle, and Files on the right with
+a compact read-only Trip in PerfectBook (the Upcoming follow-up-tasks card and the Review inquiry link form on Trip in PerfectBook are hidden). On a phone the same cards sit
 behind Thread, Details, and Files & dates tabs. Each visit starts on Thread
 unless an explicit link targets another panel. Use New client to create a
 record, and Edit to update facts or add another
 person in the blank People fields. Archive lives in the More menu and
 moves a client to the Archived tab, where Restore makes it active again.
 Archived client and lead pages keep their history readable, with editing
-controls, composer, and Upcoming hidden. Restore is the sole header action
+controls and composer hidden. Restore is the sole header action
 except for the spam review described under [Leads](#leads).
 The Organizations tab holds advisors, operators, and other companies,
 with their own notes and timeline. On lead and client pages one Load
@@ -636,8 +633,8 @@ A lead carries source (`google_ads`, `meta_ads`, `trade_show`, `website_form`,
 `email`, `referral`, `manual`), campaign, `external_ref` for n8n idempotency, an optional
 advisor `referral_code` from the storefront `?ref=` links, Panda
 AI fit (`fit_score`, `fit_band`, `fit_reason`), and status (`new`,
-`chatting`, `quoted`, `nudged`, `lost`). Tabs are New, Potential, Unsure,
-Quoted, Not interested, and Archived. Stages keep driving the pipeline, reports,
+`chatting`, `quoted`, `nudged`, `lost`). Visible tabs are New, Potential, Unsure,
+Not interested, and Archived (the Quoted and Missing source tabs are hidden from the tab strip while their query params remain supported). Stages keep driving the pipeline, reports,
 and automations; on the Leads tabs, chatting and nudged leads stay in New until
 you sort them, and lost leads rest in Archived beside archived and spam leads
 (old Chatting, Nudged, and Lost links open those tabs). Converted leads leave
@@ -766,23 +763,15 @@ email identities to the client, then link forward and freeze the lead read-only,
 with no reverse path.
 
 Fit labels and bar colors use the supplied fit band; the CRM does not
-derive a band from the numeric score. Edit lets you enter these fields
-manually and add another person in the blank People fields.
-
-Lead Details show "Not scored yet" while both AI fit score and band are blank.
-Use the Strong/Possible/Weak buttons under "Set your fit" to record your own
-judgment; the selected choice stays visible and can be changed. Archived and
-converted leads stay read-only. This judgment is separate from AI fit and does
-not change the lead's stage; its reporting meaning is defined under
-[Monthly source reports](#monthly-source-reports-and-reviewed-backfill).
+derive a band from the numeric score. The AI fit score bar, Best fit sort option, Set your fit buttons, interactive Confirm source form, New quote buttons, and unused pipeline/AI/value fields on the lead form are hidden from the UI while their model attributes and endpoints remain intact.
 
 Website inquiries now arrive directly in Leads. Open a lead to read its
 facts in Details and its inquiry as the oldest entry on the timeline,
 including a placeholder when a website submission has no message. Manual
 leads without inquiry evidence have no inquiry entry. Unknown timing takes
 precedence over previous dates.
-In Settings → Automations, manage credentials and the n8n subscription,
-and review machine events and delivery results. The website form and external
+In Settings → Automations, manage the website site key and Automatic first reply (with a direct link to edit the First reply template),
+and review machine events and delivery results (the Relay secret and n8n webhook URL sub-sections are hidden from the Settings UI while their endpoints and background jobs remain active). The website form and external
 n8n/Panda AI workflows are configured separately; see the
 [website intake contract](docs/leads-intake.md) for setup, delivery behavior,
 and the allowed automation actions.
@@ -1400,6 +1389,8 @@ previewing a past week. Conversion upload counts are not included in this
 report; delivery and export status are covered in [Ad conversions](#ad-conversions).
 
 ## AI assistance
+
+The AI assistance panel and triage classification block in Inbox, as well as the AI assistance card in Settings, are currently hidden from the UI; all AI endpoints, `Ai::Client`, `Ai::Scrub`, `Ai::Guard`, and background prune jobs remain intact.
 
 Approval-only help on every thread: reply drafts, three-bullet summaries,
 and suggested next actions. On unlinked threads, Classify with AI adds a

@@ -36,7 +36,6 @@
     </summary>
     <div class="more-pop">
       <%= link_to "New message", polymorphic_path(record, new_thread: 1, anchor: "reply-heading"), class: "more-item" %>
-      <%= link_to "New quote", new_quote_path(lead ? { lead_id: record.id } : { client_id: record.id }), class: "more-item" %>
       <% if !lead && record.perfectbook_contact_id.present? %>
         <%= link_to "Open in PerfectBook", perfectbook_contact_url(record.perfectbook_contact_id), class: "more-item", target: "_blank", rel: "noopener" %>
       <% end %>

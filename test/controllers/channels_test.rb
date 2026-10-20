@@ -33,8 +33,8 @@ class ChannelsTest < ActionDispatch::IntegrationTest
     assert_select ".channel-metrics dt", text: "Spend", count: 2
     assert_select ".channel-metrics dt", text: "Cost per inquiry", count: 2
     assert_select ".channel-metrics dd", text: "Not checked", count: 22
-    assert_select "a.nav-link-active[href=?]", channels_path, text: "Channels"
-    assert_select ".tabbar button.on", text: "More"
+    assert_select "a[href=?]", channels_path, count: 0
+    assert_select ".tabbar a[href=?]", edit_settings_path, text: /Settings/
     assert_includes response.body, "Sep 21-27, Pacific time"
   end
 

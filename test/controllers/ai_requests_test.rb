@@ -135,13 +135,13 @@ class AiRequestsTest < ActionDispatch::IntegrationTest
     assert_match "cost cap", response.body
   end
 
-  test "thread page shows the AI panel and triage classification slot" do
+  test "thread page hides the AI panel and triage classification slot" do
     get inbox_thread_path(@conversation)
     assert_response :success
-    assert_select "[data-assist]", minimum: 1
-    assert_select "section.ai-draft-card", text: /Draft a reply/
-    assert_select "section.ai-summary", text: /Thread summary/
-    assert_select "section.ai-suggestion", text: /Suggested next action/
+    assert_select "[data-assist]", count: 0
+    assert_select "section.ai-draft-card", count: 0
+    assert_select "section.ai-summary", count: 0
+    assert_select "section.ai-suggestion", count: 0
   end
 
   test "settings saves the provider key and voice guide" do
@@ -158,7 +158,7 @@ class AiRequestsTest < ActionDispatch::IntegrationTest
     assert Setting.new.ai_enabled?
     Setting.current.update!(ai_api_key: nil)
     get inbox_thread_path(@conversation)
-    assert_select "[role=status]", text: "Add a provider key in Settings to enable drafts"
+    assert_select "section.ai-draft-card", count: 0
     assert_no_difference "AiCall.count" do
       post ai_conversation_draft_path(@conversation), headers: { "Accept" => "text/vnd.turbo-stream.html" }
     end
@@ -354,7 +354,7 @@ class AiRequestsTest < ActionDispatch::IntegrationTest
     assert_nil @conversation.ai_triage_suggested_source
     assert_nil @conversation.ai_triage_at
     get inbox_thread_path(@conversation)
-    assert_select "form[action=?]", ai_conversation_triage_path(@conversation)
+    assert_select "form[action=?]", ai_conversation_triage_path(@conversation), count: 0
   end
 
   test "new mail prevents in-flight triage from publishing stale classification" do
@@ -376,7 +376,7 @@ class AiRequestsTest < ActionDispatch::IntegrationTest
   test "unlinked proposals require linking before acceptance is offered" do
     @conversation.update!(linkable: nil)
     get inbox_thread_path(@conversation)
-    assert_select ".ai-suggestion", text: /Link this thread to a client, lead, or organization before accepting a suggestion/
+    assert_select ".ai-suggestion", count: 0
     stub_adapter('{"title":"Call about dates","due_in_days":3,"reason":"Confirm plans"}') do
       post ai_conversation_suggestion_path(@conversation), headers: { "Accept" => "text/vnd.turbo-stream.html" }
     end
@@ -386,8 +386,8 @@ class AiRequestsTest < ActionDispatch::IntegrationTest
     assert_select ".ai-suggestion", text: /Link this thread to a client, lead, or organization before accepting a suggestion/
     post link_conversation_path(@conversation), params: { linkable_type: "Client", linkable_id: @client.id }
     follow_redirect!
-    assert_select "form[action=?]", ai_accept_conversation_suggestion_path(@conversation), count: 1
-    version = Nokogiri::HTML(response.body).at_css('input[name="suggestion_version"]')["value"]
+    assert_select "form[action=?]", ai_accept_conversation_suggestion_path(@conversation), count: 0
+    version = @conversation.reload.ai_suggestion_version
     assert_difference "Task.count", 1 do
       post ai_accept_conversation_suggestion_path(@conversation), params: { suggestion_version: version }
     end
@@ -399,10 +399,7 @@ class AiRequestsTest < ActionDispatch::IntegrationTest
       saved_value = Setting.current.public_send(limit)
       patch ai_settings_path, params: { setting: { limit => "" } }
       assert_response :unprocessable_entity
-      assert_select "input[name=?]", "setting[#{limit}]" do |fields|
-        assert fields.first["value"].blank?
-      end
-      assert_match "is not a number", response.body
+      assert_select "#ai-heading", count: 0
       assert_select "li", text: /Website inquiry received/
       assert_equal saved_value, Setting.current.public_send(limit)
     end

@@ -13,17 +13,17 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     @client = Client.create!(name: "Maya", email: "maya@example.com", perfectbook_contact_id: 11)
   end
 
-  test "today renders the six tiles with sentence-case labels" do
+  test "today renders the three kept tiles with sentence-case labels" do
     get root_path
     assert_response :success
     assert_select "h1", "Today"
-    assert_select ".stat", count: 6
+    assert_select ".stat", count: 3
     assert_select ".stat", text: /Waiting on you/
-    assert_select ".stat", text: /Follow-ups due/
-    assert_select ".stat", text: /Quotes out/
-    assert_select ".stat", text: /Overdue/
     assert_select ".stat", text: /New leads/
     assert_select ".stat", text: /Active clients/
+    assert_select ".stat", text: /Follow-ups due/, count: 0
+    assert_select ".stat", text: /Quotes out/, count: 0
+    assert_select ".stat", text: /Overdue/, count: 0
   end
 
   test "Today lists unlinked website inquiry notifications without creating leads, then labels resolved leads Added to New from email while ignoring ordinary emails" do
@@ -198,7 +198,7 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     assert_select "a[href=?]", inbox_thread_path(thread), count: 0
   end
 
-  test "today lists follow-ups with one-tap complete and nudge" do
+  test "today hides follow-ups while summary still tracks them" do
     template = Template.create!(name: "Deposit nudge", body: "Hi", purpose: "deposit_nudge")
     task = @client.tasks.create!(title: "Nudge Maya", due_on: Date.current, template: template)
     other = @client.tasks.create!(title: "Snoozed away", due_on: Date.current - 2)
@@ -206,30 +206,26 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
 
     get root_path
     assert_response :success
-    assert_select "h2", text: "Follow-ups"
-    assert_select "li", text: /Nudge Maya/
-    assert_select "form[action=?]", complete_task_path(task)
-    assert_select "a[href=?]", client_path(@client, template: template.id, task: task.id), text: "Nudge"
-    assert_select "li", text: /Snoozed away/, count: 0
+    assert_select "h2", text: "Follow-ups", count: 0
+    assert_equal [ task ], Today::Summary.new.followups.to_a
   end
 
-  test "today shows departing soon and back from the mountains" do
-    PerfectBook::Booking.create!(perfectbook_id: 200, perfectbook_contact_id: 11,
+  test "today hides departing soon and back from the mountains while summary still tracks them" do
+    departing = PerfectBook::Booking.create!(perfectbook_id: 200, perfectbook_contact_id: 11,
       trip_name: "Everest", start_date: Date.current + 5, party_size: 2, synced_at: Time.current)
     home = PerfectBook::Booking.create!(perfectbook_id: 201, perfectbook_contact_id: 11,
       trip_name: "Annapurna", end_date: Date.current - 2, synced_at: Time.current)
 
     get root_path
     assert_response :success
-    assert_select "h2", text: "Departing soon"
-    assert_select "li", text: /Everest/
-    assert_select "h2", text: "Back from the mountains"
-    assert_select "li", text: /Annapurna/
-    assert_select "form[action=?]", create_review_ask_tasks_path
-    assert_select "form input[name=booking_id][value='#{home.id}']"
+    assert_select "h2", text: "Departing soon", count: 0
+    assert_select "h2", text: "Back from the mountains", count: 0
+    summary = Today::Summary.new
+    assert_includes summary.departing_soon, departing
+    assert_includes summary.returned, home
   end
 
-  test "today counts waiting replies and live quotes" do
+  test "today counts waiting replies and hides quotes out tile" do
     convo = @client.conversations.create!(subject: "Re: Everest dates")
     convo.messages.create!(direction: "in", from_address: "maya@example.com",
       subject: "Re: Everest dates", text_body: "Can we add a night?",
@@ -245,14 +241,15 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     get root_path
     assert_response :success
     assert_select "a[href=?]", inbox_thread_path(convo), text: "Maya"
-    assert_select ".stat-value", text: "1", count: 3
+    assert_equal "1", stat_value("Waiting on you")
+    assert_equal "1", stat_value("Active clients")
+    assert_equal 1, Today::Summary.new.quotes_out
     assert_select "p", text: /No replies waiting/, count: 0
   end
 
   test "today with nothing to do shows the empty states" do
     get root_path
     assert_response :success
-    assert_select "p", text: /Nothing owed this week/
     assert_select "p", text: /No replies waiting/
     assert_select "p", text: "No inquiries waiting for first contact."
     assert_select "[aria-label='Unlinked inquiries']", count: 0

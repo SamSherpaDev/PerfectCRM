@@ -5,7 +5,7 @@ require_relative "../support/google_sign_in_test_helper"
 class LeadsSystemTest < ApplicationSystemTestCase
   include GoogleSignInTestHelper
 
-  test "set owner fit in place at desktop and phone widths" do
+  test "lead detail hides fit card at desktop and phone widths" do
     OmniAuth.config.mock_auth[:google_oauth2] = OmniAuth::AuthHash.new(
       provider: "google_oauth2", uid: "google-captain",
       extra: { id_token: JWT.encode(@claims, @key, "RS256") }
@@ -20,17 +20,8 @@ class LeadsSystemTest < ApplicationSystemTestCase
       page.current_window.resize_to(width, 900)
       visit lead_path(lead)
       click_button "Details", exact: true if width == 390
-      within ".fit-head" do
-        assert_text "Not scored yet"
-        choice = find_button("Possible")
-        choice.scroll_to(choice, align: :center)
-        choice.click
-        assert_text "Your fit at inquiry: Possible"
-        assert_selector "button[aria-pressed='true']", text: "Possible"
-        assert_text "Not scored yet"
-      end
-      assert_equal "possible", lead.reload.owner_fit_at_inquiry
-      assert_nil lead.fit_band
+      assert_no_selector ".fit-head"
+      assert_no_text "Set your fit"
       assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, width
     end
   end

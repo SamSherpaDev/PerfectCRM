@@ -13,18 +13,16 @@
         <%= render "shared/icon", name: :search, class: "pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-4" %>
         <%= search_field_tag :q, @query, id: "lead-search", placeholder: "Search name, email, campaign, or note…", autocomplete: "off", class: "input pl-9" %>
       </div>
-      <%= select_tag :sort, options_for_select([ [ "Last activity", "activity" ], [ "Best fit", "fit" ], [ "Name", "name" ], [ "Newest", "newest" ] ], @sort), class: "select sm:w-40", aria_label: "Sort", data: { action: "change->autosubmit#submit" } %>
+      <%= select_tag :sort, options_for_select([ [ "Last activity", "activity" ], [ "Name", "name" ], [ "Newest", "newest" ] ], @sort), class: "select sm:w-40", aria_label: "Sort", data: { action: "change->autosubmit#submit" } %>
       <%= submit_tag "Search", class: "btn-secondary btn" %>
     </div>
     <p class="hint">Searches names, emails, campaigns, tags, and note text.</p>
   <% end %>
 
   <nav class="tabs" data-controller="tab-row" aria-label="Lead stages">
-    <% if @tab == "missing_source" %><%= tab_link "Missing source", leads_path(tab: "missing_source", q: @query, sort: @sort), icon: :list, active: true, count: @leads.size %><% end %>
     <%= tab_link "New", leads_path(tab: "new", q: @query, sort: @sort), icon: :plus, active: @tab == "new", count: @counts["new"] %>
     <%= tab_link "Potential", leads_path(tab: "potential", q: @query, sort: @sort), icon: :check, active: @tab == "potential", count: @counts["potential"] %>
     <%= tab_link "Unsure", leads_path(tab: "unsure", q: @query, sort: @sort), icon: :question, active: @tab == "unsure", count: @counts["unsure"] %>
-    <%= tab_link "Quoted", leads_path(tab: "quoted", q: @query, sort: @sort), icon: :receipt, active: @tab == "quoted", count: @counts["quoted"] %>
     <%= tab_link "Not interested", leads_path(tab: "not_interested", q: @query, sort: @sort), icon: :void, active: @tab == "not_interested", count: @counts["not_interested"] %>
     <%= tab_link "Archived", leads_path(tab: "archived", q: @query, sort: @sort), icon: :archive, active: @tab == "archived", count: @counts["archived"] %>
   </nav>
@@ -45,14 +43,6 @@
                   <%= render "shared/icon", name: lead_source_icon(lead.source), class: "h-3.5 w-3.5" %>
                   <%= lead_source_label(lead) %>
                 </span>
-                <% if lead.fit_score.present? || lead.fit_band.present? %>
-                  <span class="fit inline-flex items-center gap-2">
-                    <span class="bar <%= lead_fit_bar_class(lead.fit_band) %>" aria-hidden="true"><span class="bar-fill" style="width: <%= lead.fit_score.to_i %>%"></span></span>
-                    <span><%= lead.fit_label %></span>
-                  </span>
-                <% else %>
-                  <%= badge "Scoring", :info, dot: true %>
-                <% end %>
                 <% if lead.potential? %><%= badge "Potential", :brand %><% end %>
                 <% if lead.unsure? %><%= badge "Unsure", :neutral %><% end %>
                 <% if lead.not_interested? %><%= badge "Not interested", :danger %><% end %>

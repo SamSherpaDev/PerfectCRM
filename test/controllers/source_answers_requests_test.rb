@@ -9,8 +9,8 @@ class SourceAnswersRequestsTest < ActionDispatch::IntegrationTest
     lead = Lead.create!(name: "Call Start", source: "manual")
     get lead_path(lead)
     assert_response :success
-    assert_select "details[open] summary", text: "Confirm source"
-    assert_select "select[name=source_choice] option[value=personal_referral]", text: "A friend or family member"
+    assert_select "summary", text: "Confirm source", count: 0
+    assert_select "select[name=source_choice]", count: 0
     assert_no_difference("ActivityEvent.where(kind: 'call').count") do
       post source_answers_path, params: { record_type: "Lead", record_id: lead.id, source_choice: "search", detail: "Google" }
     end

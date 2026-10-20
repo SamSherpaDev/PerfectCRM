@@ -48,13 +48,13 @@ class QuotesRequestsTest < ActionDispatch::IntegrationTest
     assert_select "use[href='#sk-cairn']"
   end
 
-  test "client page lists quotes with a builder link" do
+  test "client page lists existing quotes and hides the builder link" do
     quote = Quote.create!(client: @client, trip_name: "Everest trek")
     quote.lines.create!(kind: "trip", description: "Everest trek", quantity: 1, unit_dollars: "10.00")
     get client_path(@client)
     assert_response :success
     assert_select "h2", text: "Files"
-    assert_select "a[href=?]", new_quote_path(client_id: @client.id)
+    assert_select "a[href=?]", new_quote_path(client_id: @client.id), count: 0
     assert_select "a", text: quote.reference
   end
 

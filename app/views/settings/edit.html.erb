@@ -46,18 +46,6 @@
     </div>
   </section>
 
-  <section class="card card-pad" aria-labelledby="digest-heading">
-    <h2 class="section-title" id="digest-heading">Morning digest</h2>
-    <%= card_caption "A short email at 7am Pacific with today's follow-ups, overdue items, and departures to watch." %>
-    <%= form_with model: @settings, url: settings_path, method: :patch, class: "mt-4" do |form| %>
-      <div class="flex flex-wrap items-center gap-3">
-        <%= form.check_box :digest_enabled, class: "checkbox" %>
-        <%= form.label :digest_enabled, "Send the morning digest", class: "text-sm text-ink-2" %>
-        <%= form.submit "Save", class: "btn-secondary btn btn-sm" %>
-      </div>
-    <% end %>
-  </section>
-
   <section class="card card-pad mt-6" aria-labelledby="mailbox-heading">
     <h2 class="section-title" id="mailbox-heading">Mailbox</h2>
     <%= card_caption "Microsoft 365 mail to and from #{@mailbox_address} lands on client timelines. Only that address is ever kept; personal mail is skipped without storing it." %>
@@ -110,41 +98,9 @@
     <p class="hint mt-4">Setup: register the CRM as a Microsoft application, add the delegated mail scopes, paste the credentials into .env.app, then Connect mailbox. Sync runs every 5 minutes over every mail folder, child folders included, read-only — it never moves, deletes, or flags server mail. A first connect starts from now; past mail stays for Import history. See README “Mail”.</p>
   </section>
 
-  <section class="card card-pad mt-6" aria-labelledby="import-heading">
-    <h2 class="section-title" id="import-heading">Import history</h2>
-    <%= card_caption "Bring past email with clients and operators into the CRM. Preview first, flip clients and organizations per row, then import." %>
-    <div class="mt-4 flex flex-wrap gap-2">
-      <%= link_to "Import history", new_mail_import_path, class: "btn-secondary btn btn-sm" %>
-      <%= link_to "Past imports", mail_imports_path, class: "btn-ghost btn btn-sm" %>
-    </div>
-    <% if @imports.any? %>
-      <ul class="mt-3 space-y-1 text-sm">
-        <% @imports.each do |import| %>
-          <li><%= link_to "#{import.scope_label} · #{import.status}", mail_import_path(import), class: "link" %></li>
-        <% end %>
-      </ul>
-    <% end %>
-  </section>
-
-  <section class="card card-pad mt-6" aria-labelledby="pipeline-digest-heading">
-    <h2 class="section-title" id="pipeline-digest-heading">Monday pipeline note</h2>
-    <%= card_caption "One line every Monday at 7am: open leads, stale cards, and pipeline value." %>
-    <%= form_with model: @settings, url: settings_path, method: :patch, class: "mt-4" do |form| %>
-      <label class="inline-flex items-center gap-2 text-sm">
-        <%= form.check_box :pipeline_digest, class: "checkbox" %>
-        Send the Monday note to info@sherpaholidays.com
-      </label>
-      <div class="mt-3">
-        <%= form.submit "Save", class: "btn-secondary btn btn-sm" %>
-      </div>
-    <% end %>
-  </section>
-
-  <%= render "settings/weekly_report", settings: @settings, spend_weeks: @spend_weeks, ad_spends: @ad_spends %>
-
   <section class="card card-pad mt-6" aria-labelledby="automations-heading">
     <h2 class="section-title" id="automations-heading">Automations</h2>
-    <%= card_caption "The website form, Panda AI scoring, and the n8n webhooks. Automations may create leads, score them, and move them between New, Chatting and Lost. Quoted, Nudged, conversion to client, and everything after stay manual." %>
+    <%= card_caption "Website inquiries and automatic first replies. Conversion to client and all follow-up replies stay manual." %>
 
     <div class="mt-4 space-y-4">
       <div class="setting">
@@ -155,35 +111,20 @@
         </div>
         <%= button_to "Rotate", rotate_site_key_settings_path, method: :post, class: "btn-secondary btn btn-sm", form: { data: { turbo_confirm: "Rotate the site key? Update the storefront block right after." } } %>
       </div>
-
-      <div class="setting">
-        <div class="k">
-          <p class="font-medium text-sm">Relay secret</p>
-          <p class="hint">Signs server calls from n8n and Panda AI, and signs the webhooks sent to n8n. Last used <%= @settings.relay_last_used_at ? time_24_12(@settings.relay_last_used_at) : "never" %>.</p>
-          <% if @fresh_relay_secret %>
-            <p class="mono mt-1 text-xs" role="status">New secret (shown once): <%= @fresh_relay_secret %></p>
-          <% else %>
-            <p class="mono mt-1 text-xs"><%= @settings.masked_relay_secret %></p>
-          <% end %>
-        </div>
-        <%= button_to "Rotate", rotate_relay_secret_settings_path, method: :post, class: "btn-secondary btn btn-sm", form: { data: { turbo_confirm: "Rotate the relay secret? Update n8n and Panda AI right after." } } %>
-      </div>
     </div>
 
     <%= form_with model: @settings, url: settings_path, method: :patch, class: "mt-4 space-y-4" do |form| %>
       <div class="setting">
         <div class="k">
           <%= form.label :auto_first_reply_enabled, "Automatic first reply", class: "font-medium text-sm" %>
-          <p class="hint">New website inquiries only, after two minutes. Sends the live First reply template once per email address. All other replies stay manual. Lead and client replies send an alert to info@sherpaholidays.com.</p>
+          <p class="hint">
+            New website inquiries only, after two minutes. Sends the live First reply template once per email address. All other replies stay manual. Lead and client replies send an alert to info@sherpaholidays.com.
+            <%= link_to "Edit First reply template", first_reply_template ? edit_template_path(first_reply_template) : new_template_path(purpose: "first_reply"), class: "link" %>
+          </p>
         </div>
         <%= form.check_box :auto_first_reply_enabled, class: "checkbox" %>
       </div>
       <p class="hint">One copy of every website inquiry goes to info@sherpaholidays.com, with Reply-To the visitor.</p>
-      <div>
-        <%= form.label :lead_webhook_url, "n8n webhook URL", class: "label" %>
-        <%= form.url_field :lead_webhook_url, class: "input mono text-xs", placeholder: "https://n8n.example.com/webhook/lead" %>
-        <p class="hint">Each new lead and each details answer is posted here, signed with the relay secret. Use an approved HTTPS endpoint. Empty means disabled.</p>
-      </div>
       <div>
         <%= form.submit "Save automations", class: "btn-primary btn btn-sm" %>
       </div>
@@ -289,71 +230,9 @@
     <% end %>
   </section>
 
-  <section class="card card-pad" aria-labelledby="export-heading">
-    <h2 class="section-title" id="export-heading">Export everything</h2>
-    <%= card_caption "A zip of leads, clients, people, organizations, notes, tags, and timeline events as CSV. Opens cleanly in Excel." %>
-    <div class="mt-4">
-      <%= link_to "Export everything", settings_export_path, class: "btn-secondary btn btn-sm" %>
-    </div>
-  </section>
-
-  <section class="card card-pad mt-6" aria-labelledby="ai-heading">
-    <h2 class="section-title" id="ai-heading">AI assistance</h2>
-    <%= card_caption "Approval-only drafts, summaries, suggestions, and triage. Nothing is ever sent or created without your tap. See README \u201CAI assistance\u201D." %>
-    <dl class="mt-4 space-y-1 text-sm">
-      <div class="flex gap-2">
-        <dt class="muted">Calls today:</dt>
-        <dd><%= @ai_calls_today %> · <%= number_to_currency(@ai_cost_today / 100.0) %> estimated</dd>
-      </div>
-      <div class="flex gap-2">
-        <dt class="muted">Prompt version:</dt>
-        <dd><%= Ai::Prompts.version %></dd>
-      </div>
-    </dl>
-    <%= form_with model: @settings, url: ai_settings_path, method: :patch, class: "mt-4 space-y-3" do |form| %>
-      <div class="flex flex-wrap items-center gap-3">
-        <%= form.check_box :ai_enabled, class: "checkbox" %>
-        <%= form.label :ai_enabled, "Enable AI assistance (kill switch)", class: "text-sm text-ink-2" %>
-      </div>
-      <p class="hint">On by default. Turn it off any time to stop every AI call immediately.</p>
-      <div class="grid gap-3 sm:grid-cols-2">
-        <div>
-          <%= form.label :ai_model, "Model", class: "label" %>
-          <%= form.text_field :ai_model, class: "input", placeholder: "gpt-4o-mini", autocomplete: "off" %>
-        </div>
-      </div>
-      <div>
-        <%= form.label :ai_base_url, "Base URL (OpenAI-compatible)", class: "label" %>
-        <%= form.text_field :ai_base_url, class: "input", placeholder: "https://api.openai.com/v1 or https://openrouter.ai/api/v1", autocomplete: "off" %>
-      </div>
-      <div>
-        <%= form.label :ai_api_key, "API key", class: "label" %>
-        <%= form.password_field :ai_api_key, class: "input", placeholder: @settings.ai_api_key.present? ? "Saved — enter a new one to replace it" : "sk-…", autocomplete: "new-password" %>
-        <p class="hint">Stored encrypted. Leaving it blank keeps the saved key.</p>
-      </div>
-      <div>
-        <%= form.label :ai_voice_guide, "Voice guide", class: "label" %>
-        <%= form.text_area :ai_voice_guide, class: "textarea", rows: 3, placeholder: "Short, warm, plain-spoken. Sign as Sam." %>
-        <p class="hint">Your templates are the style examples; this guide steers tone.</p>
-      </div>
-      <div class="grid gap-3 sm:grid-cols-2">
-        <div>
-          <%= form.label :ai_daily_cost_cap_cents, "Daily cost cap (cents)", class: "label" %>
-          <%= form.number_field :ai_daily_cost_cap_cents, class: "input", min: 0, step: 1 %>
-          <p class="hint">AI stops for the day once estimated spend reaches this.</p>
-        </div>
-        <div>
-          <%= form.label :ai_rate_limit_per_minute, "Calls per minute", class: "label" %>
-          <%= form.number_field :ai_rate_limit_per_minute, class: "input", min: 1, max: 120, step: 1 %>
-        </div>
-      </div>
-      <% if @settings.errors.any? %>
-        <p class="text-sm text-bad"><%= @settings.errors.full_messages.to_sentence %></p>
-      <% end %>
-      <%= form.submit "Save AI assistance", class: "btn-primary btn btn-sm" %>
-    <% end %>
-    <p class="hint mt-4">\u201CAlways show me the draft before it sends\u201D is on and cannot be turned off: there is no auto-send setting. Prices, availability promises, and legal or refund language stay human. To opt one client, lead, or organization out, edit their record and tick \u201COpt out of AI assistance\u201D.</p>
-  </section>
+  <footer class="mt-6 text-center text-xs muted">
+    <%= link_to "Export everything", settings_export_path, class: "link-quiet" %> · CSV zip of leads, clients, people, organizations, notes, tags, and timeline events.
+  </footer>
   <div class="foot-sketch" aria-hidden="true">
     <%= sketch :wheel, class: "sk scene" %>
   </div>

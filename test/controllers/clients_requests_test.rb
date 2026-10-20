@@ -83,7 +83,7 @@ class ClientsRequestsTest < ActionDispatch::IntegrationTest
     assert_select "a[href=?]", "https://perfectbook.sherpaholidays.com/contacts/123"
     assert_select "h2", text: "Details"
     assert_select "h2", text: "Timeline"
-    assert_select "h2", text: "Upcoming"
+    assert_select "h2", { text: "Upcoming", count: 0 }
     assert_select "h2", text: "Files"
     assert_select "h2", text: "Trip in PerfectBook"
     assert_select "h2", { text: "People", count: 0 }

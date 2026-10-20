@@ -20,15 +20,17 @@ class MobileShellTest < ApplicationSystemTestCase
     assert_selector "nav[aria-label=Primary] a", text: "Inbox"
     assert_selector "nav[aria-label=Primary] a", text: "Leads"
     assert_selector "nav[aria-label=Primary] a", text: "Settings"
+    assert_no_selector "nav[aria-label=Primary] a", text: "Pipeline"
+    assert_no_selector "nav[aria-label=Primary] a", text: "Quotes"
+    assert_no_selector "nav[aria-label=Primary] a", text: "Templates"
+    assert_no_selector "nav[aria-label=Primary] a", text: "Channels"
     click_button "Close menu"
     within "nav.tabbar" do
-      click_button "More"
+      assert_no_button "More"
+      click_link "Settings"
     end
-    within "aside" do
-      click_link "Pipeline"
-    end
-    assert_selector "h1", text: "Pipeline"
-    assert_selector "nav.tabbar button.on", text: "More"
+    assert_selector "h1", text: "Settings"
+    assert_selector "nav.tabbar a.on", text: "Settings"
     [ "/", "/inbox", "/leads", "/clients", "/pipeline", "/quotes", "/templates", "/design", "/settings/edit" ].each do |path|
       visit path
       width = page.evaluate_script("document.documentElement.scrollWidth")

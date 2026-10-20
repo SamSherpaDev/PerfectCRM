@@ -16,33 +16,24 @@ class SourceHistorySystemTest < ApplicationSystemTestCase
     page.current_window.resize_to(1400, 900)
   end
 
-  test "source is immediately editable at call start on desktop and phone without competing call form" do
-    lead = Lead.create!(name: "Source Screen", email: "screen@example.com", source: "manual")
+  test "source is displayed read-only on desktop and phone without the interactive confirm form" do
+    lead = Lead.create!(name: "Source Screen", email: "screen@example.com", source: "manual",
+      source_choice: "personal_referral", reported_source_detail: "Alex")
     visit lead_path(lead)
-    assert_selector "details[open] summary", text: "Confirm source"
-    assert_no_selector "select[name=outcome]", visible: true
-    select "A friend or family member", from: "How did you first hear about SherpaHolidays?"
-    fill_in "Short answer", with: "Alex"
-    click_button "Save source"
-    assert_text "Source saved."
+    assert_no_selector "summary", text: "Confirm source"
+    assert_no_selector "summary", text: "Edit source"
+    assert_no_selector "select[name=source_choice]", visible: :all
     assert_text "Heard about us: A friend or family member"
-    assert_text "Confirmed on the call."
-    assert_no_selector "select[name=source_choice]", visible: true
-    assert_equal 0, lead.activity_events.where(kind: "call").count
+    assert_text "Alex"
     assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, 1400
 
-    phone_lead = Lead.create!(name: "Phone Source", source: "manual")
+    phone_lead = Lead.create!(name: "Phone Source", source: "manual", source_choice: "unsure")
     page.current_window.resize_to(390, 844)
     visit lead_path(phone_lead)
     find("button[data-tab='details']").click
-    assert_selector "details[open] summary", text: "Confirm source"
-    select "I don't remember", from: "How did you first hear about SherpaHolidays?"
-    click_button "Save source"
-    assert_text "Source saved."
-    find("button[data-tab='details']").click
+    assert_no_selector "summary", text: "Confirm source"
     assert_text "Heard about us: I don't remember"
     assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, 390
-    assert_equal "unsure", phone_lead.reload.source_answer_state
   end
 
   test "call details form records a connected call on its inquiry independently of source and tasks" do

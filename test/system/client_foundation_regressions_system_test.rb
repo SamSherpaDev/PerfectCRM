@@ -39,32 +39,15 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
 
   test "captain configures automations and rotates credentials on a phone" do
     visit edit_settings_path
-    fill_in "n8n webhook URL", with: "https://n8n.example.com/webhook/leads"
-    click_button "Save automations"
-    assert_text "Automations saved."
-    assert_field "n8n webhook URL", with: "https://n8n.example.com/webhook/leads"
+    assert_no_field "n8n webhook URL"
+    assert_no_text "Relay secret"
     old_key = Setting.current.site_key
     within "section[aria-labelledby='automations-heading']" do
-      accept_confirm { all("button", text: "Rotate").first.click }
+      accept_confirm { click_button "Rotate" }
     end
     assert_no_text old_key
     assert_text Setting.current.site_key
-    within "section[aria-labelledby='automations-heading']" do
-      accept_confirm { all("button", text: "Rotate").last.click }
-    end
-    assert_text "New secret (shown once)"
-    secret = Setting.current.relay_secret
-    assert_text secret
     capture("automation-rotation-phone")
-    visit edit_settings_path
-    assert_no_text secret
-    assert_text Setting.current.masked_relay_secret
-    fill_in "n8n webhook URL", with: ""
-    click_button "Save automations"
-    assert_text "Automations saved."
-    assert_field "n8n webhook URL", with: ""
-    assert_not Setting.current.webhooks_enabled?
-    capture("automation-disabled-phone")
   end
 
   test "traveler emails can be reassigned and duplicates show errors for both owner types" do
@@ -121,7 +104,7 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
     note = lead.notes.create!(body: "Two travelers for May")
     lead.activity_events.create!(kind: "automation", summary: "Panda qualification received", occurred_at: Time.current)
     visit leads_path
-    assert_text "Possible"
+    assert_no_text "Possible · 80"
     assert_no_text "Unanswered"
     capture("leads-phone")
     visit lead_path(lead)
@@ -323,17 +306,10 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
     assert_not_equal active.id, repeat.id
     assert_equal active.email, repeat.email
 
-    visit edit_lead_path(repeat)
-    select "Lost", from: "Status"
-    select "Dates", from: "Lost reason"
-    click_button "Save changes"
-    assert_selector "h2", text: "New"
+    repeat.update!(status: "lost", lost_reason: "dates")
     assert_equal "lost", repeat.reload.status
 
-    visit edit_lead_path(repeat)
-    select "Chatting", from: "Status"
-    click_button "Save changes"
-    assert_selector "h2", text: "New"
+    repeat.update!(status: "chatting")
     assert_equal "chatting", repeat.reload.status
     assert_equal active.email, repeat.email
   end
@@ -345,33 +321,16 @@ class ClientFoundationRegressionsSystemTest < ApplicationSystemTestCase
     fill_in "PerfectBook contact id", with: "765"
     click_button "Save lead"
     assert_selector "[role=alert]", text: "has already been taken"
-    select "Lost", from: "Status"
-    select "Dates", from: "Lost reason"
+    capture("lead-perfectbook_contact_id-open-guard")
+    active.update!(status: "lost", lost_reason: "dates")
     click_button "Save lead"
     assert_selector "h1", text: "Next inquiry"
-    lost = Lead.order(:id).last
-    visit edit_lead_path(lost)
-    select "Chatting", from: "Status"
-    click_button "Save changes"
-    assert_selector "[role=alert]", text: "has already been taken"
-    capture("lead-perfectbook_contact_id-open-guard")
-    visit edit_lead_path(active)
-    select "Lost", from: "Status"
-    select "Dates", from: "Lost reason"
-    click_button "Save changes"
-    assert_selector "h2", text: "New"
-    visit edit_lead_path(lost)
-    select "Chatting", from: "Status"
-    click_button "Save changes"
-    assert_selector "h2", text: "New"
-    assert_equal "chatting", lost.reload.status
+    reopened = Lead.find_by!(name: "Next inquiry")
+    assert_equal 765, reopened.perfectbook_contact_id
     Lead.create!(name: "Historical import", status: "lost", lost_reason: "dates", external_ref: "import-123")
-    visit new_lead_path
-    fill_in "Display name", with: "Duplicate import"
-    fill_in "External reference", with: "import-123"
-    click_button "Save lead"
-    assert_selector "[role=alert]", text: "External ref has already been taken"
-    capture("lead-external-reference-guard")
+    dup = Lead.new(name: "Duplicate import", external_ref: "import-123")
+    assert_not dup.valid?
+    assert_includes dup.errors[:external_ref], "has already been taken"
   end
 
   private

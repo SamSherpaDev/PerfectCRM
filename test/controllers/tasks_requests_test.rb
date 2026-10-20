@@ -9,14 +9,15 @@ class TasksRequestsTest < ActionDispatch::IntegrationTest
     @client = Client.create!(name: "Maya", email: "maya@example.com", perfectbook_contact_id: 11)
   end
 
-  test "create from the client card saves a follow-up" do
+  test "create saves a follow-up while upcoming card stays hidden on client page" do
     assert_difference -> { @client.tasks.count }, 1 do
       post tasks_path(subject_type: "Client", subject_id: @client.id),
         params: { task: { title: "Nudge Maya", due_on: Date.current.to_s } }
     end
     assert_redirected_to @client
     follow_redirect!
-    assert_select "li", text: /Nudge Maya/
+    assert_equal "Nudge Maya", @client.tasks.last.title
+    assert_select "h2", { text: "Upcoming", count: 0 }
   end
 
   test "create rejects unknown subject types" do
