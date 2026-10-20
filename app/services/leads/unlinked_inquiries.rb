@@ -43,7 +43,7 @@ module Leads
     # the person an inquiry is from, so never the address a reply goes to.
     def self.relay_sender?(from)
       address = EmailIdentity.normalized(from)
-      address.present? && (own_sender?(address) || automated_sender_address?(address))
+      address.present? && (website_form_sender?(address) || automated_sender_address?(address))
     end
 
     def self.own_sender?(from)
