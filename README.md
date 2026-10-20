@@ -527,7 +527,7 @@ that thread. Any logged call outcome counts as handling the inquiry; a new
 inbound message after the call queues it again.
 Replies waiting lists the newest five with reply links,
 Quotes out counts live sent and viewed quotes whose valid-until has not
-passed, New leads counts and links to the Leads New tab (untriaged leads in
+passed, New leads counts the leads in the Leads New tab (untriaged leads in
 New, Chatting, or Nudged), and Active clients
 counts clients that are not archived.
 

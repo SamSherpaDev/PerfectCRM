@@ -53,7 +53,6 @@ class TodaySystemTest < ApplicationSystemTestCase
 
     within("section[aria-label=Counts]") do
       assert_selector ".stat", count: 6
-      assert_selector "a.stat.stat-link[href='#{leads_path(tab: "new")}']", text: /1\s+New leads/
     end
     width = page.evaluate_script("document.documentElement.scrollWidth")
     assert_operator width, :<=, 390, "Today overflows a 390px viewport (#{width}px)"

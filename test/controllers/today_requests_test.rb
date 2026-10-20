@@ -69,7 +69,7 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     assert_select "[aria-label='Unlinked inquiries']", count: 0
   end
 
-  test "today counts new leads matching the New tab and links to it" do
+  test "today counts new leads matching the New tab and active clients" do
     Lead.create!(name: "Priya", email: "priya@example.com")
     Lead.create!(name: "Ken", email: "ken@example.com", status: "chatting")
     potential = Lead.create!(name: "Tenzing", email: "tenzing@example.com")
@@ -88,10 +88,6 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "2", stat_value("New leads")
     assert_equal "1", stat_value("Active clients")
-    assert_select "a.stat.stat-link[href=?]", leads_path(tab: "new") do
-      assert_select ".stat-value", "2"
-      assert_select "p", "New leads"
-    end
 
     get leads_path(tab: "new")
     assert_response :success

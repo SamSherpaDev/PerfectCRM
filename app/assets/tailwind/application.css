@@ -294,11 +294,11 @@
     @apply px-6 pb-6 pt-4 sm:px-7;
     background: var(--pb-sk-line) left top / 720px 6px repeat-x;
   }
-  .stat-link {
-    @apply block no-underline rounded-tile transition-transform duration-150 ease-out hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seal;
-  }
   .stat {
     @apply card flex flex-col gap-2.5 min-w-0 rounded-tile px-5 pt-5 pb-4;
+  }
+  .stat-link {
+    @apply block no-underline rounded-tile transition-transform duration-150 ease-out hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-seal;
   }
   .stat-value {
     @apply font-display text-[2rem] tabular-nums text-ink leading-none tracking-tight whitespace-nowrap;
