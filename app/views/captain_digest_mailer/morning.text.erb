@@ -20,7 +20,7 @@ Today (<%= @summary.followups_due.count %>):
   <%= lead_url(call.lead) %>
 <% end %>
 <% end %>Replies waiting: <%= @summary.waiting_on_you %>.
-Not yet called: <%= @summary.not_yet_called.count %>.
+Calls to make today: <%= @summary.not_yet_called.count %>.
 <% if @summary.departing_soon.any? %>
 Departing soon:
 <% @summary.departing_soon.each do |booking| %>- <%= booking.trip_name %> · <%= booking.start_date.strftime("%-b %-d") %> (<%= booking.party_size %> travelers)

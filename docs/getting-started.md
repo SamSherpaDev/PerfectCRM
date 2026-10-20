@@ -15,7 +15,7 @@ one-handed.
 4. **Review triage** in Inbox → Triage. Confirm each unknown sender as a
    client, lead, or organization, or ignore it.
 5. **Answer what is waiting** on Today: the Replies waiting list first,
-   then Scheduled calls and Not yet called.
+   then Scheduled calls and Calls to make today.
 6. **Configure AI assistance** using the [AI setup guide](../README.md#ai-assistance),
    including the provider key and Voice guide (the Settings card is hidden).
 7. **Write your name, upload your logo, and set your signature** in Settings → Signature.

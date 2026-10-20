@@ -13,6 +13,7 @@ module Today
     MAX_CALL_ATTEMPTS = 3
     FRESH_INQUIRY_WITHIN = 24.hours
     CALL_LIST_WINDOW = 14.days
+    CALL_CADENCE_STARTS_ON = Date.new(2026, 10, 20)
 
     CallEntry = Data.define(:lead, :attempt, :attempt_label, :last_call, :waited_since)
 
@@ -62,6 +63,9 @@ module Today
     #     due 1 day after attempt 1; attempt 3 due 2 days after attempt 2;
     #     at most 3 attempts);
     # (c) older uncalled inquiries up to 14 days old, oldest first.
+    # Calls logged before CALL_CADENCE_STARTS_ON belong to the separate
+    # backlog call sheet: such a lead stays off the list until a new call
+    # starts its cadence.
     # A cadence is the run of calls within 14 days before the latest call,
     # and a lead leaves the list once its latest call is over 14 days old.
     # Leads drop off once a call connects, they are marked Not interested,
@@ -70,8 +74,9 @@ module Today
     def call_entries
       @call_entries ||= begin
         window_start = @now - CALL_LIST_WINDOW
+        cadence_start = CALL_CADENCE_STARTS_ON.in_time_zone
         recently_called = ActivityEvent.where(subject_type: "Lead", kind: "call")
-          .where("activity_events.subject_id = leads.id").where("activity_events.occurred_at >= ?", window_start)
+          .where("activity_events.subject_id = leads.id").where("activity_events.occurred_at >= ?", [ window_start, cadence_start ].max)
         candidates = Lead.open
           .where(not_interested_marked_at: nil, spam_marked_at: nil)
           .where("TRIM(COALESCE(leads.phone, '')) <> '' OR TRIM(COALESCE(leads.phone_raw, '')) <> ''")
@@ -89,9 +94,10 @@ module Today
         candidates.each do |lead|
           waited_since = lead.received_at || lead.created_at
           calls = calls_by_lead.fetch(lead.id, []).select { |event| event.occurred_at >= waited_since }
+          backlog_calls, calls = calls.partition { |event| event.occurred_at < cadence_start }
 
           if calls.empty?
-            next unless lead.status == "new" && waited_since >= window_start
+            next unless backlog_calls.empty? && lead.status == "new" && waited_since >= window_start
 
             entry = CallEntry.new(
               lead: lead,

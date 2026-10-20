@@ -94,8 +94,8 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     assert_select "nav.tabs a.tab-on", text: /New.*2/
   end
 
-  test "not yet called orders uncalled phone inquiries before due retries, shows attempt badges, and supports one-tap logging and return_to" do
-    travel_to Time.zone.local(2026, 10, 14, 12) do
+  test "calls to make today orders fresh inquiries, due retries, then older first tries, shows attempt badges, and supports one-tap logging and return_to" do
+    travel_to Time.zone.local(2026, 10, 28, 12) do
       newer = Lead.create!(name: "Newer inquiry", phone_raw: "+1 415 555 0101", received_at: 2.hours.ago)
       older = Lead.create!(name: "Older inquiry", phone_raw: "+1 415 555 0102", received_at: 5.days.ago)
       retry_two = Lead.create!(name: "Second try inquiry", phone_raw: "+1 415 555 0103", received_at: 3.days.ago)
@@ -124,7 +124,7 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "not yet called keeps a flagged inquiry with a Check marker and drops it once confirmed as spam" do
+  test "calls to make today keeps a flagged inquiry with a Check marker and drops it once confirmed as spam" do
     flagged = Lead.create!(name: "Anna Lindqvist", email: "annalindqvist@gmail.com", phone_raw: "+1 415 555 0199",
       received_at: 1.hour.ago, spam_score: 25, tag_list: Lead::SUSPECTED_SPAM_TAG)
     clean = Lead.create!(name: "Clara Jensen", phone_raw: "+1 415 555 0134", received_at: 2.hours.ago)
@@ -271,7 +271,7 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     get root_path
     assert_response :success
     assert_select "p", text: /No replies waiting/
-    assert_select "p", text: "No inquiries waiting for first contact."
+    assert_select "p", text: "No calls to make right now."
     assert_select "[aria-label='Unlinked inquiries']", count: 0
   end
 

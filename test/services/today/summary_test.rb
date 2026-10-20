@@ -81,7 +81,7 @@ class TodaySummaryTest < ActiveSupport::TestCase
   end
 
   test "not yet called prioritizes uncalled phone inquiries oldest first, then Day 1 (2nd try) and Day 3 (3rd try) retries, and drops connected, scheduled, not-interested, spam, archived, and 3-attempt leads" do
-    travel_to Time.zone.local(2026, 10, 20, 12) do
+    travel_to Time.zone.local(2026, 11, 3, 12) do
       oldest_uncalled = inquiry("Oldest uncalled", 2.days.ago)
       newest_uncalled = inquiry("Newest uncalled", 30.minutes.ago)
       Lead.create!(name: "No phone inquiry", email: "nophone@example.test", received_at: 3.days.ago)
@@ -90,7 +90,7 @@ class TodaySummaryTest < ActiveSupport::TestCase
       CallLog.record!(retry_second_older, key: "call-vm-01", occurred_at: 1.day.ago, outcome: "voicemail", direction: "outbound")
 
       retry_second_newer = inquiry("Due 2nd try (no answer yesterday evening)", 2.days.ago)
-      CallLog.record!(retry_second_newer, key: "call-na-01", occurred_at: Time.zone.local(2026, 10, 19, 18), outcome: "no_answer", direction: "outbound")
+      CallLog.record!(retry_second_newer, key: "call-na-01", occurred_at: Time.zone.local(2026, 11, 2, 18), outcome: "no_answer", direction: "outbound")
 
       retry_third_due = inquiry("Due 3rd try (2 days after 2nd try)", 5.days.ago)
       CallLog.record!(retry_third_due, key: "call-try3-1", occurred_at: 4.days.ago, outcome: "voicemail", direction: "outbound")
@@ -220,7 +220,7 @@ class TodaySummaryTest < ActiveSupport::TestCase
   end
 
   test "fresh inquiries lead newest first, then due retries, then older first tries up to 14 days old" do
-    travel_to Time.zone.local(2026, 10, 20, 12) do
+    travel_to Time.zone.local(2026, 11, 3, 12) do
       fresh_older = inquiry("Fresh 20 hours", 20.hours.ago)
       fresh_newest = inquiry("Fresh 10 minutes", 10.minutes.ago)
       older_newer = inquiry("Older 3 days", 3.days.ago)
@@ -233,20 +233,33 @@ class TodaySummaryTest < ActiveSupport::TestCase
     end
   end
 
-  test "stale calls stay off the list until a new call starts a fresh cadence" do
+  test "calls logged before the cadence start keep a lead off the list until a new call starts its cadence" do
     travel_to Time.zone.local(2026, 10, 20, 12) do
-      backlog = inquiry("Old single call", 60.days.ago)
-      CallLog.record!(backlog, key: "stale-call-1", occurred_at: 30.days.ago, outcome: "no_answer", direction: "outbound")
-      lapsed = inquiry("Lapsed cadence", 20.days.ago)
-      CallLog.record!(lapsed, key: "lapsed-call-1", occurred_at: 16.days.ago, outcome: "voicemail", direction: "outbound")
+      backlog = inquiry("Called Oct 15", Time.zone.local(2026, 10, 8, 9))
+      CallLog.record!(backlog, key: "backlog-call-1", occurred_at: Time.zone.local(2026, 10, 15, 11), outcome: "no_answer", direction: "outbound")
+      old_backlog = inquiry("Old single call", 60.days.ago)
+      CallLog.record!(old_backlog, key: "stale-call-1", occurred_at: 30.days.ago, outcome: "no_answer", direction: "outbound")
       assert_empty Today::Summary.new.call_entries
 
-      CallLog.record!(backlog, key: "stale-call-2", occurred_at: Time.current, outcome: "voicemail", direction: "outbound")
+      CallLog.record!(backlog, key: "backlog-call-2", occurred_at: Time.current, outcome: "voicemail", direction: "outbound")
       assert_empty Today::Summary.new.call_entries
 
       travel 1.day
       entry = Today::Summary.new.call_entries.sole
       assert_equal [ backlog, 2, "2nd try" ], [ entry.lead, entry.attempt, entry.attempt_label ]
+
+      CallLog.record!(backlog, key: "backlog-call-3", occurred_at: Time.current, outcome: "no_answer", direction: "outbound")
+      travel 2.days
+      entry = Today::Summary.new.call_entries.sole
+      assert_equal [ backlog, 3, "3rd try" ], [ entry.lead, entry.attempt, entry.attempt_label ]
+    end
+  end
+
+  test "uncalled inquiries appear as first tries only up to 14 days old" do
+    travel_to Time.zone.local(2026, 11, 3, 12) do
+      edge = inquiry("Exactly 14 days", 14.days.ago)
+      inquiry("Just over 14 days", 14.days.ago - 1.minute)
+      assert_equal [ edge ], Today::Summary.new.not_yet_called
     end
   end
 

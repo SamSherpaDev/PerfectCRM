@@ -8,7 +8,7 @@ class NotYetCalledSystemTest < ApplicationSystemTestCase
 
   # Chrome uses the real clock for cookie expiry, so travel to future weekdays.
   test "captain sees uncalled phone inquiries and due retries with attempt badges, and logs calls or schedules from Today" do
-    travel_to Date.current.next_occurring(:wednesday).in_time_zone.change(hour: 12) do
+    travel_to [ Date.current, Today::Summary::CALL_CADENCE_STARTS_ON + 7 ].max.next_occurring(:wednesday).in_time_zone.change(hour: 12) do
       oldest = inquiry("Oldest uncalled", 2.days.ago)
       recent = inquiry("Recent uncalled", 45.minutes.ago)
       Lead.create!(name: "No phone inquiry", email: "nophone@example.test", received_at: 3.days.ago)
@@ -88,7 +88,7 @@ class NotYetCalledSystemTest < ApplicationSystemTestCase
       capture("today-after-call")
 
       mail = CaptainDigestMailer.morning.deliver_now
-      assert_includes mail.body.decoded, "Not yet called: 2."
+      assert_includes mail.body.decoded, "Calls to make today: 2."
       assert_includes mail.body.decoded, "http://example.com/"
       File.write(File.join(EVIDENCE, "daily-digest.txt"), mail.body.decoded) if EVIDENCE
     end
