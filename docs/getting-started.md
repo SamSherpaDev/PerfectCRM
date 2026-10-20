@@ -21,9 +21,10 @@ one-handed.
 7. **Write your name, upload your logo, and set your signature** in Settings → Signature.
 8. **Check the PerfectBook connection** in Settings → PerfectBook → Test
    connection. Bookings and the trip catalog mirror from there.
-9. **Walk the pipeline** and drag any stale card to its true stage. Lost
+9. **Walk the pipeline** at `/pipeline` and drag any stale card to its true stage. Lost
    asks for a reason.
-10. **Send a test quote** to yourself from any client page → New quote.
+10. **Send a test quote** to yourself from the builder at
+    `/quotes/new?client_id=<id>` (New quote buttons are hidden).
     Complete the [booking documents and payment schedule](quote-terms.md#before-sending),
     then open the accept link on your phone the way a client would.
 

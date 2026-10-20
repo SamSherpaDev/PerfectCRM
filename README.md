@@ -814,9 +814,9 @@ Today already lists linked threads whose latest inbound needs an answer.
 ## Source history and calls
 
 Record **How did you first hear about SherpaHolidays? (Optional)** using one
-shared list. The same question is first in the manual form and immediately
-available in record Details at the start of a call. Missing answers open
-**Confirm source**; after recording, **Edit source** stays quiet. The short
+shared list. The same question is first in the manual form, and record
+Details show the answer read-only (the **Confirm source** / **Edit source**
+form there is hidden while `SourceAnswersController` stays routed). The short
 answer is optional, 240 characters; for referrals a first name is enough.
 Confirming a form answer records the call confirmation without losing the
 original answer. Corrections need a reason and append history, never rewrite it.
@@ -1016,9 +1016,9 @@ The existing Monday email adds the monthly summary/link, not a second digest.
 `BookingInquiryBinding` holds one primary inquiry per PerfectBook booking ID.
 Sync holds unvalidated returned references for review. CRM provides a token-protected
 inquiry lookup for the separate PerfectBook pre-storage validation follow-up;
-see docs/source-reporting.md. Reviewed bindings retain unchanged upstream evidence. The Trip panel's quiet
-review disclosure accepts a contact-linked inquiry and evidence/reason, with
-actor/date/prior-link audit. Correct changed upstream references in PerfectBook
+see docs/source-reporting.md. Reviewed bindings retain unchanged upstream evidence. The binding endpoint
+(`BookingInquiryBindingsController`; its Trip panel form is hidden) accepts a
+contact-linked inquiry and evidence/reason, with actor/date/prior-link audit. Correct changed upstream references in PerfectBook
 as well. Binding edits never edit either application's creation/source fields.
 A lead-owned quote handoff passes that exact inquiry reference, including legacy
 staged quotes, and uses PerfectBook's departure booking route when known. A
