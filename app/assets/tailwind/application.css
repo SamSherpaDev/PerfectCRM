@@ -659,10 +659,10 @@
 
   /* Page header: title left, drawing top-right, actions bottom-right */
   .page-header {
-    @apply relative flex min-h-40 flex-col gap-5 sm:flex-row sm:items-end sm:justify-between;
+    @apply relative flex min-h-40 flex-col gap-5 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between;
   }
   .page-header .page-actions {
-    @apply relative z-[1] flex flex-wrap items-center gap-2 sm:shrink-0;
+    @apply relative z-[1] flex flex-wrap items-center gap-2 sm:ml-auto sm:justify-end;
   }
 
   /* Navigation: the rail stays ink in both schemes */
@@ -3046,12 +3046,12 @@
  * Call scheduling & Today calendar (crm-call-scheduling)
  * ------------------------------------------------------------------------- */
 .call-schedule-pop {
+  position: relative;
   display: inline-block;
   max-width: 100%;
 }
 .call-schedule-pop[open] {
-  flex-basis: 100%;
-  width: 100%;
+  z-index: 10;
 }
 .call-schedule-pop > summary {
   list-style: none;
@@ -3064,18 +3064,27 @@
 .call-schedule-pop > summary::-webkit-details-marker {
   display: none;
 }
+.call-schedule-pop[open] > summary {
+  box-shadow: var(--pb-press);
+}
 .call-schedule-sheet {
-  margin-top: 10px;
-  width: 100%;
-  max-width: 460px;
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 460px;
+  max-width: calc(100vw - 32px);
   padding: 14px;
   border-radius: 12px;
-  border: 1px solid var(--pb-rule);
+  border: 1px solid var(--pb-edge);
   background-color: var(--pb-paper);
   background-image: var(--pb-grain);
-  box-shadow: var(--pb-raise-sm);
+  box-shadow: var(--pb-raise);
   color: var(--pb-ink);
   text-align: left;
+}
+.page-actions .call-schedule-sheet {
+  right: auto;
+  left: 0;
 }
 .call-schedule-form {
   display: flex;
@@ -3342,9 +3351,20 @@
 }
 
 @media (max-width: 749px) {
+  body:has(.call-schedule-pop[open]) .reply-pill {
+    display: none;
+  }
+  .call-schedule-pop[open] {
+    flex-basis: 100%;
+    width: 100%;
+  }
   .call-schedule-sheet {
+    position: static;
+    margin-top: 10px;
+    width: 100%;
     max-width: 100%;
     padding: 12px;
+    box-shadow: var(--pb-raise-sm);
   }
   .call-schedule-grid {
     grid-template-columns: minmax(0, 1fr);
