@@ -10,6 +10,18 @@ module Today
   class Summary
     DEPARTING_WITHIN = 14.days
     RETURNED_WITHIN = 7.days
+    MAX_CALL_ATTEMPTS = 3
+    FRESH_INQUIRY_WITHIN = 24.hours
+    CALL_LIST_WINDOW = 14.days
+    CALL_CADENCE_STARTS_ON = Date.new(2026, 10, 20)
+
+    CallEntry = Data.define(:lead, :attempt, :attempt_label, :last_call, :waited_since)
+
+    ATTEMPT_LABELS = {
+      1 => "1st try",
+      2 => "2nd try",
+      3 => "3rd try"
+    }.freeze
 
     attr_reader :today, :now, :calendar_view, :calendar_date
 
@@ -43,22 +55,92 @@ module Today
       Lead.in_new_tab.count
     end
 
-    # One full weekday without a successful personal reply or logged call.
-    # Keep this separate from replies owed: it includes inquiries with no email
-    # thread, and handling an inquiry once removes it even if more mail arrives.
-    def not_yet_called
-      since_inquiry = "COALESCE(leads.received_at, leads.created_at)"
-      replied = Message.personal_replies.where(status: %w[sent received])
-        .joins(:conversation).where(conversations: { linkable_type: "Lead" })
-        .where("conversations.linkable_id = leads.id AND messages.sent_at >= #{since_inquiry}")
-      called = ActivityEvent.where(subject_type: "Lead", kind: "call")
-        .where("activity_events.subject_id = leads.id AND occurred_at >= #{since_inquiry}")
+    # Daily call list in priority order:
+    # (a) inquiries from the last 24 hours with a phone and no call yet,
+    #     newest first, so a fresh inquiry is always on top;
+    # (b) leads with a phone whose calls never connected (Attempted,
+    #     Voicemail, or No answer) and that are due another try (attempt 2
+    #     due 1 day after attempt 1; attempt 3 due 2 days after attempt 2;
+    #     at most 3 attempts);
+    # (c) older uncalled inquiries up to 14 days old, oldest first.
+    # Calls logged before CALL_CADENCE_STARTS_ON belong to the separate
+    # backlog call sheet: such a lead stays off the list until a new call
+    # starts its cadence.
+    # A cadence is the run of calls within 14 days before the latest call,
+    # and a lead leaves the list once its latest call is over 14 days old.
+    # Leads drop off once a call connects, they are marked Not interested,
+    # spam or archived, have a scheduled call, or have used 3 attempts.
+    # Leads flagged as suspected spam stay on the list for a check.
+    def call_entries
+      @call_entries ||= begin
+        window_start = @now - CALL_LIST_WINDOW
+        cadence_start = CALL_CADENCE_STARTS_ON.in_time_zone
+        recently_called = ActivityEvent.where(subject_type: "Lead", kind: "call")
+          .where("activity_events.subject_id = leads.id").where("activity_events.occurred_at >= ?", [ window_start, cadence_start ].max)
+        candidates = Lead.open
+          .where(not_interested_marked_at: nil, spam_marked_at: nil)
+          .where("TRIM(COALESCE(leads.phone, '')) <> '' OR TRIM(COALESCE(leads.phone_raw, '')) <> ''")
+          .where("(leads.status = 'new' AND COALESCE(leads.received_at, leads.created_at) >= ?) OR EXISTS (#{recently_called.select(:id).to_sql})", window_start)
+          .where.not(id: ScheduledCall.scheduled.select(:lead_id))
+          .includes(:tags)
+          .to_a
+        calls_by_lead = ActivityEvent.where(subject_type: "Lead", kind: "call", subject_id: candidates.map(&:id))
+          .order(:occurred_at, :id).group_by(&:subject_id)
 
-      Lead.by_status("new").where(not_interested_marked_at: nil)
-        .where("#{since_inquiry} < ?", one_business_day_ago)
-        .where("NOT EXISTS (#{replied.select(:id).to_sql})")
-        .where("NOT EXISTS (#{called.select(:id).to_sql})")
-        .order(Arel.sql("#{since_inquiry} ASC, leads.id ASC"))
+        fresh = []
+        retries = []
+        older = []
+
+        candidates.each do |lead|
+          waited_since = lead.received_at || lead.created_at
+          calls = calls_by_lead.fetch(lead.id, []).select { |event| event.occurred_at >= waited_since }
+          backlog_calls, calls = calls.partition { |event| event.occurred_at < cadence_start }
+
+          if calls.empty?
+            next unless backlog_calls.empty? && lead.status == "new" && waited_since >= window_start
+
+            entry = CallEntry.new(
+              lead: lead,
+              attempt: 1,
+              attempt_label: ATTEMPT_LABELS.fetch(1),
+              last_call: nil,
+              waited_since: waited_since
+            )
+            (waited_since >= @now - FRESH_INQUIRY_WITHIN ? fresh : older) << entry
+            next
+          end
+
+          last_call = calls.last
+          next if last_call.occurred_at < window_start
+
+          cadence = calls.select { |call| call.occurred_at >= last_call.occurred_at - CALL_LIST_WINDOW }
+          next if cadence.size >= MAX_CALL_ATTEMPTS
+          next if cadence.any? { |call| call_connected?(call) }
+
+          attempt = cadence.size + 1
+          days_wait = attempt == 2 ? 1 : 2
+          due = last_call.occurred_at <= @now - days_wait.days ||
+            last_call.occurred_at.in_time_zone.to_date <= @today - days_wait.days
+          next unless due
+
+          retries << CallEntry.new(
+            lead: lead,
+            attempt: attempt,
+            attempt_label: ATTEMPT_LABELS.fetch(attempt),
+            last_call: last_call,
+            waited_since: waited_since
+          )
+        end
+
+        fresh.sort_by! { |entry| [ -entry.waited_since.to_f, -entry.lead.id ] }
+        retries.sort_by! { |entry| [ entry.attempt, entry.last_call.occurred_at, entry.waited_since, entry.lead.id ] }
+        older.sort_by! { |entry| [ entry.waited_since, entry.lead.id ] }
+        fresh + retries + older
+      end
+    end
+
+    def not_yet_called
+      @not_yet_called ||= call_entries.map(&:lead)
     end
 
     # Clients on the books: everything that is not archived.
@@ -176,18 +258,18 @@ module Today
       nil
     end
 
-    def one_business_day_ago
-      as_of = @now
-      # Freeze elapsed business time at Saturday midnight throughout the weekend.
-      as_of = as_of.beginning_of_week(:monday) + 5.days if as_of.saturday? || as_of.sunday?
-      cutoff = as_of - 1.day
-      cutoff -= 1.day while cutoff.saturday? || cutoff.sunday?
-      cutoff
-    end
-
     def waiting_threads
       Conversation.where(ignored: false).ordered.preload(:linkable, :messages)
         .merge(Conversation.waiting_on_you).linked
+    end
+
+    def call_outcome(event)
+      event.metadata.is_a?(Hash) ? event.metadata["outcome"].to_s : ""
+    end
+
+    def call_connected?(event)
+      outcome = call_outcome(event)
+      outcome == "connected" || outcome.blank?
     end
   end
 end

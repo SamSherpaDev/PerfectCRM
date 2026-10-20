@@ -100,19 +100,31 @@ Bot and spam scoring (`Leads.suspicion_hits`, `25` points per hit):
 - Flag-only hits: `many_links` (3+ links in `message`), `disposable_domain`
   (known throwaway email domain), and `name_matches_email` (local-part matches
   normalized name), alone or combined. The lead is tagged `suspected_spam`
-  (`Looks like spam`), kept in the `New` tab for review, prefixed `[check]` on
-  the intake email copy, and withheld from automatic first replies and ad
-  conversions until reviewed.
+  (`Looks like spam`), kept in the `New` tab and on the Today call list (with a
+  `Check` marker) for review, alerted with a `Check, then call:` subject, and
+  withheld from automatic first replies and ad conversions until reviewed.
 - Missing or unparseable `timing` is not a hit; such inquiries are scored on the
   remaining signals only.
 
+Instant call alert (`LeadIntakeMailer#inquiry_copy`): sent immediately to
+`info@sherpaholidays.com` (with `Reply-To` set to the visitor) for every new
+inquiry except confirmed spam, bot traps, duplicates, and safety-net copies.
+Subject starts with `Call now: <First name> - <Trip>`, or
+`Check, then call: <First name> - <Trip>` when the inquiry has a flag-only
+suspicion hit. Without a phone number it starts with `Reply now:` (or
+`Check, then reply:`) instead. The first lines carry a tap-to-call `tel:` link
+(or a `mailto:` reply link when there is no phone), the suspicion reason for
+flagged inquiries, `Reference: SH-XXXX`, and a direct link to the lead page.
+
 Source derivation: `google_ads` on `gclid`/`gbraid`/`wbraid`, or
-`utm_source=google` with a paid medium (`cpc`, `ppc`, `paid`); `meta_ads`
-on `facebook`/`instagram`/`meta` with a paid medium; `trade_show` on
-`utm_medium=event` (travel show booth links and QR codes); else `website_form`.
-`campaign_name` copies `utm_campaign`. With `acquisition`, this compatibility
-projection uses the eligible last-non-direct touch, falling back to the eligible
-last touch, with source and campaign from that complete snapshot. See the
+`utm_source=google` with a paid medium (`cpc`, `ppc`, `paid`); `meta_ads` on
+`facebook`/`instagram`/`meta`/`fb`/`ig` with a paid medium or `ad_id`;
+`trade_show` on `utm_medium=event` (travel show booth links and QR codes); else
+`website_form`. `campaign_name` copies `utm_campaign`.
+With `acquisition`, this compatibility projection uses the eligible
+last-non-direct touch, falling back to the eligible last touch, and when
+`last_touch` is `unavailable` on a permission-allowed submission, falling back
+to `submission_page.landing_url` (utm/ad parameters). See the
 [source contract](#additive-browser-payloads) for permission and ordering rules.
 The reference is `SH-XXXX`.
 
@@ -206,6 +218,21 @@ converted inquiries' read-only validation without generating notifications or
 sales activity. Each repaired inquiry, client, or person's owner refreshes its
 existing search projection so recovered phone tails are searchable, without
 changing activity timestamps. No production execution is part of this change.
+
+To apply the `submission_page.landing_url` source fallback to inquiries saved
+before it existed, run once after deploying, or safely repeat:
+
+```sh
+RAILS_ENV=production bin/rails leads:backfill_attribution
+```
+
+It prints only numeric counts as JSON: `leads_updated`, `conversions_queued`.
+It touches only permission-allowed inquiries whose `last_touch` was
+`unavailable` and whose landing URL carries utm/ad/click parameters. It changes
+`source` only from `website_form`, fills a blank `campaign_name`, adds missing
+attribution keys without overwriting present ones, and refreshes search without
+activity. Each updated reportable inquiry queues `AdConversions::LeadJob`, so
+platform event windows still apply. Repeating it makes no further writes.
 
 ## Details follow-up (optional step two)
 
@@ -516,8 +543,8 @@ verdicts and repeated statuses leave stage timing unchanged.
   [README, Leads](../README.md#leads).
 - **Email copy.** A background job mails the inquiry to
   `info@sherpaholidays.com`, Reply-To the visitor, From the app's `MAIL_FROM`
-  (default `info@sherpaholidays.com`). Suspected spam prefixes
-  the subject with `[check]`. Attribution metadata is omitted, and the
+  (default `info@sherpaholidays.com`). Suspected spam starts
+  the subject with `Check, then call:` (`Check, then reply:` without a phone). Attribution metadata is omitted, and the
   displayed page URL strips `gclid`, `gbraid`, `wbraid`, and `utm_*` query
   parameters. A mail failure never touches the lead. If a website-form copy or
   fallback email arrives in the mailbox without a saved intake lead, the daily

@@ -1,16 +1,25 @@
+<% if @tel_href.present? -%>
+Call now: tel:<%= @tel_href %><%= @phone && @phone != @tel_href ? " (#{@phone})" : "" %>
+<% else -%>
+Reply now: <%= @lead.email.present? ? "mailto:#{@lead.email}" : lead_url(@lead) %>
+<% end -%>
+<% if @check_first -%>
+Check first: flagged as possible spam<%= @lead.spam_reason ? " (#{@lead.spam_reason})" : "" %>, suspicion score <%= @lead.spam_score %>.
+<% end -%>
+Reference: <%= @lead.reference %>
+Lead page: <%= lead_url(@lead) %>
+
 New website inquiry — reply to answer them directly.
 
 Name: <%= @lead.name %>
 Email: <%= @lead.email %>
-Phone: <%= @lead.phone_raw.presence || @lead.phone.presence || "—" %>
-Has in mind: <%= @lead.trip_title.presence || @lead.trip_handle.presence || "Not sure yet" %>
+Phone: <%= @phone || "—" %>
+Has in mind: <%= @lead.trip_title.presence || @lead.trip_interest.presence || @lead.trip_handle.presence || "Not sure yet" %>
 
 Message:
 <%= @lead.message.presence || "—" %>
 
-Reference: <%= @lead.reference %>
 Source: <%= @lead.source %><% if @lead.campaign_name.present? %> · <%= @lead.campaign_name %><% end %>
 Placement: <%= @lead.placement.presence || "—" %>
 Page: <%= @page_url || "-" %>
-<% if @lead.suspected_spam? %>Flagged for a check (spam score <%= @lead.spam_score %>).<% end %>
 Open in PerfectCRM: <%= lead_url(@lead) %>

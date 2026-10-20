@@ -54,23 +54,54 @@
 
   <%= render "scheduled_calls/calendar", summary: @summary %>
 
-  <section class="card card-pad" aria-labelledby="not-yet-called-heading">
+  <% today_return_to = root_path({ view: (@summary.calendar_view if @summary.calendar_view != "week"), date: (@summary.calendar_date.iso8601 if @summary.calendar_date != @summary.today) }.compact) %>
+  <section class="card card-pad" id="not-yet-called-section" aria-labelledby="not-yet-called-heading">
     <div class="card-header">
-      <h2 class="card-title" id="not-yet-called-heading">Not yet called</h2>
+      <h2 class="card-title" id="not-yet-called-heading">Calls to make today</h2>
       <%= badge @summary.not_yet_called.count, :neutral %>
     </div>
-    <%= card_caption "New inquiries over one business day old, with no personal reply or logged call. Oldest first; Monday to Friday." %>
-    <% inquiries = @summary.not_yet_called %>
-    <% if inquiries.any? %>
-      <ul class="rowlist">
-        <% inquiries.each do |lead| %>
-          <li>
-            <div class="who">
-              <%= link_to lead.name, lead_path(lead), class: "n link" %>
-              <span class="s"><%= lead.trip_interest.presence || "Trip inquiry" %></span>
+    <%= card_caption "Last 24 hours of new inquiries with a phone (newest first), then unanswered calls due a retry on Day 1 (2nd try) and Day 3 (3rd try), then older first tries up to 14 days old." %>
+    <% entries = @summary.call_entries %>
+    <% if entries.any? %>
+      <ul class="divide-y divide-rule-2">
+        <% entries.each do |entry| %>
+          <% lead = entry.lead %>
+          <li class="scheduled-call-row" id="call_list_lead_<%= lead.id %>">
+            <div class="scheduled-call-row-main">
+              <div class="flex flex-wrap items-center gap-2">
+                <%= link_to lead.name, lead_path(lead), class: "link font-medium" %>
+                <%= badge entry.attempt_label, entry.attempt > 1 ? :warning : :neutral %>
+                <% if lead.potential? %><%= badge "Potential", :brand %><% end %>
+                <% if lead.suspected_spam? %><%= badge "Check", :danger %><% end %>
+              </div>
+              <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs muted">
+                <% if lead.display_phone.present? %>
+                  <span class="font-medium text-ink-2 tnum"><%= lead.display_phone %></span>
+                <% end %>
+                <span>Waiting <%= distance_of_time_in_words(entry.waited_since, @summary.now) %></span>
+                <% if entry.last_call %>
+                  <span>Last: <%= CallLog::LABELS.fetch(entry.last_call.metadata["outcome"], "Called") %> <%= distance_of_time_in_words(entry.last_call.occurred_at, @summary.now) %> ago</span>
+                <% end %>
+                <span><%= lead.trip_interest.presence || lead.trip_title.presence || "Trip inquiry" %></span>
+              </div>
             </div>
-            <div class="meta">
-              <span>Received <%= date_short((lead.received_at || lead.created_at).to_date) %></span>
+
+            <div class="scheduled-call-row-actions">
+              <%= form_with url: lead_calls_path(lead), method: :post, class: "scheduled-call-outcomes", data: { turbo: false } do |form| %>
+                <%= form.hidden_field :save_key, value: SecureRandom.uuid, id: nil %>
+                <%= form.hidden_field :direction, value: "outbound", id: nil %>
+                <%= form.hidden_field :return_to, value: today_return_to, id: nil %>
+                <% CallLog::ONE_TAP.each do |outcome| %>
+                  <%= button_tag CallLog::LABELS.fetch(outcome), name: "outcome", value: outcome, class: "btn-secondary btn-xs" %>
+                <% end %>
+              <% end %>
+
+              <%= render "scheduled_calls/popover",
+                lead: lead,
+                scheduled_call: nil,
+                return_to: today_return_to,
+                trigger_class: "btn-secondary btn-xs",
+                id_prefix: "today_call_list_schedule_#{lead.id}" %>
             </div>
           </li>
         <% end %>
@@ -78,8 +109,8 @@
     <% else %>
       <div class="empty-inline">
         <%= sketch :enso, class: "enso" %>
-        <p class="text-sm text-ink">No inquiries waiting for first contact.</p>
-        <p class="text-xs muted">Older new inquiries will appear here until you reply or log a call.</p>
+        <p class="text-sm text-ink">No calls to make right now.</p>
+        <p class="text-xs muted">New inquiries with a phone from the last 14 days and due 2nd or 3rd call tries appear here.</p>
       </div>
     <% end %>
   </section>

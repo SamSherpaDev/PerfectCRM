@@ -5,7 +5,7 @@
 # verification, source derivation, suspicion scoring, and rate limiting.
 module Leads
   PAID_MEDIUMS = %w[cpc ppc paid].freeze
-  META_SOURCES = %w[facebook instagram meta].freeze
+  META_SOURCES = %w[facebook instagram meta fb ig].freeze
   DISPOSABLE_DOMAINS = %w[
     mailinator.com guerrillamail.com 10minutemail.com tempmail.com
     yopmail.com trashmail.com getnada.com mohmal.com
@@ -50,7 +50,7 @@ module Leads
   end
 
   # google_ads on a click id or google+paid; meta_ads on a meta
-  # source+paid medium; trade_show on utm_medium=event (booth QR codes);
+  # source with a paid medium or ad_id; trade_show on utm_medium=event (booth QR codes);
   # else website_form.
   def derive_source(attribution)
     attribution = (attribution || {}).with_indifferent_access
@@ -61,7 +61,7 @@ module Leads
     medium = attribution[:utm_medium].to_s.strip.downcase
     paid = PAID_MEDIUMS.include?(medium)
     return "google_ads" if source == "google" && paid
-    return "meta_ads" if META_SOURCES.include?(source) && paid
+    return "meta_ads" if META_SOURCES.include?(source) && (paid || attribution[:ad_id].present?)
     return "trade_show" if medium == "event"
 
     "website_form"

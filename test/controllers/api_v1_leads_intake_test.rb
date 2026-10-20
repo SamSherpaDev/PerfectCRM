@@ -316,6 +316,8 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     "facebook paid" => [ { "utm_source" => "facebook", "utm_medium" => "cpc" }, "meta_ads" ],
     "instagram paid" => [ { "utm_source" => "instagram", "utm_medium" => "ppc" }, "meta_ads" ],
     "meta paid" => [ { "utm_source" => "meta", "utm_medium" => "paid" }, "meta_ads" ],
+    "fb paid macro" => [ { "utm_source" => "fb", "utm_medium" => "paid" }, "meta_ads" ],
+    "ig paid macro" => [ { "utm_source" => "ig", "utm_medium" => "paid" }, "meta_ads" ],
     "facebook organic" => [ { "utm_source" => "facebook", "utm_medium" => "social" }, "website_form" ],
     "trade show booth" => [ { "utm_source" => "bay-area-travel-show", "utm_medium" => "event" }, "trade_show" ],
     "trade show medium any case" => [ { "utm_medium" => " Event " }, "trade_show" ],
@@ -348,6 +350,27 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     assert_response :accepted
     assert_equal "website_form", Lead.last.capture_channel
     assert_equal "google_ads", Lead.last.source
+  end
+
+  test "a permission-allowed Meta inquiry with unavailable last_touch falls back to submission_page landing_url and queues ad conversion" do
+    landing_url = "https://www.sherpaholidays.com/pages/everest-base-camp-trek?utm_source=ig&utm_medium=paid&utm_campaign=sh_us_cold_cbo&campaign_id=52666579688338&adset_id=52666579688138&utm_content=Ad+B+At+your+pace+-+Round+2+Hook+A&ad_id=52670563689538"
+    assert_enqueued_with(job: AdConversions::LeadJob) do
+      post_intake intake_body(
+        "attribution" => {},
+        "acquisition" => {
+          "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true, "observed_at" => Time.current.iso8601 },
+          "first_touch" => { "unknown_reason" => "unavailable" },
+          "last_touch" => { "unknown_reason" => "unavailable" },
+          "last_non_direct_touch" => nil,
+          "submission_page" => { "url" => landing_url, "referrer" => "https://www.instagram.com/" }
+        }
+      )
+    end
+    assert_response :accepted
+    lead = Lead.last
+    assert_equal "meta_ads", lead.source
+    assert_equal "sh_us_cold_cbo", lead.campaign_name
+    assert_equal "52670563689538", lead.metadata.dig("attribution", "ad_id")
   end
 
   test "legacy intake remains accepted but missing advertising permission withholds exports" do
@@ -795,14 +818,36 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     assert_nil lead.spam_marked_at
   end
 
-  test "flagged lead email copy carries the check prefix" do
+  test "flagged real-looking inquiry gets a check-first call alert while a clean inquiry gets call now" do
     body = intake_body(
-      "contact" => { "name" => "Anna Lindqvist", "email" => "annalindqvist@example.com" }
+      "contact" => { "name" => "Anna Lindqvist", "email" => "annalindqvist@gmail.com", "phone_raw" => "+1 415 555 0199" }
     )
     post_intake body
-    perform_enqueued_jobs only: LeadNotificationJob
+    flagged = Lead.last
+    assert flagged.suspected_spam?
+    assert flagged.lead_notifications.exists?(event: "email_copy")
+    assert_emails 1 do
+      perform_enqueued_jobs only: LeadNotificationJob
+    end
+    check = ActionMailer::Base.deliveries.last
+    assert_equal "Check, then call: Anna - Private Nepal tour", check.subject
+    check_lines = check.body.to_s.lines.first(4).map(&:strip)
+    assert_equal "Call now: tel:+14155550199 (+1 415 555 0199)", check_lines[0]
+    assert_equal "Check first: flagged as possible spam (Name matches email), suspicion score 25.", check_lines[1]
+    assert_equal "Reference: #{flagged.reference}", check_lines[2]
+    assert_match(%r{\ALead page: https?://.+/leads/#{flagged.id}\z}, check_lines[3])
+    assert_includes Today::Summary.new.call_entries.map(&:lead), flagged
+
+    real_body = intake_body(
+      "contact" => { "name" => "Clara Jensen", "email" => "clara@example.com", "phone_raw" => "+1 415 555 0134" }
+    )
+    post_intake real_body
+    assert_emails 1 do
+      perform_enqueued_jobs only: LeadNotificationJob
+    end
     mail = ActionMailer::Base.deliveries.last
-    assert_match(/\A\[check\] New inquiry from/, mail.subject)
+    assert_equal "Call now: Clara - Private Nepal tour", mail.subject
+    assert_includes mail.body.to_s.lines.first, "tel:+14155550134"
   end
 
   test "end-to-end bot protection: real submission creates a lead and conversion while fast, honeypot, and duplicate submissions do not" do

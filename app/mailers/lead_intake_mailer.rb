@@ -2,13 +2,31 @@
 # Reply-To the visitor so one tap answers them. Attribution stays in lead
 # metadata; the displayed page URL strips tracking query parameters.
 class LeadIntakeMailer < ApplicationMailer
+  def self.real_inquiry?(lead)
+    lead.present? &&
+      !lead.archived? &&
+      lead.spam_marked_at.nil? &&
+      !lead.safety_net_inquiry? &&
+      !lead.external_ref.to_s.start_with?("mail_message:")
+  end
+
   def inquiry_copy(lead)
+    return unless self.class.real_inquiry?(lead)
+
     @lead = lead
     @page_url = displayed_page_url(lead)
+    @phone = lead.phone_raw.presence || lead.phone.presence
+    @tel_href = lead.phone.presence || @phone.to_s.gsub(/[^\d+]/, "").presence
+    @check_first = lead.spam_score.to_i.positive? || lead.suspected_spam?
 
-    subject = "New inquiry from #{lead.name}: #{lead.trip_title.presence || 'not sure yet'}"
-    subject = "[check] #{subject}" if lead.suspected_spam?
+    first_name = lead.name.to_s.split.first.presence || lead.name.to_s.strip.presence || "New inquiry"
+    trip = lead.trip_title.presence || lead.trip_interest.presence || lead.trip_handle.presence || "not sure yet"
+    verb = @tel_href.present? ? "call" : "reply"
+    prefix = @check_first ? "Check, then #{verb}" : "#{verb.capitalize} now"
+    subject = "#{prefix}: #{first_name} - #{trip}"
 
+    headers["Auto-Submitted"] = "auto-generated"
+    headers["X-Auto-Response-Suppress"] = "All"
     mail(
       to: "info@sherpaholidays.com",
       reply_to: lead.email,

@@ -1,5 +1,6 @@
 class ScheduledCallsController < ApplicationController
   include LeadsReturnPath
+  include TodayReturnPath
 
   before_action :set_lead
   before_action :set_scheduled_call, only: %i[update complete cancel]
@@ -64,18 +65,6 @@ class ScheduledCallsController < ApplicationController
   def return_destination
     value = params[:return_to].to_s
     safe_leads_return_path(value) || safe_today_return_path(value) || safe_lead_return_path(value) || lead_path(@lead)
-  end
-
-  def safe_today_return_path(value)
-    uri = URI.parse(value)
-    return unless uri.relative? && uri.host.nil? && uri.path == root_path
-
-    query = URI.decode_www_form(uri.query.to_s).to_h
-    view = query["view"] if %w[week month].include?(query["view"])
-    date = Date.iso8601(query["date"]).iso8601 if query["date"].present?
-    root_path({ view: view, date: date }.compact)
-  rescue URI::InvalidURIError, ArgumentError
-    nil
   end
 
   def safe_lead_return_path(value)

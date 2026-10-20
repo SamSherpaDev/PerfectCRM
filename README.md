@@ -515,7 +515,7 @@ files while another process is using them.
 ## Today and follow-ups
 
 Today (the root route) is the captain's morning screen: three tiles
-(Waiting on you, New leads, Active clients), then Scheduled calls, Not yet called, and Replies waiting (Follow-ups due, Quotes out, Overdue, Follow-ups, Departing soon, and Back from the mountains are hidden from the Today view while their data and queries remain in `Today::Summary`). Waiting on you counts linked threads
+(Waiting on you, New leads, Active clients), then Scheduled calls, Calls to make today, and Replies waiting (Follow-ups due, Quotes out, Overdue, Follow-ups, Departing soon, and Back from the mountains are hidden from the Today view while their data and queries remain in `Today::Summary`). Waiting on you counts linked threads
 where the client wrote last (same rule as the Inbox tab; unknown senders
 wait in triage). Inquiry threads ignore automatic first replies and failed
 personal email; they stay waiting until a successful personal reply or a
@@ -529,12 +529,24 @@ passed, New leads counts the leads in the Leads New tab (untriaged leads in
 New, Chatting, or Nudged), and Active clients
 counts clients that are not archived.
 
-Not yet called lists active, unconverted inquiries still at New, oldest
-receipt first (creation time if no receipt is recorded), once more than one
-business day has passed with no successful personal reply or logged call since
-receipt. Automatic greetings and queued, sending, or failed personal email do
-not clear it; any logged call outcome does. Business time runs Monday to Friday
-in the Pacific timezone, pausing over the weekend. Every row opens the inquiry.
+Calls to make today is the daily call list in priority order (receipt time, or
+creation time if no receipt is recorded): first, active new inquiries from the
+last 24 hours with a phone number and no logged call yet, newest first; second,
+open leads with a phone number whose calls never connected (`Attempted`,
+`Voicemail`, or `No answer`) and that are due another try (attempt 2 due 1 day
+after attempt 1, attempt 3 due 2 days after attempt 2 - Day 0, Day 1, Day 3, up
+to 3 attempts); third, older uncalled inquiries up to 14 days old, oldest
+first. Uncalled inquiries over 14 days old and leads whose latest call is over
+14 days old stay off the list. Calls logged before 2026-10-20
+(`Today::Summary::CALL_CADENCE_STARTS_ON`) belong to the separate backlog call
+sheet: a lead with such a call stays off the list until a new call is logged,
+which starts its Day 0, Day 1, Day 3 cadence. Each
+row shows its attempt badge (`1st try`, `2nd try`, or `3rd try`), a `Check`
+marker on inquiries flagged as looking like spam, wait time, and one-tap
+`Talked` / `Voicemail` / `No answer` logging plus `Schedule call`. Leads drop
+off the list once a call connects (`Talked`), they are marked
+`Not interested`, `spam`, or `archived`, have an open scheduled call, or have
+used 3 attempts.
 
 Tasks belong to clients, leads, or organizations. Today lists overdue tasks
 and those due through the next 7 days, using the Pacific date. Tap the
@@ -581,7 +593,7 @@ followed by a Pacific week or month calendar
 
 The production 7am Pacific digest (`TodayDigestJob` + `CaptainDigestMailer`,
 same schedule file) emails today's follow-ups, overdue items, missed and
-upcoming scheduled calls, replies waiting, the Not yet called count, and
+upcoming scheduled calls, replies waiting, the Calls to make today count, and
 departures. Task and call links open their records, and Open Today opens the
 morning screen. It goes to the first allowlisted address.
 `Setting#digest_enabled` controls it; it is enabled by default, and its Settings
@@ -689,7 +701,7 @@ Not interested is not spam: it does not set `spam_marked_at` or the
 `suspected_spam` tag, and it does not alter spam reports or ad conversions
 already sent.
 
-While marked not interested, a lead is excluded from Today's Not yet called,
+While marked not interested, a lead is excluded from Today's Calls to make today,
 New leads, Quotes out, Follow-ups, Replies waiting, and Scheduled calls, from
 Inbox Waiting tabs, from the morning digest call and follow-up lists, from
 pipeline columns, totals, and stale/nudge indicators, from task/document nudge
@@ -723,7 +735,7 @@ described under [Clients](#clients).
 
 Mark as spam on an inquiry or lead row records your verdict, adds the existing
 `suspected_spam` tag, and archives it in one tap. It leaves active leads,
-Inbox, Today's replies and follow-ups, and Not yet called. Find it in Archived;
+Inbox, Today's replies and follow-ups, and Calls to make today. Find it in Archived;
 Not spam clears your verdict and the tag and restores its previous stage.
 Automatically flagged inquiries show Looks like spam with Mark as spam and
 Not spam choices. Website inquiries that fill the hidden trap field or submit
@@ -866,8 +878,13 @@ website touch are three separate facts. Versioned metadata holds `first_touch`,
 Snapshots include actual observed time, source/campaign from the same visit,
 stable campaign/ad IDs, sanitized landing URL/referrer host and permitted
 `gclid`/`gbraid`/`wbraid`/`fbclid`. First touch is immutable while retained;
-missing/denied collection is unknown, not direct. `fbclid` alone is not paid
-Meta. Legacy broad source remains compatible, not proven first discovery.
+missing/denied collection is unknown, not direct. When `last_touch` is
+unavailable on a permission-allowed inquiry, compatibility attribution,
+`/channels/cost-per-inquiry`, and `AdConversions` fall back to
+`submission_page.landing_url` (utm/ad parameters) so Meta inquiries carrying an
+`ad_id` in the landing URL count as `meta_ads` and are reported under
+[Ad conversions](#ad-conversions). `fbclid` alone is not paid Meta. Legacy
+broad source remains compatible, not proven first discovery.
 
 The additive payload and exact field contract are in
 [docs/leads-intake.md](docs/leads-intake.md#source-database-contract-v1).
@@ -913,7 +930,8 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
 | Booked | An explicitly linked or reviewed active PerfectBook booking with an authoritative timestamped first receipt at or after the inquiry | `Booking (deposit paid)` | `Purchase` | USD booking total times the booking value percent (default 35); other currencies report a fixed 2,000 USD |
 
 - Only leads that arrived with a click ID (`gclid`, `gbraid`, `wbraid`, or
-  `fbclid`, with `fbclid` also read from the landing URL) are reported: the form drops
+  `fbclid`, with `fbclid` also read from the landing URL), or Meta-sourced leads
+  whose attribution carries an `ad_id`, are reported: the form drops
   click IDs when marketing consent is off. Explicit allowed measurement/sharing
   permission and no opt-out are required at recording and delivery; missing
   legacy permission is withheld. Archived, suspected-spam, explicit `is_test`,
