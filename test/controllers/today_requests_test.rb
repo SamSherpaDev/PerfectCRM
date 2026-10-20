@@ -64,20 +64,38 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     messages.last.conversation.update!(ignored: true)
     get root_path
     assert_response :success
+    assert_equal "1", stat_value("New leads")
     assert_select "[aria-label='Added to New from email']", count: 0
     assert_select "[aria-label='Unlinked inquiries']", count: 0
   end
 
-  test "today counts new leads and active clients" do
+  test "today counts new leads matching the New tab and links to it" do
     Lead.create!(name: "Priya", email: "priya@example.com")
     Lead.create!(name: "Ken", email: "ken@example.com", status: "chatting")
+    potential = Lead.create!(name: "Tenzing", email: "tenzing@example.com")
+    potential.mark_potential!
+    unsure = Lead.create!(name: "Dawa", email: "dawa@example.com")
+    unsure.mark_unsure!
+    spam = Lead.create!(name: "Spammer", email: "spam@example.com")
+    spam.mark_as_spam!
+    archived = Lead.create!(name: "Archived", email: "archived@example.com")
+    archived.archive!
+    Lead.create!(name: "Quoted", email: "quoted@example.com", status: "quoted")
     Lead.create!(name: "Ana", email: "ana@example.com", status: "lost", lost_reason: "price")
     Client.create!(name: "Retired Ray", email: "ray@example.com").archive!
 
     get root_path
     assert_response :success
-    assert_equal "1", stat_value("New leads")
+    assert_equal "2", stat_value("New leads")
     assert_equal "1", stat_value("Active clients")
+    assert_select "a.stat.stat-link[href=?]", leads_path(tab: "new") do
+      assert_select ".stat-value", "2"
+      assert_select "p", "New leads"
+    end
+
+    get leads_path(tab: "new")
+    assert_response :success
+    assert_select "nav.tabs a.tab-on", text: /New.*2/
   end
 
   test "not yet called links every older inquiry oldest first and clears after a logged call" do

@@ -1,6 +1,41 @@
 require "test_helper"
 
 class TodaySummaryTest < ActiveSupport::TestCase
+  test "new_leads matches Lead.in_new_tab and excludes triaged leads" do
+    untriaged_new = inquiry("Untriaged new", 2.days.ago)
+    untriaged_chatting = Lead.create!(name: "Untriaged chatting", status: "chatting")
+    untriaged_nudged = Lead.create!(name: "Untriaged nudged", status: "nudged")
+    potential = inquiry("Marked potential", 2.days.ago)
+    potential.mark_potential!
+    unsure = inquiry("Marked unsure", 2.days.ago)
+    unsure.mark_unsure!
+    spam = inquiry("Marked spam", 2.days.ago)
+    spam.mark_as_spam!
+    archived = inquiry("Archived", 2.days.ago)
+    archived.archive!
+    Lead.create!(name: "Not interested", status: "lost", lost_reason: "not_a_fit")
+    Lead.create!(name: "Quoted", status: "quoted")
+    inquiry("Converted", 2.days.ago).convert_to_client!
+
+    assert_equal 3, Lead.in_new_tab.count
+    assert_equal 3, Today::Summary.new.new_leads
+
+    untriaged_new.mark_potential!
+    assert_equal 2, Today::Summary.new.new_leads
+
+    untriaged_chatting.mark_unsure!
+    assert_equal 1, Today::Summary.new.new_leads
+
+    untriaged_nudged.update!(status: "lost", lost_reason: "no_reply")
+    assert_equal 0, Today::Summary.new.new_leads
+
+    potential.unmark_potential!
+    assert_equal 1, Today::Summary.new.new_leads
+
+    unsure.unmark_unsure!
+    assert_equal 2, Today::Summary.new.new_leads
+  end
+
   test "quotes for archived spam stop counting while client quotes stay visible" do
     lead = inquiry("Quoted spam", 5.days.ago)
     quote = Quote.create!(lead: lead, status: "sent", sent_at: 1.day.ago, valid_until: Date.tomorrow)
