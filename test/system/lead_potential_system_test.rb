@@ -59,7 +59,7 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
       waiting = Lead.create!(name: "Sorting#{width} Waiting")
       chatting = Lead.create!(name: "Sorting#{width} Chatting", status: "chatting")
       visit leads_path(tab: "new", q: "Sorting#{width}", sort: "name")
-      assert_equal [ "New", "Potential", "Unsure", "Quoted", "Not interested", "Archived" ],
+      assert_equal [ "New", "Potential", "Unsure", "Not interested", "Archived" ],
         all("nav.tabs a").map { |tab| tab.first("span").text }
       assert_link chatting.name
       capture("new-#{width}")
@@ -238,9 +238,9 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
       page.current_window.resize_to(width, 900)
       lead = Lead.create!(name: "Tab traveler #{width}", status: "quoted", source: "manual")
       visit leads_path
-      assert_equal [ "New", "Potential", "Unsure", "Quoted", "Not interested", "Archived" ],
+      assert_equal [ "New", "Potential", "Unsure", "Not interested", "Archived" ],
         all("nav.tabs a").map { |tab| tab.first("span").text }
-      within("nav.tabs") { click_link "Quoted" }
+      visit leads_path(tab: "quoted")
       assert_link lead.name
       assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, width
       find_link(lead.name).scroll_to(:center) if width == 390

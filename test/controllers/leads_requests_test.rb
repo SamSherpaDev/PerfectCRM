@@ -287,7 +287,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     get leads_path
     assert_response :success
     assert_select "h1", "Leads"
-    assert_equal [ "New", "Potential", "Unsure", "Quoted", "Not interested", "Archived" ],
+    assert_equal [ "New", "Potential", "Unsure", "Not interested", "Archived" ],
       css_select("nav.tabs a").map { |tab| tab.at_css("span").text }
     assert_select "nav.tabs a", text: /New.*2/
     assert_select "a", text: "Chatty"
@@ -629,31 +629,32 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     assert_not lead.reload.converted?
   end
 
-  test "fit labels and bars use the supplied band" do
+  test "fit labels and bars are hidden on lead list and detail while model fit_label uses the supplied band" do
     lead = Lead.create!(name: "Panda", fit_score: 80, fit_band: "possible")
+    assert_equal "Possible · 80", lead.fit_label
     get leads_path
     assert_response :success
-    assert_select ".bar-warn", count: 1
-    assert_select "span", text: "Possible · 80"
+    assert_select ".bar-warn", count: 0
+    assert_select ".badge", { text: "Scoring", count: 0 }
     assert_select ".stat", count: 0
     get lead_path(lead)
     assert_response :success
-    assert_select ".bar-warn", count: 1
-    assert_select ".fit-word", text: /Possible fit/
-    assert_select ".fit-word .num", text: "80"
+    assert_select ".bar-warn", count: 0
+    assert_select ".fit-word", count: 0
     assert_select ".stat", count: 0
     lead.update!(fit_score: nil, fit_band: "strong")
+    assert_equal "Strong", lead.fit_label
     get lead_path(lead)
-    assert_select ".fit-word", text: /Strong fit/
-    assert_select ".bar-good", count: 1
+    assert_select ".fit-word", count: 0
+    assert_select ".bar-good", count: 0
   end
 
-  test "unscored inquiry offers audited owner fit choices without setting AI fit or stage" do
+  test "owner fit updates work via PATCH without setting AI fit or stage while fit card is hidden" do
     lead = Lead.create!(name: "Unscored inquiry")
     get lead_path(lead)
-    assert_select ".fit-word", text: "Not scored yet"
-    assert_select "#owner-fit-heading", text: "Set your fit"
-    assert_select "button[name='lead[owner_fit_at_inquiry]']", count: 3
+    assert_select ".fit-word", count: 0
+    assert_select "#owner-fit-heading", count: 0
+    assert_select "button[name='lead[owner_fit_at_inquiry]']", count: 0
 
     Lead::FIT_BANDS.each do |band|
       patch lead_path(lead), params: { lead: { owner_fit_at_inquiry: band } }
@@ -667,9 +668,8 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
       assert_nil lead.fit_score
       assert_equal "new", lead.status
       follow_redirect!
-      assert_select ".fit-word", text: "Not scored yet"
-      assert_select "#owner-fit-heading", text: "Your fit at inquiry: #{band.humanize}"
-      assert_select "button[value='#{band}'][aria-pressed='true']", count: 1
+      assert_select ".fit-word", count: 0
+      assert_select "#owner-fit-heading", count: 0
     end
   end
 
@@ -677,14 +677,12 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     lead = Lead.create!(name: "Scored inquiry", fit_band: "strong", fit_score: 84, fit_reason: "Good trip match")
     patch lead_path(lead), params: { lead: { owner_fit_at_inquiry: "weak" } }
     follow_redirect!
-    assert_select ".fit-word", text: /Strong fit/
-    assert_select ".fit-word .num", text: "84"
-    assert_select ".fit-why", text: "Good trip match"
-    assert_select "#owner-fit-heading", text: "Your fit at inquiry: Weak"
-    assert_equal [ "strong", 84, "Good trip match" ], lead.reload.attributes.values_at("fit_band", "fit_score", "fit_reason")
+    assert_select ".fit-word", count: 0
+    assert_equal [ "strong", 84, "Good trip match", "weak" ],
+      lead.reload.attributes.values_at("fit_band", "fit_score", "fit_reason", "owner_fit_at_inquiry")
   end
 
-  test "archived and converted inquiries show owner fit without editable choices" do
+  test "archived and converted inquiries reject owner fit updates" do
     archived = Lead.create!(name: "Archived inquiry", owner_fit_at_inquiry: "possible")
     archived.archive!
     converted = Lead.create!(name: "Converted inquiry", owner_fit_at_inquiry: "possible")
@@ -692,7 +690,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
 
     [ archived, converted ].each do |lead|
       get lead_path(lead)
-      assert_select "#owner-fit-heading", text: "Your fit at inquiry: Possible"
+      assert_select "#owner-fit-heading", count: 0
       assert_select "button[name='lead[owner_fit_at_inquiry]']", count: 0
       patch lead_path(lead), params: { lead: { owner_fit_at_inquiry: "strong" } }
       assert_redirected_to lead_path(lead)

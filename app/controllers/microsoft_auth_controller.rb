@@ -18,7 +18,7 @@ class MicrosoftAuthController < ApplicationController
     Mail::GraphAuth.connect!(code: params[:code], redirect_uri: microsoft_callback_url)
     Mail::SyncJob.perform_later
     redirect_to edit_settings_path,
-      notice: "Mailbox connected. Ongoing sync starts now; past mail stays for Import history.",
+      notice: "Mailbox connected. Ongoing sync starts now; earlier mail is not synced.",
       status: :see_other
   rescue Mail::WrongMailboxError => e
     redirect_to edit_settings_path, alert: e.message, status: :see_other

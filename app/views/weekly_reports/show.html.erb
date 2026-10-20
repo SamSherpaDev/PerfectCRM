@@ -1,6 +1,6 @@
 <% content_for :title, "Monday ads report · PerfectCRM" %>
 <div class="page">
-  <%= render layout: "shared/page_header", locals: { eyebrow: "Settings", title: "Monday ads report", subtitle: "The email as it arrives, for any past week.", back: [ "Settings", edit_settings_path(anchor: "weekly-report-heading") ] } do %>
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Settings", title: "Monday ads report", subtitle: "The email as it arrives, for any past week.", back: [ "Settings", edit_settings_path ] } do %>
     <%= button_to "Send it now", deliver_settings_weekly_report_path(week: @summary.week_start.iso8601), method: :post, class: "btn-primary btn btn-sm", form: { data: { turbo_confirm: "Send the report for #{@summary.week_label} to #{@recipient}?" } } %>
   <% end %>
   <%= render "shared/flash" %>
@@ -27,4 +27,6 @@
       <%= render "weekly_report_mailer/report", summary: @summary %>
     </div>
   </section>
+
+  <%= render "settings/weekly_report", settings: @settings, spend_weeks: @spend_weeks, ad_spends: @ad_spends %>
 </div>

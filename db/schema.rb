@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_20_012348) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_20_043726) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -838,7 +838,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_20_012348) do
     t.string "meta_dataset_id"
     t.boolean "meta_terms_accepted", default: false, null: false
     t.text "ms_graph_refresh_token"
-    t.boolean "pipeline_digest", default: true, null: false
+    t.boolean "pipeline_digest", default: false, null: false
     t.datetime "relay_last_used_at"
     t.text "relay_secret"
     t.string "sender_name", default: "", null: false

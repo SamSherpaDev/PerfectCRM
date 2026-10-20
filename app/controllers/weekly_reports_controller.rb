@@ -1,7 +1,14 @@
 # The Monday ads report in the app (README.md, "Weekly ads report"): any
-# week's email as it would arrive, plus a send-now button.
+# week's email as it would arrive, plus a send-now button, the recipient, and
+# ad spend entry.
 class WeeklyReportsController < ApplicationController
+  # Weeks offered for typing in ad spend, newest complete week first.
+  SPEND_WEEKS = 8
+
   def show
+    @settings = Setting.current
+    @spend_weeks = (0...SPEND_WEEKS).map { |ago| WeeklyReport::Summary.last_complete_week - (7 * ago) }
+    @ad_spends = AdSpend.where(week_start: @spend_weeks.last..).newest_first
     @summary = WeeklyReport::Summary.new(week_start: requested_week)
     @monthly = WeeklyReport::Monthly.new(month: requested_month, view: params[:view])
     @subject = WeeklyReportMailer.subject_for(@summary)

@@ -1,6 +1,6 @@
 <%# locals: (settings:, spend_weeks:, ad_spends:) %>
 <section class="card card-pad mt-6" aria-labelledby="weekly-report-heading">
-  <h2 class="section-title" id="weekly-report-heading">Monday ads report</h2>
+  <h2 class="section-title" id="weekly-report-heading">Recipient and ad spend</h2>
   <%= card_caption "Every Monday at 7am: last week's inquiries, qualified leads, and bookings by channel, campaign, and trip, with reply speed and cost per inquiry." %>
   <%= form_with model: settings, url: settings_path, method: :patch, class: "mt-4 space-y-4" do |form| %>
     <div class="grid gap-3 sm:grid-cols-2">
@@ -10,12 +10,8 @@
         <p class="hint">Empty sends to <%= Setting.captain_email %>.</p>
       </div>
     </div>
-    <% if settings.errors.include?(:weekly_report_recipient) %>
-      <p class="text-sm text-bad" role="alert"><%= settings.errors.full_messages_for(:weekly_report_recipient).to_sentence %></p>
-    <% end %>
     <div class="flex flex-wrap items-center gap-3">
       <%= form.submit "Save weekly report", class: "btn-secondary btn btn-sm" %>
-      <%= link_to "Preview last week", settings_weekly_report_path, class: "btn-ghost btn btn-sm" %>
     </div>
   <% end %>
 

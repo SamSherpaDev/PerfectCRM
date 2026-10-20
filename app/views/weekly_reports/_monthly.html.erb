@@ -8,7 +8,6 @@
     <%= form.submit "View", class: "btn-secondary btn btn-sm justify-self-start" %>
   <% end %>
   <p class="hint mt-3">As of <%= report.as_of.strftime('%b %-d, %Y %H:%M %Z') %>. Recomputed from current facts. These source views are alternatives, not additive. <% if report.view == "paid" %>Activity and spend through <%= report.end_date.strftime("%b %-d, %Y") %>, the last completed day.<% end %></p>
-  <%= link_to "Review missing sources", leads_path(tab: "missing_source"), class: "link-quiet inline-block mt-3 text-sm" %>
   <% if report.view == "paid" %>
     <%= render "shared/spend_status", daily: report.spend_statuses, limitation: true %>
   <% end %>

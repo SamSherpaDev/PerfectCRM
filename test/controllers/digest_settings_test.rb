@@ -20,6 +20,6 @@ class DigestSettingsTest < ActionDispatch::IntegrationTest
 
     get edit_settings_path
     assert_response :success
-    assert_select "h2", text: "Morning digest"
+    assert_select "h2", text: "Morning digest", count: 0
   end
 end

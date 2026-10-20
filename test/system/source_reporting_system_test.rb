@@ -35,15 +35,12 @@ class SourceReportingSystemTest < ApplicationSystemTestCase
     end
   end
 
-  test "inquiry link review and settings prerequisites stay quiet on phone" do
+  test "inquiry link review form is hidden and settings prerequisites stay quiet on phone" do
     lead = Lead.create!(name: "Synthetic link", source: "manual", perfectbook_contact_id: 55)
-    PerfectBook::Booking.create!(perfectbook_id: 55, perfectbook_contact_id: 55, ref: "BK-55", synced_at: Time.current)
+    booking = PerfectBook::Booking.create!(perfectbook_id: 55, perfectbook_contact_id: 55, ref: "BK-55", synced_at: Time.current)
+    BookingInquiryBinding.link!(booking, lead: lead, actor: "test", evidence: "Checked contact and trip")
     visit lead_path(lead)
-    find("summary", text: "Review inquiry link").click
-    select "#{lead.reference} · #{lead.name}", from: "Purchasing inquiry"
-    fill_in "Evidence and reason", with: "Checked contact and trip"
-    click_button "Confirm inquiry link"
-    assert_text "Booking inquiry link reviewed."
+    assert_no_selector "summary", text: "Review inquiry link"
     assert_text "Primary inquiry: #{lead.reference}"
     page.current_window.resize_to(390, 844)
     visit edit_settings_path(anchor: "ad-conversions-heading")

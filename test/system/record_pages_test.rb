@@ -32,7 +32,7 @@ class RecordPagesTest < ApplicationSystemTestCase
     assert_grid_columns(3)
     assert_selector "h2", text: "Details"
     assert_selector "h2", text: "Timeline"
-    assert_selector "h2", text: "Upcoming"
+    assert_no_selector "h2", text: "Upcoming"
     assert_selector "h2", text: "Files"
     assert_button "Send"
     assert_selector "p", text: "Zephyr check-in 7f3a", count: 1
@@ -41,7 +41,7 @@ class RecordPagesTest < ApplicationSystemTestCase
     assert_no_overflow(1400, "lead page")
   end
 
-  test "client page shows three columns with upcoming, files, and trip" do
+  test "client page shows three columns with files and trip" do
     client = Client.create!(name: "Record Amara", email: "amara@example.com",
       source: "website", perfectbook_contact_id: 4242)
     client.tasks.create!(title: "Call Amara", due_on: Date.current)
@@ -53,8 +53,7 @@ class RecordPagesTest < ApplicationSystemTestCase
     visit client_path(client)
     assert_selector "h1", text: "Record Amara"
     assert_grid_columns(3)
-    assert_selector "h2", text: "Upcoming"
-    assert_text "Call Amara"
+    assert_no_selector "h2", text: "Upcoming"
     assert_selector "h2", text: "Files"
     assert_selector "h2", text: "Trip in PerfectBook"
     assert_text "SH-4242"
@@ -71,16 +70,6 @@ class RecordPagesTest < ApplicationSystemTestCase
     click_button "Save note"
     assert_text "Note saved."
     within(".timeline") { assert_text "Prefers a slow pace" }
-  end
-
-  test "follow-up completes in place from upcoming" do
-    client = Client.create!(name: "Record Task", email: "task@example.com")
-    client.tasks.create!(title: "Confirm itinerary", due_on: Date.current)
-
-    visit client_path(client)
-    find("button[aria-label='Mark done: Confirm itinerary']").click
-    assert_text "Done. Nice."
-    within(".timeline") { assert_text "Completed: Confirm itinerary" }
   end
 
   test "converted lead shows only open client" do
@@ -115,16 +104,15 @@ class RecordPagesTest < ApplicationSystemTestCase
     assert_selector "#files-heading"
     assert_selector "#perfectbook-heading"
     page.current_window.resize_to(390, 844)
-    click_button "Files & dates"
+    click_button "Files"
     assert_selector "[data-tab='files'] .tab-count", text: "0", exact_text: true
 
     click_button "Restore"
     click_button "Reply", exact: true
     assert_button "Send"
     click_button "Close", exact: true
-    click_button "Files & dates"
-    assert_text task.title
-    assert_field "New follow-up"
+    click_button "Files"
+    assert_no_selector "#upcoming-heading", visible: :all
     assert_nil task.reload.done_at
   end
 
@@ -169,7 +157,7 @@ class RecordPagesTest < ApplicationSystemTestCase
     page.current_window.resize_to(390, 844)
 
     visit client_path(owner)
-    click_button "Files & dates"
+    click_button "Files"
     assert_selector "#files-heading", visible: true
     visit client_path(owner, template: template.id, task: task.id)
     assert_selector ".record-tabs .tab-on", text: "Thread"
@@ -179,7 +167,7 @@ class RecordPagesTest < ApplicationSystemTestCase
     assert_equal "8102", find("#message_perfectbook_booking_id", visible: :all).value
 
     visit client_path(owner, anchor: "files-heading")
-    assert_selector ".record-tabs .tab-on", text: "Files & dates"
+    assert_selector ".record-tabs .tab-on", text: "Files"
     assert_selector "#files-heading", visible: true
   end
 

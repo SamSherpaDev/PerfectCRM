@@ -53,14 +53,15 @@ configuration lives in `config/environments/development.rb`.
 
 On desktop, hover or focus the icon rail to reveal navigation labels and Sign
 out. On mobile, use Open menu to show the drawer. The rail holds **Today**
-(root), **Inbox**, **Leads**, **Clients**, **Pipeline**, **Quotes**, **Templates**,
-**Channels** (in the Settings group), and **Settings**. See [Today and follow-ups](#today-and-follow-ups), [Mail](#mail),
+(root), **Inbox**, **Leads**, **Clients**, and **Settings**. **Pipeline**
+(`/pipeline`), **Quotes** (`/quotes`), **Templates** (`/templates`), and
+**Channels** (`/channels`) are hidden from primary navigation and remain
+reachable by direct URL. See [Today and follow-ups](#today-and-follow-ups), [Mail](#mail),
 [Replying](#replying), [Templates](#templates), [Pipeline](#pipeline), and [Quotes](#quotes) for the live features. Settings provides appearance,
-morning and pipeline digests, the [weekly ads report](#weekly-ads-report), connections, history import, automation settings, email sender settings, and export controls.
+connections, automation settings (including a direct link to edit the First reply template), ad conversions, email sender settings, and a footer export link; morning and pipeline digests, the [weekly ads report](#weekly-ads-report) (`/settings/weekly_report`), history import, and AI assistance cards are hidden from the Settings UI while their routes and background jobs remain active.
 
 On phones (under 750px) a bottom tab bar holds **Today**, **Inbox**,
-**Leads**, **Clients**, and **More** (Pipeline, Quotes, Templates,
-Channels, Settings) while the rail hides. Signed-in builders can preview every
+**Leads**, **Clients**, and **Settings** directly while the rail hides. Signed-in builders can preview every
 component of the kit at `/design` (listed nowhere in the rail) in Paper
 and Night.
 
@@ -86,7 +87,7 @@ Missing spend or no inquiries makes cost unavailable. The
 [channel spend endpoint](docs/channel-checks.md#weekly-spend-request) is for the
 channels manager's Monday check, an external agent run outside PerfectCRM,
 configured separately with the same `CHANNEL_CHECKS_TOKEN`. Nothing in
-PerfectCRM calls it. Until that check posts spend, enter it in Settings as before.
+PerfectCRM calls it. Until that check posts spend, enter it on the Monday ads report page (`/settings/weekly_report`) as before.
 Paid inquiries still come from CRM leads, not checks.
 For the six organic channels,
 inquiries come from the latest check: an optional aggregate count of contacts
@@ -361,7 +362,8 @@ AI defaults to the OpenAI and OpenRouter origins, and PerfectBook defaults
 to `https://perfectbook.sherpaholidays.com`. Additional deployments require
 the corresponding environment allowlist: `AI_ALLOWED_ORIGINS` or
 `PERFECTBOOK_ALLOWED_ORIGINS`. Webhooks have no default destination; set
-`LEAD_WEBHOOK_ALLOWED_ORIGINS` before saving a webhook in Settings.
+`LEAD_WEBHOOK_ALLOWED_ORIGINS` before saving a webhook URL (its Settings field is
+currently hidden).
 These are comma-separated HTTPS origins, including an explicit port when
 nonstandard, with no credentials, path, query or fragment. For example,
 `LEAD_WEBHOOK_ALLOWED_ORIGINS=https://n8n.example.com` allows that host's
@@ -512,12 +514,8 @@ files while another process is using them.
 
 ## Today and follow-ups
 
-Today (the root route) is the captain's morning screen: six tiles
-(Waiting on you, Follow-ups due, Quotes out, Overdue, New leads, Active
-clients), then Scheduled calls, Not yet called, Replies waiting, Follow-ups as one-tap check rows,
-Departing soon (trips leaving in the next 14 days), and Back from the
-mountains (returned in the last 7 days). Returned bookings linked to a
-local record offer Create review ask. Waiting on you counts linked threads
+Today (the root route) is the captain's morning screen: three tiles
+(Waiting on you, New leads, Active clients), then Scheduled calls, Not yet called, and Replies waiting (Follow-ups due, Quotes out, Overdue, Follow-ups, Departing soon, and Back from the mountains are hidden from the Today view while their data and queries remain in `Today::Summary`). Waiting on you counts linked threads
 where the client wrote last (same rule as the Inbox tab; unknown senders
 wait in triage). Inquiry threads ignore automatic first replies and failed
 personal email; they stay waiting until a successful personal reply or a
@@ -586,22 +584,23 @@ same schedule file) emails today's follow-ups, overdue items, missed and
 upcoming scheduled calls, replies waiting, the Not yet called count, and
 departures. Task and call links open their records, and Open Today opens the
 morning screen. It goes to the first allowlisted address.
-Settings → Morning digest toggles it; it is enabled by default.
+`Setting#digest_enabled` controls it; it is enabled by default, and its Settings
+toggle is currently hidden.
 
 ## Clients
 
 Clients own people, tags, notes, and a timeline. The record page keeps
 three columns on a desktop: Details (facts, travelers, tags) on the left,
 the composer and the one timeline of every email, note, quote, and
-automated step in the middle, Upcoming dates and Files on the right with
-a compact read-only Trip in PerfectBook. On a phone the same cards sit
-behind Thread, Details, and Files & dates tabs. Each visit starts on Thread
+automated step in the middle, and Files on the right with
+a compact read-only Trip in PerfectBook (the Upcoming follow-up-tasks card and the Review inquiry link form on Trip in PerfectBook are hidden). On a phone the same cards sit
+behind Thread, Details, and Files tabs. Each visit starts on Thread
 unless an explicit link targets another panel. Use New client to create a
 record, and Edit to update facts or add another
 person in the blank People fields. Archive lives in the More menu and
 moves a client to the Archived tab, where Restore makes it active again.
 Archived client and lead pages keep their history readable, with editing
-controls, composer, and Upcoming hidden. Restore is the sole header action
+controls and composer hidden. Restore is the sole header action
 except for the spam review described under [Leads](#leads).
 The Organizations tab holds advisors, operators, and other companies,
 with their own notes and timeline. On lead and client pages one Load
@@ -621,7 +620,7 @@ to PerfectBook when `perfectbook_contact_id` is set, via
 target; an unlinked contact opens a create form with its PerfectBook ID
 prefilled, without fetching contact details.
 
-Settings → Export everything downloads a zip containing leads, clients,
+The Export everything link in the Settings footer downloads a zip containing leads, clients,
 people, organizations, notes, tags, tag assignments, and timeline events as
 CSV with a UTF-8 BOM. Cells beginning with `=`, `+`, `-`, or `@` receive a
 leading single quote to prevent spreadsheet formula execution, including
@@ -636,8 +635,8 @@ A lead carries source (`google_ads`, `meta_ads`, `trade_show`, `website_form`,
 `email`, `referral`, `manual`), campaign, `external_ref` for n8n idempotency, an optional
 advisor `referral_code` from the storefront `?ref=` links, Panda
 AI fit (`fit_score`, `fit_band`, `fit_reason`), and status (`new`,
-`chatting`, `quoted`, `nudged`, `lost`). Tabs are New, Potential, Unsure,
-Quoted, Not interested, and Archived. Stages keep driving the pipeline, reports,
+`chatting`, `quoted`, `nudged`, `lost`). Visible tabs are New, Potential, Unsure,
+Not interested, and Archived (the Quoted and Missing source tabs are hidden from the tab strip while their query params remain supported). Stages keep driving the pipeline, reports,
 and automations; on the Leads tabs, chatting and nudged leads stay in New until
 you sort them, and lost leads rest in Archived beside archived and spam leads
 (old Chatting, Nudged, and Lost links open those tabs). Converted leads leave
@@ -766,23 +765,15 @@ email identities to the client, then link forward and freeze the lead read-only,
 with no reverse path.
 
 Fit labels and bar colors use the supplied fit band; the CRM does not
-derive a band from the numeric score. Edit lets you enter these fields
-manually and add another person in the blank People fields.
-
-Lead Details show "Not scored yet" while both AI fit score and band are blank.
-Use the Strong/Possible/Weak buttons under "Set your fit" to record your own
-judgment; the selected choice stays visible and can be changed. Archived and
-converted leads stay read-only. This judgment is separate from AI fit and does
-not change the lead's stage; its reporting meaning is defined under
-[Monthly source reports](#monthly-source-reports-and-reviewed-backfill).
+derive a band from the numeric score. The AI fit score bar, Best fit sort option, Set your fit buttons, interactive Confirm source form, New quote buttons, and unused pipeline/AI/value fields on the lead form are hidden from the UI while their model attributes and endpoints remain intact.
 
 Website inquiries now arrive directly in Leads. Open a lead to read its
 facts in Details and its inquiry as the oldest entry on the timeline,
 including a placeholder when a website submission has no message. Manual
 leads without inquiry evidence have no inquiry entry. Unknown timing takes
 precedence over previous dates.
-In Settings → Automations, manage credentials and the n8n subscription,
-and review machine events and delivery results. The website form and external
+In Settings → Automations, manage the website site key and Automatic first reply (with a direct link to edit the First reply template),
+and review machine events and delivery results (the Relay secret and n8n webhook URL sub-sections are hidden from the Settings UI while their endpoints and background jobs remain active). The website form and external
 n8n/Panda AI workflows are configured separately; see the
 [website intake contract](docs/leads-intake.md) for setup, delivery behavior,
 and the allowed automation actions.
@@ -823,9 +814,9 @@ Today already lists linked threads whose latest inbound needs an answer.
 ## Source history and calls
 
 Record **How did you first hear about SherpaHolidays? (Optional)** using one
-shared list. The same question is first in the manual form and immediately
-available in record Details at the start of a call. Missing answers open
-**Confirm source**; after recording, **Edit source** stays quiet. The short
+shared list. The same question is first in the manual form, and record
+Details show the answer read-only (the **Confirm source** / **Edit source**
+form there is hidden while `SourceAnswersController` stays routed). The short
 answer is optional, 240 characters; for referrals a first name is enough.
 Confirming a form answer records the call confirmation without losing the
 original answer. Corrections need a reason and append history, never rewrite it.
@@ -1025,9 +1016,9 @@ The existing Monday email adds the monthly summary/link, not a second digest.
 `BookingInquiryBinding` holds one primary inquiry per PerfectBook booking ID.
 Sync holds unvalidated returned references for review. CRM provides a token-protected
 inquiry lookup for the separate PerfectBook pre-storage validation follow-up;
-see docs/source-reporting.md. Reviewed bindings retain unchanged upstream evidence. The Trip panel's quiet
-review disclosure accepts a contact-linked inquiry and evidence/reason, with
-actor/date/prior-link audit. Correct changed upstream references in PerfectBook
+see docs/source-reporting.md. Reviewed bindings retain unchanged upstream evidence. The binding endpoint
+(`BookingInquiryBindingsController`; its Trip panel form is hidden) accepts a
+contact-linked inquiry and evidence/reason, with actor/date/prior-link audit. Correct changed upstream references in PerfectBook
 as well. Binding edits never edit either application's creation/source fields.
 A lead-owned quote handoff passes that exact inquiry reference, including legacy
 staged quotes, and uses PerfectBook's departure booking route when known. A
@@ -1099,7 +1090,8 @@ out, children and all. The folder list is re-read each run, so a folder created
 in Outlook is watched without a reconnect. Connecting records when watching
 began (a reconnect keeps it) and starts a sync straight away. Sync only takes
 mail received since that first connect, in every folder, however late the
-folder appears or its first sync runs; past mail stays for Import history.
+folder appears or its first sync runs; earlier mail is not synced (Import
+history at `/mail_imports/new` can bring it in).
 Because Microsoft reports read-state toggles, flags, and moves as changes too,
 touching or filing away older mail never brings it in behind the depth chosen
 there. Sync is incremental by per-folder delta link, threaded on the Graph
@@ -1114,7 +1106,7 @@ and the window since its last successful sync is re-read, so the gap is filled
 rather than dropped - up to 24 hours. A longer outage than that is reported on
 the Settings mailbox card, naming the date to import from, instead of the app
 quietly opening months of mail: sync resumes from now and the depth of the
-catch-up stays the captain's choice through Import history, with a preview.
+catch-up stays the captain's choice through Import history (`/mail_imports/new`), with a preview.
 The notice also says that import cannot recover mail that reached the mailbox
 only as a hidden copy (see the backfill rule below).
 
@@ -1215,7 +1207,7 @@ Storage failures preserve the reference and triage retry path. Only the
 explicit **Send to PerfectBook** action uploads bytes to PerfectBook; neither
 holding nor removing a file changes the mailbox.
 
-Settings → Import history backfills past mail: all, since a date, or last
+Import history (`/mail_imports/new`; its Settings card is hidden) backfills past mail: all, since a date, or last
 N months (no 90-day cap), as requested by the captain. The backfill walks the
 same folders as live sync, because archived and filed mail is exactly what
 needs converting. Preview scans the whole selected range in a background job, paging each folder
@@ -1293,8 +1285,8 @@ conversion once, including returns to existing clients and referral leads.
 
 The one-line digest reports open and stale leads, wins this month, and open
 lead value. Its production schedule is in [`config/recurring.yml`](config/recurring.yml).
-Settings → Monday pipeline note controls delivery to info@sherpaholidays.com;
-it is enabled by default. It is separate from the morning digest described
+The Monday note to info@sherpaholidays.com is off by default and its Settings
+toggle is hidden; it sends only when `Setting#pipeline_digest` is enabled. It is separate from the morning digest described
 in [Today and follow-ups](#today-and-follow-ups); combining them is pending.
 
 ## Weekly ads report
@@ -1364,7 +1356,7 @@ spend. Missing spend for any paid campaign with activity makes paid total
 spend, costs, and ROAS
 unknown, shown as "-", and names the campaigns needing spend.
 
-Settings → Monday ads report sets the recipient (empty sends to the first
+The report page (`/settings/weekly_report`) sets the recipient (empty sends to the first
 allowlisted Google sign-in, or info@sherpaholidays.com if none is configured).
 The Monday email always sends using the spend already stored.
 [The channel spend API](docs/channel-checks.md#weekly-spend-request) is for the
@@ -1373,12 +1365,12 @@ PerfectCRM and is configured separately with the same `CHANNEL_CHECKS_TOKEN`.
 Nothing in PerfectCRM calls this endpoint. The external check should read last
 week's per-campaign USD spend from Google Ads and Meta and post both channels
 before the Monday 7am Pacific email. Until that check posts, spend is entered
-in Settings as before.
+on the report page as before.
 Paid-cost screens and both Monday email formats show spend receipt time, the
 dates represented, and selected-period coverage separately. Use **Review week**
 or **Review missing days** on a paid Channels card to inspect gaps. See
 [spend status rules and limitations](docs/channel-checks.md#spend-status).
-Settings supports entry and corrections for one of the last eight complete
+The report page supports entry and corrections for one of the last eight complete
 weeks, per channel and required campaign name, matching the lead's campaign
 exactly, including capitalization (surrounding whitespace is ignored).
 Saving the same week, channel, and campaign replaces its amount; unmentioned
@@ -1401,6 +1393,8 @@ report; delivery and export status are covered in [Ad conversions](#ad-conversio
 
 ## AI assistance
 
+The AI assistance panel and triage classification block in Inbox, as well as the AI assistance card in Settings, are currently hidden from the UI; all AI endpoints, `Ai::Client`, `Ai::Scrub`, `Ai::Guard`, and background prune jobs remain intact.
+
 Approval-only help on every thread: reply drafts, three-bullet summaries,
 and suggested next actions. On unlinked threads, Classify with AI adds a
 category, one-line reason, and suggested lead source to the triage card;
@@ -1413,9 +1407,10 @@ refund language stay human. Thinking orbs show composing for drafts and
 summaries, shaping for triage and suggestions. Plain fallbacks keep manual
 work available when AI is off or fails.
 
-AI assistance is on by default. In Settings → AI assistance, enter an
+AI assistance is on by default. Its Settings card is hidden, so set the
 OpenAI-compatible base URL (OpenAI or OpenRouter), model name, provider key,
-and short voice guide (templates are the style examples). Without a key,
+and short voice guide (templates are the style examples) on `Setting` from a
+Rails console. Without a key,
 threads show "Add a provider key in Settings to enable drafts".
 Endpoint requirements and additional deployments follow
 [Outbound service origins](#outbound-service-origins).

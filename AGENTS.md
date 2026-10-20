@@ -24,10 +24,10 @@ When updating this file, preserve this bar for all agents and keep entries conci
   syncs. Do not invent a separate visual identity.
 - CRM-only kit lives in `app/assets/tailwind/application.css` (CRM layer) +
   shared partials; preview every component at `/design` (signed-in only).
-  Rail order: Today, Inbox, Leads, Clients, Pipeline, Quotes, Templates,
-  Channels, Settings; phone tab bar: Today, Inbox, Leads, Clients, More.
-- Today's counts strip carries six `.stat` tiles, two rows of three on
-  desktop. `docs/DESIGN.md` section 5 still reads "four equal tiles" from
+  Rail and phone tab bar order: Today, Inbox, Leads, Clients, Settings (Pipeline, Quotes, Templates, and Channels are hidden from primary navigation and remain reachable by direct URL).
+- Today's counts strip carries three `.stat` tiles (Waiting on you, New leads,
+  Active clients); Follow-ups due, Quotes out, and Overdue are hidden from the
+  Today view. `docs/DESIGN.md` section 5 still reads "four equal tiles" from
   the four-tile era.
 - Timezone `America/Los_Angeles` (`config/application.rb`).
 - Leads convert to clients one way only, by the captain; no reverse action,

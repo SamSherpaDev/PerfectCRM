@@ -2,15 +2,14 @@ require "application_system_test_case"
 require_relative "../support/google_sign_in_test_helper"
 require_relative "../support/inquiry_mail_test_helper"
 
-# Today is the first screen on the phone: two tiles per row, check rows
+# Today is the first screen on the phone: two tiles over one full-width tile, check rows
 # completable with one tap, and no sideways scrolling at 390px.
 class TodaySystemTest < ApplicationSystemTestCase
   include GoogleSignInTestHelper
   include InquiryMailTestHelper
 
-  test "today at 390px completes a follow-up with one tap" do
-    client = Client.create!(name: "Maya", email: "maya@example.com")
-    client.tasks.create!(title: "Nudge Maya about the deposit", due_on: Date.current)
+  test "today at 390px shows the three counts tiles and safety-net banner without overflow" do
+    Client.create!(name: "Maya", email: "maya@example.com")
     ingest_inquiry(subject: "New inquiry from Pemba Sherpa: Annapurna Circuit Trek")
     InquirySafetyNetJob.perform_now
 
@@ -32,7 +31,7 @@ class TodaySystemTest < ApplicationSystemTestCase
       assert_link "New inquiry from Pemba Sherpa: Annapurna Circuit Trek"
     end
 
-    %w[departing returned].each do |section|
+    %w[not-yet-called].each do |section|
       empty_state = find("section[aria-labelledby='#{section}-heading'] .empty-inline")
       overlaps = empty_state.evaluate_script(<<~JS)
         (() => {
@@ -50,20 +49,24 @@ class TodaySystemTest < ApplicationSystemTestCase
       JS
       assert_not overlaps, "#{section} illustration overlaps empty-state text at 390px"
     end
+    assert_selector "section[aria-labelledby='replies-heading']"
 
     within("section[aria-label=Counts]") do
-      assert_selector ".stat", count: 6
+      assert_selector ".stat", count: 3
     end
+    rows = page.evaluate_script(<<~JS)
+      (() => {
+        const grid = document.querySelector('section[aria-label=Counts] > div').getBoundingClientRect();
+        const rows = {};
+        document.querySelectorAll('section[aria-label=Counts] .stat').forEach(tile => {
+          const box = tile.getBoundingClientRect();
+          (rows[Math.round(box.top)] ||= []).push(box);
+        });
+        return Object.values(rows).map(row => Math.round(row[row.length - 1].right - row[0].left) === Math.round(grid.width));
+      })()
+    JS
+    assert_equal [ true, true ], rows, "Counts tiles leave a partly filled row at 390px"
     width = page.evaluate_script("document.documentElement.scrollWidth")
     assert_operator width, :<=, 390, "Today overflows a 390px viewport (#{width}px)"
-
-    complete = find("button[aria-label='Mark done: Nudge Maya about the deposit']")
-    size = complete.evaluate_script("[this.offsetWidth, this.offsetHeight]")
-    assert_operator size[0], :>=, 44, "complete target is narrower than 44px"
-    assert_operator size[1], :>=, 44, "complete target is shorter than 44px"
-    complete.click
-
-    assert_text "Done. Nice."
-    assert_no_text "Nudge Maya about the deposit"
   end
 end

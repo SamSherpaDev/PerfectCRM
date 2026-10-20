@@ -10,37 +10,44 @@ class WeeklyReportSettingsTest < ActionDispatch::IntegrationTest
     travel_to Time.zone.local(2026, 9, 22, 9)
   end
 
-  test "settings save the recipient and require campaign spend" do
+  test "settings save the recipient while weekly report card is hidden from Settings UI" do
     get edit_settings_path
     assert_response :success
-    assert_select "h2", text: "Monday ads report"
-    assert_select "input[name='setting[weekly_report_enabled]']", count: 0
-    assert_select "input[name='setting[travelers_goal]']", count: 0
-    assert_select "input[name='ad_spend[campaign_name]'][required]"
-    assert_select "select[name='ad_spend[week_start]'] option[value='2026-09-14']", text: "Sep 14-20 (last week)"
+    assert_select "h2", text: "Monday ads report", count: 0
 
     patch settings_path, params: { setting: { weekly_report_recipient: " Sam@Example.com " } }
-    assert_redirected_to edit_settings_path(anchor: "weekly-report-heading")
+    assert_redirected_to settings_weekly_report_path
     settings = Setting.current.reload
     assert_equal "sam@example.com", settings.weekly_report_to
   end
 
-  test "a bad recipient is shown on the card" do
+  test "a bad recipient comes back to the report page as a message" do
     patch settings_path, params: { setting: { weekly_report_recipient: "not an email" } }
-    assert_response :unprocessable_entity
-    assert_select "[role=alert]", text: /Weekly report recipient is invalid/
+    assert_redirected_to settings_weekly_report_path
+    follow_redirect!
+    assert_select ".flash-alert", text: /Weekly report recipient is invalid/
+    assert_not_equal "not an email", Setting.current.reload.weekly_report_recipient
   end
 
-  test "spend is entered, listed, and removed" do
+  test "the report page holds the recipient and ad spend forms" do
+    get settings_weekly_report_path
+    assert_select "#weekly-report-heading"
+    assert_select "form[action='#{settings_path}'] input[name='setting[weekly_report_recipient]']"
+    assert_select "form[action='#{settings_ad_spends_path}'] select[name='ad_spend[week_start]']"
+  end
+
+  test "spend is entered and removed via controller while weekly report card stays hidden" do
     post settings_ad_spends_path, params: { ad_spend: { week_start: "2026-09-14", source: "meta_ads", campaign_name: "social", amount_dollars: "140" } }
-    assert_redirected_to edit_settings_path(anchor: "weekly-report-heading")
+    assert_redirected_to settings_weekly_report_path
     assert_equal "Saved $140 for Meta social, week of Sep 14-20.", flash[:notice]
     entry = AdSpend.sole
+    assert_equal 14_000, entry.amount_minor
 
-    get edit_settings_path
+    get settings_weekly_report_path
     assert_select "li", text: /Meta social · \$140/
 
     delete settings_ad_spend_path(entry)
+    assert_redirected_to settings_weekly_report_path
     assert_not AdSpend.exists?
   end
 

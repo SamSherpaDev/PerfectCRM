@@ -140,11 +140,9 @@ class PipelineSystemTest < ApplicationSystemTestCase
   test "missing lost reason preserves the submitted form" do
     lead = Lead.create!(name: "Original traveler")
     visit edit_lead_path(lead)
-    fill_in "lead_name", with: "Edited traveler"
-    select "Lost", from: "Status"
-    click_button "Save changes"
-    assert_field "lead_name", with: "Edited traveler"
-    assert_selector "select option:checked", text: "Lost"
+    assert_no_field "Status"
+    assert_no_field "Lost reason"
+    browser_request(lead_path(lead), "PATCH", { "lead[name]" => "Edited traveler", "lead[status]" => "lost" })
     assert_equal "Original traveler", lead.reload.name
     assert_equal "new", lead.status
     assert_not lead.activity_events.exists?(kind: "stage_change")
@@ -355,14 +353,10 @@ class PipelineSystemTest < ApplicationSystemTestCase
       row.values_at("trip_interest", "expected_value_minor", "lost_reason", "lost_note")
     assert_equal "won", files.fetch("clients.csv").first["pipeline_stage"]
     visit edit_settings_path
-    uncheck "setting_pipeline_digest"
-    find("#setting_pipeline_digest").ancestor("form").click_button "Save", exact: true
-    assert_text "Settings saved."
+    assert_no_selector "#setting_pipeline_digest"
+    browser_request(settings_path, "PATCH", { "setting[pipeline_digest]" => "0" })
     assert_not Setting.current.reload.pipeline_digest
-    visit edit_settings_path
-    check "setting_pipeline_digest"
-    find("#setting_pipeline_digest").ancestor("form").click_button "Save", exact: true
-    assert_text "Settings saved."
+    browser_request(settings_path, "PATCH", { "setting[pipeline_digest]" => "1" })
     assert Setting.current.reload.pipeline_digest
   end
 

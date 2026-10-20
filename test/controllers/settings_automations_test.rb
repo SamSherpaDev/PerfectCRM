@@ -11,15 +11,16 @@ class SettingsAutomationsTest < ActionDispatch::IntegrationTest
     Setting.current.update!(lead_webhook_url: nil)
   end
 
-  test "edit shows the automations card with keys, rules, and the log" do
+  test "edit shows the automations card with site key, first reply link, and the log" do
+    template = Template.create!(name: "Welcome", purpose: :first_reply, subject: "Hi", body: "Hello")
     get edit_settings_path
     assert_response :success
     assert_select "h2", text: "Automations"
-    assert_select "p", text: /Automations may create leads/
-    assert_select "p", text: /Quoted, Nudged, conversion to client/
-    assert_select "input[name='setting[lead_webhook_url]']"
+    assert_select "p", text: /Website inquiries and automatic first replies/
+    assert_select "input[name='setting[lead_webhook_url]']", count: 0
     assert_select "form[action=?]", rotate_site_key_settings_path
-    assert_select "form[action=?]", rotate_relay_secret_settings_path
+    assert_select "form[action=?]", rotate_relay_secret_settings_path, count: 0
+    assert_select "a[href=?]", edit_template_path(template), text: "Edit First reply template"
   end
 
   test "first reply kill switch persists without moving its enable time" do
@@ -57,18 +58,15 @@ class SettingsAutomationsTest < ActionDispatch::IntegrationTest
     assert_not_equal before, Setting.current.reload.site_key
   end
 
-  test "rotating the relay secret shows it once, then masked" do
+  test "rotating the relay secret changes it while keeping it hidden from Settings UI" do
+    before = Setting.current.ensure_intake_credentials!.relay_secret
     post rotate_relay_secret_settings_path
     assert_redirected_to edit_settings_path
     follow_redirect!
     assert_response :success
     fresh = Setting.current.reload.relay_secret
-    assert_includes response.body, fresh
-
-    get edit_settings_path
-    assert_response :success
+    assert_not_equal before, fresh
     assert_not_includes response.body, fresh
-    assert_includes response.body, Setting.current.masked_relay_secret
   end
 
   test "automation events and deliveries appear in the log" do

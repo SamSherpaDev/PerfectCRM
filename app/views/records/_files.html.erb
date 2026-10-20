@@ -7,9 +7,6 @@
 <section class="card card-pad" aria-labelledby="files-heading">
   <div class="card-header">
     <h2 class="card-title" id="files-heading">Files</h2>
-    <% unless read_only %>
-      <%= link_to "New quote", new_quote_path(lead ? { lead_id: record.id } : { client_id: record.id }), class: "link-quiet text-xs" %>
-    <% end %>
   </div>
   <%= card_caption bookings.any? ? "Attachments from the thread, quote PDFs, and traveler documents." : "Attachments from the thread and quote PDFs." %>
   <% if rows.any? %>

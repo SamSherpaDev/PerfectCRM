@@ -86,7 +86,8 @@ class DesignKitTest < ApplicationSystemTestCase
     visit "/design"
     assert_equal "grid", page.evaluate_script("getComputedStyle(document.querySelector('[data-controller=sidebar] > .tabbar')).display")
     assert_selector "nav.tabbar a", text: "Inbox"
-    assert_selector "nav.tabbar button", text: "More"
+    assert_selector "nav.tabbar a", text: "Settings"
+    assert_no_selector "nav.tabbar button", text: "More"
     rail_right = page.evaluate_script("document.querySelector('aside').getBoundingClientRect().right")
     assert_operator rail_right, :<=, 1, "rail should hide off-canvas on the phone"
     assert_no_page_overflow "/design"

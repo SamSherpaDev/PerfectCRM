@@ -50,7 +50,7 @@
     <p style="margin:8px 0 0;">Paid cost per booking <%= report_money(summary.paid_total.cost_per_booking) %>, ROAS <%= summary.roas ? "#{summary.roas}x" : "-" %>.</p>
   <% end %>
   <% unless summary.spend_entered? %>
-    <p style="margin:8px 0 0;color:#8a4b12;"><%= report_missing_spend_line(summary) %> <%= link_to "Add it on Settings", edit_settings_url(anchor: "weekly-report-heading"), style: "color:#8a4b12;" %>.</p>
+    <p style="margin:8px 0 0;color:#8a4b12;"><%= report_missing_spend_line(summary) %> <%= link_to "Add it on Settings", settings_weekly_report_url(anchor: "weekly-report-heading"), style: "color:#8a4b12;" %>.</p>
   <% end %>
 
   <p style="margin:14px 0 0;">

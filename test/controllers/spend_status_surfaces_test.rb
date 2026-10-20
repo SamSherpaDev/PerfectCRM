@@ -67,8 +67,6 @@ class SpendStatusSurfacesTest < ActionDispatch::IntegrationTest
     assert_equal [ Date.new(2026, 10, 5), 0, Time.current ], entry.reload.attributes.values_at("week_start", "amount_minor", "last_posted_at")
     get edit_settings_path
     assert_response :success
-    assert_select "#weekly-report-heading"
-    assert_select "section[aria-labelledby=weekly-report-heading]", text: /Its spend dates stay in that week/
-    assert_select "section[aria-labelledby=weekly-report-heading]", text: /Last posted Oct 15, 2026 at 11:00 PDT/
+    assert_select "#weekly-report-heading", count: 0
   end
 end
