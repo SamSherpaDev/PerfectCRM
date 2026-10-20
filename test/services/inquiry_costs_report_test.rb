@@ -144,6 +144,37 @@ class InquiryCostsReportTest < ActiveSupport::TestCase
     assert_nil report.campaign_rows.sole.campaign_key
   end
 
+  test "falls back to submission_page.landing_url when last_touch is unavailable and permission is allowed" do
+    landing_url = "https://www.sherpaholidays.com/pages/everest-base-camp-trek?utm_source=ig&utm_medium=paid&utm_campaign=Nepal+Cold&campaign_id=52666579688338&adset_id=52666579688138&ad_id=52670563689538"
+    Lead.create!(
+      name: "Synthetic Meta person",
+      email: "meta@example.test",
+      message: "Everest inquiry",
+      source: "website_form",
+      capture_channel: "website_form",
+      received_at: @day.in_time_zone + 12.hours,
+      metadata: {
+        "acquisition" => {
+          "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true, "observed_at" => "2026-10-13T18:00:00Z" },
+          "first_touch" => { "source" => "unknown", "landing_url" => nil, "unknown_reason" => "unavailable" },
+          "last_touch" => { "source" => "unknown", "landing_url" => nil, "unknown_reason" => "unavailable" },
+          "submission_page" => { "landing_url" => landing_url, "referrer_host" => "instagram.com" }
+        }
+      }
+    )
+    spend(source: "meta_ads", id: "52666579688338", name: "Nepal Cold", amount: 2500)
+    spend(source: "meta_ads", id: "52666579688338", name: "Nepal Cold", ad_id: "52670563689538", amount: 2500)
+
+    result = report
+    assert_equal 0, result.totals[:unknown_source]
+    assert_equal 1, result.totals[:inquiries]
+    campaign_row = result.campaign_rows.find { |r| r.source == "meta_ads" && r.campaign_key == "id:52666579688338" }
+    assert_equal 1, campaign_row.inquiries
+    ad_row = result.ad_rows.find { |r| r.source == "meta_ads" && r.ad_id == "52670563689538" }
+    assert_equal 1, ad_row.inquiries
+    assert_equal({ "USD" => 2500 }, ad_row.cost_per_inquiry)
+  end
+
   test "every selected day and currency requires exact spend and currencies never blend" do
     inquiry
     spend(amount: 101)

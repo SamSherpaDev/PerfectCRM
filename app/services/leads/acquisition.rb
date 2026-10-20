@@ -123,12 +123,90 @@ module Leads::Acquisition
       result["landing_url"] = safe_url(input["landing_url"], campaign: true)
     end
     if acquisition
-      touch = %w[last_non_direct_touch last_touch].map { |key| acquisition[key] }.find { |snapshot| eligible?(snapshot) } || {}
-      result = touch.slice(*(CAMPAIGN_KEYS + CLICK_KEYS)).merge("first_seen_at" => touch["observed_at"], "referral_code" => result["referral_code"])
+      touch = %w[last_non_direct_touch last_touch].map { |key| acquisition[key] }.find { |snapshot| eligible?(snapshot) } ||
+        submission_page_fallback(acquisition) || {}
+      result = touch.slice(*(CAMPAIGN_KEYS + CLICK_KEYS + %w[landing_url])).merge("first_seen_at" => touch["observed_at"], "referral_code" => result["referral_code"])
       unless permitted?(acquisition)
-        result.except!(*(CAMPAIGN_KEYS + CLICK_KEYS))
+        result.except!(*(CAMPAIGN_KEYS + CLICK_KEYS + %w[landing_url]))
       end
     end
     result.compact
+  end
+
+  def submission_page_fallback(acquisition)
+    return nil unless acquisition.is_a?(Hash) && permitted?(acquisition)
+    return nil if %w[last_non_direct_touch last_touch].any? { |key| eligible?(acquisition[key]) }
+
+    last_touch = acquisition["last_touch"]
+    return nil if last_touch.is_a?(Hash) &&
+      (last_touch.slice(*(CAMPAIGN_KEYS + CLICK_KEYS)).any? ||
+       (last_touch["unknown_reason"].present? && last_touch["unknown_reason"] != "unavailable"))
+
+    page = acquisition["submission_page"]
+    landing_url = page.is_a?(Hash) ? (page["landing_url"].presence || page["url"].presence) : nil
+    return nil if landing_url.blank?
+
+    params = query_params(landing_url)
+    return nil if params.empty?
+
+    observed_at = acquisition.dig("permission", "observed_at").presence
+    fallback = params.merge(
+      "landing_url" => safe_url(landing_url, campaign: true),
+      "referrer_host" => page["referrer_host"].presence || host(page["referrer"]),
+      "observed_at" => observed_at
+    ).compact
+    fallback["source"] = classify(fallback)
+    fallback
+  end
+
+  def query_params(url)
+    uri = URI.parse(url.to_s)
+    URI.decode_www_form(uri.query.to_s).each_with_object({}) do |(key, val), out|
+      next unless (CAMPAIGN_KEYS + CLICK_KEYS).include?(key)
+      cleaned = val.to_s.strip
+      out[key] = cleaned if cleaned.present? && cleaned.length <= 200
+    end
+  rescue URI::InvalidURIError, ArgumentError
+    {}
+  end
+
+  def backfill_unavailable_touches!
+    counts = { leads_updated: 0, conversions_queued: 0 }
+    ::Lead.order(:id).find_each do |lead|
+      lead.with_lock do
+        meta = lead.metadata.is_a?(Hash) ? lead.metadata.deep_dup : {}
+        acquisition = meta["acquisition"]
+        fallback = submission_page_fallback(acquisition)
+        next unless fallback
+
+        legacy = legacy_attribution(meta["attribution"].is_a?(Hash) ? meta["attribution"] : {}, acquisition: acquisition)
+        next if legacy.empty?
+
+        derived_source = ::Leads.derive_source(legacy)
+        existing_attr = meta["attribution"].is_a?(Hash) ? meta["attribution"] : {}
+        merged_attr = legacy.merge(existing_attr.compact_blank)
+
+        updates = {}
+        updates[:source] = derived_source if lead.source == "website_form" && derived_source != "website_form"
+        if lead.campaign_name.blank? && legacy["utm_campaign"].present?
+          updates[:campaign_name] = legacy["utm_campaign"].to_s.strip.presence
+        end
+        if merged_attr != existing_attr
+          meta["attribution"] = merged_attr
+          updates[:metadata] = meta
+        end
+
+        next if updates.empty?
+
+        lead.update_columns(updates)
+        lead.sync_fts!
+        counts[:leads_updated] += 1
+        if ::AdConversions.reportable?(lead)
+          ::AdConversions::LeadJob.perform_later(lead.id)
+          counts[:conversions_queued] += 1
+        end
+      end
+    end
+    counts
   end
 end

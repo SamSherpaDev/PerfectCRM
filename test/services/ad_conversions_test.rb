@@ -770,4 +770,52 @@ class AdConversionsTest < ActiveSupport::TestCase
     assert_equal "not_sent", undelivered.reload.delivery_status
     assert_not_includes AdConversions::GoogleFeed.rows(now: @now).map(&:id), undelivered.id
   end
+
+  test "Meta inquiry with unavailable last_touch and ad_id in submission_page.landing_url sends Lead and QualifiedLead" do
+    observed = (@now - 30.minutes).iso8601
+    landing_url = "https://www.sherpaholidays.com/pages/everest-base-camp-trek?utm_source=ig&utm_medium=paid&utm_campaign=sh_us_cold_cbo&campaign_id=52666579688338&adset_id=52666579688138&utm_content=Ad+B+At+your+pace+-+Round+2+Hook+A&ad_id=52670563689538"
+    lead = Lead.create!(
+      name: "Clara Jensen",
+      email: "clara.jensen@gmail.com",
+      phone: "+14155550177",
+      source: "website_form",
+      capture_channel: "website_form",
+      external_ref: "website_form:sub-axe9",
+      received_at: @now - 30.minutes,
+      metadata: {
+        "attribution" => {},
+        "acquisition" => {
+          "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true, "opted_out" => false, "observed_at" => observed },
+          "first_touch" => { "source" => "unknown", "landing_url" => nil, "unknown_reason" => "unavailable" },
+          "last_touch" => { "source" => "unknown", "landing_url" => nil, "unknown_reason" => "unavailable" },
+          "submission_page" => { "landing_url" => landing_url, "referrer_host" => "instagram.com" }
+        },
+        "page" => { "url" => "https://www.sherpaholidays.com/pages/everest-base-camp-trek" },
+        "user_agent" => "Mozilla/5.0 Instagram"
+      }
+    )
+
+    assert AdConversions.reportable?(lead)
+    marked_at = @now - 10.minutes
+    assert_enqueued_with(job: AdConversions::LeadJob, args: [ lead.id ]) do
+      travel_to(marked_at) { lead.mark_potential! }
+    end
+
+    with_meta do |fake|
+      AdConversions::LeadJob.perform_now(lead.id)
+      assert_equal 2, fake.requests.size
+      events = fake.requests.map { |req| JSON.parse(req.body)["data"].sole }
+      assert_equal %w[Lead QualifiedLead], events.map { |event| event["event_name"] }
+      assert_equal "https://www.sherpaholidays.com/pages/everest-base-camp-trek", events.first["event_source_url"]
+      qualified_payload = events.last
+      assert_equal marked_at.to_i, qualified_payload["event_time"]
+      assert_equal "sh-lead-#{lead.id}-qualified", qualified_payload["event_id"]
+      assert_equal "system_generated", qualified_payload["action_source"]
+    end
+
+    qualified = lead.ad_conversions.find_by!(event: "qualified")
+    assert_equal "sent", qualified.meta_status
+    assert_equal "accepted", qualified.delivery_status
+    assert_not qualified.google
+  end
 end

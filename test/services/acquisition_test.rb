@@ -98,4 +98,59 @@ class AcquisitionTest < ActiveSupport::TestCase
       assert_nil result[key]
     end
   end
+
+  test "falls back to submission_page landing_url when last_touch is unavailable and permission is allowed" do
+    observed = Time.current.iso8601
+    landing_url = "https://www.sherpaholidays.com/pages/everest-base-camp-trek?utm_source=ig&utm_medium=paid&utm_campaign=sh_us_cold_cbo&campaign_id=52666579688338&adset_id=52666579688138&utm_content=Ad+B+At+your+pace+-+Round+2+Hook+A&ad_id=52670563689538"
+    acquisition = Leads::Acquisition.parse({
+      "acquisition" => {
+        "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true, "opted_out" => false, "observed_at" => observed },
+        "first_touch" => { "unknown_reason" => "unavailable" },
+        "last_touch" => { "unknown_reason" => "unavailable" },
+        "last_non_direct_touch" => nil,
+        "submission_page" => { "url" => landing_url, "referrer" => "https://www.instagram.com/" }
+      }
+    })
+
+    assert_equal({ "landing_url" => nil, "referrer_host" => nil, "unknown_reason" => "unavailable", "source" => "unknown" }, acquisition["last_touch"])
+    result = Leads::Acquisition.legacy_attribution({}, acquisition: acquisition)
+    assert_equal "ig", result["utm_source"]
+    assert_equal "paid", result["utm_medium"]
+    assert_equal "sh_us_cold_cbo", result["utm_campaign"]
+    assert_equal "52666579688338", result["campaign_id"]
+    assert_equal "52666579688138", result["adset_id"]
+    assert_equal "52670563689538", result["ad_id"]
+    assert_equal "meta_ads", Leads.derive_source(result)
+  end
+
+  test "backfill_unavailable_touches! is idempotent and only fills missing attribution on unavailable-touch leads" do
+    observed = Time.current.iso8601
+    landing_url = "https://www.sherpaholidays.com/pages/private-nepal-tours?utm_source=fb&utm_medium=paid&utm_campaign=sh_us_cold_cbo&campaign_id=52666579688338&adset_id=52666579688138&ad_id=52669753271538"
+    lead = Lead.create!(
+      name: "Meta Fallback Traveler",
+      email: "fallback@example.com",
+      source: "website_form",
+      capture_channel: "website_form",
+      external_ref: "website_form:sub-fallback-1",
+      metadata: {
+        "attribution" => {},
+        "acquisition" => {
+          "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true, "opted_out" => false, "observed_at" => observed },
+          "first_touch" => { "source" => "unknown", "landing_url" => nil, "unknown_reason" => "unavailable" },
+          "last_touch" => { "source" => "unknown", "landing_url" => nil, "unknown_reason" => "unavailable" },
+          "submission_page" => { "landing_url" => landing_url, "referrer_host" => "m.facebook.com" }
+        }
+      }
+    )
+
+    counts = Leads::Acquisition.backfill_unavailable_touches!
+    assert_equal({ leads_updated: 1, conversions_queued: 1 }, counts)
+    lead.reload
+    assert_equal "meta_ads", lead.source
+    assert_equal "sh_us_cold_cbo", lead.campaign_name
+    assert_equal "52669753271538", lead.metadata.dig("attribution", "ad_id")
+
+    # Second run is a no-op
+    assert_equal({ leads_updated: 0, conversions_queued: 0 }, Leads::Acquisition.backfill_unavailable_touches!)
+  end
 end

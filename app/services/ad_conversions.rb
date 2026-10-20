@@ -39,8 +39,11 @@ module AdConversions
 
   def attribution(lead)
     acquisition = lead.metadata.is_a?(Hash) ? lead.metadata["acquisition"] : nil
-    touch = acquisition&.dig("last_non_direct_touch") || acquisition&.dig("last_touch")
-    return touch if touch.is_a?(Hash)
+    if acquisition.is_a?(Hash)
+      touch = [ acquisition["last_non_direct_touch"], acquisition["last_touch"] ].find { |item| Leads::Acquisition.eligible?(item) } ||
+        Leads::Acquisition.submission_page_fallback(acquisition)
+      return touch if touch.is_a?(Hash)
+    end
     data = lead.metadata.is_a?(Hash) ? lead.metadata["attribution"] : nil
     data.is_a?(Hash) ? data : {}
   end
@@ -62,7 +65,14 @@ module AdConversions
   end
 
   def click_id?(lead)
-    google_click_ids(lead).any? || fbclid(lead).present?
+    google_click_ids(lead).any? || fbclid(lead).present? || meta_ad_attribution?(lead)
+  end
+
+  def meta_ad_attribution?(lead)
+    data = attribution(lead)
+    return false if data["ad_id"].to_s.strip.blank?
+
+    lead.source == "meta_ads" || data["source"] == "meta_ads" || Leads.derive_source(data) == "meta_ads"
   end
 
   def click_at(lead)

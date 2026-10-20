@@ -196,8 +196,13 @@ module InquiryCosts
       if acquisition.is_a?(Hash)
         return [ "unknown", nil, nil, nil ] unless Leads::Acquisition.permitted?(acquisition)
         touch = acquisition["last_non_direct_touch"]
-        return [ "unknown", nil, nil, nil ] unless Leads::Acquisition.eligible?(touch)
-        source = touch["source"].presence || "unknown"
+        if Leads::Acquisition.eligible?(touch)
+          source = touch["source"].presence || "unknown"
+        elsif (touch = Leads::Acquisition.submission_page_fallback(acquisition))
+          source = touch["source"].presence || "unknown"
+        else
+          return [ "unknown", nil, nil, nil ]
+        end
       else
         # Legacy website intake stored its normalized source beside this snapshot.
         touch = metadata["attribution"].is_a?(Hash) ? metadata["attribution"] : {}

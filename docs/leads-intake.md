@@ -100,19 +100,28 @@ Bot and spam scoring (`Leads.suspicion_hits`, `25` points per hit):
 - Flag-only hits: `many_links` (3+ links in `message`), `disposable_domain`
   (known throwaway email domain), and `name_matches_email` (local-part matches
   normalized name), alone or combined. The lead is tagged `suspected_spam`
-  (`Looks like spam`), kept in the `New` tab for review, prefixed `[check]` on
-  the intake email copy, and withheld from automatic first replies and ad
-  conversions until reviewed.
+  (`Looks like spam`), kept in the `New` tab for review, and withheld from the
+  instant `Call now:` email alert, automatic first replies, and ad conversions
+  until reviewed.
 - Missing or unparseable `timing` is not a hit; such inquiries are scored on the
   remaining signals only.
 
+Instant call alert (`LeadIntakeMailer#inquiry_copy`): sent immediately to
+`info@sherpaholidays.com` (with `Reply-To` set to the visitor) only for real
+inquiries (never spam, bot, duplicate, or safety-net copies). Subject starts
+with `Call now: <First name> — <Trip>`, and the first three lines carry a
+tap-to-call `tel:` link, `Reference: SH-XXXX`, and a direct link to the lead
+page.
+
 Source derivation: `google_ads` on `gclid`/`gbraid`/`wbraid`, or
-`utm_source=google` with a paid medium (`cpc`, `ppc`, `paid`); `meta_ads`
-on `facebook`/`instagram`/`meta` with a paid medium; `trade_show` on
-`utm_medium=event` (travel show booth links and QR codes); else `website_form`.
-`campaign_name` copies `utm_campaign`. With `acquisition`, this compatibility
-projection uses the eligible last-non-direct touch, falling back to the eligible
-last touch, with source and campaign from that complete snapshot. See the
+`utm_source=google` with a paid medium (`cpc`, `ppc`, `paid`, `paid_social`,
+`paidsocial`); `meta_ads` on `facebook`/`instagram`/`meta`/`fb`/`ig` with a
+paid medium or `ad_id`; `trade_show` on `utm_medium=event` (travel show booth
+links and QR codes); else `website_form`. `campaign_name` copies `utm_campaign`.
+With `acquisition`, this compatibility projection uses the eligible
+last-non-direct touch, falling back to the eligible last touch, and when
+`last_touch` is `unavailable` on a permission-allowed submission, falling back
+to `submission_page.landing_url` (utm/ad parameters). See the
 [source contract](#additive-browser-payloads) for permission and ordering rules.
 The reference is `SH-XXXX`.
 

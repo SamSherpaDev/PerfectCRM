@@ -38,9 +38,10 @@ class CaptainDigestMailerTest < ActionMailer::TestCase
 
   test "morning includes the full not yet called count and links to Today" do
     travel_to Time.zone.local(2026, 10, 14, 7) do
-      7.times { |i| Lead.create!(name: "Inquiry #{i}", received_at: 3.days.ago) }
-      Lead.create!(name: "Recent inquiry", received_at: 1.hour.ago)
-      called = Lead.create!(name: "Called inquiry", received_at: 3.days.ago)
+      6.times { |i| Lead.create!(name: "Inquiry #{i}", phone_raw: "+1 415 555 010#{i}", received_at: 3.days.ago) }
+      Lead.create!(name: "Recent inquiry", phone_raw: "+1 415 555 0109", received_at: 1.hour.ago)
+      Lead.create!(name: "No phone inquiry", received_at: 3.days.ago)
+      called = Lead.create!(name: "Called inquiry", phone_raw: "+1 415 555 0199", received_at: 3.days.ago)
       CallLog.record!(called, key: "digest-call-1", occurred_at: 1.day.ago,
         outcome: "connected", direction: "outbound")
 

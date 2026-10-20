@@ -80,30 +80,69 @@ class TodaySummaryTest < ActiveSupport::TestCase
     assert_includes summary.overdue, overdue
   end
 
-  test "not yet called lists new inquiries oldest first and ignores automatic and failed replies" do
-    travel_to Time.zone.local(2026, 10, 14, 12) do
-      oldest = inquiry("Oldest", 6.days.ago)
-      automatic_only = inquiry("Automatic only", 5.days.ago)
-      failed_only = inquiry("Failed only", 4.days.ago)
-      no_mail = inquiry("No mail", 3.days.ago)
-      automatic = reply(automatic_only, status: "sent")
-      AutomaticFirstReply.create!(lead: automatic_only, message: automatic, email: automatic_only.email)
-      reply(failed_only, status: "failed")
-      reply(failed_only, status: "queued")
-      reply(failed_only, status: "sending")
-      reply(inquiry("Personally replied", 3.days.ago), status: "sent")
-      reply(inquiry("Imported personal reply", 3.days.ago), status: "received")
-      CallLog::OUTCOMES.each do |outcome|
-        called = inquiry("Called #{outcome}", 3.days.ago)
-        CallLog.record!(called, key: "call-#{outcome}", occurred_at: 2.days.ago,
-          outcome: outcome, direction: "outbound")
-      end
-      inquiry("Chatting", 3.days.ago).update!(status: "chatting")
+  test "not yet called prioritizes uncalled phone inquiries oldest first, then Day 1 (2nd try) and Day 3 (3rd try) retries, and drops connected, scheduled, not-interested, spam, archived, and 3-attempt leads" do
+    travel_to Time.zone.local(2026, 10, 20, 12) do
+      oldest_uncalled = inquiry("Oldest uncalled", 2.days.ago)
+      newest_uncalled = inquiry("Newest uncalled", 30.minutes.ago)
+      Lead.create!(name: "No phone inquiry", email: "nophone@example.test", received_at: 3.days.ago)
+
+      retry_second_older = inquiry("Due 2nd try (voicemail yesterday)", 3.days.ago)
+      CallLog.record!(retry_second_older, key: "call-vm-01", occurred_at: 1.day.ago, outcome: "voicemail", direction: "outbound")
+
+      retry_second_newer = inquiry("Due 2nd try (no answer yesterday evening)", 2.days.ago)
+      CallLog.record!(retry_second_newer, key: "call-na-01", occurred_at: Time.zone.local(2026, 10, 19, 18), outcome: "no_answer", direction: "outbound")
+
+      retry_third_due = inquiry("Due 3rd try (2 days after 2nd try)", 5.days.ago)
+      CallLog.record!(retry_third_due, key: "call-try3-1", occurred_at: 4.days.ago, outcome: "voicemail", direction: "outbound")
+      CallLog.record!(retry_third_due, key: "call-try3-2", occurred_at: 2.days.ago, outcome: "no_answer", direction: "outbound")
+
+      # Not yet due for 2nd try (called earlier today)
+      called_today = inquiry("Called today (wait until Day 1)", 1.day.ago)
+      CallLog.record!(called_today, key: "call-today-1", occurred_at: 2.hours.ago, outcome: "voicemail", direction: "outbound")
+
+      # Not yet due for 3rd try (attempt 2 was only 1 day ago)
+      third_not_due = inquiry("Attempt 2 yesterday (wait 2 days for 3rd try)", 4.days.ago)
+      CallLog.record!(third_not_due, key: "call-nd3-1", occurred_at: 3.days.ago, outcome: "voicemail", direction: "outbound")
+      CallLog.record!(third_not_due, key: "call-nd3-2", occurred_at: 1.day.ago, outcome: "voicemail", direction: "outbound")
+
+      # Drops off after 3 attempts
+      three_tries = inquiry("Used 3 attempts", 6.days.ago)
+      CallLog.record!(three_tries, key: "call-max-1", occurred_at: 5.days.ago, outcome: "voicemail", direction: "outbound")
+      CallLog.record!(three_tries, key: "call-max-2", occurred_at: 4.days.ago, outcome: "no_answer", direction: "outbound")
+      CallLog.record!(three_tries, key: "call-max-3", occurred_at: 2.days.ago, outcome: "voicemail", direction: "outbound")
+
+      # Drops off once connected (Talked)
+      connected = inquiry("Talked", 4.days.ago)
+      CallLog.record!(connected, key: "call-conn-1", occurred_at: 3.days.ago, outcome: "voicemail", direction: "outbound")
+      CallLog.record!(connected, key: "call-conn-2", occurred_at: 2.days.ago, outcome: "connected", direction: "outbound")
+
+      # Drops off when a call is scheduled
+      scheduled = inquiry("Has scheduled call", 2.days.ago)
+      scheduled.scheduled_calls.create!(scheduled_at: 1.day.from_now)
+
+      # Drops off when Not interested, spam, archived, converted, or lost
+      inquiry("Not interested", 3.days.ago).mark_not_interested!
+      inquiry("Spam", 3.days.ago).mark_as_spam!
       inquiry("Archived", 3.days.ago).archive!
       inquiry("Converted", 3.days.ago).convert_to_client!
-      inquiry("Too recent", 1.hour.ago)
+      inquiry("Lost", 3.days.ago).update!(status: "lost", lost_reason: "no_reply")
 
-      assert_equal [ oldest, automatic_only, failed_only, no_mail ], Today::Summary.new.not_yet_called.to_a
+      summary = Today::Summary.new
+      assert_equal [
+        oldest_uncalled,
+        newest_uncalled,
+        retry_second_older,
+        retry_second_newer,
+        retry_third_due
+      ], summary.not_yet_called.to_a
+
+      assert_equal [
+        [ oldest_uncalled, 1, "1st try" ],
+        [ newest_uncalled, 1, "1st try" ],
+        [ retry_second_older, 2, "2nd try" ],
+        [ retry_second_newer, 2, "2nd try" ],
+        [ retry_third_due, 3, "3rd try" ]
+      ], summary.call_entries.map { |e| [ e.lead, e.attempt, e.attempt_label ] }
     end
   end
 
@@ -117,37 +156,50 @@ class TodaySummaryTest < ActiveSupport::TestCase
       reply(earlier_contact, status: "sent", sent_at: 3.days.ago)
       CallLog.record!(earlier_contact, key: "earlier-call", occurred_at: 3.days.ago,
         outcome: "connected", direction: "inbound")
-      assert_equal [ fallback, earlier_contact ], Today::Summary.new.not_yet_called.to_a
+      assert_equal [ fallback, earlier_contact, old_created ], Today::Summary.new.not_yet_called.to_a
     end
   end
 
-  test "one business day uses Pacific weekdays and strict time boundaries" do
-    # Friday noon is exactly one business day before Monday noon.
-    travel_to Time.zone.local(2026, 10, 12, 12) do
-      older = inquiry("Over a business day", Time.zone.local(2026, 10, 9, 11, 59, 59))
-      boundary = inquiry("Exactly a business day", Time.zone.local(2026, 10, 9, 12))
-      inquiry("Friday afternoon", Time.zone.local(2026, 10, 9, 15))
-      inquiry("Weekend", Time.zone.local(2026, 10, 10, 8))
-      assert_equal [ older ], Today::Summary.new.not_yet_called.to_a
-      travel 1.second
-      assert_equal [ older, boundary ], Today::Summary.new.not_yet_called.to_a
-    end
-  end
+  test "Day 0 -> Day 1 -> Day 3 retry lifecycle progresses through 1st, 2nd, and 3rd try and then drops off" do
+    travel_to Time.zone.local(2026, 10, 20, 10) do
+      lead = inquiry("Cadence traveler", 15.minutes.ago)
 
-  test "weekend hours do not age an inquiry" do
-    travel_to Time.zone.local(2026, 10, 10, 12) do
-      older = inquiry("Thursday", Time.zone.local(2026, 10, 8, 23, 59, 59))
-      inquiry("Friday morning", Time.zone.local(2026, 10, 9, 8))
-      assert_equal [ older ], Today::Summary.new.not_yet_called.to_a
+      # Day 0: appears immediately as 1st try
+      entry = Today::Summary.new.call_entries.sole
+      assert_equal [ lead, 1, "1st try" ], [ entry.lead, entry.attempt, entry.attempt_label ]
+
+      # Day 0 attempt 1 -> voicemail: drops off for the rest of Day 0
+      CallLog.record!(lead, key: "cadence-1", occurred_at: Time.current, outcome: "voicemail", direction: "outbound")
+      assert_empty Today::Summary.new.call_entries
+
+      # Day 1: due for 2nd try
       travel 1.day
-      assert_equal [ older ], Today::Summary.new.not_yet_called.to_a
+      entry = Today::Summary.new.call_entries.sole
+      assert_equal [ lead, 2, "2nd try" ], [ entry.lead, entry.attempt, entry.attempt_label ]
+
+      # Day 1 attempt 2 -> no_answer: drops off on Day 1 and stays off on Day 2
+      CallLog.record!(lead, key: "cadence-2", occurred_at: Time.current, outcome: "no_answer", direction: "outbound")
+      assert_empty Today::Summary.new.call_entries
+      travel 1.day
+      assert_empty Today::Summary.new.call_entries
+
+      # Day 3 (2 days after attempt 2): due for 3rd try
+      travel 1.day
+      entry = Today::Summary.new.call_entries.sole
+      assert_equal [ lead, 3, "3rd try" ], [ entry.lead, entry.attempt, entry.attempt_label ]
+
+      # Day 3 attempt 3 -> voicemail: used 3 attempts, drops off permanently
+      CallLog.record!(lead, key: "cadence-3", occurred_at: Time.current, outcome: "voicemail", direction: "outbound")
+      assert_empty Today::Summary.new.call_entries
+      travel 5.days
+      assert_empty Today::Summary.new.call_entries
     end
   end
 
   private
 
-  def inquiry(name, received_at)
-    Lead.create!(name: name, email: "demo@example.test", received_at: received_at)
+  def inquiry(name, received_at, phone: "+1 415 555 0134")
+    Lead.create!(name: name, email: "demo@example.test", phone_raw: phone, received_at: received_at)
   end
 
   def reply(lead, status:, sent_at: 1.hour.ago)

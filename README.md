@@ -529,12 +529,17 @@ passed, New leads counts the leads in the Leads New tab (untriaged leads in
 New, Chatting, or Nudged), and Active clients
 counts clients that are not archived.
 
-Not yet called lists active, unconverted inquiries still at New, oldest
-receipt first (creation time if no receipt is recorded), once more than one
-business day has passed with no successful personal reply or logged call since
-receipt. Automatic greetings and queued, sending, or failed personal email do
-not clear it; any logged call outcome does. Business time runs Monday to Friday
-in the Pacific timezone, pausing over the weekend. Every row opens the inquiry.
+Not yet called is the daily call list in priority order: first, active new
+inquiries with a phone number and no logged call yet, oldest receipt first
+(creation time if no receipt is recorded), showing how long they have waited;
+second, open leads with a phone number whose last call was `Voicemail` or
+`No answer` and that are due another try (attempt 2 due 1 day after attempt 1,
+attempt 3 due 2 days after attempt 2 — Day 0, Day 1, Day 3, up to 3 attempts).
+Each row shows its attempt badge (`1st try`, `2nd try`, or `3rd try`), wait
+time, and one-tap `Talked` / `Voicemail` / `No answer` logging plus
+`Schedule call`. Leads drop off the list once a call connects (`Talked`), they
+are marked `Not interested`, `spam`, or `archived`, have an open scheduled call,
+or have used 3 attempts.
 
 Tasks belong to clients, leads, or organizations. Today lists overdue tasks
 and those due through the next 7 days, using the Pacific date. Tap the
@@ -866,7 +871,12 @@ website touch are three separate facts. Versioned metadata holds `first_touch`,
 Snapshots include actual observed time, source/campaign from the same visit,
 stable campaign/ad IDs, sanitized landing URL/referrer host and permitted
 `gclid`/`gbraid`/`wbraid`/`fbclid`. First touch is immutable while retained;
-missing/denied collection is unknown, not direct. `fbclid` alone is not paid
+missing/denied collection is unknown, not direct. When `last_touch` is
+unavailable on a permission-allowed inquiry, compatibility attribution,
+`/channels/cost-per-inquiry`, and `AdConversions` fall back to
+`submission_page.landing_url` (utm/ad parameters) so Meta inquiries carrying an
+`ad_id` in the landing URL count as `meta_ads` and send their `Lead` and
+`QualifiedLead` (`Potential`) conversion events. `fbclid` alone is not paid
 Meta. Legacy broad source remains compatible, not proven first discovery.
 
 The additive payload and exact field contract are in

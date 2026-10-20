@@ -94,27 +94,32 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     assert_select "nav.tabs a.tab-on", text: /New.*2/
   end
 
-  test "not yet called links every older inquiry oldest first and clears after a logged call" do
+  test "not yet called orders uncalled phone inquiries before due retries, shows attempt badges, and supports one-tap logging and return_to" do
     travel_to Time.zone.local(2026, 10, 14, 12) do
-      newer = Lead.create!(name: "Newer inquiry", received_at: 3.days.ago)
-      older = Lead.create!(name: "Older inquiry", received_at: 5.days.ago)
+      newer = Lead.create!(name: "Newer inquiry", phone_raw: "+1 415 555 0101", received_at: 2.hours.ago)
+      older = Lead.create!(name: "Older inquiry", phone_raw: "+1 415 555 0102", received_at: 5.days.ago)
+      retry_two = Lead.create!(name: "Second try inquiry", phone_raw: "+1 415 555 0103", received_at: 3.days.ago)
+      CallLog.record!(retry_two, key: "retry-two-1", occurred_at: 1.day.ago, outcome: "voicemail", direction: "outbound")
+
       get root_path
       assert_response :success
       assert_select "section[aria-labelledby='not-yet-called-heading']" do
-        assert_select "a", count: 2 do |links|
-          assert_equal [ "Older inquiry", "Newer inquiry" ], links.map(&:text)
+        assert_select "a", count: 3 do |links|
+          assert_equal [ "Older inquiry", "Newer inquiry", "Second try inquiry" ], links.map(&:text)
         end
-        assert_select "a[href=?]", lead_path(older)
-        assert_select "a[href=?]", lead_path(newer)
+        assert_select "#call_list_lead_#{older.id} .badge", text: "1st try"
+        assert_select "#call_list_lead_#{retry_two.id} .badge", text: "2nd try"
+        assert_select "#call_list_lead_#{older.id}", text: /Waiting 5 days/
       end
 
-      post lead_calls_path(older), params: { save_key: "first-contact-call", occurred_at: 1.hour.ago.iso8601,
-        outcome: "voicemail", direction: "outbound" }
-      assert_redirected_to lead_path(older, anchor: "record-details")
+      post lead_calls_path(older), params: { save_key: "first-contact-call",
+        outcome: "voicemail", direction: "outbound", return_to: root_path }
+      assert_redirected_to root_path
       get root_path
       assert_select "section[aria-labelledby='not-yet-called-heading']" do
-        assert_select "a", count: 1
-        assert_select "a[href=?]", lead_path(newer)
+        assert_select "a", count: 2 do |links|
+          assert_equal [ "Newer inquiry", "Second try inquiry" ], links.map(&:text)
+        end
       end
     end
   end

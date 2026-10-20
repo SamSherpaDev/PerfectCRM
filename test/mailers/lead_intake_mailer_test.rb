@@ -17,9 +17,13 @@ class LeadIntakeMailerTest < ActionMailer::TestCase
     assert_equal [ "info@sherpaholidays.com" ], mail.to
     assert_equal [ "anna@example.com" ], mail.reply_to
     assert_equal [ ENV.fetch("MAIL_FROM", "info@sherpaholidays.com") ], mail.from
-    assert_equal "New inquiry from Anna Lindqvist: Private Nepal tour", mail.subject
+    assert_equal "Call now: Anna — Private Nepal tour", mail.subject
 
     body = mail.body.to_s
+    first_lines = body.lines.first(3).map(&:strip)
+    assert_equal "Call now: tel:+14155550134 (+1 415 555 0134)", first_lines[0]
+    assert_equal "Reference: #{lead.reference}", first_lines[1]
+    assert_match(%r{\ALead page: https?://.+/leads/#{lead.id}\z}, first_lines[2])
     assert_includes body, "Anna Lindqvist"
     assert_includes body, "anna@example.com"
     assert_includes body, "+1 415 555 0134"
@@ -34,18 +38,24 @@ class LeadIntakeMailerTest < ActionMailer::TestCase
     assert_not_includes body, "Cj0K-secret"
   end
 
-  test "suspected spam prefixes the subject with check" do
-    lead = Lead.create!(name: "X", email: "x@example.com", source: "website_form", spam_score: 25)
-    lead.tag_list = "suspected_spam"
-    lead.save!
-    mail = LeadIntakeMailer.inquiry_copy(lead)
-    assert_match(/\A\[check\] New inquiry from X:/, mail.subject)
+  test "never sends call alert for suspected spam, archived bot, or safety-net leads" do
+    spam = Lead.create!(name: "Spammer", email: "spam@example.com", source: "website_form", spam_score: 25, tag_list: "suspected_spam")
+    archived = Lead.create!(name: "Bot", email: "bot@example.com", source: "website_form", archived_at: Time.current)
+    safety_net = Lead.create!(name: "Fallback", email: "fb@example.com", source: "email", capture_channel: "email", external_ref: "mail_message:99", metadata: { "inquiry_safety_net" => true })
+
+    [ spam, archived, safety_net ].each do |lead|
+      assert_not LeadIntakeMailer.real_inquiry?(lead)
+      assert_no_emails do
+        LeadIntakeMailer.inquiry_copy(lead).deliver_now
+        LeadIntakeEmailJob.perform_now(lead.id)
+      end
+    end
   end
 
   test "missing trip falls back to not sure yet" do
     lead = Lead.create!(name: "Anna Lindqvist", email: "anna@example.com", source: "website_form")
     mail = LeadIntakeMailer.inquiry_copy(lead)
-    assert_equal "New inquiry from Anna Lindqvist: not sure yet", mail.subject
+    assert_equal "Call now: Anna — not sure yet", mail.subject
   end
 
   test "displayed page URL omits tracking parameters without changing metadata" do

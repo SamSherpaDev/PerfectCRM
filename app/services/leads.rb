@@ -4,8 +4,8 @@
 # docs/leads-intake.md): relay HMAC
 # verification, source derivation, suspicion scoring, and rate limiting.
 module Leads
-  PAID_MEDIUMS = %w[cpc ppc paid].freeze
-  META_SOURCES = %w[facebook instagram meta].freeze
+  PAID_MEDIUMS = %w[cpc ppc paid paid_social paidsocial].freeze
+  META_SOURCES = %w[facebook instagram meta fb ig].freeze
   DISPOSABLE_DOMAINS = %w[
     mailinator.com guerrillamail.com 10minutemail.com tempmail.com
     yopmail.com trashmail.com getnada.com mohmal.com
@@ -61,7 +61,8 @@ module Leads
     medium = attribution[:utm_medium].to_s.strip.downcase
     paid = PAID_MEDIUMS.include?(medium)
     return "google_ads" if source == "google" && paid
-    return "meta_ads" if META_SOURCES.include?(source) && paid
+    return "meta_ads" if META_SOURCES.include?(source) && (paid || attribution[:ad_id].present?)
+    return "meta_ads" if attribution[:ad_id].present? && (attribution[:adset_id].present? || paid) && source != "google"
     return "trade_show" if medium == "event"
 
     "website_form"
