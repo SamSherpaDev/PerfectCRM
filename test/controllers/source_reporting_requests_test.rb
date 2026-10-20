@@ -50,13 +50,13 @@ class SourceReportingRequestsTest < ActionDispatch::IntegrationTest
     ENV["PERFECTBOOK_INQUIRY_TOKEN"] = old
   end
 
-  test "signed in month selector and missing source link render" do
+  test "signed in month selector renders without the hidden missing source link" do
     sign_in
     get settings_weekly_report_path(month: "2026-10", view: "paid")
     assert_response :success
     assert_select "h2", text: "Where people come from"
     assert_select "input[type=month]"
-    assert_select "a", text: "Review missing sources"
+    assert_select "a[href=?]", leads_path(tab: "missing_source"), count: 0
     assert_includes response.body, "known unique people from stable Client/PerfectBook links"
     assert_includes response.body, "inquiries with unresolved identity"
     assert_includes response.body, "As of"
