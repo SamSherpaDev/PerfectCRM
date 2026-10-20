@@ -107,7 +107,7 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
   end
 
   test "website copies survive automation headers while human mail is ignored" do
-    website = ingest_inquiry(from: "noreply@example.com", headers: { "Auto-Submitted" => "auto-generated",
+    website = ingest_inquiry(headers: { "Auto-Submitted" => "auto-generated",
       "List-Unsubscribe" => "<https://example.com/unsubscribe>" })
     human = ingest_inquiry(from: "human@gmail.com", subject: "Hello", body: "Please call",
       headers: { "Auto-Submitted" => "no" })
@@ -499,6 +499,15 @@ class UnlinkedInquiriesTest < ActiveSupport::TestCase
     assert cold.conversation.triage?
     assert_equal "shopify.visitor@example.com", shopify.reload.conversation.linkable.email
     assert_equal "website_form", own_mailer.reload.conversation.linkable.source
+  end
+
+  test "form-looking mail from a no-reply or notification address at an outside domain is ordinary mail" do
+    vendors = %w[noreply@rankboosters.example updates@pixelstudio.example
+      billing@saasvendor.example notifications@typeform.example].map { |from| ingest_inquiry(from: from) }
+
+    assert_empty missing
+    assert_no_difference("Lead.count") { Leads::UnlinkedInquiries.new.resolve! }
+    vendors.each { |message| assert_nil message.reload.conversation.linkable }
   end
 
   private

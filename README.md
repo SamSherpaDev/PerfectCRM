@@ -1094,30 +1094,31 @@ history is reachable, and expanded messages show their full body.
 The inquiry safety net checks the last seven days of imported inbound mail at
 7:10am Pacific every day (`InquirySafetyNetJob` in `config/recurring.yml`). Only
 unlinked website-form copies (the form's notification or fallback email for a
-website submission, sent from our own domain, the form's Shopify relay, or a
-no-reply/notifications address) are candidates; mail from any other sender is
-ordinary however it is laid out. Ordinary inbound emails (human emails,
-vendor pitches, replies) stay in the inbox as threads and never become leads,
-raise alerts, or appear as missing inquiries, whatever their wording. Mail
-already linked to any record (a lead, client, or organization) is visible on
-that record's thread and stays outside the safety net; the safety net never
-moves a thread. Unlinked website copies match a saved lead by their Reference
-or submission ID; an unrelated lead sharing the visitor's email is insufficient
-unless that lead is still in the **New** tab. A matched thread is linked to
-that lead (or its converted client) instead of creating a duplicate. Otherwise,
-the check creates a lead in New (`source: "website_form"`, filling the name,
-email, phone, trip, message text, and received time from the website-form copy
-and leaving unknowns blank), and links the email thread to that lead.
-Safety-net leads arrive untagged, with no spam scoring, so the captain sorts
-them with the normal lead buttons; they never trigger an automatic first reply
-to the customer. One message that cannot be resolved is logged and does not
-stop the rest. Today and the morning digest only read; they never create leads.
-Ignored threads, outbound mail, automatic replies and bounces, and replies
-(`Re:`/`Fwd:` subjects, `In-Reply-To`/`References` headers, or messages in
-conversations our side started or already replied to) stay out; website-form
-copies remain candidates even when sent from an automated or no-reply address.
-Classification headers are retained on newly imported mail. The check cannot
-detect a submission that produced neither a lead nor imported mail.
+website submission, sent from our own domain or the form's Shopify relay) are
+candidates; mail from any other sender, including no-reply or notification
+addresses elsewhere, is ordinary however it is laid out. Ordinary inbound emails
+(human emails, vendor pitches, replies) stay in the inbox as threads and never
+become leads, raise alerts, or appear as missing inquiries, whatever their
+wording. Mail already linked to any record (a lead, client, or organization) is
+visible on that record's thread and stays outside the safety net; the safety net
+never moves a thread. Unlinked website copies match a saved lead by their
+Reference or submission ID; an unrelated lead sharing the visitor's email is
+insufficient unless that lead is still in the **New** tab. A matched thread is
+linked to that lead (or its converted client) instead of creating a duplicate.
+Otherwise, the check creates a lead in New (`source: "website_form"`, filling
+the name, email, phone, trip, message text, and received time from the
+website-form copy and leaving unknowns blank), and links the email thread to
+that lead. Safety-net leads arrive untagged, with no spam scoring, so the
+captain sorts them with the normal lead buttons; they never trigger an automatic
+first reply to the customer. One message that cannot be resolved is logged and
+does not stop the rest. Today and the morning digest only read; they never
+create leads. Ignored threads, outbound mail, automatic replies and bounces, and
+replies (`Re:`/`Fwd:` subjects, `In-Reply-To`/`References` headers, or messages
+in conversations our side started or already replied to) stay out; website-form
+copies from our own domain or the Shopify relay remain candidates even when sent
+from a no-reply address. Classification headers are retained on newly imported
+mail. The check cannot detect a submission that produced neither a lead nor
+imported mail.
 
 When missing website-form submissions are added to New, one short email to
 `Setting.captain_email` (the first allowed Google address, falling back to

@@ -55,11 +55,10 @@ module Leads
       local.to_s.match?(AUTOMATED_SENDER) || domain_in?(domain, PLATFORM_DOMAINS)
     end
 
-    # Our own mailbox or domain, the form's relay, or a no-reply/notification
-    # address: only these send website-form copies.
+    # Our own mailbox or domain, or the form's relay: only these send
+    # website-form copies.
     def self.website_form_sender?(from)
-      local, domain = from.split("@", 2)
-      own_sender?(from) || local.to_s.match?(AUTOMATED_SENDER) || domain_in?(domain, WEBSITE_RELAY_DOMAINS)
+      own_sender?(from) || domain_in?(from.split("@", 2)[1], WEBSITE_RELAY_DOMAINS)
     end
 
     def self.domain_in?(domain, entries)
