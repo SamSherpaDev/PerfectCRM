@@ -49,6 +49,13 @@ class NotYetCalledSystemTest < ApplicationSystemTestCase
         assert_text "Last: No answer 2 days ago"
       end
 
+      within("#call_list_lead_#{oldest.id}") do
+        talked = find_button("Talked").evaluate_script("JSON.stringify(this.getBoundingClientRect())")
+        schedule = find("summary", text: "Schedule call").evaluate_script("JSON.stringify(this.getBoundingClientRect())")
+        talked, schedule = [ talked, schedule ].map { |rect| JSON.parse(rect).values_at("top", "height") }
+        assert_equal schedule, talked, "one-tap call buttons line up with Schedule call"
+      end
+
       capture("today-desktop")
       page.current_window.resize_to(390, 844)
       assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, 390

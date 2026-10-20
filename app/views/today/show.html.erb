@@ -87,7 +87,7 @@
             </div>
 
             <div class="scheduled-call-row-actions">
-              <%= form_with url: lead_calls_path(lead), method: :post, class: "scheduled-call-outcomes call-choices", data: { turbo: false } do |form| %>
+              <%= form_with url: lead_calls_path(lead), method: :post, class: "scheduled-call-outcomes", data: { turbo: false } do |form| %>
                 <%= form.hidden_field :save_key, value: SecureRandom.uuid, id: nil %>
                 <%= form.hidden_field :direction, value: "outbound", id: nil %>
                 <%= form.hidden_field :return_to, value: today_return_to, id: nil %>
