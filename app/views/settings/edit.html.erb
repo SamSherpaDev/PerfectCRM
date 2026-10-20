@@ -95,7 +95,7 @@
         <p class="hint">Add <span class="mono">MS_GRAPH_CLIENT_ID</span>, <span class="mono">MS_GRAPH_CLIENT_SECRET</span> and <span class="mono">MS_GRAPH_TENANT_ID</span> to <span class="mono">.env.app</span> first — see README “Mail” — then connect here.</p>
       <% end %>
     </div>
-    <p class="hint mt-4">Setup: register the CRM as a Microsoft application, add the delegated mail scopes, paste the credentials into .env.app, then Connect mailbox. Sync runs every 5 minutes over every mail folder, child folders included, read-only — it never moves, deletes, or flags server mail. A first connect starts from now; past mail stays for Import history. See README “Mail”.</p>
+    <p class="hint mt-4">Setup: register the CRM as a Microsoft application, add the delegated mail scopes, paste the credentials into .env.app, then Connect mailbox. Sync runs every 5 minutes over every mail folder, child folders included, read-only — it never moves, deletes, or flags server mail. A first connect starts from now; earlier mail is not synced. See README “Mail”.</p>
   </section>
 
   <section class="card card-pad mt-6" aria-labelledby="automations-heading">

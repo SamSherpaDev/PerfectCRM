@@ -1,6 +1,6 @@
 # The three-column record page for leads and clients (docs/DESIGN.md 4.11,
 # README "Leads" and "Clients"): one timeline of email, notes, quotes and
-# automated steps, the Upcoming dates on the right, and the Files list.
+# automated steps, and the Files list on the right.
 # Used by LeadsController#show and ClientsController#show next to ReplyBox,
 # which prepares the composer.
 module RecordPage
@@ -8,7 +8,6 @@ module RecordPage
 
   TIMELINE_PAGE = 50
   UPCOMING_LIMIT = 6
-  INACTIVE_BOOKING_STATUSES = %w[cancelled voided refunded].freeze
 
   # One row on the timeline: kind is :message, :note, :event, or :inquiry.
   Entry = Struct.new(:at, :kind, :record)
@@ -24,7 +23,6 @@ module RecordPage
     @page = [ params[:page].to_i, 1 ].max
     @timeline, @older_timeline = timeline_page(record)
     @thread_unread = thread_unread?(record)
-    @upcoming = upcoming_for(record)
     @files = files_for(record)
     @bookings = bookings_for(record)
   end
@@ -72,19 +70,6 @@ module RecordPage
 
   def record_messages(record)
     Message.for_owner(record).newest_first
-  end
-
-  # Follow-ups, live quote deadlines, and confirmed departures, soonest first.
-  def upcoming_for(record)
-    rows = record.tasks.visible.ordered.includes(:template).map { |task| Upcoming.new(task.due_on, :task, task) }
-    rows += record_quotes(record).live.where("valid_until >= ?", Date.current).map do |quote|
-      Upcoming.new(quote.valid_until, :quote, quote)
-    end
-    rows += bookings_for(record).available.where("start_date >= ?", Date.current)
-      .where.not(status: INACTIVE_BOOKING_STATUSES).map do |booking|
-      Upcoming.new(booking.start_date, :departure, booking)
-    end
-    rows.sort_by { |row| [ row.date, row.kind.to_s, row.record.id ] }
   end
 
   # Attachments from every message on the record plus one row per quote

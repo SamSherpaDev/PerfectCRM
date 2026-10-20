@@ -11,7 +11,7 @@ Daily feed context, separate from weekly costs:
 <% end %><%= SpendStatus::LIMITATION %> Daily posts do not fill weekly spend.
 
 <% if @summary.paid_total.booked.positive? %>ROAS <%= @summary.roas ? "#{@summary.roas}x" : "-" %>
-<% end %><% unless @summary.spend_entered? %><%= report_missing_spend_line(@summary) %> Add it on Settings: <%= edit_settings_url(anchor: "weekly-report-heading") %>
+<% end %><% unless @summary.spend_entered? %><%= report_missing_spend_line(@summary) %> Add it on Settings: <%= settings_weekly_report_url(anchor: "weekly-report-heading") %>
 <% end %>
 <%= report_flags_line(@summary) %>
 Next review: <%= @summary.next_review.strftime('%b %-d, %Y') %>

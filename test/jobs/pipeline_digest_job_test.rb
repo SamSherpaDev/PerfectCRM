@@ -1,7 +1,8 @@
 require "test_helper"
 
 class PipelineDigestJobTest < ActiveJob::TestCase
-  test "sends the one-liner to the captain mailbox" do
+  test "sends the one-liner to the captain mailbox when enabled" do
+    Setting.current.update!(pipeline_digest: true)
     Lead.create!(name: "Open ask", source: "manual", expected_value_minor: 500_00)
     before = ActionMailer::Base.deliveries.size
     PipelineDigestJob.perform_now
@@ -11,8 +12,8 @@ class PipelineDigestJobTest < ActiveJob::TestCase
     assert_match(/1 open/, mail.text_part.body.to_s)
   end
 
-  test "stays quiet behind the settings toggle" do
-    Setting.current.update!(pipeline_digest: false)
+  test "stays quiet unless enabled" do
+    assert_not Setting.current.pipeline_digest
     before = ActionMailer::Base.deliveries.size
     PipelineDigestJob.perform_now
     assert_equal before, ActionMailer::Base.deliveries.size

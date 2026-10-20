@@ -592,7 +592,7 @@ three columns on a desktop: Details (facts, travelers, tags) on the left,
 the composer and the one timeline of every email, note, quote, and
 automated step in the middle, and Files on the right with
 a compact read-only Trip in PerfectBook (the Upcoming follow-up-tasks card and the Review inquiry link form on Trip in PerfectBook are hidden). On a phone the same cards sit
-behind Thread, Details, and Files & dates tabs. Each visit starts on Thread
+behind Thread, Details, and Files tabs. Each visit starts on Thread
 unless an explicit link targets another panel. Use New client to create a
 record, and Edit to update facts or add another
 person in the blank People fields. Archive lives in the More menu and
@@ -1282,8 +1282,8 @@ conversion once, including returns to existing clients and referral leads.
 
 The one-line digest reports open and stale leads, wins this month, and open
 lead value. Its production schedule is in [`config/recurring.yml`](config/recurring.yml).
-Settings → Monday pipeline note controls delivery to info@sherpaholidays.com;
-it is enabled by default. It is separate from the morning digest described
+The Monday note to info@sherpaholidays.com is off by default and its Settings
+toggle is hidden; it sends only when `Setting#pipeline_digest` is enabled. It is separate from the morning digest described
 in [Today and follow-ups](#today-and-follow-ups); combining them is pending.
 
 ## Weekly ads report
@@ -1353,7 +1353,7 @@ spend. Missing spend for any paid campaign with activity makes paid total
 spend, costs, and ROAS
 unknown, shown as "-", and names the campaigns needing spend.
 
-Settings → Monday ads report sets the recipient (empty sends to the first
+The report page (`/settings/weekly_report`) sets the recipient (empty sends to the first
 allowlisted Google sign-in, or info@sherpaholidays.com if none is configured).
 The Monday email always sends using the spend already stored.
 [The channel spend API](docs/channel-checks.md#weekly-spend-request) is for the
@@ -1362,12 +1362,12 @@ PerfectCRM and is configured separately with the same `CHANNEL_CHECKS_TOKEN`.
 Nothing in PerfectCRM calls this endpoint. The external check should read last
 week's per-campaign USD spend from Google Ads and Meta and post both channels
 before the Monday 7am Pacific email. Until that check posts, spend is entered
-in Settings as before.
+on the report page as before.
 Paid-cost screens and both Monday email formats show spend receipt time, the
 dates represented, and selected-period coverage separately. Use **Review week**
 or **Review missing days** on a paid Channels card to inspect gaps. See
 [spend status rules and limitations](docs/channel-checks.md#spend-status).
-Settings supports entry and corrections for one of the last eight complete
+The report page supports entry and corrections for one of the last eight complete
 weeks, per channel and required campaign name, matching the lead's campaign
 exactly, including capitalization (surrounding whitespace is ignored).
 Saving the same week, channel, and campaign replaces its amount; unmentioned

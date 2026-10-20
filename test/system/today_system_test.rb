@@ -2,7 +2,7 @@ require "application_system_test_case"
 require_relative "../support/google_sign_in_test_helper"
 require_relative "../support/inquiry_mail_test_helper"
 
-# Today is the first screen on the phone: two tiles per row, check rows
+# Today is the first screen on the phone: two tiles over one full-width tile, check rows
 # completable with one tap, and no sideways scrolling at 390px.
 class TodaySystemTest < ApplicationSystemTestCase
   include GoogleSignInTestHelper
@@ -54,6 +54,18 @@ class TodaySystemTest < ApplicationSystemTestCase
     within("section[aria-label=Counts]") do
       assert_selector ".stat", count: 3
     end
+    rows = page.evaluate_script(<<~JS)
+      (() => {
+        const grid = document.querySelector('section[aria-label=Counts] > div').getBoundingClientRect();
+        const rows = {};
+        document.querySelectorAll('section[aria-label=Counts] .stat').forEach(tile => {
+          const box = tile.getBoundingClientRect();
+          (rows[Math.round(box.top)] ||= []).push(box);
+        });
+        return Object.values(rows).map(row => Math.round(row[row.length - 1].right - row[0].left) === Math.round(grid.width));
+      })()
+    JS
+    assert_equal [ true, true ], rows, "Counts tiles leave a partly filled row at 390px"
     width = page.evaluate_script("document.documentElement.scrollWidth")
     assert_operator width, :<=, 390, "Today overflows a 390px viewport (#{width}px)"
   end

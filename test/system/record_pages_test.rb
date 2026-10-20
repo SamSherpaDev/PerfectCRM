@@ -104,14 +104,14 @@ class RecordPagesTest < ApplicationSystemTestCase
     assert_selector "#files-heading"
     assert_selector "#perfectbook-heading"
     page.current_window.resize_to(390, 844)
-    click_button "Files & dates"
+    click_button "Files"
     assert_selector "[data-tab='files'] .tab-count", text: "0", exact_text: true
 
     click_button "Restore"
     click_button "Reply", exact: true
     assert_button "Send"
     click_button "Close", exact: true
-    click_button "Files & dates"
+    click_button "Files"
     assert_no_selector "#upcoming-heading", visible: :all
     assert_nil task.reload.done_at
   end
@@ -157,7 +157,7 @@ class RecordPagesTest < ApplicationSystemTestCase
     page.current_window.resize_to(390, 844)
 
     visit client_path(owner)
-    click_button "Files & dates"
+    click_button "Files"
     assert_selector "#files-heading", visible: true
     visit client_path(owner, template: template.id, task: task.id)
     assert_selector ".record-tabs .tab-on", text: "Thread"
@@ -167,7 +167,7 @@ class RecordPagesTest < ApplicationSystemTestCase
     assert_equal "8102", find("#message_perfectbook_booking_id", visible: :all).value
 
     visit client_path(owner, anchor: "files-heading")
-    assert_selector ".record-tabs .tab-on", text: "Files & dates"
+    assert_selector ".record-tabs .tab-on", text: "Files"
     assert_selector "#files-heading", visible: true
   end
 

@@ -119,7 +119,7 @@ class ClientsSystemTest < ApplicationSystemTestCase
     [ 1440, 980, 390 ].each do |width|
       page.current_window.resize_to(width, 844)
       visit client_path(client)
-      click_button "Files & dates", exact: false if width == 390
+      click_button "Files", exact: false if width == 390
       within(".trip") { assert_text "No bookings yet." }
       assert find(".trip .empty-inline").evaluate_script(<<~JS), "The booking drawing must stay below the text at #{width}px"
         (() => {
