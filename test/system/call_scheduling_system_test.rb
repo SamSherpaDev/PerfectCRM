@@ -193,4 +193,91 @@ class CallSchedulingSystemTest < ApplicationSystemTestCase
       assert_operator height, :>=, 44, "#{label} is #{height}px tall on phone"
     end
   end
+
+  test "opening Schedule call keeps row and header layouts intact on desktop and clears phone overlays" do
+    second_lead = Lead.create!(name: "Deborah Garjian", email: "deborah@example.com", last_activity_at: 2.hours.ago)
+    second_lead.mark_potential!
+
+    first_lead = Lead.create!(name: "Madatovian Vahan", email: "madatovian@example.com", last_activity_at: 1.hour.ago)
+    first_lead.mark_potential!
+    first_lead.scheduled_calls.create!(scheduled_on: (Time.zone.today + 2.days).iso8601, scheduled_time: "12:00")
+
+    page.current_window.resize_to(1400, 900)
+    visit leads_path(tab: "potential")
+
+    row_metrics = lambda do |name|
+      page.evaluate_script(<<~JS)
+        (() => {
+          const row = Array.from(document.querySelectorAll("li")).find(li => li.textContent.includes(#{name.to_json}));
+          const link = row.querySelector("a").getBoundingClientRect();
+          const summary = row.querySelector(".call-schedule-pop > summary").getBoundingClientRect();
+          const rowRect = row.getBoundingClientRect();
+          return {
+            rowHeight: Math.round(rowRect.height),
+            linkTop: Math.round(link.top - rowRect.top),
+            summaryLeft: Math.round(summary.left),
+            summaryTop: Math.round(summary.top - rowRect.top)
+          };
+        })()
+      JS
+    end
+
+    before_metrics = row_metrics.call("Deborah Garjian")
+    within("li", text: "Deborah Garjian") do
+      find("summary", text: "Schedule call").click
+      assert_selector ".call-schedule-sheet", visible: true
+    end
+    after_metrics = row_metrics.call("Deborah Garjian")
+
+    assert_equal before_metrics["rowHeight"], after_metrics["rowHeight"],
+      "Opening Schedule call on desktop must not expand the Potential lead row height"
+    assert_equal before_metrics["linkTop"], after_metrics["linkTop"],
+      "Opening Schedule call on desktop must not shift the lead name vertically"
+    assert_equal before_metrics["summaryLeft"], after_metrics["summaryLeft"],
+      "Opening Schedule call on desktop must not jump the trigger button horizontally"
+
+    sheet_bounds = page.evaluate_script(<<~JS)
+      (() => {
+        const r = document.querySelector(".call-schedule-pop[open] .call-schedule-sheet").getBoundingClientRect();
+        return { left: Math.round(r.left), right: Math.round(r.right), bottom: Math.round(r.bottom), width: Math.round(r.width) };
+      })()
+    JS
+    assert_operator sheet_bounds["left"], :>=, 8
+    assert_operator sheet_bounds["right"], :<=, 1392
+    assert_operator sheet_bounds["bottom"], :<=, 900
+    assert_operator sheet_bounds["width"], :>=, 360
+
+    within("li", text: "Madatovian Vahan") do
+      find("summary", text: "Reschedule").click
+    end
+    assert_selector ".call-schedule-pop[open]", count: 1
+
+    visit lead_path(second_lead)
+    heading_before = page.evaluate_script("Math.round(document.querySelector('h1').getBoundingClientRect().height)")
+    heading_width_before = page.evaluate_script("Math.round(document.querySelector('h1').getBoundingClientRect().width)")
+    assert_operator heading_before, :<=, 60, "Lead heading wrapped across lines before opening Schedule call"
+    assert_operator heading_width_before, :>=, 200
+
+    within(".page-actions") do
+      find("summary", text: "Schedule call").click
+      assert_selector ".call-schedule-sheet", visible: true
+    end
+    heading_after = page.evaluate_script("Math.round(document.querySelector('h1').getBoundingClientRect().height)")
+    heading_width_after = page.evaluate_script("Math.round(document.querySelector('h1').getBoundingClientRect().width)")
+    assert_equal heading_before, heading_after, "Opening Schedule call in page header crushed or wrapped the lead h1"
+    assert_equal heading_width_before, heading_width_after
+
+    page.current_window.resize_to(390, 844)
+    visit lead_path(second_lead)
+    assert_selector ".reply-pill", visible: true
+    within(".page-actions") do
+      find("summary", text: "Schedule call").click
+      assert_selector ".call-schedule-sheet", visible: true
+    end
+    assert_no_selector ".reply-pill", visible: true
+    phone_sheet_bottom = page.evaluate_script(
+      "Math.round(document.querySelector('.call-schedule-pop[open] .call-schedule-sheet').getBoundingClientRect().bottom)"
+    )
+    assert_operator phone_sheet_bottom, :<=, 781, "Phone schedule sheet should scroll above the bottom navigation bar"
+  end
 end
