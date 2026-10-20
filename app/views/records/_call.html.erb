@@ -20,13 +20,13 @@
         <% if lead && record.call_schedulable? && next_call&.due_by?(Time.current) %>
           <p class="hint">Next call: <%= scheduled_call_stamp(next_call) %>. Log the outcome in the scheduled call bar above, or add details below.</p>
         <% else %>
-          <%= form_with url: calls_path, class: "call-choices", data: { turbo: false, controller: ("call-confirm" if confirm_call), "call-confirm-message-value": (call_confirm_msg if confirm_call) }.compact do |form| %>
+          <%= form_with url: calls_path, class: "call-choices", data: { turbo: false, controller: ("contact-confirm" if confirm_call), "contact-confirm-message-value": (call_confirm_msg if confirm_call) }.compact do |form| %>
             <%= form.hidden_field :save_key, value: SecureRandom.uuid, id: nil %>
             <%= form.hidden_field :direction, value: "outbound", id: nil %>
             <% unless lead %><%= form.hidden_field :inquiry_id, value: inquiry.id, id: nil %><% end %>
             <% CallLog::ONE_TAP.each do |outcome| %>
               <%= button_tag CallLog::LABELS.fetch(outcome), name: "outcome", value: outcome, class: "btn-secondary btn-sm",
-                    data: (confirm_call ? { turbo_confirm: call_confirm_msg, action: "click->call-confirm#confirm" } : {}) %>
+                    data: (confirm_call ? { action: "click->contact-confirm#confirm" } : {}) %>
             <% end %>
           <% end %>
         <% end %>
@@ -50,10 +50,10 @@
       <p class="hint mt-2">For a call they made, an earlier time, or a duration.</p>
       <% details_data = { turbo: false } %>
       <% if not_interested_ids.any? %>
-        <% details_data[:controller] = "call-confirm" %>
-        <% details_data[:"call-confirm-message-value"] = call_confirm_msg %>
-        <% details_data[:"call-confirm-not-interested-ids-value"] = not_interested_ids.to_json %>
-        <% details_data[:action] = "submit->call-confirm#confirmDetails" %>
+        <% details_data[:controller] = "contact-confirm" %>
+        <% details_data[:"contact-confirm-message-value"] = call_confirm_msg %>
+        <% details_data[:"contact-confirm-not-interested-ids-value"] = not_interested_ids.to_json %>
+        <% details_data[:action] = "submit->contact-confirm#confirmDetails" %>
       <% end %>
       <%= form_with url: calls_path, class: "mt-3 space-y-3", data: details_data do |form| %>
         <%= form.hidden_field :save_key, value: SecureRandom.uuid %>
@@ -79,8 +79,7 @@
           <%= form.label :duration, "Duration in seconds (optional)", class: "label" %>
           <%= form.number_field :duration, min: 0, max: 86400, class: "input" %>
         </div>
-        <%= form.submit "Save call", class: "btn-secondary",
-              data: (lead && record.not_interested? ? { turbo_confirm: call_confirm_msg } : {}) %>
+        <%= form.submit "Save call", class: "btn-secondary" %>
       <% end %>
     </details>
   </section>

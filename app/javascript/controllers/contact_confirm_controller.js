@@ -1,17 +1,17 @@
 import { Controller } from "@hotwired/stimulus"
 
-// Explicit confirmation before logging an outbound call on a not-interested
-// lead. Needed because the call forms use data-turbo="false" to preserve the
-// #record-details redirect hash on phones.
+// Explicit confirmation before contacting a not-interested lead from a form
+// that uses data-turbo="false", where Turbo's data-turbo-confirm never runs:
+// the call forms (to preserve the #record-details redirect hash on phones)
+// and the new-quote builder.
 export default class extends Controller {
   static values = {
-    message: { type: String, default: "This lead is marked not interested. Log an outbound call anyway?" },
+    message: String,
     notInterestedIds: { type: Array, default: [] }
   }
 
   confirm(event) {
-    const message = event.currentTarget.dataset.turboConfirm || this.messageValue
-    if (message && !window.confirm(message)) {
+    if (!window.confirm(this.messageValue)) {
       event.preventDefault()
     }
   }
@@ -28,8 +28,6 @@ export default class extends Controller {
       if (!this.notInterestedIdsValue.includes(selectedId)) return
     }
 
-    if (!window.confirm(this.messageValue)) {
-      event.preventDefault()
-    }
+    this.confirm(event)
   }
 }

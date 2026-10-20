@@ -67,7 +67,8 @@
     </div>
   </section>
 
-  <%= form_with model: @quote, url: quotes_path, id: "quote-builder-form", authenticity_token: form_authenticity_token, data: { turbo: false }, class: "grid gap-6 lg:grid-cols-[3fr_2fr] lg:items-start" do |form| %>
+  <% send_confirm = quote_send_confirm(@quote) %>
+  <%= form_with model: @quote, url: quotes_path, id: "quote-builder-form", authenticity_token: form_authenticity_token, data: { turbo: false, controller: ("contact-confirm" if send_confirm), "contact-confirm-message-value": send_confirm }.compact, class: "grid gap-6 lg:grid-cols-[3fr_2fr] lg:items-start" do |form| %>
     <%= hidden_field_tag :client_id, params[:client_id] %>
     <%= hidden_field_tag :lead_id, params[:lead_id] %>
     <%= form.hidden_field :perfectbook_trip_id %>
@@ -161,7 +162,7 @@
           <p class="font-display text-3xl tabular-nums text-ink" data-quote-builder-target="total">$0.00</p>
         </div>
         <div class="mt-4 flex flex-col gap-2">
-          <%= form.button "Send quote", name: "send_now", value: "1", type: "submit", class: "btn btn-primary" %>
+          <%= form.button "Send quote", name: "send_now", value: "1", type: "submit", class: "btn btn-primary", data: (send_confirm ? { action: "click->contact-confirm#confirm" } : {}) %>
           <%= form.submit "Save draft", class: "btn btn-secondary" %>
         </div>
       </section>
@@ -184,7 +185,7 @@
         <p class="font-display text-[22px] leading-none tabular-nums text-ink" data-quote-builder-target="total">$0.00</p>
         <p class="mt-0.5 truncate text-xs muted" data-quote-builder-target="count">Total</p>
       </div>
-      <%= form.button "Send quote", name: "send_now", value: "1", type: "submit", class: "btn btn-primary min-h-11 min-w-24" %>
+      <%= form.button "Send quote", name: "send_now", value: "1", type: "submit", class: "btn btn-primary min-h-11 min-w-24", data: (send_confirm ? { action: "click->contact-confirm#confirm" } : {}) %>
     </div>
     <%= form.button "Update catalog", id: "quote-catalog-refresh", formaction: preview_quotes_path, formnovalidate: true, hidden: true %>
   <% end %>

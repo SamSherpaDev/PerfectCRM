@@ -301,6 +301,9 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
       # Dismissing email confirm prevents sending; dismissing call confirm prevents logging an outbound call; accepting logs it
       click_button "Reply" if width == 390
       fill_in "Message", with: "Just following up."
+      details = find(".reply-details")
+      details.find("summary").click unless details["open"] == "true"
+      fill_in "To", with: lead.email
       assert_no_difference -> { Message.outbound.count } do
         dismiss_confirm("This lead is marked not interested. Send this email anyway?") do
           click_button "Send"
@@ -319,6 +322,14 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
           within(".calls") { click_button "No answer" }
         end
         assert_selector ".flash-notice", text: "Call logged: No answer."
+      end
+      within(".calls") do
+        find("summary", text: "Add details").click
+        assert_no_difference -> { lead.activity_events.where(kind: "call").count } do
+          dismiss_confirm("This lead is marked not interested. Log an outbound call anyway?") do
+            click_button "Save call"
+          end
+        end
       end
 
       # Undo returns the lead to Potential

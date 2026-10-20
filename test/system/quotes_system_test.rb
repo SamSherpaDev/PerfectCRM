@@ -609,6 +609,35 @@ class QuotesSystemTest < ApplicationSystemTestCase
     end
   end
 
+  test "sending a quote to a not-interested lead asks for the do-not-contact confirmation" do
+    lead = Lead.create!(name: "Declined traveler", email: "declined@example.com")
+    lead.mark_not_interested!
+    quote = Quote.create!(lead: lead, party_size: 2, valid_until: Date.current + 14)
+    quote.lines.create!(kind: "custom", description: "Trek", quantity: 2, unit_minor: 150000)
+    complete_quote_terms(quote, days: 180)
+    message = "This lead is marked not interested - do not contact. Send this quote anyway?"
+
+    visit new_quote_path(lead_id: lead.id)
+    assert_selector "h1", text: "New quote"
+    assert_no_difference -> { Quote.count } do
+      dismiss_confirm(message) { click_button "Send quote", match: :first }
+      assert_selector "h1", text: "New quote"
+    end
+
+    visit edit_quote_path(quote)
+    dismiss_confirm(message) { click_button "Send quote", match: :first }
+    assert_current_path edit_quote_path(quote)
+
+    visit quote_path(quote)
+    dismiss_confirm(message) { click_button "Send quote" }
+    assert_current_path quote_path(quote)
+    assert_equal "draft", quote.reload.status
+
+    accept_confirm(message) { click_button "Send quote" }
+    assert_text "Quote sent"
+    assert_equal "sent", quote.reload.status
+  end
+
   test "booking documents block incomplete sends and require exact public acceptance" do
     client = Client.create!(name: "Synthetic Traveler", email: "traveler@example.com")
     quote = Quote.create!(client: client, party_size: 1, valid_until: Date.current + 14)

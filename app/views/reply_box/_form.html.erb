@@ -114,7 +114,7 @@
     <%= form.submit "Save draft", formaction: draft_url, formnovalidate: true,
           class: compact ? "btn btn-ghost btn-sm" : "btn btn-secondary", data: { "reply-box-target": "saveButton" } %>
     <%= form.submit "Send", class: "btn btn-primary reply-send",
-          data: (not_interested_lead ? { turbo_confirm: not_interested_email_confirm, action: "click->reply-box#confirmSend" } : { action: "click->reply-box#confirmSend" }) %>
+          data: (not_interested_lead ? { turbo_confirm: not_interested_email_confirm } : {}) %>
   </div>
 <% end %>
 

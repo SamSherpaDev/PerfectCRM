@@ -792,8 +792,12 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "[role=alert][aria-label='Not interested warning']", text: /Not interested - do not contact/
     assert_select "input[type=submit][value=Send][data-turbo-confirm*='marked not interested']"
-    assert_select ".call-choices button[data-turbo-confirm*='marked not interested']", count: 3
-    assert_select "input[type=submit][value='Save call'][data-turbo-confirm*='marked not interested']"
+    assert_select "form.call-choices[data-controller=contact-confirm][data-contact-confirm-message-value*='marked not interested']" do
+      assert_select "button[data-action='click->contact-confirm#confirm']", count: 3
+    end
+    assert_select "form[data-controller=contact-confirm][data-action='submit->contact-confirm#confirmDetails']" do
+      assert_select "input[type=submit][value='Save call']"
+    end
 
     # Undo ("Interested again") returns it to Potential
     patch unmark_not_interested_lead_path(lead), params: { return_to: leads_path(tab: "not_interested") }

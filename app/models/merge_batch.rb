@@ -44,7 +44,7 @@ class MergeBatch
       if email.match?(URI::MailTo::EMAIL_REGEXP) && !email.match?(/[,;\s]/)
         if reject_not_interested && not_interested_lead_email?(email)
           errors << RecipientError.new(line_number: index + 1, line: line,
-            problem: "Marked not interested — do not contact.")
+            problem: "Marked not interested - do not contact.")
         else
           recipients << Recipient.new(name: name, email: email)
         end

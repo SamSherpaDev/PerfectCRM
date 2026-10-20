@@ -704,6 +704,11 @@ On the lead detail page, a prominent `Not interested - do not contact` alert
 banner warns against accidental contact, Schedule call and document-nudge links
 are hidden, and the reply box Send button and outbound call buttons require an
 explicit confirmation dialog before sending an email or logging an outbound call.
+Send quote on the quote page, builder, and new-quote form asks the same
+do-not-contact confirmation before emailing the quote. A not-interested lead is
+no longer open pipeline, so it stays out of pipeline value and open-lead counts
+(`Pipeline::Report`), the Pipeline board columns (`Pipeline::Board`), and the
+weekly report's waiting-on-reply list, while keeping its stage for a restore.
 
 More → Delete lead archives it after one confirmation naming the lead; the
 Archived tab restores it to its previous stage, and nothing is ever
