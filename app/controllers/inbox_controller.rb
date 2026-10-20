@@ -7,8 +7,10 @@ class InboxController < ApplicationController
     base = Conversation.excluding_archived_leads.where(ignored: false).ordered.includes(:linkable)
     waiting = base.merge(Conversation.waiting_on_you).linked
     @waiting_count = waiting.count
-    @waiting_them_count = base.where.not(id: Conversation.waiting_on_you.select(:id))
-      .where.not(linkable_type: nil).count
+    waiting_them = base.excluding_not_interested_leads
+      .where.not(id: Conversation.waiting_on_you.select(:id))
+      .where.not(linkable_type: nil)
+    @waiting_them_count = waiting_them.count
     @all_count = base.count
     @triage_count = Conversation.needs_triage.count
 
@@ -16,7 +18,7 @@ class InboxController < ApplicationController
     when "waiting"
       waiting
     when "waiting_them"
-      base.where.not(id: Conversation.waiting_on_you.select(:id)).where.not(linkable_type: nil)
+      waiting_them
     when "triage"
       Conversation.needs_triage.ordered.includes(:linkable)
     else

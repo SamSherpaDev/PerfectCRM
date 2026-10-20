@@ -18,7 +18,7 @@ class Pipeline::Board
   def columns
     STAGES.map do |stage|
       if LEAD_STAGES.include?(stage)
-        scope = filtered_leads(Lead.by_status(stage))
+        scope = filtered_leads(Lead.by_status(stage).where(not_interested_marked_at: nil))
         Column.new(stage: stage, records: scope.ordered.includes(:tags, :people).to_a,
           count: scope.count, values_by_currency: { "USD" => scope.sum(:expected_value_minor).to_i })
       else

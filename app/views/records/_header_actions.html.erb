@@ -13,14 +13,17 @@
 <% else %>
   <%= link_to "Edit", lead ? edit_lead_path(record, return_to: @lead_action_return_to) : edit_client_path(record), class: "btn-secondary btn btn-sm" %>
   <% if lead %>
-    <%= render "scheduled_calls/popover",
-      lead: record,
-      return_to: lead_path(record, { return_to: params[:return_to].presence }.compact),
-      trigger_label: "Schedule call",
-      trigger_class: "btn-secondary btn btn-sm",
-      id_prefix: "header_schedule_call_#{record.id}" %>
+    <% if record.call_schedulable? %>
+      <%= render "scheduled_calls/popover",
+        lead: record,
+        return_to: lead_path(record, { return_to: params[:return_to].presence }.compact),
+        trigger_label: "Schedule call",
+        trigger_class: "btn-secondary btn btn-sm",
+        id_prefix: "header_schedule_call_#{record.id}" %>
+    <% end %>
     <%= render "leads/potential_action", lead: record %>
     <%= render "leads/unsure_action", lead: record %>
+    <%= render "leads/not_interested_action", lead: record %>
     <% unless record.suspected_spam? %>
       <%= button_to "Mark as spam", mark_as_spam_lead_path(record), method: :patch, params: { return_to: @lead_action_return_to }, class: "btn-secondary btn btn-sm" %>
     <% end %>

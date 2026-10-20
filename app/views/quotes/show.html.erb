@@ -4,7 +4,7 @@
     <% if @quote.draft? %>
       <%= link_to "Edit", edit_quote_path(@quote), class: "btn btn-secondary btn-sm" %>
       <%= link_to "PDF", quote_path(@quote, format: :pdf), class: "btn btn-secondary btn-sm" %>
-      <%= button_to "Send quote", send_quote_quote_path(@quote), method: :post, class: "btn btn-primary btn-sm" %>
+      <%= button_to "Send quote", send_quote_quote_path(@quote), method: :post, class: "btn btn-primary btn-sm", form: { data: { turbo_confirm: quote_send_confirm(@quote) } } %>
     <% else %>
       <%= link_to "PDF", quote_path(@quote, format: :pdf), class: "btn btn-secondary btn-sm" %>
       <%= button_to "Duplicate", duplicate_quote_path(@quote), method: :post, class: "btn btn-ghost btn-sm" %>

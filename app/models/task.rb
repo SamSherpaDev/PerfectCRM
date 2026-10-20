@@ -39,7 +39,7 @@ class Task < ApplicationRecord
   # Snoozed past today stays hidden; snoozed until today resurfaces.
   scope :visible, -> {
     open.where("snoozed_until IS NULL OR snoozed_until <= ?", Date.current)
-      .where.not(subject_type: "Lead", subject_id: Lead.archived.select(:id))
+      .where.not(subject_type: "Lead", subject_id: Lead.archived.or(Lead.not_interested).select(:id))
   }
   scope :overdue, -> { visible.where("due_on < ?", Date.current) }
   scope :due_today, -> { visible.where(due_on: Date.current) }

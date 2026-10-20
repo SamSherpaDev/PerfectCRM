@@ -23,7 +23,7 @@ class ScheduledCall < ApplicationRecord
   validate :lead_must_be_schedulable, if: :scheduled?
 
   scope :scheduled, -> { where(status: "scheduled") }
-  scope :visible, -> { joins(:lead).merge(Lead.active.where(converted_client_id: nil)) }
+  scope :visible, -> { joins(:lead).merge(Lead.active.where(converted_client_id: nil, not_interested_marked_at: nil)) }
   scope :missed, ->(now = Time.current) { scheduled.where("scheduled_calls.scheduled_at < ?", now).order(scheduled_at: :asc, id: :asc) }
   scope :upcoming, ->(now = Time.current) { scheduled.where("scheduled_calls.scheduled_at >= ?", now).order(scheduled_at: :asc, id: :asc) }
   scope :between, ->(range_start, range_end) {

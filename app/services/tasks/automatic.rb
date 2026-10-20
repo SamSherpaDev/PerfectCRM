@@ -67,7 +67,7 @@ module Tasks
     def subject_for(booking)
       subject = Client.find_by(perfectbook_contact_id: booking.perfectbook_contact_id) ||
         Organization.find_by(perfectbook_contact_id: booking.perfectbook_contact_id) ||
-        Lead.active.find_by(perfectbook_contact_id: booking.perfectbook_contact_id)
+        Lead.active.where(not_interested_marked_at: nil).find_by(perfectbook_contact_id: booking.perfectbook_contact_id)
       subject.is_a?(Lead) && subject.converted? ? subject.converted_client : subject
     end
 

@@ -5,6 +5,15 @@
     <%= render "records/header_actions", record: @lead %>
   <% end %>
   <%= render "shared/flash" %>
+  <% if @lead.not_interested? %>
+    <section class="callout-danger mb-5 flex items-start gap-3" role="alert" aria-label="Not interested warning">
+      <%= render "shared/icon", name: :void, class: "mt-0.5 h-5 w-5 shrink-0 text-bad" %>
+      <div>
+        <p class="font-medium text-ink">Not interested - do not contact</p>
+        <p class="mt-0.5">This lead is marked not interested and hidden from call lists, follow-ups, and automatic emails. Choose Interested again above to restore them.</p>
+      </div>
+    </section>
+  <% end %>
   <% if @lead.suspected_spam? && !@lead.converted? %>
     <section class="card card-pad mb-5" aria-label="Spam review">
       <div class="flex flex-wrap items-center justify-between gap-3">

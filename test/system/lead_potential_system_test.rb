@@ -59,7 +59,7 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
       waiting = Lead.create!(name: "Sorting#{width} Waiting")
       chatting = Lead.create!(name: "Sorting#{width} Chatting", status: "chatting")
       visit leads_path(tab: "new", q: "Sorting#{width}", sort: "name")
-      assert_equal %w[New Potential Unsure Quoted Archived],
+      assert_equal [ "New", "Potential", "Unsure", "Quoted", "Not interested", "Archived" ],
         all("nav.tabs a").map { |tab| tab.first("span").text }
       assert_link chatting.name
       capture("new-#{width}")
@@ -238,7 +238,7 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
       page.current_window.resize_to(width, 900)
       lead = Lead.create!(name: "Tab traveler #{width}", status: "quoted", source: "manual")
       visit leads_path
-      assert_equal %w[New Potential Unsure Quoted Archived],
+      assert_equal [ "New", "Potential", "Unsure", "Quoted", "Not interested", "Archived" ],
         all("nav.tabs a").map { |tab| tab.first("span").text }
       within("nav.tabs") { click_link "Quoted" }
       assert_link lead.name
@@ -249,7 +249,7 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
       accept_confirm { click_button "Convert to client" }
       assert_selector "h1", text: lead.name
       assert_text "Started as a lead"
-      %w[new potential unsure quoted archived].each do |tab|
+      %w[new potential unsure quoted not_interested archived].each do |tab|
         visit leads_path(tab: tab, q: lead.name)
         assert_no_link lead.name
       end
@@ -269,6 +269,76 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
       click_link "open it"
       assert_text "Converted leads stay read-only."
       assert_no_button "Convert to client"
+    end
+  end
+
+  test "not interested leads show warning banner, require confirm before emailing or calling, and restore to previous tab on desktop and phone" do
+    [ 1400, 390 ].each do |width|
+      page.current_window.resize_to(width, 900)
+      lead = Lead.create!(name: "Declined #{width}", email: "declined-#{width}@example.com", source: "google_ads", status: "new")
+      lead.mark_potential!
+      convo = lead.conversations.create!(subject: "Everest trek")
+      convo.messages.create!(direction: "in", from_address: lead.email, to_addresses: [ "info@sherpaholidays.com" ],
+        subject: "Everest trek", text_body: "Not interested right now", sent_at: 1.hour.ago, status: "received")
+      lead.scheduled_calls.create!(scheduled_at: 2.days.from_now.change(hour: 11, min: 0), duration_minutes: 30)
+
+      visit leads_path(tab: "potential", q: "Declined #{width}", sort: "name")
+      within("li", text: lead.name) { click_button "Mark not interested" }
+      assert_selector "h2", text: "Potential", exact_text: true
+      assert_no_link lead.name
+      within("nav.tabs") { click_link "Not interested" }
+      assert_selector "h2", text: "Not interested", exact_text: true
+      assert_link lead.name
+      within("li", text: lead.name) { assert_button "Interested again" }
+      assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, width
+
+      click_link lead.name
+      assert_selector "[role=alert][aria-label='Not interested warning']", text: "Not interested - do not contact"
+      assert_text "Scheduled call for"
+      assert_text "cancelled (marked not interested)"
+      assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, width
+
+      # Dismissing email confirm prevents sending; dismissing call confirm prevents logging an outbound call; accepting logs it
+      click_button "Reply" if width == 390
+      fill_in "Message", with: "Just following up."
+      details = find(".reply-details")
+      details.find("summary").click unless details["open"] == "true"
+      fill_in "To", with: lead.email
+      assert_no_difference -> { Message.outbound.count } do
+        dismiss_confirm("This lead is marked not interested. Send this email anyway?") do
+          click_button "Send"
+        end
+      end
+      click_button "Close" if width == 390
+
+      click_button "Details", exact: true if width == 390
+      assert_no_difference -> { lead.activity_events.where(kind: "call").count } do
+        dismiss_confirm("This lead is marked not interested. Log an outbound call anyway?") do
+          within(".calls") { click_button "No answer" }
+        end
+      end
+      assert_difference -> { lead.activity_events.where(kind: "call").count }, 1 do
+        accept_confirm("This lead is marked not interested. Log an outbound call anyway?") do
+          within(".calls") { click_button "No answer" }
+        end
+        assert_selector ".flash-notice", text: "Call logged: No answer."
+      end
+      within(".calls") do
+        find("summary", text: "Add details").click
+        assert_no_difference -> { lead.activity_events.where(kind: "call").count } do
+          dismiss_confirm("This lead is marked not interested. Log an outbound call anyway?") do
+            click_button "Save call"
+          end
+        end
+      end
+
+      # Undo returns the lead to Potential
+      click_button "Interested again"
+      assert_current_path leads_path(tab: "new")
+      visit leads_path(tab: "not_interested", q: "Declined #{width}", sort: "name")
+      assert_no_link lead.name
+      within("nav.tabs") { click_link "Potential" }
+      assert_link lead.name
     end
   end
 

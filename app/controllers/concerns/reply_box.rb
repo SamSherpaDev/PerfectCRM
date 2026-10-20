@@ -32,6 +32,7 @@ module ReplyBox
   # organization page still shows the Suggested message card instead.
   def prefill_task_nudge(owner)
     return unless owner.is_a?(Lead) || owner.is_a?(Client)
+    return if owner.is_a?(Lead) && owner.not_interested?
     return if params[:template].blank? || !@reply_draft.empty?
 
     template = Template.active.find_by(id: params[:template])
@@ -54,6 +55,8 @@ module ReplyBox
   # with the document-request template naming exactly the missing types.
   # Never clobbers the captain's own draft text.
   def prefill_document_nudge(owner)
+    return if owner.is_a?(Lead) && owner.not_interested?
+
     mirror_id = params[:nudge_booking_id].presence
     return if mirror_id.nil? || !@reply_draft.empty?
 

@@ -3,11 +3,11 @@ class LeadsController < ApplicationController
   include RecordPage
   include LeadsReturnPath
 
-  before_action :set_lead, only: %i[show edit update convert refresh_bookings archive unarchive mark_as_spam not_spam mark_potential unmark_potential mark_unsure unmark_unsure]
+  before_action :set_lead, only: %i[show edit update convert refresh_bookings archive unarchive mark_as_spam not_spam mark_potential unmark_potential mark_unsure unmark_unsure mark_not_interested unmark_not_interested]
   before_action :block_converted_edit, only: %i[edit update]
   before_action :block_archived_edit, only: %i[edit update]
 
-  TABS = %w[new potential unsure quoted archived missing_source].freeze
+  TABS = %w[new potential unsure quoted not_interested archived missing_source].freeze
   SORTS = %w[activity name newest fit].freeze
   # Stages without their own tab: chatting and nudged wait in New until
   # sorted, and lost rests with Archived. Converted leads live on as clients,
@@ -23,13 +23,15 @@ class LeadsController < ApplicationController
     @sort = SORTS.include?(params[:sort]) ? params[:sort] : "activity"
     @lead_action_return_to = leads_path(tab: @tab, q: @query, sort: @sort)
     new_leads = Lead.in_new_tab
-    set_aside = Lead.archived.or(Lead.lost)
+    quoted_leads = Lead.by_status("quoted").where(not_interested_marked_at: nil)
+    set_aside = Lead.archived.or(Lead.lost.where(not_interested_marked_at: nil))
 
     @counts = {
       "new" => new_leads.count,
       "potential" => Lead.potential.count,
       "unsure" => Lead.unsure.count,
-      "quoted" => Lead.by_status("quoted").count,
+      "quoted" => quoted_leads.count,
+      "not_interested" => Lead.not_interested.count,
       "archived" => set_aside.count
     }
 
@@ -37,6 +39,8 @@ class LeadsController < ApplicationController
     when "new" then new_leads
     when "potential" then Lead.potential
     when "unsure" then Lead.unsure
+    when "quoted" then quoted_leads
+    when "not_interested" then Lead.not_interested
     when "archived" then set_aside
     else Lead.by_status(@tab)
     end
@@ -172,6 +176,20 @@ class LeadsController < ApplicationController
     redirect_to @lead, alert: e.record.errors.full_messages.to_sentence
   end
 
+  def mark_not_interested
+    @lead.mark_not_interested!
+    redirect_to lead_action_return_to, notice: "Marked as not interested - moved to Not interested. Choose Interested again to restore."
+  rescue ActiveRecord::RecordInvalid => e
+    redirect_to @lead, alert: e.record.errors.full_messages.to_sentence
+  end
+
+  def unmark_not_interested
+    @lead.unmark_not_interested!
+    redirect_to lead_action_return_to, notice: "Interested again - moved to #{lead_destination_tab}."
+  rescue ActiveRecord::RecordInvalid => e
+    redirect_to @lead, alert: e.record.errors.full_messages.to_sentence
+  end
+
   def refresh_bookings
     if @lead.perfectbook_contact_id.present?
       PerfectBook::SyncBookingsJob.perform_later(perfectbook_contact_id: @lead.perfectbook_contact_id)
@@ -229,6 +247,7 @@ class LeadsController < ApplicationController
   end
 
   def lead_destination_tab
+    return "Not interested" if @lead.not_interested?
     return "Potential" if @lead.potential?
     return "Unsure" if @lead.unsure?
     return "Quoted" if @lead.status == "quoted"

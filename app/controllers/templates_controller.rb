@@ -4,8 +4,8 @@ class TemplatesController < ApplicationController
   def document_nudge
     @booking = PerfectBook::Booking.available.find(params[:booking_id])
     @recipient = Client.find_by(perfectbook_contact_id: @booking.perfectbook_contact_id) ||
-      Lead.open.find_by(perfectbook_contact_id: @booking.perfectbook_contact_id) ||
-      Lead.lost.find_by(perfectbook_contact_id: @booking.perfectbook_contact_id)
+      Lead.open.where(not_interested_marked_at: nil).find_by(perfectbook_contact_id: @booking.perfectbook_contact_id) ||
+      Lead.lost.where(not_interested_marked_at: nil).find_by(perfectbook_contact_id: @booking.perfectbook_contact_id)
     raise ActiveRecord::RecordNotFound unless @recipient
 
     nudge = TemplateContext.for_document_nudge(@recipient, @booking)
@@ -191,8 +191,17 @@ class TemplatesController < ApplicationController
           @skipped_without_email += 1
           next
         end
+        next if not_interested_booking?(booking, email)
         contact.name.present? ? "#{contact.name} <#{email}>" : email
       end.join("\n")
+  end
+
+  def not_interested_booking?(booking, email)
+    return false if Client.where(perfectbook_contact_id: booking.perfectbook_contact_id).exists?
+    return true if booking.perfectbook_contact_id.present? &&
+      Lead.not_interested.where(perfectbook_contact_id: booking.perfectbook_contact_id).exists?
+
+    MergeBatch.not_interested_lead_email?(email)
   end
 
   def set_template

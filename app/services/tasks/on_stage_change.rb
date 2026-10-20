@@ -15,6 +15,8 @@ module Tasks
     module_function
 
     def call(subject:, from:, to:)
+      return nil if subject.respond_to?(:not_interested?) && subject.not_interested?
+
       plan = STAGE_TASK_TEMPLATES[to.to_s]
       return nil if plan.nil?
 

@@ -172,7 +172,7 @@ module WeeklyReport
     # Open leads with no reply yet, received more than a day ago.
     def waiting
       @waiting ||= counted_leads
-        .where(converted_client_id: nil).where.not(status: "lost")
+        .where(converted_client_id: nil, not_interested_marked_at: nil).where.not(status: "lost")
         .where("COALESCE(received_at, leads.created_at) <= ?", Time.current - WAITING_AFTER)
         .to_a.select { |lead| first_reply_at(lead).nil? }
         .sort_by { |lead| inquired_at(lead) }

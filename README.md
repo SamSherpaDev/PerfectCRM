@@ -636,7 +636,7 @@ A lead carries source (`google_ads`, `meta_ads`, `trade_show`, `website_form`,
 advisor `referral_code` from the storefront `?ref=` links, Panda
 AI fit (`fit_score`, `fit_band`, `fit_reason`), and status (`new`,
 `chatting`, `quoted`, `nudged`, `lost`). Tabs are New, Potential, Unsure,
-Quoted, and Archived. Stages keep driving the pipeline, reports,
+Quoted, Not interested, and Archived. Stages keep driving the pipeline, reports,
 and automations; on the Leads tabs, chatting and nudged leads stay in New until
 you sort them, and lost leads rest in Archived beside archived and spam leads
 (old Chatting, Nudged, and Lost links open those tabs). Converted leads leave
@@ -672,6 +672,43 @@ and restoring an ordinarily archived lead restores its Unsure mark.
 These actions move the lead to the matching tab while returning you to the
 Leads list context you came from, including its tab, search, and sort. From a
 lead detail page without a list context, they return to New.
+
+Mark not interested on a lead row or lead page sets `not_interested_marked_at`
+and moves the lead into the Not interested tab while keeping you on the same
+Leads list context (or returning to New from a detail page without one). It uses
+a dedicated `not_interested_marked_at` mark rather than reusing the `lost`
+pipeline stage because `lost` requires a `lost_reason`, can be set by external
+automations (`AUTOMATION_STATUSES`), rests in the Archived tab, and drives
+stage-change history and AI fit agreement; keeping `not_interested_marked_at`
+separate preserves the lead's prior stage (`new`, `chatting`, `quoted`,
+`nudged`, or `lost`) and any `Potential` or `Unsure` mark so clicking
+**Interested again** (`unmark_not_interested!`) restores the lead to its exact
+previous tab (`Potential`, `Unsure`, `Quoted`, `New`, or `Archived`). Marking
+Potential or Unsure on a not-interested lead also clears `not_interested_marked_at`.
+Not interested is not spam: it does not set `spam_marked_at` or the
+`suspected_spam` tag, and it does not alter spam reports or ad conversions
+already sent.
+
+While marked not interested, a lead is excluded from Today's Not yet called,
+New leads, Quotes out, Follow-ups, Replies waiting, and Scheduled calls, from
+Inbox Waiting tabs, from the morning digest call and follow-up lists, from
+pipeline columns, totals, and stale/nudge indicators, from task/document nudge
+prefills, from automatic first replies (`AutomaticFirstReply`), automatic
+booking follow-up proposals (`Tasks::Automatic`), stage-change follow-up hooks
+(`Tasks::OnStageChange`), and group-departure template merges (`MergeBatch` and
+`TemplatesController`). External automation verdicts still record fit scores
+and stages, since they contact no one, and the lead stays not interested. Any open
+scheduled call on the lead is cancelled when marked not interested, recording a
+`scheduled_call` timeline note (`Scheduled call for … cancelled (marked not interested)`).
+On the lead detail page, a prominent `Not interested - do not contact` alert
+banner warns against accidental contact, Schedule call and document-nudge links
+are hidden, and the reply box Send button and outbound call buttons require an
+explicit confirmation dialog before sending an email or logging an outbound call.
+Send quote on the quote page, builder, and new-quote form asks the same
+do-not-contact confirmation before emailing the quote. A not-interested lead is
+no longer open pipeline, so it stays out of pipeline value and open-lead counts
+(`Pipeline::Report`), the Pipeline board columns (`Pipeline::Board`), and the
+weekly report's waiting-on-reply list, while keeping its stage for a restore.
 
 More → Delete lead archives it after one confirmation naming the lead; the
 Archived tab restores it to its previous stage, and nothing is ever

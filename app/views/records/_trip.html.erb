@@ -53,7 +53,9 @@
             <% end %>
             <% if booking.available? && !booking.documents_ready? %>
               <span class="muted">Document status arrives with the PerfectBook update</span>
-              <%= link_to "Nudge for missing documents", document_nudge_path(booking_id: booking.id), class: "link-quiet", title: "Open the document-request template for this booking" %>
+              <% unless record.is_a?(Lead) && record.not_interested? %>
+                <%= link_to "Nudge for missing documents", document_nudge_path(booking_id: booking.id), class: "link-quiet", title: "Open the document-request template for this booking" %>
+              <% end %>
             <% end %>
           </div>
         </li>
