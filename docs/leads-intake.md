@@ -444,8 +444,8 @@ Customer-facing privacy text stays minimal and replaceable pending policy review
 
 ## Relay mode (n8n, Panda AI, any server)
 
-Signed with the relay secret (Settings → Automations, shown once at
-rotation):
+Signed with the relay secret (its Settings → Automations sub-section is
+hidden; `Setting#rotate_relay_secret!` returns a new secret once):
 
 ```
 X-Sherpa-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256(secret, t + "." + raw body)>

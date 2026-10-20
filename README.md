@@ -87,7 +87,7 @@ Missing spend or no inquiries makes cost unavailable. The
 [channel spend endpoint](docs/channel-checks.md#weekly-spend-request) is for the
 channels manager's Monday check, an external agent run outside PerfectCRM,
 configured separately with the same `CHANNEL_CHECKS_TOKEN`. Nothing in
-PerfectCRM calls it. Until that check posts spend, enter it in Settings as before.
+PerfectCRM calls it. Until that check posts spend, enter it on the Monday ads report page (`/settings/weekly_report`) as before.
 Paid inquiries still come from CRM leads, not checks.
 For the six organic channels,
 inquiries come from the latest check: an optional aggregate count of contacts
@@ -362,7 +362,8 @@ AI defaults to the OpenAI and OpenRouter origins, and PerfectBook defaults
 to `https://perfectbook.sherpaholidays.com`. Additional deployments require
 the corresponding environment allowlist: `AI_ALLOWED_ORIGINS` or
 `PERFECTBOOK_ALLOWED_ORIGINS`. Webhooks have no default destination; set
-`LEAD_WEBHOOK_ALLOWED_ORIGINS` before saving a webhook in Settings.
+`LEAD_WEBHOOK_ALLOWED_ORIGINS` before saving a webhook URL (its Settings field is
+currently hidden).
 These are comma-separated HTTPS origins, including an explicit port when
 nonstandard, with no credentials, path, query or fragment. For example,
 `LEAD_WEBHOOK_ALLOWED_ORIGINS=https://n8n.example.com` allows that host's
@@ -583,7 +584,8 @@ same schedule file) emails today's follow-ups, overdue items, missed and
 upcoming scheduled calls, replies waiting, the Not yet called count, and
 departures. Task and call links open their records, and Open Today opens the
 morning screen. It goes to the first allowlisted address.
-Settings → Morning digest toggles it; it is enabled by default.
+`Setting#digest_enabled` controls it; it is enabled by default, and its Settings
+toggle is currently hidden.
 
 ## Clients
 
@@ -618,7 +620,7 @@ to PerfectBook when `perfectbook_contact_id` is set, via
 target; an unlinked contact opens a create form with its PerfectBook ID
 prefilled, without fetching contact details.
 
-Settings → Export everything downloads a zip containing leads, clients,
+The Export everything link in the Settings footer downloads a zip containing leads, clients,
 people, organizations, notes, tags, tag assignments, and timeline events as
 CSV with a UTF-8 BOM. Cells beginning with `=`, `+`, `-`, or `@` receive a
 leading single quote to prevent spreadsheet formula execution, including
@@ -1088,7 +1090,8 @@ out, children and all. The folder list is re-read each run, so a folder created
 in Outlook is watched without a reconnect. Connecting records when watching
 began (a reconnect keeps it) and starts a sync straight away. Sync only takes
 mail received since that first connect, in every folder, however late the
-folder appears or its first sync runs; past mail stays for Import history.
+folder appears or its first sync runs; earlier mail is not synced (Import
+history at `/mail_imports/new` can bring it in).
 Because Microsoft reports read-state toggles, flags, and moves as changes too,
 touching or filing away older mail never brings it in behind the depth chosen
 there. Sync is incremental by per-folder delta link, threaded on the Graph
@@ -1103,7 +1106,7 @@ and the window since its last successful sync is re-read, so the gap is filled
 rather than dropped - up to 24 hours. A longer outage than that is reported on
 the Settings mailbox card, naming the date to import from, instead of the app
 quietly opening months of mail: sync resumes from now and the depth of the
-catch-up stays the captain's choice through Import history, with a preview.
+catch-up stays the captain's choice through Import history (`/mail_imports/new`), with a preview.
 The notice also says that import cannot recover mail that reached the mailbox
 only as a hidden copy (see the backfill rule below).
 
@@ -1204,7 +1207,7 @@ Storage failures preserve the reference and triage retry path. Only the
 explicit **Send to PerfectBook** action uploads bytes to PerfectBook; neither
 holding nor removing a file changes the mailbox.
 
-Settings → Import history backfills past mail: all, since a date, or last
+Import history (`/mail_imports/new`; its Settings card is hidden) backfills past mail: all, since a date, or last
 N months (no 90-day cap), as requested by the captain. The backfill walks the
 same folders as live sync, because archived and filed mail is exactly what
 needs converting. Preview scans the whole selected range in a background job, paging each folder
@@ -1404,9 +1407,10 @@ refund language stay human. Thinking orbs show composing for drafts and
 summaries, shaping for triage and suggestions. Plain fallbacks keep manual
 work available when AI is off or fails.
 
-AI assistance is on by default. In Settings → AI assistance, enter an
+AI assistance is on by default. Its Settings card is hidden, so set the
 OpenAI-compatible base URL (OpenAI or OpenRouter), model name, provider key,
-and short voice guide (templates are the style examples). Without a key,
+and short voice guide (templates are the style examples) on `Setting` from a
+Rails console. Without a key,
 threads show "Add a provider key in Settings to enable drafts".
 Endpoint requirements and additional deployments follow
 [Outbound service origins](#outbound-service-origins).

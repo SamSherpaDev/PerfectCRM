@@ -22,9 +22,9 @@ class SettingsController < ApplicationController
       redirect_to edit_settings_path, notice: "Settings saved.", status: :see_other
     elsif setting_params.key?(:weekly_report_recipient)
       if @settings.update(weekly_report_params)
-        redirect_to settings_weekly_report_path(anchor: "weekly-report-heading"), notice: "Weekly report saved.", status: :see_other
+        redirect_to settings_weekly_report_path, notice: "Weekly report saved.", status: :see_other
       else
-        redirect_to settings_weekly_report_path(anchor: "weekly-report-heading"),
+        redirect_to settings_weekly_report_path,
           alert: @settings.errors.full_messages_for(:weekly_report_recipient).to_sentence, status: :see_other
       end
     elsif setting_params.key?(:pipeline_digest)

@@ -2,21 +2,22 @@
 
 Sign in at `https://perfectcrm.sherpaholidays.com` with
 `info@sherpaholidays.com`. Today is the landing page; the phone tab bar at
-the bottom (Today, Inbox, Leads, Clients, More) reaches everything
+the bottom (Today, Inbox, Leads, Clients, Settings) reaches everything
 one-handed.
 
 1. **Pick Paper or Night** in Settings → Appearance. It applies instantly.
 2. **Connect the mailbox** using the [Mail setup guide](../README.md#mail):
    Settings → Mailbox → Connect mailbox (Microsoft 365) → Test connection.
-   A first connect starts from now; past mail stays for Import history.
-3. **Run the import preview** in Settings → Import history. Start with the
+   A first connect starts from now; earlier mail is not synced.
+3. **Run the import preview** at Import history (`/mail_imports/new`; its
+   Settings card is hidden). Start with the
    last 90 days, review the rows, then commit.
 4. **Review triage** in Inbox → Triage. Confirm each unknown sender as a
    client, lead, or organization, or ignore it.
 5. **Answer what is waiting** on Today: the Replies waiting list first,
-   then follow-ups. Tap the circle to mark one done.
+   then Scheduled calls and Not yet called.
 6. **Configure AI assistance** using the [AI setup guide](../README.md#ai-assistance),
-   including the provider key and Voice guide in Settings → AI assistance.
+   including the provider key and Voice guide (the Settings card is hidden).
 7. **Write your name, upload your logo, and set your signature** in Settings → Signature.
 8. **Check the PerfectBook connection** in Settings → PerfectBook → Test
    connection. Bookings and the trip catalog mirror from there.

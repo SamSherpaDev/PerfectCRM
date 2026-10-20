@@ -16,14 +16,14 @@ class WeeklyReportSettingsTest < ActionDispatch::IntegrationTest
     assert_select "h2", text: "Monday ads report", count: 0
 
     patch settings_path, params: { setting: { weekly_report_recipient: " Sam@Example.com " } }
-    assert_redirected_to settings_weekly_report_path(anchor: "weekly-report-heading")
+    assert_redirected_to settings_weekly_report_path
     settings = Setting.current.reload
     assert_equal "sam@example.com", settings.weekly_report_to
   end
 
   test "a bad recipient comes back to the report page as a message" do
     patch settings_path, params: { setting: { weekly_report_recipient: "not an email" } }
-    assert_redirected_to settings_weekly_report_path(anchor: "weekly-report-heading")
+    assert_redirected_to settings_weekly_report_path
     follow_redirect!
     assert_select ".flash-alert", text: /Weekly report recipient is invalid/
     assert_not_equal "not an email", Setting.current.reload.weekly_report_recipient
@@ -38,7 +38,7 @@ class WeeklyReportSettingsTest < ActionDispatch::IntegrationTest
 
   test "spend is entered and removed via controller while weekly report card stays hidden" do
     post settings_ad_spends_path, params: { ad_spend: { week_start: "2026-09-14", source: "meta_ads", campaign_name: "social", amount_dollars: "140" } }
-    assert_redirected_to settings_weekly_report_path(anchor: "weekly-report-heading")
+    assert_redirected_to settings_weekly_report_path
     assert_equal "Saved $140 for Meta social, week of Sep 14-20.", flash[:notice]
     entry = AdSpend.sole
     assert_equal 14_000, entry.amount_minor
@@ -47,7 +47,7 @@ class WeeklyReportSettingsTest < ActionDispatch::IntegrationTest
     assert_select "li", text: /Meta social · \$140/
 
     delete settings_ad_spend_path(entry)
-    assert_redirected_to settings_weekly_report_path(anchor: "weekly-report-heading")
+    assert_redirected_to settings_weekly_report_path
     assert_not AdSpend.exists?
   end
 

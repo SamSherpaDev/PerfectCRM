@@ -23,7 +23,7 @@ class AdSpendsController < ApplicationController
   private
 
   def back_to_card
-    settings_weekly_report_path(anchor: "weekly-report-heading")
+    settings_weekly_report_path
   end
 
   def entry_label(entry)

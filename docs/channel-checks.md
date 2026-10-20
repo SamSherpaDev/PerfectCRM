@@ -85,7 +85,8 @@ has no links to customers, messages, reviewers or individual accounts.
 This endpoint is for the channels manager's Monday check, an external agent
 run that is not part of PerfectCRM and is configured separately with the same
 `CHANNEL_CHECKS_TOKEN`. Nothing in PerfectCRM calls this endpoint. Until that
-check posts, spend is entered in Settings as before; the Monday email uses
+check posts, spend is entered on the Monday ads report page
+(`/settings/weekly_report`) as before; the Monday email uses
 whatever spend is already stored.
 
 The external check should read last week's per-campaign USD spend from Google
@@ -161,7 +162,7 @@ unknown. Costs are also unknown with no inquiries. The page labels this period
 separately from the last check time.
 
 Google Ads and Meta ads use existing CRM source attribution for paid inquiries
-and stored `AdSpend` entries for spend, entered in Settings or received through
+and stored `AdSpend` entries for spend, entered on the Monday ads report page or received through
 the weekly spend endpoint when the separately configured external check posts.
 The email, Settings preview and Channels page all keep using the same
 `WeeklyReport::Summary` calculation. Snapshots cannot supply paid inquiries,
