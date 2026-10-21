@@ -818,4 +818,117 @@ class AdConversionsTest < ActiveSupport::TestCase
     assert_equal "accepted", qualified.delivery_status
     assert_not qualified.google
   end
+
+  test "scheduling a call records and delivers one Schedule conversion at the first call's created_at" do
+    lead = ad_lead
+    created_at = Time.utc(2026, 10, 11, 21, 15)
+    call_time = Time.utc(2026, 10, 15, 18, 0)
+    call = nil
+    assert_enqueued_with(job: AdConversions::LeadJob, args: [ lead.id ]) do
+      travel_to(created_at) do
+        call = lead.scheduled_calls.create!(scheduled_at: call_time, notes: "Discuss Everest Base Camp")
+      end
+    end
+
+    with_meta do |fake|
+      AdConversions::LeadJob.perform_now(lead.id)
+      assert_equal 2, fake.requests.size
+      events = fake.requests.map { |req| JSON.parse(req.body)["data"].sole }
+      assert_equal %w[Lead Schedule], events.map { |event| event["event_name"] }
+      schedule_payload = events.last
+      assert_equal created_at.to_i, schedule_payload["event_time"]
+      assert_not_equal call_time.to_i, schedule_payload["event_time"]
+      assert_equal "sh-lead-#{lead.id}-call_scheduled", schedule_payload["event_id"]
+      assert_equal "system_generated", schedule_payload["action_source"]
+      assert_equal({ "value" => 1500.0, "currency" => "USD" }, schedule_payload["custom_data"])
+    end
+
+    scheduled = lead.ad_conversions.find_by!(event: "call_scheduled")
+    assert_equal created_at, scheduled.occurred_at
+    assert_equal 1_500_00, scheduled.value_minor
+    assert_equal 1500.0, scheduled.value_dollars
+    assert_equal "Call scheduled", scheduled.label
+    assert_nil scheduled.google_conversion_name
+    assert_equal "Schedule", scheduled.meta_event_name
+    assert_not scheduled.google
+    assert_equal "sent", scheduled.meta_status
+    assert_equal "accepted", scheduled.delivery_status
+
+    # Rescheduling, cancelling, or creating a second call does not retract or duplicate.
+    travel_to(@now - 2.hours) { call.reschedule!(scheduled_at: call_time + 1.day) }
+    travel_to(@now - 1.hour) { call.cancel! }
+    travel_to(@now) { lead.scheduled_calls.create!(scheduled_at: call_time + 2.days) }
+    assert_empty AdConversions.record!(lead, now: @now)
+    with_meta do |fake|
+      AdConversions::LeadJob.perform_now(lead.id)
+      assert_empty fake.requests
+    end
+    assert_equal 1, lead.ad_conversions.where(event: "call_scheduled").count
+    assert_equal created_at, scheduled.reload.occurred_at
+  end
+
+  test "call_scheduled is placed between qualified and quote in detect, stays out of the Google feed, and is backfilled by ExportJob" do
+    lead = ad_lead(status: "quoted", stage_changed_at: Time.utc(2026, 10, 11, 22, 0))
+    travel_to(Time.utc(2026, 10, 11, 19, 0)) { lead.mark_potential! }
+    call = travel_to(Time.utc(2026, 10, 11, 20, 30)) do
+      lead.scheduled_calls.create!(scheduled_at: Time.utc(2026, 10, 14, 17, 0))
+    end
+    # Cancelling before record! still records the milestone at the first call's created_at.
+    travel_to(Time.utc(2026, 10, 11, 21, 0)) { call.cancel! }
+    travel_to(Time.utc(2026, 10, 11, 21, 30)) do
+      lead.scheduled_calls.create!(scheduled_at: Time.utc(2026, 10, 16, 17, 0))
+    end
+
+    rows = AdConversions.record!(lead, now: @now)
+    assert_equal %w[lead qualified call_scheduled quote], rows.map(&:event)
+
+    assert_not rows.find { |row| row.event == "call_scheduled" }.google
+    google_rows = AdConversions::GoogleFeed.rows(now: @now)
+    assert_equal %w[qualified quote], google_rows.map(&:event)
+    csv = CSV.parse(AdConversions::GoogleFeed.csv(google_rows))
+    assert_equal [ "Qualified inquiry", "Quote sent" ], csv.drop(2).map { |line| line[3] }
+
+    # ExportJob backfills existing leads with scheduled calls even when the lead is older than LOOKBACK.
+    older_lead = ad_lead(created_at: @now - 100.days, received_at: @now - 100.days)
+    call_created_at = @now - 2.days
+    travel_to(call_created_at) do
+      older_lead.scheduled_calls.create!(scheduled_at: @now + 1.day)
+    end
+    with_meta do |fake|
+      AdConversions::ExportJob.perform_now(now: @now)
+    end
+    backfilled = older_lead.ad_conversions.find_by!(event: "call_scheduled")
+    assert_equal call_created_at, backfilled.occurred_at
+    assert_equal "sent", backfilled.meta_status
+    assert_equal "accepted", backfilled.delivery_status
+  end
+
+  test "scheduling a call enqueues the Schedule send only after its transaction commits" do
+    lead = ad_lead
+    ScheduledCall.transaction do
+      lead.scheduled_calls.create!(scheduled_at: @now + 1.day)
+      assert_no_enqueued_jobs only: AdConversions::LeadJob
+    end
+    assert_enqueued_with(job: AdConversions::LeadJob, args: [ lead.id ])
+
+    clear_enqueued_jobs
+    ScheduledCall.transaction do
+      lead.scheduled_calls.create!(scheduled_at: @now + 2.days)
+      raise ActiveRecord::Rollback
+    end
+    assert_no_enqueued_jobs only: AdConversions::LeadJob
+  end
+
+  test "call_scheduled respects all lead exclusions and does not enqueue for non-reportable leads" do
+    direct = Lead.create!(name: "Direct caller", email: "direct@example.com")
+    assert_no_enqueued_jobs only: AdConversions::LeadJob do
+      direct.scheduled_calls.create!(scheduled_at: @now + 1.day)
+    end
+    assert_empty AdConversions.record!(direct, now: @now)
+
+    spam = ad_lead
+    spam.scheduled_calls.create!(scheduled_at: @now + 1.day)
+    spam.mark_as_spam!
+    assert_empty AdConversions.record!(spam.reload, now: @now)
+  end
 end

@@ -15,11 +15,12 @@ module AdConversions
   META_EVENT_NAMES = {
     "lead" => "Lead",
     "qualified" => "QualifiedLead",
+    "call_scheduled" => "Schedule",
     "quote" => "Quote",
     "booked" => "Purchase"
   }.freeze
   # Fixed signal values in cents; booking valuation lives in booking_value_minor.
-  VALUES_MINOR = { "lead" => 300_00, "qualified" => 1_000_00, "quote" => 2_000_00 }.freeze
+  VALUES_MINOR = { "lead" => 300_00, "qualified" => 1_000_00, "call_scheduled" => 1_500_00, "quote" => 2_000_00 }.freeze
   QUALIFIED_BANDS = %w[strong possible].freeze
   # Scan recent inquiries and older inquiries with recent bound receipts;
   # delivery applies each platform's click/event window independently.
@@ -116,7 +117,7 @@ module AdConversions
       attributes = {
         lead: lead, event: event, event_id: event == "booked" ? "sh-booking-#{facts[:perfectbook_id]}-purchase" : event_id(lead, event),
         perfectbook_id: facts[:perfectbook_id], occurred_at: facts[:occurred_at], value_minor: facts[:value_minor],
-        google: google && event != "lead", meta_status: "pending"
+        google: google && GOOGLE_CONVERSION_NAMES.key?(event), meta_status: "pending"
       }
       if event == "booked"
         booking = PerfectBook::Booking.find_by!(perfectbook_id: facts[:perfectbook_id])
@@ -143,6 +144,10 @@ module AdConversions
 
     if lead.potential_marked_at
       events["qualified"] = { occurred_at: lead.potential_marked_at, value_minor: VALUES_MINOR["qualified"] }
+    end
+
+    if (call_scheduled_at = ScheduledCall.where(lead_id: lead.id).minimum(:created_at))
+      events["call_scheduled"] = { occurred_at: call_scheduled_at, value_minor: VALUES_MINOR["call_scheduled"] }
     end
 
     history = lead.activity_events.where(kind: "stage_change").order(:occurred_at, :id).to_a
