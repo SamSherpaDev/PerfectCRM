@@ -3,7 +3,7 @@
 <% stamp = ->(time) { time ? "#{date_short(time)}, #{time_24_12(time)}" : "Never" } %>
 <section class="card card-pad mt-6" aria-labelledby="ad-conversions-heading">
   <h2 class="section-title" id="ad-conversions-heading">Ad conversions</h2>
-  <%= card_caption "Tells Google Ads and Meta which ad clicks became qualified inquiries, scheduled calls, quotes, and paid bookings, so they bid for travelers rather than form-fills. Only leads that arrived from an ad click with marketing consent are reported; archived, spam, business-test, and not-a-fit leads never are." %>
+  <%= card_caption "Tells Google Ads and Meta which ad clicks became qualified inquiries, quotes, and paid bookings, so they bid for travelers rather than form-fills. Only leads that arrived from an ad click with marketing consent are reported; archived, spam, business-test, and not-a-fit leads never are." %>
 
   <div class="mt-4 flex flex-wrap items-center gap-2">
     <%= settings.meta_configured? ? status_badge("connected", label: "Meta configured") : status_badge("disconnected", label: "Meta off") %>
@@ -57,7 +57,7 @@
   <% end %>
 
   <h3 class="card-title mt-6">Google Ads scheduled upload</h3>
-  <p class="hint mt-1">In Google Ads, open Goals > Conversions > Uploads > Schedules, choose HTTPS, paste the URL, username, and password below, and pick a daily schedule. First create the conversion actions <span class="text-ink">Qualified inquiry</span>, <span class="text-ink">Call scheduled</span>, <span class="text-ink">Quote sent</span>, and <span class="text-ink">Booking (deposit paid)</span> as imports from clicks.</p>
+  <p class="hint mt-1">In Google Ads, open Goals > Conversions > Uploads > Schedules, choose HTTPS, paste the URL, username, and password below, and pick a daily schedule. First create the conversion actions <span class="text-ink">Qualified inquiry</span>, <span class="text-ink">Quote sent</span>, and <span class="text-ink">Booking (deposit paid)</span> as imports from clicks.</p>
   <p class="hint mt-1">Braid-only clicks (gbraid/wbraid) use email/phone matching; this scheduled feed does not send braid identifiers.</p>
   <p class="hint mt-1">Google's accept/reject counts are in Google Ads > Goals > Conversions > Uploads.</p>
   <div class="mt-3 space-y-4">

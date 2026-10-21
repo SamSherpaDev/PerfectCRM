@@ -22,7 +22,7 @@ class ScheduledCall < ApplicationRecord
   validate :validate_schedule_inputs
   validate :lead_must_be_schedulable, if: :scheduled?
 
-  after_create :enqueue_ad_conversion
+  after_create_commit :enqueue_ad_conversion
 
   scope :scheduled, -> { where(status: "scheduled") }
   scope :visible, -> { joins(:lead).merge(Lead.active.where(converted_client_id: nil, not_interested_marked_at: nil)) }

@@ -848,9 +848,9 @@ class AdConversionsTest < ActiveSupport::TestCase
     assert_equal 1_500_00, scheduled.value_minor
     assert_equal 1500.0, scheduled.value_dollars
     assert_equal "Call scheduled", scheduled.label
-    assert_equal "Call scheduled", scheduled.google_conversion_name
+    assert_nil scheduled.google_conversion_name
     assert_equal "Schedule", scheduled.meta_event_name
-    assert scheduled.google
+    assert_not scheduled.google
     assert_equal "sent", scheduled.meta_status
     assert_equal "accepted", scheduled.delivery_status
 
@@ -867,7 +867,7 @@ class AdConversionsTest < ActiveSupport::TestCase
     assert_equal created_at, scheduled.reload.occurred_at
   end
 
-  test "call_scheduled is placed between qualified and quote in detect, Google feed, and ExportJob backfill" do
+  test "call_scheduled is placed between qualified and quote in detect, stays out of the Google feed, and is backfilled by ExportJob" do
     lead = ad_lead(status: "quoted", stage_changed_at: Time.utc(2026, 10, 11, 22, 0))
     travel_to(Time.utc(2026, 10, 11, 19, 0)) { lead.mark_potential! }
     call = travel_to(Time.utc(2026, 10, 11, 20, 30)) do
@@ -882,13 +882,11 @@ class AdConversionsTest < ActiveSupport::TestCase
     rows = AdConversions.record!(lead, now: @now)
     assert_equal %w[lead qualified call_scheduled quote], rows.map(&:event)
 
+    assert_not rows.find { |row| row.event == "call_scheduled" }.google
     google_rows = AdConversions::GoogleFeed.rows(now: @now)
-    assert_equal %w[qualified call_scheduled quote], google_rows.map(&:event)
+    assert_equal %w[qualified quote], google_rows.map(&:event)
     csv = CSV.parse(AdConversions::GoogleFeed.csv(google_rows))
-    assert_equal [
-      "Cj0K-click", Digest::SHA256.hexdigest("annalind@gmail.com"), Digest::SHA256.hexdigest("+14155550134"),
-      "Call scheduled", "2026-10-11 13:30:00", "1500.00", "USD", "sh-lead-#{lead.id}-call_scheduled"
-    ], csv[3]
+    assert_equal [ "Qualified inquiry", "Quote sent" ], csv.drop(2).map { |line| line[3] }
 
     # ExportJob backfills existing leads with scheduled calls even when the lead is older than LOOKBACK.
     older_lead = ad_lead(created_at: @now - 100.days, received_at: @now - 100.days)
@@ -903,6 +901,22 @@ class AdConversionsTest < ActiveSupport::TestCase
     assert_equal call_created_at, backfilled.occurred_at
     assert_equal "sent", backfilled.meta_status
     assert_equal "accepted", backfilled.delivery_status
+  end
+
+  test "scheduling a call enqueues the Schedule send only after its transaction commits" do
+    lead = ad_lead
+    ScheduledCall.transaction do
+      lead.scheduled_calls.create!(scheduled_at: @now + 1.day)
+      assert_no_enqueued_jobs only: AdConversions::LeadJob
+    end
+    assert_enqueued_with(job: AdConversions::LeadJob, args: [ lead.id ])
+
+    clear_enqueued_jobs
+    ScheduledCall.transaction do
+      lead.scheduled_calls.create!(scheduled_at: @now + 2.days)
+      raise ActiveRecord::Rollback
+    end
+    assert_no_enqueued_jobs only: AdConversions::LeadJob
   end
 
   test "call_scheduled respects all lead exclusions and does not enqueue for non-reportable leads" do

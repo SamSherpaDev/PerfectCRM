@@ -926,7 +926,7 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
 |---|---|---|---|---|
 | Inquiry | Lead created | Existing web tag, not in the feed | `Lead`, sent at intake | $300 |
 | Qualified | You marked it Potential (`potential_marked_at`) | `Qualified inquiry` | `QualifiedLead` | $1,000 |
-| Call scheduled | First scheduled call created (`ScheduledCall#created_at`) | `Call scheduled` | `Schedule` | $1,500 |
+| Call scheduled | First scheduled call created (`ScheduledCall#created_at`) | Not in the feed (Meta only) | `Schedule`, sent when scheduled | $1,500 |
 | Quote | Current or recorded past status Quoted, or a CRM quote sent | `Quote sent` | `Quote` | $2,000 |
 | Booked | An explicitly linked or reviewed active PerfectBook booking with an authoritative timestamped first receipt at or after the inquiry | `Booking (deposit paid)` | `Purchase` | USD booking total times the booking value percent (default 35); other currencies report a fixed 2,000 USD |
 
@@ -950,7 +950,7 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
   trigger: fit band and moves to Chatting or Quoted do not qualify a lead on
   their own. Scheduling a call (`ScheduledCall`) records `Call scheduled` once
   at the first call's `created_at` (when the call was scheduled, not the call
-  time) and enqueues `AdConversions::LeadJob` right away; rescheduling,
+  time) and enqueues `AdConversions::LeadJob` once the call is saved; rescheduling,
   completing, or cancelling a call, or scheduling later calls, never reports
   again or retracts it. Quote milestones use activity history and
   sent quotes. Removing Potential, cancelling a call, lowering the fit band, or

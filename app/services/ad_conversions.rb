@@ -9,7 +9,6 @@ module AdConversions
   GOOGLE_CLICK_KEYS = %w[gclid gbraid wbraid].freeze
   GOOGLE_CONVERSION_NAMES = {
     "qualified" => "Qualified inquiry",
-    "call_scheduled" => "Call scheduled",
     "quote" => "Quote sent",
     "booked" => "Booking (deposit paid)"
   }.freeze
@@ -118,7 +117,7 @@ module AdConversions
       attributes = {
         lead: lead, event: event, event_id: event == "booked" ? "sh-booking-#{facts[:perfectbook_id]}-purchase" : event_id(lead, event),
         perfectbook_id: facts[:perfectbook_id], occurred_at: facts[:occurred_at], value_minor: facts[:value_minor],
-        google: google && event != "lead", meta_status: "pending"
+        google: google && GOOGLE_CONVERSION_NAMES.key?(event), meta_status: "pending"
       }
       if event == "booked"
         booking = PerfectBook::Booking.find_by!(perfectbook_id: facts[:perfectbook_id])
