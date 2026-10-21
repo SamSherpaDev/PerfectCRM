@@ -5,10 +5,10 @@
 # (AdConversions::MetaClient). Rules live in AdConversions.
 class AdConversion < ApplicationRecord
   DELIVERY_STATUSES = %w[not_sent accepted rejected unknown].freeze
-  EVENTS = %w[lead qualified quote booked].freeze
+  EVENTS = %w[lead qualified call_scheduled quote booked].freeze
   META_STATUSES = %w[not_applicable pending sending sent failed rejected uncertain skipped].freeze
   LABELS = {
-    "lead" => "Inquiry", "qualified" => "Qualified inquiry",
+    "lead" => "Inquiry", "qualified" => "Qualified inquiry", "call_scheduled" => "Call scheduled",
     "quote" => "Quote sent", "booked" => "Booking (deposit paid)"
   }.freeze
 

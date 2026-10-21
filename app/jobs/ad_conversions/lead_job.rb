@@ -1,7 +1,7 @@
-# Sends the Meta Lead and QualifiedLead events right after a website
-# inquiry lands or the owner marks it Potential, because Meta weighs events
-# that arrive within the hour. The nightly AdConversions::ExportJob retries
-# anything this misses.
+# Sends the Meta Lead, QualifiedLead, and Schedule events right after a website
+# inquiry lands, the owner marks it Potential, or a call is scheduled, because
+# Meta weighs events that arrive within the hour. The nightly
+# AdConversions::ExportJob retries anything this misses.
 class AdConversions::LeadJob < ApplicationJob
   queue_as :default
 
@@ -13,7 +13,7 @@ class AdConversions::LeadJob < ApplicationJob
     return unless lead
 
     AdConversions.record!(lead)
-    lead.ad_conversions.where(event: %w[lead qualified]).order(:occurred_at, :id).each do |row|
+    lead.ad_conversions.where(event: %w[lead qualified call_scheduled]).order(:occurred_at, :id).each do |row|
       AdConversions.deliver_meta!(row, settings: settings)
     end
   end

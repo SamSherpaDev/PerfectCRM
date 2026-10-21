@@ -22,6 +22,8 @@ class ScheduledCall < ApplicationRecord
   validate :validate_schedule_inputs
   validate :lead_must_be_schedulable, if: :scheduled?
 
+  after_create :enqueue_ad_conversion
+
   scope :scheduled, -> { where(status: "scheduled") }
   scope :visible, -> { joins(:lead).merge(Lead.active.where(converted_client_id: nil, not_interested_marked_at: nil)) }
   scope :missed, ->(now = Time.current) { scheduled.where("scheduled_calls.scheduled_at < ?", now).order(scheduled_at: :asc, id: :asc) }
@@ -146,5 +148,11 @@ class ScheduledCall < ApplicationRecord
     return unless lead.present? && !lead.call_schedulable?
 
     errors.add(:base, "Calls can only be scheduled for active, unconverted leads")
+  end
+
+  def enqueue_ad_conversion
+    AdConversions::LeadJob.perform_later(lead_id) if lead && AdConversions.reportable?(lead)
+  rescue StandardError => error
+    Rails.logger.error("[scheduled_call] ad conversion enqueue failed: #{error.class}")
   end
 end

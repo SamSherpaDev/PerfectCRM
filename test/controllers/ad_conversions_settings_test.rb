@@ -34,6 +34,7 @@ class AdConversionsSettingsTest < ActionDispatch::IntegrationTest
       metadata: { "attribution" => { "gclid" => "Cj0K-click", "first_seen_at" => 1.day.ago.iso8601 },
         "acquisition" => { "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true } } })
     lead.mark_potential!
+    lead.scheduled_calls.create!(scheduled_at: 1.day.from_now)
     AdConversions.record!(lead)
 
     get google_conversions_feed_path, headers: basic("sherpaholidays", password)
@@ -43,7 +44,8 @@ class AdConversionsSettingsTest < ActionDispatch::IntegrationTest
     lines = response.body.lines
     assert_equal "Parameters:TimeZone=America/Los_Angeles\n", lines.first
     assert_match(/\ACj0K-click,.*,Qualified inquiry,/, lines[2])
-    assert_equal 1, @settings.reload.google_feed_last_row_count
+    assert_match(/\ACj0K-click,.*,Call scheduled,.*,1500\.00,USD,sh-lead-#{lead.id}-call_scheduled\n\z/, lines[3])
+    assert_equal 2, @settings.reload.google_feed_last_row_count
     assert @settings.google_feed_last_fetched_at.present?
   end
 
@@ -55,6 +57,7 @@ class AdConversionsSettingsTest < ActionDispatch::IntegrationTest
     assert_select "span.badge", text: "Meta off"
     assert_select "span.badge", text: "Google off"
     assert_select "p.mono", text: google_conversions_feed_url
+    assert_select "span.text-ink", text: "Call scheduled"
     assert_select "input[name='setting[meta_dataset_id]']"
     assert_select "input[type=password][name='setting[meta_access_token]']"
   end

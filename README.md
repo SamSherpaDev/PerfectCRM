@@ -926,6 +926,7 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
 |---|---|---|---|---|
 | Inquiry | Lead created | Existing web tag, not in the feed | `Lead`, sent at intake | $300 |
 | Qualified | You marked it Potential (`potential_marked_at`) | `Qualified inquiry` | `QualifiedLead` | $1,000 |
+| Call scheduled | First scheduled call created (`ScheduledCall#created_at`) | `Call scheduled` | `Schedule` | $1,500 |
 | Quote | Current or recorded past status Quoted, or a CRM quote sent | `Quote sent` | `Quote` | $2,000 |
 | Booked | An explicitly linked or reviewed active PerfectBook booking with an authoritative timestamped first receipt at or after the inquiry | `Booking (deposit paid)` | `Purchase` | USD booking total times the booking value percent (default 35); other currencies report a fixed 2,000 USD |
 
@@ -947,12 +948,16 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
   `AdConversions::LeadJob` right away so the outcome is recorded and sent to Meta
   without waiting for the nightly sweep. Potential is the only qualification
   trigger: fit band and moves to Chatting or Quoted do not qualify a lead on
-  their own. Quote milestones use activity history and
-  sent quotes. Removing Potential, lowering the fit band, or later marking spam
-  does not send a retraction once an outcome is delivered, and already recorded
-  outcomes are retained; a lead marked spam before the event is delivered is
-  withheld and never sent.
-- Inquiry, qualification and quote are unique per lead/event. Purchase is unique
+  their own. Scheduling a call (`ScheduledCall`) records `Call scheduled` once
+  at the first call's `created_at` (when the call was scheduled, not the call
+  time) and enqueues `AdConversions::LeadJob` right away; rescheduling,
+  completing, or cancelling a call, or scheduling later calls, never reports
+  again or retracts it. Quote milestones use activity history and
+  sent quotes. Removing Potential, cancelling a call, lowering the fit band, or
+  later marking spam does not send a retraction once an outcome is delivered,
+  and already recorded outcomes are retained; a lead marked spam before the
+  event is delivered is withheld and never sent.
+- Inquiry, qualification, call scheduled, and quote are unique per lead/event. Purchase is unique
   per PerfectBook booking ID (`sh-booking-ID-purchase`), so two inquiries cannot
   export the same booking and a balance payment is not another Purchase. Repeat
   bookings get distinct IDs. The Lead event keeps the browser `submission_id`

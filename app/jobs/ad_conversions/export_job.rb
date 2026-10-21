@@ -14,7 +14,8 @@ class AdConversions::ExportJob < ApplicationJob
     recorded = 0
     recent_booking_leads = BookingInquiryBinding.where(state: %w[explicit reviewed])
       .where(perfectbook_id: PerfectBook::Booking.where("first_received_at >= ?", now - AdConversions::LOOKBACK).select(:perfectbook_id)).select(:lead_id)
-    Lead.where("created_at >= ?", now - AdConversions::LOOKBACK).or(Lead.where(id: recent_booking_leads)).includes(:tags).find_each do |lead|
+    recent_call_leads = ScheduledCall.where("created_at >= ?", now - AdConversions::LOOKBACK).select(:lead_id)
+    Lead.where("created_at >= ?", now - AdConversions::LOOKBACK).or(Lead.where(id: recent_booking_leads)).or(Lead.where(id: recent_call_leads)).includes(:tags).find_each do |lead|
       recorded += AdConversions.record!(lead, now: now).size
     end
 
