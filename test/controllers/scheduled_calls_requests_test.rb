@@ -34,25 +34,27 @@ class ScheduledCallsRequestsTest < ActionDispatch::IntegrationTest
   end
 
   test "scheduling from the Lead page stays on the Lead page and shows the next scheduled call" do
-    lead_return = lead_path(@lead, return_to: leads_path(tab: "potential"))
+    travel_to Time.zone.local(2026, 10, 20, 10, 0) do
+      lead_return = lead_path(@lead, return_to: leads_path(tab: "potential"))
 
-    post lead_scheduled_calls_path(@lead), params: {
-      return_to: lead_return,
-      scheduled_call: {
-        scheduled_on: "2026-10-23",
-        scheduled_time: "11:00",
-        duration_minutes: "45",
-        notes: "Compare Manaslu vs Annapurna"
+      post lead_scheduled_calls_path(@lead), params: {
+        return_to: lead_return,
+        scheduled_call: {
+          scheduled_on: "2026-10-23",
+          scheduled_time: "11:00",
+          duration_minutes: "45",
+          notes: "Compare Manaslu vs Annapurna"
+        }
       }
-    }
 
-    assert_redirected_to lead_return
-    follow_redirect!
-    assert_response :success
-    assert_select "#scheduled-call" do
-      assert_select ".badge", text: "Next call"
-      assert_select "time", text: /Oct 23 · 11:00 AM PT · 45 min/
-      assert_select ".scheduled-call-note", text: "Compare Manaslu vs Annapurna"
+      assert_redirected_to lead_return
+      follow_redirect!
+      assert_response :success
+      assert_select "#scheduled-call" do
+        assert_select ".badge", text: "Next call"
+        assert_select "time", text: /Oct 23 · 11:00 AM PT · 45 min/
+        assert_select ".scheduled-call-note", text: "Compare Manaslu vs Annapurna"
+      end
     end
   end
 
