@@ -9,6 +9,7 @@ class InquirySafetyNetJobTest < ActiveSupport::TestCase
     @old_allowlist = ENV["ALLOWED_GOOGLE_EMAILS"]
     ENV["ALLOWED_GOOGLE_EMAILS"] = "owner@example.com,second@example.com"
     ActionMailer::Base.deliveries.clear
+    Setting.current.update!(inquiry_safety_net_email: true)
   end
 
   teardown do
@@ -51,6 +52,19 @@ class InquirySafetyNetJobTest < ActiveSupport::TestCase
     new_lead = new_message.reload.conversation.linkable
     assert_includes ActionMailer::Base.deliveries.last.body.decoded, "/leads/#{new_lead.id}"
     assert_includes ActionMailer::Base.deliveries.last.subject, "1 added to New"
+  end
+
+  test "by default the daily check adds missing inquiries to New and lists them on Today without emailing" do
+    Setting.current.update!(inquiry_safety_net_email: false)
+    message = ingest_inquiry
+    assert_difference("Lead.count", 1) do
+      assert_emails(0) { InquirySafetyNetJob.perform_now }
+    end
+    lead = message.reload.conversation.linkable
+    assert_instance_of Lead, lead
+    assert_equal "new", lead.status
+    assert_nil message.inquiry_alert_attempted_at
+    assert_equal [ message ], Today::Summary.new.unlinked_inquiries
   end
 
   test "a clear check, a linked inquiry, a candidate matching an existing lead, or ordinary email, vendor pitch, and reply sends no email and creates no lead" do

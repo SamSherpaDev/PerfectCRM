@@ -4,6 +4,8 @@ class InquirySafetyNetJob < ApplicationJob
   def perform
     scanner = Leads::UnlinkedInquiries.new
     scanner.resolve!
+    # The report email is opt-in; Today lists the same leads either way.
+    return unless Setting.current.inquiry_safety_net_email?
 
     # Reserve before SMTP, just like reply alerts. Even an uncertain SMTP
     # acknowledgement must never cause a second alert about the same message.
