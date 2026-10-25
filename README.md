@@ -1173,7 +1173,9 @@ from a no-reply address. Classification headers are retained on newly imported
 mail. The check cannot detect a submission that produced neither a lead nor
 imported mail.
 
-When missing website-form submissions are added to New, one short email to
+The safety net's report email is off by default (`Setting#inquiry_safety_net_email`,
+no Settings toggle); Today lists the same leads either way. When enabled and
+missing website-form submissions are added to New, one short email to
 `Setting.captain_email` (the first allowed Google address, falling back to
 info@, independently of the morning-digest toggle) reports that the inquiries
 were added to New and links directly to each lead. A clear check or a run that
