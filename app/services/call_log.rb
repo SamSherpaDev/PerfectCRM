@@ -33,7 +33,9 @@ module CallLog
             occurred_at: event.occurred_at, metadata: event.metadata.merge("from_lead_id" => record.id, "from_lead_event_id" => event.id))
       end
       yield event if block_given?
-      mark_not_interested_after_three_voicemails!(record, event, key: key) if existing.nil?
+      if existing.nil? && event.metadata.values_at("outcome", "direction") == %w[voicemail outbound]
+        mark_not_interested_after_three_voicemails!(record, event: event)
+      end
       event
     end
   end
@@ -68,25 +70,24 @@ module CallLog
     [ record, record.existing_client ].compact.any? do |owner|
       Message.for_owner(owner).inbound
         .where("COALESCE(messages.sent_at, messages.inbound_received_at, messages.created_at) > ?", first_voicemail.occurred_at)
-        .exists?
+        .any? { |message| !Mail::ReplyAlerts.automatic?(message.from_address, message.subject, message.inquiry_headers) }
     end
   end
 
-  def mark_not_interested_after_three_voicemails!(record, event, key:)
-    return unless event.metadata.values_at("outcome", "direction") == %w[voicemail outbound] && record.unsure?
-    return unless three_unanswered_voicemails?(record)
+  def mark_not_interested_after_three_voicemails!(record, event: nil)
+    return unless record.unsure? && three_unanswered_voicemails?(record)
 
     record.mark_not_interested!
     record.activity_events.create!(
       kind: "not_interested",
-      idempotency_key: key,
+      idempotency_key: event&.idempotency_key,
       summary: AUTO_NOT_INTERESTED_SUMMARY,
-      occurred_at: [ Time.current, event.occurred_at ].max,
+      occurred_at: [ Time.current, event&.occurred_at ].compact.max,
       metadata: {
         "reason" => "three_voicemails",
-        "call_event_id" => event.id,
+        "call_event_id" => event&.id,
         "actor" => Current.user_email.presence || "automatic"
-      }
+      }.compact
     )
   end
 end

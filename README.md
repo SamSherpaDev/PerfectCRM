@@ -731,12 +731,17 @@ those three also marks the lead not interested automatically via
 `Lead#mark_not_interested!`, records a `not_interested` timeline note
 (`Moved to Not interested automatically after three voicemails`), and adds
 `Moved to Not interested after three voicemails.` to the `Call logged` notice,
-while keeping `unsure_marked_at` intact for **Interested again**. A response is
-a `Talked` call, any inbound call, or an inbound message on the lead or its
-existing client. Clearing a not-interested mark (**Interested again**, or
-marking Potential or Unsure) records an `interested_again` timeline note
-(`Restored from Not interested`) and also restarts the count, so only voicemails
-after the latest response or restore count.
+while keeping `unsure_marked_at` intact for **Interested again**. Mark Unsure
+runs the same check, so a lead that already has three unanswered voicemails
+moves straight to Not interested (`Marked as Unsure - moved to Not interested
+after three voicemails.`); leads already in Unsure are not backfilled. A
+response is a `Talked` call, any inbound call, or an inbound message on the
+lead or its existing client; auto-replies, out-of-office notes, and bounces
+(`Mail::ReplyAlerts.automatic?`, the same rule that skips reply alerts) are not
+responses. Clearing a not-interested mark (**Interested again**, or marking
+Potential or Unsure) records an `interested_again` timeline note (`Restored
+from Not interested`) and also restarts the count, so only voicemails after the
+latest response or restore count.
 
 While marked not interested, a lead is excluded from Today's Calls to make today,
 New leads, Quotes out, Follow-ups, Replies waiting, and Scheduled calls, from

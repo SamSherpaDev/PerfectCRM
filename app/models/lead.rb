@@ -221,6 +221,7 @@ class Lead < ApplicationRecord
       end
       update!(unsure_marked_at: unsure_marked_at || Time.current, potential_marked_at: nil, not_interested_marked_at: nil)
       record_interested_again! if saved_change_to_not_interested_marked_at?
+      CallLog.mark_not_interested_after_three_voicemails!(self)
     end
   end
 

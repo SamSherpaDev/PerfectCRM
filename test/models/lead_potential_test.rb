@@ -210,6 +210,59 @@ class LeadPotentialTest < ActiveSupport::TestCase
     assert_equal 1, lead.activity_events.where(kind: "interested_again").count
   end
 
+  test "Mark Unsure runs the three-voicemail check and leaves leads that answered in Unsure" do
+    silent = Lead.create!(name: "Silent Traveler", email: "silent-traveler@example.com")
+    open_call = silent.scheduled_calls.create!(scheduled_at: 2.days.from_now.change(hour: 11, min: 0))
+    3.times do |i|
+      CallLog.record!(silent, key: "silent-vm-#{i + 1}", occurred_at: (3 - i).days.ago, outcome: "voicemail", direction: "outbound")
+    end
+    assert_not silent.reload.not_interested?
+
+    silent.mark_unsure!
+    assert silent.not_interested?
+    assert silent.reload.not_interested?
+    assert_not_nil silent.unsure_marked_at
+    assert_equal "cancelled", open_call.reload.status
+    note = silent.activity_events.where(kind: "not_interested").sole
+    assert_equal "Moved to Not interested automatically after three voicemails", note.summary
+    assert_equal "three_voicemails", note.metadata["reason"]
+
+    answered = Lead.create!(name: "Answered Traveler", email: "answered-traveler@example.com")
+    CallLog.record!(answered, key: "answered-vm-1", occurred_at: 4.days.ago, outcome: "voicemail", direction: "outbound")
+    CallLog.record!(answered, key: "answered-vm-2", occurred_at: 3.days.ago, outcome: "voicemail", direction: "outbound")
+    CallLog.record!(answered, key: "answered-ok-1", occurred_at: 2.days.ago, outcome: "connected", direction: "outbound")
+    CallLog.record!(answered, key: "answered-vm-3", occurred_at: 1.day.ago, outcome: "voicemail", direction: "outbound")
+
+    answered.mark_unsure!
+    assert answered.reload.unsure?
+    assert_equal 0, answered.activity_events.where(kind: "not_interested").count
+  end
+
+  test "out-of-office replies and bounces are not a response and do not reset the voicemail count" do
+    lead = Lead.create!(name: "Away Traveler", email: "away-traveler@example.com")
+    lead.mark_unsure!
+    convo = lead.conversations.create!(subject: "Everest base camp")
+    CallLog.record!(lead, key: "away-vm-1", occurred_at: 4.days.ago, outcome: "voicemail", direction: "outbound")
+    convo.messages.create!(
+      direction: "in", from_address: lead.email, to_addresses: [ "info@sherpaholidays.com" ],
+      subject: "Automatic reply: Everest base camp", text_body: "I am travelling until next week.", sent_at: 3.days.ago, status: "received"
+    )
+    convo.messages.create!(
+      direction: "in", from_address: lead.email, to_addresses: [ "info@sherpaholidays.com" ],
+      subject: "Re: Everest base camp", text_body: "Away from my desk.", sent_at: 3.days.ago + 1.hour, status: "received",
+      inquiry_headers: { "auto-submitted" => [ "auto-replied" ] }
+    )
+    convo.messages.create!(
+      direction: "in", from_address: "mailer-daemon@mail.example.com", to_addresses: [ "info@sherpaholidays.com" ],
+      subject: "Returned mail", text_body: "Your message could not be delivered.", sent_at: 3.days.ago + 2.hours, status: "received"
+    )
+    CallLog.record!(lead, key: "away-vm-2", occurred_at: 2.days.ago, outcome: "voicemail", direction: "outbound")
+    assert lead.reload.unsure?
+
+    CallLog.record!(lead, key: "away-vm-3", occurred_at: 1.day.ago, outcome: "voicemail", direction: "outbound")
+    assert lead.reload.not_interested?
+  end
+
   test "three voicemails do not move leads in New, Potential, Quoted, or client inquiries outside Unsure" do
     new_lead = Lead.create!(name: "New Tab Lead")
     potential_lead = Lead.create!(name: "Potential Tab Lead").tap(&:mark_potential!)
