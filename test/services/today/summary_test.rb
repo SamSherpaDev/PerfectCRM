@@ -146,6 +146,27 @@ class TodaySummaryTest < ActiveSupport::TestCase
     end
   end
 
+  test "an open call booked on a client takes that client's returning inquiries off the call list" do
+    travel_to Time.zone.local(2026, 11, 3, 9) do
+      client = Client.create!(name: "Returning traveler", email: "returning@example.test")
+      returning = Lead.create!(name: "Returning traveler", email: "returning@example.test", phone_raw: "+1 415 555 0144",
+        received_at: 1.hour.ago, existing_client: client)
+      other_client = Client.create!(name: "Other client", email: "other@example.test")
+      other_returning = Lead.create!(name: "Other returning", email: "other@example.test", phone_raw: "+1 415 555 0145",
+        received_at: 2.hours.ago, existing_client: other_client)
+      unrelated = inquiry("Unrelated new inquiry", 3.hours.ago)
+      assert_equal [ returning, other_returning, unrelated ], Today::Summary.new.not_yet_called.to_a
+
+      call = client.scheduled_calls.create!(scheduled_on: "2026-11-03", scheduled_time: "15:00")
+      summary = Today::Summary.new
+      assert_equal [ other_returning, unrelated ], summary.not_yet_called.to_a
+      assert_equal [ call ], summary.todays_calls
+
+      call.cancel!
+      assert_equal [ returning, other_returning, unrelated ], Today::Summary.new.not_yet_called.to_a
+    end
+  end
+
   test "uses received time before creation time and does not count contact before the inquiry" do
     travel_to Time.zone.local(2026, 10, 14, 12) do
       old_created = inquiry("Recently received", 2.hours.ago)

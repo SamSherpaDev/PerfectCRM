@@ -546,7 +546,8 @@ marker on inquiries flagged as looking like spam, wait time, and one-tap
 `Talked` / `Voicemail` / `No answer` logging plus `Schedule call`. Leads drop
 off the list once a call connects (`Talked`), they are marked
 `Not interested`, `spam`, or `archived`, have an open scheduled call, or have
-used 3 attempts.
+used 3 attempts. An open call booked on a client also takes that client's open
+inquiries off the list, so the person shows once, under Scheduled calls.
 
 Tasks belong to clients, leads, or organizations. Today lists overdue tasks
 and those due through the next 7 days, using the Pacific date. Tap the
