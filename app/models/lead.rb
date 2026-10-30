@@ -42,6 +42,8 @@ class Lead < ApplicationRecord
   include EmailRedirects
   include ScheduledCallOwner
 
+  attr_accessor :allow_converted_name_sync, :skip_name_propagation
+
   before_save :reject_converted_write, prepend: true
 
   before_validation :normalize_email
@@ -85,6 +87,7 @@ class Lead < ApplicationRecord
   after_create :stamp_activity
   after_create :assign_reference
   after_save :sync_fts_later
+  after_update :propagate_name_change
   after_destroy :remove_fts_row
 
   scope :active, -> { where(archived_at: nil) }
@@ -548,6 +551,7 @@ class Lead < ApplicationRecord
   end
 
   def reject_converted_write
+    return if allow_converted_name_sync && converted_name_sync_only?
     return unless persisted? && self.class.lock.find(id).converted?
 
     errors.add(:base, "Converted leads stay read-only")
@@ -579,11 +583,16 @@ class Lead < ApplicationRecord
   def no_changes_when_converted
     return unless converted_client_id_was.present?
     return if errors.any?
+    return if allow_converted_name_sync && converted_name_sync_only?
 
     changed = changes.keys - %w[last_activity_at updated_at]
     if changed.any? || !@pending_tag_list.nil?
       errors.add(:base, "Converted leads stay read-only")
     end
+  end
+
+  def converted_name_sync_only?
+    (changes.keys - %w[name last_activity_at updated_at]).empty? && @pending_tag_list.nil?
   end
 
   def no_unconvert
@@ -628,5 +637,16 @@ class Lead < ApplicationRecord
     sync_fts!
   rescue ActiveRecord::StatementInvalid
     nil
+  end
+
+  def propagate_name_change
+    if skip_name_propagation
+      self.skip_name_propagation = false
+      return
+    end
+    return unless saved_change_to_name?
+
+    old_name, new_name = saved_change_to_name
+    PersonNamePropagation.call(self, old_name: old_name, new_name: new_name)
   end
 end

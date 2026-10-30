@@ -616,7 +616,20 @@ a compact read-only Trip in PerfectBook (the Upcoming follow-up-tasks card and t
 behind Thread, Details, and Files tabs. Each visit starts on Thread
 unless an explicit link targets another panel. Use New client to create a
 record, and Edit to update facts or add another
-person in the blank People fields. Archive lives in the More menu and
+person in the blank People fields. Renaming a lead, client, or person updates
+the stored name and search for that same person across linked PerfectCRM
+records (converted or origin leads, matching client, and linked people that
+still carry the old name); renaming an organization changes only its own name.
+Every rename refreshes the FTS5 search index and logs a `name_change` timeline
+event. Existing notes, tasks, drafts, quotes, call notes, messages, and other
+written text keep the wording they were written with, and synced PerfectBook
+contacts stay untouched. Renaming the only person
+on a record who carries its display name renames the display name and linked
+records with that name too; on a record with two or more people, changing just
+the display name relabels that record alone, and adding a person never renames
+it. A linked
+record that fails validation keeps the old name, and the saved notice says how
+many did. Archive lives in the More menu and
 moves a client to the Archived tab, where Restore makes it active again.
 Archived client and lead pages keep their history readable, with editing
 controls and composer hidden. Restore is the sole header action
@@ -783,7 +796,8 @@ referrer. CRM records who sent the enquiry; PerfectBook owns commissions.
 Only clients created by conversion show Started as a lead.
 Both paths transfer the lead's tasks, drafts, linked conversations, and remembered
 email identities to the client, then link forward and freeze the lead read-only,
-with no reverse path.
+with no reverse path. Only a rename carried over from a linked record (see
+[Clients](#clients)) still changes the frozen lead's name.
 
 Fit labels and bar colors use the supplied fit band; the CRM does not
 derive a band from the numeric score. The AI fit score bar, Best fit sort option, Set your fit buttons, interactive Confirm source form, New quote buttons, and unused pipeline/AI/value fields on the lead form are hidden from the UI while their model attributes and endpoints remain intact.

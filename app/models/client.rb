@@ -32,6 +32,8 @@ class Client < ApplicationRecord
   include EmailRedirects
   include ScheduledCallOwner
 
+  attr_accessor :skip_name_propagation
+
   before_validation :normalize_email
 
   validates :name, presence: true
@@ -45,6 +47,7 @@ class Client < ApplicationRecord
 
   after_create :stamp_activity
   after_save :sync_fts_later
+  after_update :propagate_name_change
   after_destroy :remove_fts_row
 
   scope :active, -> { where(archived_at: nil) }
@@ -176,5 +179,16 @@ class Client < ApplicationRecord
     sync_fts!
   rescue ActiveRecord::StatementInvalid
     nil
+  end
+
+  def propagate_name_change
+    if skip_name_propagation
+      self.skip_name_propagation = false
+      return
+    end
+    return unless saved_change_to_name?
+
+    old_name, new_name = saved_change_to_name
+    PersonNamePropagation.call(self, old_name: old_name, new_name: new_name)
   end
 end
