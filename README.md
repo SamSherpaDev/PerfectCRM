@@ -65,6 +65,11 @@ On phones (under 750px) a bottom tab bar holds **Today**, **Inbox**,
 component of the kit at `/design` (listed nowhere in the rail) in Paper
 and Night.
 
+Open a lead, client, or organization from the Leads or Clients list, then
+come back with the browser's Back or the page's ← Leads or ← Clients link:
+the list reopens at the row you opened instead of the top. Rail and tab bar
+links open lists at the top.
+
 PerfectCRM defaults to **Paper**, the light Washi scheme. In **Settings →
 Appearance**, choose **Paper** or **Night** to apply the scheme immediately
 and save it automatically - the choice submits its own form, so there is no
@@ -684,7 +689,9 @@ Mark as spam clears Unsure the same way it clears Potential,
 and restoring an ordinarily archived lead restores its Unsure mark.
 These actions move the lead to the matching tab while returning you to the
 Leads list context you came from, including its tab, search, and sort. From a
-lead detail page without a list context, they return to New.
+lead detail page without a list context, they return to New. A lead page keeps
+that list context through notes, calls, replies, drafts, and edits, so ← Leads
+and these actions still return to the list you opened it from.
 
 Mark not interested on a lead row or lead page sets `not_interested_marked_at`
 and moves the lead into the Not interested tab while keeping you on the same
