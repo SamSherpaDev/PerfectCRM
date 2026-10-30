@@ -27,7 +27,7 @@
   <%# Envelope fields fold behind Details: always on the record composer,
       on the phone for the docked box. A failed send reopens them so the
       flagged fields stay visible. %>
-  <details class="reply-details" <%= "open" if !compact || @envelope_open %> data-reply-box-target="details">
+  <details class="reply-details" <%= "open" if !compact || @envelope_open %> data-reply-box-target="details" data-action="toggle->reply-box#grow">
     <summary>Details</summary>
     <div class="mt-3">
       <%= form.label :to, "To", class: "label" %>
@@ -76,7 +76,7 @@
     <%= form.label :body, "Message", class: compact ? "sr-only" : "label" %>
     <%= form.text_area :body, value: draft.body, rows: compact ? 3 : 5, required: true,
           class: "textarea reply-body", placeholder: "Hi #{@reply_context['first_name'] || 'there'},",
-          data: { "reply-box-target": "body" } %>
+          data: { "reply-box-target": "body", action: "focus->reply-box#grow" } %>
   </div>
 
   <div class="reply-chips" role="group" aria-label="Insert a template">

@@ -92,6 +92,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     page.current_window.resize_to(1400, 1000)
     visit client_path(@client)
     open_envelope_details
+    assert_selector(:field, "Message") { |body| well_height(body) >= 128 }
     fill_in "To", with: ""
     fill_in "Subject", with: ""
     fill_in "Message", with: "Half written"
@@ -99,8 +100,8 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     assert_text "Draft saved"
     assert_equal "Half written", Draft.find_by!(owner: @client).body
     fill_in "Message", with: ""
-    # Blurring the body animates its height and moves the button below it.
-    find_button("Save draft").send_keys(:enter)
+    height = well_height
+    assert_equal height, well_height_while_holding(find_button("Save draft"))
     assert_text "Draft cleared"
     assert_not Draft.exists?(owner: @client)
   end
@@ -120,16 +121,54 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     assert_equal "Short note", Draft.find_by!(owner: @client).body
   end
 
+  test "a held press on a template chip keeps the compact record well still" do
+    sign_in_browser
+    page.current_window.resize_to(1400, 1000)
+    visit client_path(@client)
+    height = well_height
+    assert_operator height, :<, 128, "the record well should start compact"
+    assert_equal height, well_height_while_holding(find_button("Quick hello"))
+    assert_field "Message", with: "Hello Maya, thinking of [missing: trip]!"
+  end
+
+  test "a focused empty record well stays grown through a held press on a template chip" do
+    sign_in_browser
+    page.current_window.resize_to(1400, 1000)
+    visit client_path(@client)
+    find_field("Message").click
+    assert_selector(:field, "Message") { |body| well_height(body) >= 128 }
+    height = well_height
+    assert_equal height, well_height_while_holding(find_button("Quick hello"))
+    assert_field "Message", with: "Hello Maya, thinking of [missing: trip]!"
+  end
+
+  test "a cleared record well stays grown through a held press on Save draft" do
+    @client.update!(email: nil)
+    sign_in_browser
+    page.current_window.resize_to(1400, 1000)
+    visit client_path(@client)
+    fill_in "Message", with: "Half written"
+    assert_selector(:field, "Message") { |body| well_height(body) >= 128 }
+    click_button "Save draft"
+    assert_selector "#draft-status", text: "Draft saved"
+    fill_in "Message", with: ""
+    height = well_height
+    assert_operator height, :>=, 128, "the record well should stay grown once focused"
+    assert_equal height, well_height_while_holding(find_button("Save draft"))
+    assert_selector "#draft-status", text: "Draft cleared"
+    assert_not Draft.exists?(owner: @client)
+  end
+
   test "saving attachments clears selections before another save and send" do
     sign_in_browser
     page.current_window.resize_to(1400, 1000)
     visit client_path(@client)
     open_envelope_details
+    assert_selector(:field, "Message") { |body| well_height(body) >= 128 }
     fill_in "Subject", with: "Attachment"
     fill_in "Message", with: "See attached"
     attach_file "Attachments", Rails.root.join("test/fixtures/files/sample.txt")
-    # Submit by keyboard while the editor's blur animation moves the button.
-    find_button("Save draft").send_keys(:enter)
+    click_button "Save draft"
     assert_selector "[aria-label='Draft attachments'] li", text: "sample.txt", count: 1
     capture_outbound_evidence("saved-attachment")
     assert_equal "", find_field("Attachments").value
@@ -226,12 +265,13 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     [ inbox_thread_path(older), client_path(@client, new_thread: 1) ].each_with_index do |path, index|
       visit path
       open_envelope_details
+      # Only the record composer well grows; let it settle before Send.
+      assert_selector(:field, "Message") { |body| well_height(body) >= 128 } if index == 1
       fill_in "To", with: "secondary@example.com"
       fill_in "Subject", with: "Correct this reply"
       fill_in "Message", with: "  "
       attach_file "Attachments", Rails.root.join("test/fixtures/files/sample.txt")
-      # Submit by keyboard while the editor's blur animation moves the button.
-      find_button("Send").send_keys(:enter)
+      click_button "Send"
       assert_text "Could not send"
       assert_field "To", with: "secondary@example.com"
       assert_field "Subject", with: "Correct this reply"
@@ -421,6 +461,20 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     end
   end
 
+
+  def well_height(body = find_field("Message"))
+    body.evaluate_script("this.getBoundingClientRect().height")
+  end
+
+  # A real press: mousedown moves focus, mouseup follows a beat later. The
+  # well is measured while the button is still held down.
+  def well_height_while_holding(button)
+    press = page.driver.browser.action.move_to(button.native)
+    press.click_and_hold.pause(duration: 0.3).perform
+    height = well_height
+    press.release.perform
+    height
+  end
 
   def assert_no_overflow(context)
     width = page.evaluate_script("document.documentElement.scrollWidth")
