@@ -20,7 +20,8 @@ module NestedPeople
     return if respond_to?(:converted?) && (converted? || converted_client_id_in_database.present?) && !allow_converted_name_sync
 
     rows = association(:people).scope.where.not(id: people.select(&:marked_for_destruction?).map(&:id)).pluck(:id, :name)
-    people_count = rows.size + people.count { |person| person.new_record? && !person.marked_for_destruction? }
+    new_people = people.select { |person| person.new_record? && !person.marked_for_destruction? }
+    people_count = rows.size + new_people.size
     namesake_ids = rows.select { |_id, person_name| person_name.to_s.strip.casecmp?(name_in_database.to_s.strip) }.map(&:first)
     sole = people.find { |person| person.persisted? && person.id == namesake_ids.first } if namesake_ids.one?
     renamed_sole = sole if sole&.will_save_change_to_name? && sole.name.to_s.strip.present?
@@ -34,9 +35,9 @@ module NestedPeople
     elsif renamed_sole && renamed_sole.name.to_s.strip.casecmp?(name.to_s.strip)
       renamed_sole.skip_name_propagation = true
       @name_identity_person_ids = namesake_ids
-    elsif people_count.zero? || (people_count == 1 && namesake_ids.one?)
+    elsif people_count.zero? || (people_count == 1 && (namesake_ids.one? || new_people.any? { |person| person.name.to_s.strip.casecmp?(name.to_s.strip) }))
       @name_identity_person_ids = namesake_ids
-      if sole && !sole.will_save_change_to_name?
+      if sole && !sole.will_save_change_to_name? && sole.name != name
         sole.name = name
         sole.skip_name_propagation = true
       end

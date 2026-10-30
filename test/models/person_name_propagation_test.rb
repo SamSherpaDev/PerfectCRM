@@ -560,6 +560,22 @@ class PersonNamePropagationTest < ActiveSupport::TestCase
     assert_equal 0, lead.activity_events.where(kind: "name_change").count
   end
 
+  test "renaming a record with no people while adding its first person under the new name carries the rename" do
+    lead = Lead.create!(name: "Maria", email: "maria.l@example.com", source: "website_form")
+    task = lead.tasks.create!(title: "Reply to Maria", due_on: Date.current)
+    draft = Draft.create!(owner: lead, to_addrs: "Maria <maria.l@example.com>", body: "Here are the dates.")
+
+    lead.update!(
+      name: "Maria Lopez",
+      people_attributes: { "0" => { name: "Maria Lopez", email: "maria.l@example.com", role: "Lead traveler" } }
+    )
+
+    assert_equal "Maria Lopez", lead.reload.name
+    assert_equal [ "Maria Lopez" ], lead.people.map(&:name)
+    assert_equal "Reply to Maria Lopez", task.reload.title
+    assert_equal "Maria Lopez <maria.l@example.com>", draft.reload.to_addrs
+  end
+
   test "relabeling a one-person display name while adding a second person keeps the first person's name" do
     lead = Lead.create!(name: "Tom Becker", email: "tom.b@example.com", source: "referral")
     lead_tom = lead.people.create!(name: "Tom Becker", email: "tom.b@example.com", role: "Lead traveler")

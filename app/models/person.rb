@@ -107,7 +107,11 @@ class Person < ApplicationRecord
   end
 
   def propagate_name_change
-    return if skip_name_propagation || !saved_change_to_name?
+    if skip_name_propagation
+      self.skip_name_propagation = false
+      return
+    end
+    return unless saved_change_to_name?
 
     old_name, new_name = saved_change_to_name
     PersonNamePropagation.call(self, old_name: old_name, new_name: new_name)
