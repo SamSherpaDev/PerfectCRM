@@ -55,13 +55,13 @@ class RenamePersonSystemTest < ApplicationSystemTestCase
       assert_text "Sofia Conti"
       assert_no_text "Elena Rossi"
     end
-    assert_equal "Follow up with Sofia Conti", task.reload.title
+    assert_equal "Follow up with Elena Rossi", task.reload.title
     assert_no_overflow("lead page desktop", 1400)
 
-    # Today page shows updated lead name and scheduled call note
+    # Today page shows updated lead name and the call note as written
     visit root_path
     assert_text "Sofia Conti"
-    assert_text "Call Sofia Conti about dates"
+    assert_text "Call Elena Rossi about dates"
 
     # Search finds new lead name and not old name
     visit leads_path(q: "Sofia Conti")

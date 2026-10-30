@@ -616,19 +616,13 @@ behind Thread, Details, and Files tabs. Each visit starts on Thread
 unless an explicit link targets another panel. Use New client to create a
 record, and Edit to update facts or add another
 person in the blank People fields. Renaming a lead, client, or person updates
-linked PerfectCRM records for that same person (converted or origin leads,
-matching client, and linked people that still carry the old name, plus open
-tasks, open scheduled-call notes, unsent drafts, and unbundled draft quotes);
-renaming an organization updates only its own open tasks and unsent drafts.
+the stored name and search for that same person across linked PerfectCRM
+records (converted or origin leads, matching client, and linked people that
+still carry the old name); renaming an organization changes only its own name.
 Every rename refreshes the FTS5 search index and logs a `name_change` timeline
-event while leaving sent messages,
-sent or accepted quotes, past activity events, and synced PerfectBook contacts
-untouched. Free text (task titles and notes, draft subjects and bodies, quote
-and call notes) changes only when the old name has two or more words: the full
-old name is replaced only in its exact letter case, and the bare first name only
-after a leading Hi, Hello, Hey, or Dear. Draft recipients and quote traveler
-lists match the full old name in any letter case, so a one-word name such as
-Info still updates there. Renaming the only person
+event. Existing notes, tasks, drafts, quotes, call notes, messages, and other
+written text keep the wording they were written with, and synced PerfectBook
+contacts stay untouched. Renaming the only person
 on a record who carries its display name renames the display name and linked
 records with that name too; on a record with two or more people, changing just
 the display name relabels that record alone, and adding a person never renames

@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
-# Propagates a name change across every linked PerfectCRM record that still
-# carries the old name, updates open follow-ups, unsent drafts, draft quotes,
-# and open scheduled calls, and appends one timeline entry without rewriting
-# sent messages, delivered quotes, or past activity history.
+# Propagates a name change to the linked PerfectCRM leads, clients, and people
+# that still carry the old name and appends one timeline entry. Written text
+# (tasks, drafts, quotes, call notes, messages, and history) keeps its wording.
 class PersonNamePropagation
   def self.call(record, old_name:, new_name:)
     new(record, old_name: old_name, new_name: new_name).call
@@ -20,7 +19,7 @@ class PersonNamePropagation
     return if @old_name.blank? || @new_name.blank? || @old_name == @new_name
 
     if @record.is_a?(Organization)
-      propagate_organization
+      record_activity_event(@record)
     else
       propagate_person_or_owner
     end
@@ -28,12 +27,6 @@ class PersonNamePropagation
   end
 
   private
-
-  def propagate_organization
-    update_open_tasks([ @record ])
-    update_unsent_drafts([ @record ])
-    record_activity_event(@record)
-  end
 
   def propagate_person_or_owner
     event_subject = @record.is_a?(Person) ? @record.owner : @record
@@ -55,12 +48,6 @@ class PersonNamePropagation
     update_clients(family_clients.select { |client| same_name?(client.name, @old_name) })
     update_leads(family_leads.select { |lead| same_name?(lead.name, @old_name) })
     update_people(target_people)
-
-    affected_owners = (family_clients + family_leads + target_people.filter_map(&:owner)).uniq
-    update_open_tasks(affected_owners)
-    update_unsent_drafts(affected_owners)
-    update_draft_quotes(affected_owners)
-    update_open_scheduled_calls(affected_owners)
   end
 
   def namesake_shares_owner?(seed_people)
@@ -220,85 +207,6 @@ class PersonNamePropagation
     end
   end
 
-  def update_open_tasks(owners)
-    return if owners.empty?
-
-    Task.open.where(subject: owners).find_each do |task|
-      allow_first = first_name_replaceable_for?(task.subject)
-      new_title = replace_name_in_prose(task.title, allow_first_name: allow_first)
-      new_notes = replace_name_in_prose(task.notes, allow_first_name: allow_first)
-      if new_title != task.title || new_notes != task.notes
-        save_linked(task) { task.update!(title: new_title, notes: new_notes) }
-      end
-    end
-  end
-
-  def update_unsent_drafts(owners)
-    return if owners.empty?
-
-    conversation_ids = Conversation.where(linkable: owners).select(:id)
-    scope = Draft.where(owner: owners).or(Draft.where(conversation_id: conversation_ids))
-    scope.find_each do |draft|
-      allow_first = first_name_replaceable_for?(draft.owner)
-      attrs = {
-        to_addrs: replace_name_in_field(draft.to_addrs),
-        cc_addrs: replace_name_in_field(draft.cc_addrs),
-        bcc_addrs: replace_name_in_field(draft.bcc_addrs),
-        subject: replace_name_in_prose(draft.subject, allow_first_name: allow_first),
-        body: replace_name_in_prose(draft.body, allow_first_name: allow_first)
-      }
-      draft.update_columns(attrs) if attrs.any? { |key, value| draft.public_send(key) != value }
-    end
-  end
-
-  def update_draft_quotes(owners)
-    client_ids = owners.select { |o| o.is_a?(Client) }.map(&:id)
-    lead_ids = owners.select { |o| o.is_a?(Lead) }.map(&:id)
-    return if client_ids.empty? && lead_ids.empty?
-
-    clauses = []
-    clauses << Quote.where(client_id: client_ids) if client_ids.any?
-    clauses << Quote.where(lead_id: lead_ids) if lead_ids.any?
-    scope = clauses.reduce(:or).where(status: "draft", terms_bundle: nil)
-
-    scope.find_each do |quote|
-      changed = false
-      details = quote.disclosure_details.is_a?(Hash) ? quote.disclosure_details.deep_dup : nil
-      if details && details["travelers"].present?
-        updated_travelers = replace_name_in_field(details["travelers"])
-        if updated_travelers != details["travelers"]
-          details["travelers"] = updated_travelers
-          quote.disclosure_details = details
-          changed = true
-        end
-      end
-      if quote.notes.present?
-        updated_notes = replace_name_in_prose(quote.notes)
-        if updated_notes != quote.notes
-          quote.notes = updated_notes
-          changed = true
-        end
-      end
-      save_linked(quote) { quote.save! } if changed
-    end
-  end
-
-  def update_open_scheduled_calls(owners)
-    client_ids = owners.select { |o| o.is_a?(Client) }.map(&:id)
-    lead_ids = owners.select { |o| o.is_a?(Lead) }.map(&:id)
-    return if client_ids.empty? && lead_ids.empty?
-
-    # A call belongs to its client when it has one, else to its lead (ScheduledCall#owner).
-    owned = ScheduledCall.where(client_id: client_ids).or(ScheduledCall.where(client_id: nil, lead_id: lead_ids))
-    ScheduledCall.visible.scheduled.merge(owned).find_each do |call|
-      next if call.notes.blank?
-
-      allow_first = first_name_replaceable_for?(call.owner)
-      updated_notes = replace_name_in_prose(call.notes, allow_first_name: allow_first)
-      save_linked(call) { call.update!(notes: updated_notes) } if updated_notes != call.notes
-    end
-  end
-
   def save_linked(record)
     yield
   rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotSaved => error
@@ -319,43 +227,6 @@ class PersonNamePropagation
       occurred_at: Time.current,
       metadata: metadata
     )
-  end
-
-  def replace_name_in_prose(text, allow_first_name: false)
-    return text if text.blank? || @old_name.split.size < 2
-
-    updated = replace_name_in_field(text, exact_case: true)
-    return updated unless allow_first_name
-
-    salutation = /^([ \t]*(?i:hi|hello|hey|dear)[ \t]+)#{Regexp.escape(old_first_name)}(?![\w@+-]|\.\w)/
-    updated.gsub(salutation) { "#{Regexp.last_match(1)}#{new_first_name}" }
-  end
-
-  def replace_name_in_field(text, exact_case: false)
-    return text if text.blank?
-
-    full_names = [ @old_name, @new_name ].sort_by { |name| -name.length }.map { |name| Regexp.escape(name) }
-    text.gsub(/(?<![\w.@+-])(?:#{full_names.join("|")})(?![\w@+-]|\.\w)/i) do |match|
-      matches_old = exact_case ? match == @old_name : match.casecmp?(@old_name)
-      matches_old ? @new_name : match
-    end
-  end
-
-  def first_name_replaceable_for?(owner)
-    return false unless (owner.is_a?(Client) || owner.is_a?(Lead)) && owner.kind != "company"
-    return false if old_first_name.length < 2 || new_first_name.blank? || old_first_name == new_first_name
-
-    ([ owner.name ] + owner.people.reload.map(&:name)).none? do |name|
-      name.to_s.split.first.to_s.casecmp?(old_first_name)
-    end
-  end
-
-  def old_first_name
-    @old_first_name ||= @old_name.split.first.to_s
-  end
-
-  def new_first_name
-    @new_first_name ||= @new_name.split.first.to_s
   end
 
   def same_name?(left, right)

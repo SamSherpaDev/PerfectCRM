@@ -1,7 +1,7 @@
 require "test_helper"
 
 class PersonNamePropagationTest < ActiveSupport::TestCase
-  test "renaming a lead updates its matching person, existing client, search index, open items, and timeline" do
+  test "renaming a lead updates its matching person, existing client, search index, and timeline but keeps written text" do
     existing_client = Client.create!(name: "Elena Rossi", email: "traveler1@example.com")
     client_self_person = existing_client.people.create!(name: "Elena Rossi", email: "traveler1@example.com", role: "Lead traveler")
 
@@ -16,19 +16,10 @@ class PersonNamePropagationTest < ActiveSupport::TestCase
     companion = lead.people.create!(name: "Marco Bianchi", email: "companion1@example.com", role: "Spouse")
 
     open_task = lead.tasks.create!(title: "Call Elena Rossi about the November departure", due_on: Date.current)
-    done_task = lead.tasks.create!(title: "Send brochure to Elena Rossi", due_on: Date.current - 1, done_at: 1.day.ago)
     scheduled_call = lead.scheduled_calls.create!(
       scheduled_at: 1.day.from_now,
       duration_minutes: 30,
       notes: "Confirm pace with Elena Rossi"
-    )
-    completed_call = lead.scheduled_calls.create!(
-      scheduled_at: 2.days.ago,
-      duration_minutes: 30,
-      status: "completed",
-      outcome: "connected",
-      completed_at: 2.days.ago,
-      notes: "Spoke with Elena Rossi"
     )
     draft = Draft.create!(
       owner: lead,
@@ -68,16 +59,14 @@ class PersonNamePropagationTest < ActiveSupport::TestCase
     assert_includes Client.search("Sofia Conti"), existing_client
     assert_not_includes Client.search("Elena Rossi"), existing_client
 
-    assert_equal "Call Sofia Conti about the November departure", open_task.reload.title
-    assert_equal "Send brochure to Elena Rossi", done_task.reload.title
-    assert_equal "Confirm pace with Sofia Conti", scheduled_call.reload.notes
-    assert_equal "Spoke with Elena Rossi", completed_call.reload.notes
-    assert_equal "Sofia Conti <traveler1@example.com>", draft.reload.to_addrs
-    assert_equal "Dates for Sofia Conti", draft.subject
-    assert_equal "Hi Sofia,\n\nHere are the dates.", draft.body
+    assert_equal "Call Elena Rossi about the November departure", open_task.reload.title
+    assert_equal "Confirm pace with Elena Rossi", scheduled_call.reload.notes
+    assert_equal "Elena Rossi <traveler1@example.com>", draft.reload.to_addrs
+    assert_equal "Dates for Elena Rossi", draft.subject
+    assert_equal "Hi Elena,\n\nHere are the dates.", draft.body
     assert_equal "Sofia Conti", draft_quote.reload.owner_name
-    assert_equal "Sofia Conti, Marco Bianchi", draft_quote.disclosure_details["travelers"]
-    assert_equal "Prepared for Sofia Conti", draft_quote.notes
+    assert_equal "Elena Rossi, Marco Bianchi", draft_quote.disclosure_details["travelers"]
+    assert_equal "Prepared for Elena Rossi", draft_quote.notes
     assert_equal "Hi, I am Elena Rossi asking about October.", lead.message
 
     events = lead.activity_events.where(kind: "name_change")
@@ -266,7 +255,7 @@ class PersonNamePropagationTest < ActiveSupport::TestCase
     assert_equal "Amara Okafor", accepted_quote.intake_details["client"]
   end
 
-  test "renaming an organization refreshes FTS, updates open tasks, and logs one event" do
+  test "renaming an organization refreshes FTS, keeps open task wording, and logs one event" do
     org = Organization.create!(name: "Alpine Guides", kind: "advisor", email: "info@partner-org.example.com")
     task = org.tasks.create!(title: "Follow up with Alpine Guides", due_on: Date.current)
 
@@ -274,7 +263,7 @@ class PersonNamePropagationTest < ActiveSupport::TestCase
 
     assert_includes Organization.search("Summit Expeditions"), org
     assert_not_includes Organization.search("Alpine Guides"), org
-    assert_equal "Follow up with Summit Expeditions", task.reload.title
+    assert_equal "Follow up with Alpine Guides", task.reload.title
     event = org.activity_events.find_by!(kind: "name_change")
     assert_equal "Name changed from Alpine Guides to Summit Expeditions", event.summary
   end
@@ -306,7 +295,7 @@ class PersonNamePropagationTest < ActiveSupport::TestCase
     assert_equal "Johnny Smith", john.reload.name
   end
 
-  test "renaming a client updates its open calls, including the ones carried over from its converted lead" do
+  test "renaming a client keeps the wording of its open calls, including the ones carried over from its converted lead" do
     lead = Lead.create!(name: "Tom Becker", email: "primary7@example.com", source: "google_ads")
     carried_call = lead.scheduled_calls.create!(scheduled_at: 1.day.from_now, duration_minutes: 30, notes: "Call Tom Becker about dates")
     client = lead.convert_to_client!
@@ -316,92 +305,9 @@ class PersonNamePropagationTest < ActiveSupport::TestCase
 
     assert_equal "Thomas Becker", client.reload.name
     assert_equal "Thomas Becker", lead.reload.name
-    assert_equal "Call Thomas Becker about dates", carried_call.reload.notes
-    assert_equal "Hi Thomas, Thomas Becker asked for a callback", client_call.reload.notes
+    assert_equal "Call Tom Becker about dates", carried_call.reload.notes
+    assert_equal "Hi Tom, Tom Becker asked for a callback", client_call.reload.notes
     assert_equal 0, Current.name_change_skips.to_i
-  end
-
-  test "first-name rewrites skip organizations, companies, and owners who share the old first name" do
-    org = Organization.create!(name: "Himalayan Footprints", kind: "operator")
-    org_task = org.tasks.create!(title: "Confirm Himalayan permit with Himalayan Footprints", due_on: Date.current)
-    org_draft = Draft.create!(owner: org, subject: "Himalayan Footprints dates", body: "Dear Himalayan partners,\nOur Himalayan departures are full.")
-
-    org.update!(name: "Summit Footprints")
-
-    assert_equal "Confirm Himalayan permit with Summit Footprints", org_task.reload.title
-    assert_equal "Summit Footprints dates", org_draft.reload.subject
-    assert_equal "Dear Himalayan partners,\nOur Himalayan departures are full.", org_draft.body
-
-    company = Client.create!(name: "Himalayan Adventures", kind: "company", email: "office@example.com")
-    company_task = company.tasks.create!(title: "Send Himalayan Adventures the Himalayan route", notes: "Hi Himalayan team", due_on: Date.current)
-
-    company.update!(name: "Summit Adventures")
-
-    assert_equal "Send Summit Adventures the Himalayan route", company_task.reload.title
-    assert_equal "Hi Himalayan team", company_task.notes
-
-    lead = Lead.create!(name: "Maria Lopez", email: "maria@example.com", source: "website_form")
-    companion = lead.people.create!(name: "Maria Garcia", role: "Partner")
-    lead_task = lead.tasks.create!(title: "Call Maria about deposit", notes: "Hi Maria,\nBook Maria Garcia's flight", due_on: Date.current)
-
-    lead.update!(people_attributes: { "0" => { id: companion.id, name: "Marta Garcia", role: "Partner" } })
-
-    assert_equal "Marta Garcia", companion.reload.name
-    assert_equal "Maria Lopez", lead.reload.name
-    assert_equal "Call Maria about deposit", lead_task.reload.title
-    assert_equal "Hi Maria,\nBook Marta Garcia's flight", lead_task.notes
-  end
-
-  test "renaming keeps text that already holds the new name from doubling" do
-    lead = Lead.create!(name: "Elena Rossi", email: "rossi@example.com", source: "referral")
-    task = lead.tasks.create!(title: "Call Elena Rossi", notes: "Maria Elena Rossi confirmed", due_on: Date.current)
-
-    lead.update!(name: "Maria Elena Rossi")
-
-    assert_equal "Call Maria Elena Rossi", task.reload.title
-    assert_equal "Maria Elena Rossi confirmed", task.notes
-  end
-
-  test "renaming to a shortened name replaces the longer old name" do
-    lead = Lead.create!(name: "Elena Rossi Bianchi", email: "bianchi@example.com", source: "referral")
-    task = lead.tasks.create!(title: "Call Elena Rossi Bianchi about dates", due_on: Date.current)
-
-    lead.update!(name: "Elena Rossi")
-
-    assert_equal "Call Elena Rossi about dates", task.reload.title
-  end
-
-  test "first names are rewritten only in a leading salutation" do
-    lead = Lead.create!(name: "June Park", email: "june@example.com", source: "website_form")
-    draft = Draft.create!(owner: lead, subject: "June Park trip", body: "Hi June,\n\nThe June departure is full.")
-
-    lead.update!(name: "Jun Park")
-
-    assert_equal "Jun Park trip", draft.reload.subject
-    assert_equal "Hi Jun,\n\nThe June departure is full.", draft.body
-  end
-
-  test "rewriting a submitted draft keeps it eligible for cleanup once the message sends" do
-    lead = Lead.create!(name: "Priya Shah", email: "priya@example.com", source: "website_form")
-    conversation = lead.conversations.create!(subject_line: "Trip dates")
-    draft = Draft.create!(owner: lead, conversation: conversation, to_addrs: "priya@example.com",
-      subject: "Dates", body: "Hi Priya Shah,\n\nHere are the dates.")
-    message = conversation.messages.create!(
-      direction: "out",
-      status: "sending",
-      from_address: "info@sherpaholidays.com",
-      to_addresses: [ "priya@example.com" ],
-      subject: "Dates",
-      text_body: "Hi Priya Shah,\n\nHere are the dates.",
-      submitted_draft_id: draft.id,
-      submitted_draft_updated_at: draft.reload.updated_at
-    )
-
-    lead.update!(name: "Priya Mehta")
-
-    assert_equal "Hi Priya Mehta,\n\nHere are the dates.", draft.reload.body
-    message.mark_sent!
-    assert_not Draft.exists?(draft.id)
   end
 
   test "a linked record that fails validation keeps the old name without blocking the rename" do
@@ -464,15 +370,13 @@ class PersonNamePropagationTest < ActiveSupport::TestCase
     assert_equal "Robert Chen", lead_son.reload.name
   end
 
-  test "relabeling a two-person display name leaves people, drafts, and linked leads alone" do
+  test "relabeling a two-person display name leaves people and linked leads alone" do
     lead = Lead.create!(name: "Elena Rossi", email: "elena@example.com", source: "referral")
     lead_elena = lead.people.create!(name: "Elena Rossi", email: "elena@example.com", role: "Lead traveler")
     lead_marco = lead.people.create!(name: "Marco Bianchi", email: "marco@example.com", role: "Partner")
     client = lead.convert_to_client!
     elena = client.people.find_by!(origin_person_id: lead_elena.id)
     marco = client.people.find_by!(origin_person_id: lead_marco.id)
-    draft = Draft.create!(owner: client, to_addrs: "Elena Rossi <elena@example.com>",
-      subject: "Dates for Elena Rossi", body: "Hi Elena,\n\nHere are the dates.")
 
     client.update!(
       name: "Rossi Family",
@@ -487,9 +391,6 @@ class PersonNamePropagationTest < ActiveSupport::TestCase
     assert_equal "Marco Bianchi", marco.reload.name
     assert_equal "Elena Rossi", lead.reload.name
     assert_equal "Elena Rossi", lead_elena.reload.name
-    assert_equal "Elena Rossi <elena@example.com>", draft.reload.to_addrs
-    assert_equal "Dates for Elena Rossi", draft.subject
-    assert_equal "Hi Elena,\n\nHere are the dates.", draft.body
   end
 
   test "renaming a one-person client carries to her person and linked records" do
@@ -497,7 +398,6 @@ class PersonNamePropagationTest < ActiveSupport::TestCase
     person = client.people.create!(name: "Ana Diaz", email: "ana.d@example.com", role: "Lead traveler")
     lead = Lead.create!(name: "Ana Diaz", email: "ana.d@example.com", source: "website_form", existing_client: client)
     lead_person = lead.people.create!(name: "Ana Diaz", email: "ana.d@example.com", role: "Lead traveler")
-    task = lead.tasks.create!(title: "Send Ana Diaz the dates", due_on: Date.current)
 
     client.update!(
       name: "Ana Díaz",
@@ -508,7 +408,6 @@ class PersonNamePropagationTest < ActiveSupport::TestCase
     assert_equal "Ana Díaz", person.reload.name
     assert_equal "Ana Díaz", lead.reload.name
     assert_equal "Ana Díaz", lead_person.reload.name
-    assert_equal "Send Ana Díaz the dates", task.reload.title
   end
 
   test "renaming the only person carrying a two-person display name renames it and its converted lead" do
@@ -518,9 +417,6 @@ class PersonNamePropagationTest < ActiveSupport::TestCase
     client = lead.convert_to_client!
     tom = client.people.find_by!(origin_person_id: lead_tom.id)
     lena = client.people.find_by!(origin_person_id: lead_lena.id)
-    task = client.tasks.create!(title: "Call Tom Becker about dates", due_on: Date.current)
-    draft = Draft.create!(owner: client, to_addrs: "Tom Becker <tom@example.com>",
-      subject: "Dates for Tom Becker", body: "Hi Tom,\n\nHere are the dates.")
 
     client.update!(
       name: "Tom Becker",
@@ -536,29 +432,22 @@ class PersonNamePropagationTest < ActiveSupport::TestCase
     assert_equal "Thomas Becker", lead_tom.reload.name
     assert_equal "Lena Weber", lena.reload.name
     assert_equal "Lena Weber", lead_lena.reload.name
-    assert_equal "Call Thomas Becker about dates", task.reload.title
-    assert_equal "Thomas Becker <tom@example.com>", draft.reload.to_addrs
-    assert_equal "Dates for Thomas Becker", draft.subject
-    assert_equal "Hi Thomas,\n\nHere are the dates.", draft.body
     assert_equal 1, client.activity_events.where(kind: "name_change").count
   end
 
-  test "adding the first person to a record leaves its display name and drafts alone" do
+  test "adding the first person to a record leaves its display name alone" do
     lead = Lead.create!(name: "Maria Lopez", email: "maria@example.com", source: "website_form")
-    draft = Draft.create!(owner: lead, to_addrs: "Maria Lopez <maria@example.com>", body: "Hi Maria,\n\nHere are the dates.")
 
     lead.update!(people_attributes: { "0" => { name: "Carlos Lopez", email: "carlos@example.com", role: "Spouse" } })
 
     assert_equal "Maria Lopez", lead.reload.name
     assert_equal [ "Carlos Lopez" ], lead.people.map(&:name)
-    assert_equal "Maria Lopez <maria@example.com>", draft.reload.to_addrs
-    assert_equal "Hi Maria,\n\nHere are the dates.", draft.body
     assert_equal 0, lead.activity_events.where(kind: "name_change").count
   end
 
   test "renaming a record with no people while adding its first person under the new name carries the rename" do
+    client = Client.create!(name: "Maria", email: "maria.l@example.com")
     lead = Lead.create!(name: "Maria", email: "maria.l@example.com", source: "website_form")
-    draft = Draft.create!(owner: lead, to_addrs: "Maria <maria.l@example.com>", body: "Here are the dates.")
 
     lead.update!(
       name: "Maria Lopez",
@@ -567,7 +456,7 @@ class PersonNamePropagationTest < ActiveSupport::TestCase
 
     assert_equal "Maria Lopez", lead.reload.name
     assert_equal [ "Maria Lopez" ], lead.people.map(&:name)
-    assert_equal "Maria Lopez <maria.l@example.com>", draft.reload.to_addrs
+    assert_equal "Maria Lopez", client.reload.name
   end
 
   test "relabeling a one-person display name while adding a second person keeps the first person's name" do
@@ -590,32 +479,29 @@ class PersonNamePropagationTest < ActiveSupport::TestCase
     assert_equal "Tom Becker", lead_tom.reload.name
   end
 
-  test "names followed by a sentence-ending period are replaced and prose needs the exact letter case" do
-    lead = Lead.create!(name: "Elena Rossi", email: "elena.rossi@example.com", source: "referral")
-    task = lead.tasks.create!(title: "Follow up with Elena Rossi.", notes: "Met Elena Rossi. Ask about elena rossi tours",
-      due_on: Date.current)
-    draft = Draft.create!(owner: lead, to_addrs: "elena rossi <elena.rossi@example.com>", body: "Here are the dates.")
-
-    lead.update!(name: "Elena Conti")
-
-    assert_equal "Follow up with Elena Conti.", task.reload.title
-    assert_equal "Met Elena Conti. Ask about elena rossi tours", task.notes
-    assert_equal "Elena Conti <elena.rossi@example.com>", draft.reload.to_addrs
-  end
-
-  test "a one-word old name renames the record and its addresses but leaves prose alone" do
-    lead = Lead.create!(name: "Info", email: "info@acme-travel.com", source: "email")
-    task = lead.tasks.create!(title: "Reply to Info", notes: "Send more info", due_on: Date.current)
-    draft = Draft.create!(owner: lead, to_addrs: "Info <info@acme-travel.com>", subject: "Re: Trip info",
-      body: "Thanks for the info. Here is more info about Annapurna.")
+  test "a rename leaves recipient and traveler lists exactly as written" do
+    lead = Lead.create!(name: "Maria", email: "maria@x.com", source: "email")
+    draft = Draft.create!(owner: lead, to_addrs: "Maria <maria@x.com>", cc_addrs: "Maria <maria@x.com>, Maria Garcia <mg@x.com>",
+      body: "Here are the dates.")
+    quote = Quote.create!(lead: lead, status: "draft", trip_name: "Annapurna Sanctuary", party_size: 2,
+      disclosure_details: { "travelers" => "Maria, Maria Garcia" })
 
     lead.update!(name: "Maria Lopez")
 
     assert_equal "Maria Lopez", lead.reload.name
-    assert_equal "Maria Lopez <info@acme-travel.com>", draft.reload.to_addrs
-    assert_equal "Re: Trip info", draft.subject
-    assert_equal "Thanks for the info. Here is more info about Annapurna.", draft.body
-    assert_equal "Reply to Info", task.reload.title
-    assert_equal "Send more info", task.notes
+    assert_includes Lead.search("Maria Lopez"), lead
+    assert_equal "Maria <maria@x.com>", draft.reload.to_addrs
+    assert_equal "Maria <maria@x.com>, Maria Garcia <mg@x.com>", draft.cc_addrs
+    assert_equal "Maria, Maria Garcia", quote.reload.disclosure_details["travelers"]
+  end
+
+  test "a rename leaves a longer name in task notes exactly as written" do
+    lead = Lead.create!(name: "Robert Chen", email: "robert@example.com", source: "referral")
+    task = lead.tasks.create!(title: "Book flights", notes: "Seat Robert Chen Jr. next to his father", due_on: Date.current)
+
+    lead.update!(name: "Bob Chen")
+
+    assert_equal "Bob Chen", lead.reload.name
+    assert_equal "Seat Robert Chen Jr. next to his father", task.reload.notes
   end
 end

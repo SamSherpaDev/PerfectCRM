@@ -31,7 +31,7 @@ class OrganizationsController < ApplicationController
 
   def update
     if @organization.update(organization_params)
-      redirect_to @organization, notice: with_name_change_skips("Organization saved.")
+      redirect_to @organization, notice: "Organization saved."
     else
       render :edit, status: :unprocessable_entity
     end
