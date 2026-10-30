@@ -274,6 +274,15 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     assert_equal "020 7946 0958", Lead.last.display_phone
   end
 
+  test "a non-US ten-digit phone keeps its own spelling through display and conversion" do
+    post_intake intake_body("contact" => { "phone_raw" => "9841234567", "country" => "Nepal" })
+    assert_response :accepted
+    lead = Lead.find(response.parsed_body.fetch("id"))
+    assert_nil lead.phone
+    assert_equal "9841234567", lead.display_phone
+    assert_equal "9841234567", lead.convert_to_client!.display_phone
+  end
+
   test "bare domain origin is accepted" do
     post_intake intake_body, headers: { "Origin" => "https://sherpaholidays.com" }
     assert_response :accepted

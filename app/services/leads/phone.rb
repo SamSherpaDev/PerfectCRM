@@ -3,10 +3,13 @@ module Leads
   # international calling code. Explicit + numbers retain the intake's existing
   # 7–15 digit contract. This is formatting, not proof a number is reachable.
   module Phone
+    SEPARATORS = /[\s\-().]/
+    US_COUNTRIES = [ "US", "USA", "UNITED STATES", "UNITED STATES OF AMERICA" ].freeze
+
     def self.normalize(raw, country: nil)
-      compact = raw.to_s.gsub(/[\s\-().]/, "")
+      compact = raw.to_s.gsub(SEPARATORS, "")
       return compact if compact.match?(/\A\+[1-9]\d{6,14}\z/)
-      return nil unless country.blank? || country.to_s.strip.upcase.in?(%w[US USA UNITED\ STATES UNITED\ STATES\ OF\ AMERICA])
+      return nil unless us_default?(country)
 
       if compact.match?(/\A\d{10}\z/)
         "+1#{compact}"
@@ -15,15 +18,18 @@ module Leads
       end
     end
 
-    def self.format(raw)
+    def self.format(raw, country: nil)
       value = raw.presence
       return nil unless value
 
-      if (match = value.to_s.strip.match(/\A(?:\+1)?(\d{3})(\d{3})(\d{4})\z/))
-        "#{match[1]}-#{match[2]}-#{match[3]}"
-      else
-        value
-      end
+      compact = value.to_s.gsub(SEPARATORS, "")
+      digits = compact[/\A\+?1(\d{10})\z/, 1] || (compact[/\A\d{10}\z/] if us_default?(country))
+      digits ? "#{digits[0, 3]}-#{digits[3, 3]}-#{digits[6, 4]}" : value
     end
+
+    def self.us_default?(country)
+      country.blank? || country.to_s.strip.upcase.in?(US_COUNTRIES)
+    end
+    private_class_method :us_default?
   end
 end

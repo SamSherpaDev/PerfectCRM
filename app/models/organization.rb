@@ -4,7 +4,7 @@ class Organization < ApplicationRecord
   encrypts :phone
 
   def display_phone
-    Leads::Phone.format(phone)
+    Leads::Phone.format(phone, country: country)
   end
 
   has_many :referred_clients, class_name: "Client",

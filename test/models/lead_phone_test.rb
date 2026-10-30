@@ -15,12 +15,27 @@ class LeadPhoneTest < ActiveSupport::TestCase
     end
   end
 
-  test "formats US and Canada +1 or bare 10-digit numbers with dashes and leaves other numbers unchanged" do
-    assert_equal "609-781-0024", Leads::Phone.format("+16097810024")
-    assert_equal "609-781-0024", Leads::Phone.format("6097810024")
-    assert_equal "416-555-0199", Leads::Phone.format("+14165550199")
+  test "formats +1 and eleven-digit 1 numbers with dashes whatever their separators or country" do
+    [ "+14155550134", "+1 415 555 0134", "+1 (415) 555-0134", "14155550134", "1-415-555-0134" ].each do |raw|
+      [ nil, "US", "Canada", "Nepal" ].each do |country|
+        assert_equal "415-555-0134", Leads::Phone.format(raw, country: country), [ raw, country ].inspect
+      end
+    end
+  end
 
-    [ "+9779841234567", "+977-1-4445555", "+919876543210", "+442079460958", "020 7946 0958", "  ask for Alex at reception  " ].each do |other|
+  test "formats bare ten digits with dashes only under the US parsing default" do
+    [ "4155550134", "(415) 555-0134", "415.555.0134", "415 555 0134", "415-555-0134" ].each do |raw|
+      [ nil, "", "US", "usa", "United States" ].each do |country|
+        assert_equal "415-555-0134", Leads::Phone.format(raw, country: country), [ raw, country ].inspect
+      end
+    end
+    assert_equal "9841234567", Leads::Phone.format("9841234567", country: "Nepal")
+    assert_equal "(415) 555-0134", Leads::Phone.format("(415) 555-0134", country: "GB")
+  end
+
+  test "leaves international, extension, and unparseable numbers unchanged" do
+    [ "+9779841234567", "+977 984 123 4567", "+977-1-4445555", "+919876543210", "+442079460958", "020 7946 0958",
+      "415-555-0134 ext 2", "+1 415 555 0134 x12", "24155550134", "  ask for Alex at reception  " ].each do |other|
       assert_equal other, Leads::Phone.format(other)
     end
 

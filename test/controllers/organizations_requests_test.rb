@@ -22,6 +22,16 @@ class OrganizationsRequestsTest < ActionDispatch::IntegrationTest
     assert_select "h2", text: "Timeline"
   end
 
+  test "show dashes a typed US phone but keeps a Nepal operator's local number as entered" do
+    us = Organization.create!(name: "Bay Advisors", kind: "advisor", phone: "(609) 781-0024", country: "US")
+    nepal = Organization.create!(name: "Kathmandu Treks", kind: "operator", phone: "9841234567", country: "Nepal")
+    get organization_path(us)
+    assert_select "dd", text: "609-781-0024"
+    get organization_path(nepal)
+    assert_select "dd", text: "9841234567"
+    assert_select "dd", text: "984-123-4567", count: 0
+  end
+
   test "show leaves the CRM signature logo out of mail rows and the outbound timeline while listing real files" do
     logo = "\x89PNG\r\n\x1A\n".b + [ 13 ].pack("N") + "IHDR" + [ 120, 40 ].pack("NN") + "\x08\x02\x00\x00\x00org-logo".b
     Setting.current.signature_logo.attach(io: StringIO.new(logo), filename: "signature-logo.png", content_type: "image/png")
