@@ -184,14 +184,19 @@ module Mail
         .map { |value| value.to_s.strip.downcase }.reject(&:blank?).uniq
     end
 
-    def self.partition_attachments(attachments)
+    def self.partition_attachments(attachments, logo_checksums: nil)
+      entries = Array(attachments)
+      return [ [], [] ] if entries.empty?
+
       ordinary = []
       held = []
-      Array(attachments).each do |file|
+      logo_checksums ||= EmailSignature.logo_checksums
+      entries.each do |file|
         filename = file[:filename].to_s.presence || "attachment"
         content_type = file[:content_type].to_s.presence || "application/octet-stream"
         data = file[:data].to_s
         next if data.blank?
+        next if EmailSignature.signature_logo_data?(data, checksums: logo_checksums)
 
         # A reader can mark an entry sensitive when it could not screen
         # everything inside it (see GraphFetcher#forwarded_entry); such
@@ -200,7 +205,7 @@ module Mail
           held << { "filename" => filename, "byte_size" => data.bytesize, "content_type" => content_type,
             "data" => data, "status" => "held: send to PerfectBook" }
         elsif content_type == "message/rfc822" || filename.downcase.end_with?(".eml")
-          enclosed, sensitive = partition_attachments(parse_raw(data).attachments)
+          enclosed, sensitive = partition_attachments(parse_raw(data).attachments, logo_checksums: logo_checksums)
           if sensitive.any?
             ordinary.concat(enclosed)
             held.concat(sensitive)

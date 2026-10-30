@@ -53,7 +53,9 @@ class SettingsController < ApplicationController
 
   # Removes the uploaded signature logo; the signature keeps its words.
   def remove_signature_logo
-    Setting.current.signature_logo.purge
+    setting = Setting.current
+    setting.remember_signature_logo_checksum!
+    setting.signature_logo.purge
     redirect_to edit_settings_path, notice: "Logo removed.", status: :see_other
   end
 

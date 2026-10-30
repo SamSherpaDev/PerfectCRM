@@ -131,6 +131,49 @@ class ClientsRequestsTest < ActionDispatch::IntegrationTest
     assert_select "ol li", text: /Note added/, count: 0
   end
 
+  test "show excludes the CRM signature logo from Files and counts while keeping real files and stored attachments" do
+    first_logo = "\x89PNG\r\n\x1A\n".b + [ 13 ].pack("N") + "IHDR" + [ 120, 40 ].pack("NN") + "\x08\x02\x00\x00\x00sig-v1".b
+    second_logo = "\x89PNG\r\n\x1A\n".b + [ 13 ].pack("N") + "IHDR" + [ 100, 36 ].pack("NN") + "\x08\x02\x00\x00\x00sig-v2".b
+    customer_image = "\x89PNG\r\n\x1A\n".b + [ 13 ].pack("N") + "IHDR" + [ 64, 64 ].pack("NN") + "\x08\x02\x00\x00\x00customer".b
+    setting = Setting.current
+    setting.signature_logo.attach(io: StringIO.new(first_logo), filename: "signature-logo.png", content_type: "image/png")
+    setting.signature_logo.attach(io: StringIO.new(second_logo), filename: "signature-logo.png", content_type: "image/png")
+
+    client = Client.create!(name: "Daniel Loveless", email: "daniel@example.com")
+    conversation = client.conversations.create!(subject: "Everest Base Camp")
+
+    outbound = conversation.messages.create!(
+      direction: "out", status: "sent", to_addrs: client.email,
+      subject: "Everest Base Camp", text_body: "Here is your itinerary.", sent_at: 3.days.ago
+    )
+    outbound.files.attach(io: StringIO.new("%PDF-1.4 itinerary"), filename: "itinerary.pdf", content_type: "application/pdf")
+    outbound.files.attach(io: StringIO.new(first_logo), filename: "signature-logo.png", content_type: "image/png")
+
+    [ first_logo, second_logo ].each_with_index do |logo_bytes, idx|
+      reply = conversation.messages.create!(
+        direction: "in", from_address: client.email,
+        subject: "Re: Everest Base Camp", text_body: "Reply #{idx}", sent_at: (2 - idx).days.ago
+      )
+      reply.files.attach(io: StringIO.new(logo_bytes), filename: "signature-logo.png", content_type: "image/png")
+    end
+
+    customer_msg = conversation.messages.create!(
+      direction: "in", from_address: client.email,
+      subject: "Re: Everest Base Camp", text_body: "My own image", sent_at: 1.hour.ago
+    )
+    customer_msg.files.attach(io: StringIO.new(customer_image), filename: "signature-logo.png", content_type: "image/png")
+
+    get client_path(client)
+    assert_response :success
+    assert_select "[data-tab='files'] .tab-count", text: "2"
+    assert_select "section[aria-labelledby='files-heading'] ul.files > li", count: 2
+    assert_select "section[aria-labelledby='files-heading'] ul.files .n", text: "itinerary.pdf", count: 1
+    assert_select "section[aria-labelledby='files-heading'] ul.files .n", text: "signature-logo.png", count: 1
+    assert_equal 2, outbound.reload.files.count
+  ensure
+    Setting.current.signature_logo.purge if Setting.current.signature_logo.attached?
+  end
+
   test "new and create with inline person and tags" do
     get new_client_path
     assert_response :success

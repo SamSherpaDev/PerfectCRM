@@ -150,6 +150,32 @@ module EmailSignature
       setting.signature_logo.attached? && setting.signature_logo.attachment.persisted?
     end
 
+    # Checksums of every signature logo configured on Settings, including the
+    # currently attached logo and any logo it later replaced.
+    def logo_checksums(setting = Setting.current)
+      return [] unless setting
+
+      checksums = Array(setting.signature_logo_checksums).dup
+      checksums << setting.signature_logo.blob.checksum if logo_attached?(setting)
+      checksums.filter_map { |value| value.to_s.presence }.uniq
+    end
+
+    def signature_logo_blob?(blob, setting = Setting.current, checksums: nil)
+      return false if blob.nil? || blob.checksum.blank?
+
+      known = checksums || logo_checksums(setting)
+      known.include?(blob.checksum)
+    end
+
+    def signature_logo_data?(data, setting = Setting.current, checksums: nil)
+      return false if data.blank?
+
+      known = checksums || logo_checksums(setting)
+      return false if known.empty?
+
+      known.include?(Digest::MD5.base64digest(data.to_s))
+    end
+
     # A template that renders {{signature}} signs its own body, so nothing
     # appends a second signature after it.
     def template_carries_signature?(template_id)

@@ -348,6 +348,59 @@ class MailIngesterTest < ActiveSupport::TestCase
     assert_equal "Ordinary itinerary", result[:message].files.first.download
   end
 
+  test "skips storing the CRM signature logo quoted on replies while keeping customer files with the same name" do
+    first_logo = "\x89PNG\r\n\x1A\n".b + [ 13 ].pack("N") + "IHDR" + [ 120, 40 ].pack("NN") + "\x08\x02\x00\x00\x00first-logo".b
+    second_logo = "\x89PNG\r\n\x1A\n".b + [ 13 ].pack("N") + "IHDR" + [ 100, 36 ].pack("NN") + "\x08\x02\x00\x00\x00second-logo".b
+    customer_png = "\x89PNG\r\n\x1A\n".b + [ 13 ].pack("N") + "IHDR" + [ 80, 80 ].pack("NN") + "\x08\x02\x00\x00\x00customer-photo".b
+    setting = Setting.current
+    setting.update!(email_signature: "Sam Sherpa\nSherpaHolidays")
+    setting.signature_logo.attach(io: StringIO.new(first_logo), filename: "logo-v1.png", content_type: "image/png")
+
+    client = Client.create!(name: "Daniel Loveless", email: "daniel@example.com")
+    conversation = client.conversations.create!(subject: "Everest itinerary", provider_thread_id: "thread-daniel")
+    outbound = conversation.messages.create!(
+      direction: "out", status: "sent", from_address: "info@sherpaholidays.com",
+      to_addrs: client.email, subject: "Everest itinerary",
+      text_body: "Hi Daniel,\n\nSam Sherpa\nSherpaHolidays", message_id: "out-1@sherpaholidays.com"
+    )
+    delivered = ClientMailer.outbound(outbound)
+    inline_logo = delivered.attachments.find { |part| part.content_id == "<#{EmailSignature::CID}>" }
+    assert_equal first_logo, inline_logo.decoded
+
+    # Replace the configured logo; replies quoting either the old or new CRM logo should skip it.
+    setting.signature_logo.attach(io: StringIO.new(second_logo), filename: "logo-v2.png", content_type: "image/png")
+
+    reply = ::Mail.new do
+      from "daniel@example.com"
+      to "info@sherpaholidays.com"
+      subject "Re: Everest itinerary"
+      message_id "<reply-daniel-1@test>"
+      in_reply_to "<out-1@sherpaholidays.com>"
+      text_part { body "Looks great, thank you!" }
+      html_part do
+        content_type "text/html; charset=UTF-8"
+        body "<p>Looks great!</p><blockquote><img src=\"cid:#{EmailSignature::CID}\"></blockquote>"
+      end
+    end
+    reply.attachments.inline["signature-logo.png"] = {
+      mime_type: "image/png", content: inline_logo.decoded, content_id: "<#{EmailSignature::CID}>"
+    }
+    reply.attachments.inline["image001.png"] = {
+      mime_type: "image/png", content: second_logo, content_id: "<quoted-v2@perfectcrm>"
+    }
+    reply.attachments["signature-logo.png"] = { mime_type: "image/png", content: customer_png }
+    reply.attachments["itinerary.pdf"] = { mime_type: "application/pdf", content: pdf_with_title("Everest itinerary") }
+
+    result = ingest_raw(reply.to_s, provider: { thread_id: "thread-daniel" })
+    stored = result[:message].files.map { |file| [ file.filename.to_s, file.download ] }
+    assert_equal [
+      [ "signature-logo.png", customer_png ],
+      [ "itinerary.pdf", pdf_with_title("Everest itinerary") ]
+    ], stored
+  ensure
+    Setting.current.signature_logo.purge if Setting.current.signature_logo.attached?
+  end
+
   private
 
   def pdf_with_title(title)

@@ -2,6 +2,7 @@ class Setting < ApplicationRecord
   APPEARANCES = %w[paper night].freeze
 
   has_one_attached :signature_logo
+  serialize :signature_logo_checksums, coder: JSON
 
   encrypts :relay_secret, deterministic: false
 
@@ -24,6 +25,7 @@ class Setting < ApplicationRecord
   validate :outbound_endpoints
 
   before_save :normalize_signature
+  before_save :remember_signature_logo_checksums
   before_validation { self.google_review_url = google_review_url.to_s.strip }
 
   normalizes :weekly_report_recipient, with: ->(value) { value.to_s.strip.downcase }
@@ -111,6 +113,11 @@ class Setting < ApplicationRecord
     self
   end
 
+  def remember_signature_logo_checksum!
+    checksums = collected_signature_logo_checksums
+    update_column(:signature_logo_checksums, checksums) if persisted? && checksums != Array(signature_logo_checksums)
+  end
+
   private
 
   def outbound_endpoints
@@ -145,5 +152,17 @@ class Setting < ApplicationRecord
   def normalize_signature
     self.email_signature_html = EmailSignature.sanitize(email_signature_html)
     self[:email_signature] = EmailSignature.text_for(self).to_s.gsub("\r\n", "\n")
+  end
+
+  def remember_signature_logo_checksums
+    self.signature_logo_checksums = collected_signature_logo_checksums
+  end
+
+  def collected_signature_logo_checksums
+    stored = ActiveStorage::Blob.joins(:attachments)
+      .where(active_storage_attachments: { record_type: "Setting", name: "signature_logo" })
+      .pluck(:checksum)
+    current = signature_logo.blob&.checksum if signature_logo.attached?
+    (Array(signature_logo_checksums) + stored + [ current ]).filter_map { |value| value.to_s.presence }.uniq
   end
 end
