@@ -38,9 +38,16 @@ module CallLog
     end
   end
 
+  def notice(event)
+    lead = event.subject
+    moved = lead.not_interested? &&
+      lead.activity_events.exists?(kind: "not_interested", idempotency_key: event.idempotency_key)
+    "Call logged: #{LABELS.fetch(event.metadata['outcome'])}.#{' Moved to Not interested after three voicemails.' if moved}"
+  end
+
   def three_unanswered_voicemails?(record)
     recent_voicemails = record.activity_events.where(kind: "call")
-      .where("json_extract(metadata, '$.outcome') = 'voicemail'")
+      .where("json_extract(metadata, '$.outcome') = 'voicemail' AND json_extract(metadata, '$.direction') = 'outbound'")
       .order(occurred_at: :desc, id: :desc)
       .limit(AUTO_NOT_INTERESTED_VOICEMAILS)
       .to_a
@@ -50,45 +57,36 @@ module CallLog
   end
 
   def responded_since?(record, first_voicemail)
-    connected_call = record.activity_events.where(kind: "call")
-      .where("json_extract(metadata, '$.outcome') = 'connected'")
+    reset_event = record.activity_events
+      .where("kind = 'interested_again' OR (kind = 'call' AND (json_extract(metadata, '$.outcome') = 'connected' " \
+        "OR json_extract(metadata, '$.direction') = 'inbound'))")
       .where("occurred_at > ? OR (occurred_at = ? AND id > ?)",
         first_voicemail.occurred_at, first_voicemail.occurred_at, first_voicemail.id)
       .exists?
-    return true if connected_call
+    return true if reset_event
 
-    Message.for_owner(record).inbound
-      .where("COALESCE(messages.sent_at, messages.inbound_received_at, messages.created_at) > ?", first_voicemail.occurred_at)
-      .exists?
+    [ record, record.existing_client ].compact.any? do |owner|
+      Message.for_owner(owner).inbound
+        .where("COALESCE(messages.sent_at, messages.inbound_received_at, messages.created_at) > ?", first_voicemail.occurred_at)
+        .exists?
+    end
   end
 
   def mark_not_interested_after_three_voicemails!(record, event, key:)
-    return unless event.metadata["outcome"] == "voicemail" && record.unsure?
+    return unless event.metadata.values_at("outcome", "direction") == %w[voicemail outbound] && record.unsure?
     return unless three_unanswered_voicemails?(record)
 
     record.mark_not_interested!
-    occurred_at = [ Time.current, event.occurred_at ].max
-    note_event = record.activity_events.find_by(kind: "not_interested", idempotency_key: key) ||
-      record.activity_events.create!(
-        kind: "not_interested",
-        idempotency_key: key,
-        summary: AUTO_NOT_INTERESTED_SUMMARY,
-        occurred_at: occurred_at,
-        metadata: {
-          "reason" => "three_voicemails",
-          "call_event_id" => event.id,
-          "actor" => Current.user_email.presence || "automatic"
-        }
-      )
-    if (client = record.converted_client || record.existing_client)
-      client.activity_events.where(kind: "not_interested").find_by("json_extract(metadata, '$.from_lead_event_id') = ?", note_event.id) ||
-        client.activity_events.create!(
-          kind: "not_interested",
-          idempotency_key: "#{record.id}:#{key}",
-          summary: note_event.summary,
-          occurred_at: note_event.occurred_at,
-          metadata: note_event.metadata.merge("from_lead_id" => record.id, "from_lead_event_id" => note_event.id)
-        )
-    end
+    record.activity_events.create!(
+      kind: "not_interested",
+      idempotency_key: key,
+      summary: AUTO_NOT_INTERESTED_SUMMARY,
+      occurred_at: [ Time.current, event.occurred_at ].max,
+      metadata: {
+        "reason" => "three_voicemails",
+        "call_event_id" => event.id,
+        "actor" => Current.user_email.presence || "automatic"
+      }
+    )
   end
 end

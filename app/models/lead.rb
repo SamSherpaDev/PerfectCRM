@@ -194,6 +194,7 @@ class Lead < ApplicationRecord
         raise ActiveRecord::RecordInvalid, self
       end
       update!(potential_marked_at: potential_marked_at || Time.current, unsure_marked_at: nil, not_interested_marked_at: nil)
+      record_interested_again! if saved_change_to_not_interested_marked_at?
     end
     enqueue_ad_conversion
   end
@@ -219,6 +220,7 @@ class Lead < ApplicationRecord
         raise ActiveRecord::RecordInvalid, self
       end
       update!(unsure_marked_at: unsure_marked_at || Time.current, potential_marked_at: nil, not_interested_marked_at: nil)
+      record_interested_again! if saved_change_to_not_interested_marked_at?
     end
   end
 
@@ -255,6 +257,7 @@ class Lead < ApplicationRecord
         raise ActiveRecord::RecordInvalid, self
       end
       update!(not_interested_marked_at: nil)
+      record_interested_again! if saved_change_to_not_interested_marked_at?
     end
   end
 
@@ -518,6 +521,11 @@ class Lead < ApplicationRecord
   def record_spam_review!(verdict, summary)
     activity_events.create!(kind: "spam_review", summary: summary, occurred_at: Time.current,
       metadata: { "verdict" => verdict, "actor" => Current.user_email.presence || "manual" })
+  end
+
+  def record_interested_again!
+    activity_events.create!(kind: "interested_again", summary: "Restored from Not interested", occurred_at: Time.current,
+      metadata: { "actor" => Current.user_email.presence || "manual" })
   end
 
   def cancel_open_scheduled_calls!(at: Time.current)

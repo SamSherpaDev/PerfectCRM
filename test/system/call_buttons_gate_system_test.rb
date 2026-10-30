@@ -69,7 +69,7 @@ class CallButtonsGateSystemTest < ApplicationSystemTestCase
     within(".calls") do
       tolerate_submit_navigation { click_button "Voicemail" }
     end
-    tolerate_navigation_assertion { assert_text "Call logged: Voicemail." }
+    tolerate_navigation_assertion { assert_text "Call logged: Voicemail. Moved to Not interested after three voicemails." }
 
     assert_selector "[role=alert][aria-label='Not interested warning']", text: "Not interested - do not contact"
     assert_selector ".timeline", text: "Moved to Not interested automatically after three voicemails"

@@ -14,7 +14,7 @@ class CallsController < ApplicationController
       outcome: params[:outcome], direction: params[:direction], duration: params[:duration]) do |logged_event|
       ScheduledCall.complete_due_by!(logged_event)
     end
-    redirect_to back, notice: "Call logged: #{CallLog::LABELS.fetch(event.metadata['outcome'])}."
+    redirect_to back, notice: CallLog.notice(event)
   rescue ArgumentError, TypeError
     redirect_to back, alert: "Check the call time, outcome and duration."
   end

@@ -57,7 +57,7 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
         post lead_calls_path(lead), params: { save_key: "req-vm-3", outcome: "voicemail", direction: "outbound" }
       end
       assert_redirected_to lead_path(lead, anchor: "record-details")
-      assert_equal "Call logged: Voicemail.", flash[:notice]
+      assert_equal "Call logged: Voicemail. Moved to Not interested after three voicemails.", flash[:notice]
 
       lead.reload
       assert lead.not_interested?
@@ -78,5 +78,20 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
       assert lead.reload.unsure?
       assert_not lead.not_interested?
     end
+  end
+
+  test "the Today call row says when a third voicemail moved the lead to Not interested" do
+    lead = Lead.create!(name: "Today Three Voicemails", email: "today-3vm@example.com", phone: "+14155550199")
+    lead.mark_unsure!
+    CallLog.record!(lead, key: "today-vm-1", occurred_at: 2.days.ago, outcome: "voicemail", direction: "outbound")
+
+    post lead_calls_path(lead), params: { save_key: "today-vm-2", outcome: "voicemail", direction: "outbound", return_to: root_path }
+    assert_redirected_to root_path
+    assert_equal "Call logged: Voicemail.", flash[:notice]
+
+    post lead_calls_path(lead), params: { save_key: "today-vm-3", outcome: "voicemail", direction: "outbound", return_to: root_path }
+    assert_redirected_to root_path
+    assert_equal "Call logged: Voicemail. Moved to Not interested after three voicemails.", flash[:notice]
+    assert lead.reload.not_interested?
   end
 end
