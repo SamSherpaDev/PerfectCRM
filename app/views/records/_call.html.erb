@@ -23,6 +23,7 @@
           <%= form_with url: calls_path, class: "call-choices", data: { turbo: false, controller: ("contact-confirm" if confirm_call), "contact-confirm-message-value": (call_confirm_msg if confirm_call) }.compact do |form| %>
             <%= form.hidden_field :save_key, value: SecureRandom.uuid, id: nil %>
             <%= form.hidden_field :direction, value: "outbound", id: nil %>
+            <%= hidden_field_tag :return_to, @lead_action_return_to, id: nil if @lead_action_return_to %>
             <% unless lead %><%= form.hidden_field :inquiry_id, value: inquiry.id, id: nil %><% end %>
             <% CallLog::ONE_TAP.each do |outcome| %>
               <%= button_tag CallLog::LABELS.fetch(outcome), name: "outcome", value: outcome, class: "btn-secondary btn-sm",
@@ -57,6 +58,7 @@
       <% end %>
       <%= form_with url: calls_path, class: "mt-3 space-y-3", data: details_data do |form| %>
         <%= form.hidden_field :save_key, value: SecureRandom.uuid %>
+        <%= hidden_field_tag :return_to, @lead_action_return_to, id: nil if @lead_action_return_to %>
         <% unless lead %>
           <div>
             <%= form.label :inquiry_id, "Inquiry", class: "label" %>

@@ -27,7 +27,7 @@
         </div>
         <div class="flex items-center gap-3">
           <% if conversation %>
-            <%= link_to "New message", polymorphic_path(record, new_thread: 1, anchor: "reply-heading"), class: "link-quiet text-xs" %>
+            <%= link_to "New message", polymorphic_path(record, { new_thread: 1, return_to: @lead_action_return_to, anchor: "reply-heading" }.compact), class: "link-quiet text-xs" %>
           <% end %>
           <button type="button" class="reply-close link-quiet text-xs" data-action="reply-box#toggleComposer">Close</button>
         </div>
@@ -38,6 +38,7 @@
       <div class="composer-note">
         <p class="reply-to-line">Only you see this. It lands on the timeline below.</p>
         <%= form_with model: [ record, @note ], url: notes_url do |form| %>
+          <%= hidden_field_tag :return_to, @lead_action_return_to, id: nil if @lead_action_return_to %>
           <div class="mt-3">
             <%= form.label :body, "Add a note", class: "sr-only" %>
             <%= form.text_area :body, rows: 3, required: true, class: "textarea reply-body", placeholder: record.is_a?(Lead) ? "Asked about Everest in May…" : "Spoke about Everest in May, two travelers…" %>

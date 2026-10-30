@@ -73,7 +73,6 @@ function findRowRecordLink(row) {
 }
 
 let currentPage = {
-  pathname: window.location.pathname,
   listKey: listKeyForLocation(window.location.href, document)
 }
 let isTransitioning = false
@@ -198,19 +197,18 @@ window.addEventListener("pagehide", () => {
 document.addEventListener(
   "click",
   (event) => {
-    const target = event.target instanceof Element ? event.target : null
-    const link = target?.closest("a[href]")
     if (!isTransitioning && currentPage.listKey) {
-      saveCurrentListScroll(link || target)
+      saveCurrentListScroll(event.target)
     }
-    if (!link) return
-
-    const opensList = listKeyForLocation(link.href) && !link.closest('nav[aria-label="Primary"], .tabbar')
-    scrollState.linkedFrom = opensList ? currentPage.pathname : null
-    persistScrollState()
   },
   true
 )
+
+document.addEventListener("turbo:click", (event) => {
+  const opensList = listKeyForLocation(event.detail.url) && !event.target.closest('nav[aria-label="Primary"], .tabbar')
+  scrollState.linkedFrom = opensList ? window.location.pathname : null
+  persistScrollState()
+})
 
 document.addEventListener("turbo:before-visit", () => {
   if (!isTransitioning && currentPage.listKey) {
@@ -247,7 +245,6 @@ document.addEventListener("turbo:load", () => {
   popstateRestore = false
   scrollState.linkedFrom = null
   currentPage = {
-    pathname: window.location.pathname,
     listKey: listKeyForLocation(window.location.href, document.body)
   }
   isTransitioning = false

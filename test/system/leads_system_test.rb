@@ -156,7 +156,7 @@ class LeadsSystemTest < ApplicationSystemTestCase
       page.current_window.resize_to(width, height)
 
       visit leads_path(tab: "new")
-      assert_selector "h2", text: "New", exact_text: true
+      assert_list_rendered "New"
       link = find_link(target_new.name)
       page.execute_script("arguments[0].scrollIntoView({ block: 'center' })", link)
       before_scroll_y = page.evaluate_script("window.scrollY")
@@ -166,19 +166,19 @@ class LeadsSystemTest < ApplicationSystemTestCase
       link.click
       assert_selector "h1", text: target_new.name
       page.go_back
-      assert_selector "h2", text: "New", exact_text: true
+      assert_list_rendered "New"
       assert_in_delta before_scroll_y, page.evaluate_script("window.scrollY"), 5
       assert_in_delta before_top, find_link(target_new.name).evaluate_script("this.getBoundingClientRect().top"), 5
 
       find_link(target_new.name).click
       assert_selector "h1", text: target_new.name
       within("header.page-header") { click_link "Leads" }
-      assert_selector "h2", text: "New", exact_text: true
+      assert_list_rendered "New"
       assert_in_delta before_scroll_y, page.evaluate_script("window.scrollY"), 5
       assert_in_delta before_top, find_link(target_new.name).evaluate_script("this.getBoundingClientRect().top"), 5
 
       visit leads_path(tab: "potential", q: "Scroll Potential", sort: "name")
-      assert_selector "h2", text: "Potential", exact_text: true
+      assert_list_rendered "Potential"
       pot_link = find_link(target_potential.name)
       page.execute_script("arguments[0].scrollIntoView({ block: 'center' })", pot_link)
       pot_scroll_y = page.evaluate_script("window.scrollY")
@@ -198,7 +198,7 @@ class LeadsSystemTest < ApplicationSystemTestCase
       end
       assert_selector "h1", text: target_potential.name
       within("header.page-header") { click_link "Leads" }
-      assert_selector "h2", text: "Potential", exact_text: true
+      assert_list_rendered "Potential"
       assert_in_delta pot_scroll_y, page.evaluate_script("window.scrollY"), 5
       assert_in_delta pot_top, find_link(target_potential.name).evaluate_script("this.getBoundingClientRect().top"), 5
     end
@@ -230,7 +230,7 @@ class LeadsSystemTest < ApplicationSystemTestCase
     list_url = leads_path(tab: "potential", q: "Note Back", sort: "name")
 
     visit list_url
-    assert_selector "h2", text: "Potential", exact_text: true
+    assert_list_rendered "Potential"
     link = find_link(target.name)
     page.execute_script("arguments[0].scrollIntoView({ block: 'center' })", link)
     scroll_y = page.evaluate_script("window.scrollY")
@@ -244,20 +244,20 @@ class LeadsSystemTest < ApplicationSystemTestCase
     click_button "Save note"
     assert_text "Note saved"
     within("header.page-header") { click_link "Leads" }
-    assert_selector "h2", text: "Potential", exact_text: true
+    assert_list_rendered "Potential"
     assert_equal list_url, page.evaluate_script("window.location.pathname + window.location.search")
     assert_in_delta scroll_y, page.evaluate_script("window.scrollY"), 5
     assert_in_delta row_top, find_link(target.name).evaluate_script("this.getBoundingClientRect().top"), 5
 
     page.execute_script("window.scrollTo(0, 0)")
     within("nav.tabs") { click_link "New" }
-    assert_selector "h2", text: "New", exact_text: true
+    assert_list_rendered "New"
     page.go_back
-    assert_selector "h2", text: "Potential", exact_text: true
+    assert_list_rendered "Potential"
     assert_in_delta 0, page.evaluate_script("window.scrollY"), 5
 
     visit leads_path(tab: "new")
-    assert_selector "h2", text: "New", exact_text: true
+    assert_list_rendered "New"
     new_link = find_link(new_leads[18].name)
     page.execute_script("arguments[0].scrollIntoView({ block: 'center' })", new_link)
     assert_operator page.evaluate_script("window.scrollY"), :>, 600
@@ -266,11 +266,30 @@ class LeadsSystemTest < ApplicationSystemTestCase
     visit lead_path(new_leads[2])
     assert_selector "h1", text: new_leads[2].name
     within("header.page-header") { click_link "Leads" }
-    assert_selector "h2", text: "New", exact_text: true
+    assert_list_rendered "New"
+    assert_in_delta 0, page.evaluate_script("window.scrollY"), 5
+
+    visit list_url
+    second = potential_leads[17]
+    second_link = find_link(second.name)
+    page.execute_script("arguments[0].scrollIntoView({ block: 'center' })", second_link)
+    assert_operator page.evaluate_script("window.scrollY"), :>, 600
+    second_link.click
+    assert_selector "h1", text: second.name
+    within("header.page-header") { find_link("Leads").click(:shift) }
+    assert_selector "h1", text: second.name
+    click_button "Mark Unsure"
+    assert_text "Marked as Unsure - moved to Unsure."
+    assert_list_rendered "Potential"
     assert_in_delta 0, page.evaluate_script("window.scrollY"), 5
   end
 
   private
+
+  def assert_list_rendered(heading)
+    assert_selector "h2", text: heading, exact_text: true
+    assert_no_selector "html[aria-busy]", visible: :all
+  end
 
   def assert_no_overflow(context)
     width = page.evaluate_script("document.documentElement.scrollWidth")

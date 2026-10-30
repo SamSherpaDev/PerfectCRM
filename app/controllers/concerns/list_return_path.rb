@@ -30,4 +30,10 @@ module ListReturnPath
   rescue URI::InvalidURIError, ArgumentError
     nil
   end
+
+  def record_path_keeping_list(record, **options)
+    return polymorphic_path(record, options) unless record.is_a?(Lead)
+
+    lead_path(record, { return_to: safe_leads_return_path(params[:return_to]) }.compact.merge(options))
+  end
 end

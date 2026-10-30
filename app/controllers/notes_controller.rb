@@ -1,20 +1,22 @@
 class NotesController < ApplicationController
+  include ListReturnPath
+
   def create
     @notable = find_notable
     return render_not_found unless @notable
     if @notable.is_a?(Lead) && @notable.converted?
-      return redirect_to @notable, alert: "Converted leads stay read-only."
+      return redirect_to record_path_keeping_list(@notable), alert: "Converted leads stay read-only."
     end
     if @notable.is_a?(Lead) && @notable.archived?
-      return redirect_to @notable, alert: "Archived leads stay read-only until restored."
+      return redirect_to record_path_keeping_list(@notable), alert: "Archived leads stay read-only until restored."
     end
 
     @note = @notable.notes.build(note_params)
     @note.author = current_user
     if @note.save
-      redirect_to @notable, notice: "Note saved."
+      redirect_to record_path_keeping_list(@notable), notice: "Note saved."
     else
-      redirect_to @notable, alert: @note.errors.full_messages.to_sentence
+      redirect_to record_path_keeping_list(@notable), alert: @note.errors.full_messages.to_sentence
     end
   end
 

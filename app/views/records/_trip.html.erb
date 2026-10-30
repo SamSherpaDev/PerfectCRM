@@ -58,5 +58,5 @@
       <p class="text-xs muted">Trips booked in PerfectBook for this contact show here with balances and invoice status.</p>
     </div>
   <% end %>
-  <%= button_to "Refresh", refresh_path, method: :post, class: "link-quiet mt-3 text-xs" %>
+  <%= button_to "Refresh", refresh_path, method: :post, params: { return_to: @lead_action_return_to }.compact, class: "link-quiet mt-3 text-xs" %>
 </section>

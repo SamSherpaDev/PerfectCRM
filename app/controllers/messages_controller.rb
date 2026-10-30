@@ -2,25 +2,26 @@
 # Delivery and draft retention: see README.md, "Replying".
 class MessagesController < ApplicationController
   include DraftParameters
+  include ListReturnPath
 
   def create
     owner = find_owner
     return render_not_found unless owner
     if owner.is_a?(Lead) && owner.converted?
-      return redirect_to owner, alert: "Converted leads stay read-only."
+      return redirect_to record_path_keeping_list(owner), alert: "Converted leads stay read-only."
     end
     if owner.is_a?(Lead) && owner.archived?
-      return redirect_to owner, alert: "Archived leads stay read-only until restored."
+      return redirect_to record_path_keeping_list(owner), alert: "Archived leads stay read-only until restored."
     end
 
     conversation = params[:conversation_id].present? ?
       owner.conversations.find_by(id: params[:conversation_id]) : nil
     message = Outbound::Composer.call(owner: owner, params: message_params, conversation: conversation)
     OutboundDeliveryJob.perform_later(message.id)
-    redirect_to owner, notice: "Sending your reply…"
+    redirect_to record_path_keeping_list(owner), notice: "Sending your reply…"
   rescue ActiveRecord::RecordInvalid, Outbound::Uploads::SensitiveDocument => e
     refused = keep_draft(owner, conversation)
-    destination = conversation ? inbox_thread_path(conversation) : polymorphic_path(owner, new_thread: 1)
+    destination = conversation ? inbox_thread_path(conversation) : record_path_keeping_list(owner, new_thread: 1)
     alert = refused || e.is_a?(Outbound::Uploads::SensitiveDocument) ? Outbound::Uploads::REFUSAL : "Could not send: #{e.record.errors.full_messages.to_sentence}"
     redirect_to destination, alert: alert
   end
@@ -30,7 +31,7 @@ class MessagesController < ApplicationController
     message = Message.find(params[:id])
     owner = message.owner
     return render_not_found unless owner || message.group_send
-    destination = message.group_send ? group_send_path(message.group_send) : owner_path_for(owner)
+    destination = message.group_send ? group_send_path(message.group_send) : record_path_keeping_list(owner)
 
     if Message.where(id: message.id, status: "failed").update_all(status: "queued", send_error: nil, updated_at: Time.current) == 1
       OutboundDeliveryJob.perform_later(message.id)
@@ -70,14 +71,6 @@ class MessagesController < ApplicationController
       draft.save
     end
     refused
-  end
-
-  def owner_path_for(owner)
-    case owner
-    when Client then client_path(owner)
-    when Lead then lead_path(owner)
-    when Organization then organization_path(owner)
-    end
   end
 
   def render_not_found

@@ -50,7 +50,7 @@ class LeadsController < ApplicationController
   end
 
   def show
-    @lead_action_return_to = remembered_leads_return_path
+    @lead_action_return_to = safe_leads_return_path(params[:return_to]) || leads_path(tab: "new")
     @matching_client = @lead.matching_client unless @lead.converted?
     @note = Note.new
     load_reply_box(@lead)
@@ -96,7 +96,7 @@ class LeadsController < ApplicationController
     if status_changed
       redirect_to lead_action_return_to, notice: "Marked as #{target_status.humanize} - moved to #{lead_destination_tab}."
     else
-      redirect_to lead_path(@lead, { return_to: safe_leads_return_path(params[:return_to]) }.compact), notice: "Lead saved."
+      redirect_to record_path_keeping_list(@lead), notice: "Lead saved."
     end
   rescue ActiveRecord::RecordInvalid
     @lead.people.build unless @lead.people.any?(&:new_record?)
@@ -105,97 +105,97 @@ class LeadsController < ApplicationController
 
   def convert
     if @lead.archived?
-      return redirect_to @lead, alert: "Restore this lead before converting."
+      return redirect_to record_path_keeping_list(@lead), alert: "Restore this lead before converting."
     end
     if @lead.converted?
-      return redirect_to @lead, alert: "Already converted."
+      return redirect_to record_path_keeping_list(@lead), alert: "Already converted."
     end
     client = Leads::Transition.call(@lead, to: "won",
       expected_client_id: params[:expected_client_id].presence || "new").converted_client
     redirect_to client, notice: "Lead converted. Their timeline moved with them."
   rescue ActiveRecord::RecordInvalid => e
-    redirect_to @lead, alert: e.record.errors.full_messages.to_sentence.presence || "Could not convert."
+    redirect_to record_path_keeping_list(@lead), alert: e.record.errors.full_messages.to_sentence.presence || "Could not convert."
   end
 
   def archive
     if @lead.converted?
-      return redirect_to @lead, alert: "Converted leads stay read-only."
+      return redirect_to record_path_keeping_list(@lead), alert: "Converted leads stay read-only."
     end
     @lead.archive!
     redirect_to lead_action_return_to, notice: "Archived - moved to Archived. Choose Restore to bring this lead back."
   rescue ActiveRecord::RecordInvalid => e
-    redirect_to @lead, alert: e.record.errors.full_messages.to_sentence.presence || "Could not archive."
+    redirect_to record_path_keeping_list(@lead), alert: e.record.errors.full_messages.to_sentence.presence || "Could not archive."
   end
 
   def unarchive
     @lead.unarchive!
     redirect_to lead_action_return_to, notice: "Restored - moved to #{lead_destination_tab}."
   rescue ActiveRecord::RecordInvalid => e
-    redirect_to @lead, alert: e.record.errors.full_messages.to_sentence.presence || "Could not restore."
+    redirect_to record_path_keeping_list(@lead), alert: e.record.errors.full_messages.to_sentence.presence || "Could not restore."
   end
 
   def mark_as_spam
     @lead.mark_as_spam!
     redirect_to lead_action_return_to, notice: "Marked as spam - moved to Archived. Choose Not spam to restore."
   rescue ActiveRecord::RecordInvalid => e
-    redirect_to @lead, alert: e.record.errors.full_messages.to_sentence.presence || "Could not mark as spam."
+    redirect_to record_path_keeping_list(@lead), alert: e.record.errors.full_messages.to_sentence.presence || "Could not mark as spam."
   end
 
   def not_spam
     @lead.mark_not_spam!
     redirect_to lead_action_return_to, notice: "Not spam - restored to #{lead_destination_tab}."
   rescue ActiveRecord::RecordInvalid => e
-    redirect_to @lead, alert: e.record.errors.full_messages.to_sentence.presence || "Could not clear spam."
+    redirect_to record_path_keeping_list(@lead), alert: e.record.errors.full_messages.to_sentence.presence || "Could not clear spam."
   end
 
   def mark_potential
     @lead.mark_potential!
     redirect_to lead_action_return_to, notice: "Marked as Potential - moved to Potential."
   rescue ActiveRecord::RecordInvalid => e
-    redirect_to @lead, alert: e.record.errors.full_messages.to_sentence
+    redirect_to record_path_keeping_list(@lead), alert: e.record.errors.full_messages.to_sentence
   end
 
   def unmark_potential
     @lead.unmark_potential!
     redirect_to lead_action_return_to, notice: "Removed from Potential - moved to #{lead_destination_tab}."
   rescue ActiveRecord::RecordInvalid => e
-    redirect_to @lead, alert: e.record.errors.full_messages.to_sentence
+    redirect_to record_path_keeping_list(@lead), alert: e.record.errors.full_messages.to_sentence
   end
 
   def mark_unsure
     @lead.mark_unsure!
     redirect_to lead_action_return_to, notice: "Marked as Unsure - moved to Unsure."
   rescue ActiveRecord::RecordInvalid => e
-    redirect_to @lead, alert: e.record.errors.full_messages.to_sentence
+    redirect_to record_path_keeping_list(@lead), alert: e.record.errors.full_messages.to_sentence
   end
 
   def unmark_unsure
     @lead.unmark_unsure!
     redirect_to lead_action_return_to, notice: "Removed from Unsure - moved to #{lead_destination_tab}."
   rescue ActiveRecord::RecordInvalid => e
-    redirect_to @lead, alert: e.record.errors.full_messages.to_sentence
+    redirect_to record_path_keeping_list(@lead), alert: e.record.errors.full_messages.to_sentence
   end
 
   def mark_not_interested
     @lead.mark_not_interested!
     redirect_to lead_action_return_to, notice: "Marked as not interested - moved to Not interested. Choose Interested again to restore."
   rescue ActiveRecord::RecordInvalid => e
-    redirect_to @lead, alert: e.record.errors.full_messages.to_sentence
+    redirect_to record_path_keeping_list(@lead), alert: e.record.errors.full_messages.to_sentence
   end
 
   def unmark_not_interested
     @lead.unmark_not_interested!
     redirect_to lead_action_return_to, notice: "Interested again - moved to #{lead_destination_tab}."
   rescue ActiveRecord::RecordInvalid => e
-    redirect_to @lead, alert: e.record.errors.full_messages.to_sentence
+    redirect_to record_path_keeping_list(@lead), alert: e.record.errors.full_messages.to_sentence
   end
 
   def refresh_bookings
     if @lead.perfectbook_contact_id.present?
       PerfectBook::SyncBookingsJob.perform_later(perfectbook_contact_id: @lead.perfectbook_contact_id)
-      redirect_to @lead, notice: "Refreshing bookings from PerfectBook."
+      redirect_to record_path_keeping_list(@lead), notice: "Refreshing bookings from PerfectBook."
     else
-      redirect_to @lead, alert: "Link a PerfectBook contact first."
+      redirect_to record_path_keeping_list(@lead), alert: "Link a PerfectBook contact first."
     end
   end
 
@@ -207,13 +207,13 @@ class LeadsController < ApplicationController
 
   def block_converted_edit
     if @lead.converted?
-      redirect_to @lead, alert: "Converted leads stay read-only."
+      redirect_to record_path_keeping_list(@lead), alert: "Converted leads stay read-only."
     end
   end
 
   def block_archived_edit
     if @lead.archived?
-      redirect_to @lead, alert: "Archived leads stay read-only until restored."
+      redirect_to record_path_keeping_list(@lead), alert: "Archived leads stay read-only until restored."
     end
   end
 
@@ -244,17 +244,6 @@ class LeadsController < ApplicationController
 
   def lead_action_return_to
     safe_leads_return_path(params[:return_to]) || leads_path(tab: "new")
-  end
-
-  def remembered_leads_return_path
-    if (path = safe_leads_return_path(params[:return_to]))
-      session[:lead_return_to] = { "lead_id" => @lead.id, "path" => path }
-      path
-    elsif session.dig(:lead_return_to, "lead_id") == @lead.id
-      session[:lead_return_to]["path"]
-    else
-      leads_path(tab: "new")
-    end
   end
 
   def lead_destination_tab

@@ -28,14 +28,14 @@
       <%= button_to "Mark as spam", mark_as_spam_lead_path(record), method: :patch, params: { return_to: @lead_action_return_to }, class: "btn-secondary btn btn-sm" %>
     <% end %>
     <% confirmation = @matching_client ? "This is an existing client: #{@matching_client.name}. Convert will attach this lead's history to them." : "Convert #{record.name} to a client? Their whole timeline moves with them. This cannot be undone." %>
-    <%= button_to "Convert to client", convert_lead_path(record), method: :post, params: { expected_client_id: @matching_client&.id || "new" }, class: "btn-secondary btn btn-sm", form: { data: { turbo_confirm: confirmation } } %>
+    <%= button_to "Convert to client", convert_lead_path(record), method: :post, params: { expected_client_id: @matching_client&.id || "new", return_to: @lead_action_return_to }, class: "btn-secondary btn btn-sm", form: { data: { turbo_confirm: confirmation } } %>
   <% end %>
   <details class="more-menu">
     <summary class="btn-ghost btn btn-sm" aria-label="More actions" title="More">
       <%= render "shared/icon", name: :more, class: "h-4 w-4" %><span class="sr-only">More</span>
     </summary>
     <div class="more-pop">
-      <%= link_to "New message", polymorphic_path(record, new_thread: 1, anchor: "reply-heading"), class: "more-item" %>
+      <%= link_to "New message", polymorphic_path(record, { new_thread: 1, return_to: @lead_action_return_to, anchor: "reply-heading" }.compact), class: "more-item" %>
       <% if !lead && record.perfectbook_contact_id.present? %>
         <%= link_to "Open in PerfectBook", perfectbook_contact_url(record.perfectbook_contact_id), class: "more-item", target: "_blank", rel: "noopener" %>
       <% end %>

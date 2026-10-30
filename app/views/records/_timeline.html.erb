@@ -34,7 +34,7 @@
                 <%= render "shared/message_body", message: message, attachments: :chips %>
                 <% if message.failed? %>
                   <p class="mt-2 text-xs text-bad">Could not deliver: <%= message.send_error.presence || "unknown error" %></p>
-                  <%= button_to "Retry", retry_message_path(message), method: :post, class: "btn btn-secondary btn-sm mt-1" %>
+                  <%= button_to "Retry", retry_message_path(message), method: :post, params: { return_to: @lead_action_return_to }.compact, class: "btn btn-secondary btn-sm mt-1" %>
                 <% elsif %w[queued sending].include?(message.status) %>
                   <p class="mt-1 text-xs muted">Sending…</p>
                 <% end %>
