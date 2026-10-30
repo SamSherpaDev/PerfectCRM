@@ -14,6 +14,8 @@ class Organization < ApplicationRecord
 
   include TaggedRecord
 
+  attr_accessor :skip_name_propagation
+
   before_validation :normalize_email
   before_validation :normalize_website
 
@@ -27,6 +29,7 @@ class Organization < ApplicationRecord
 
   after_create :stamp_activity
   after_save :sync_fts_later
+  after_update :propagate_name_change
   after_destroy :remove_fts_row
 
   scope :ordered, -> { order(Arel.sql("COALESCE(last_activity_at, updated_at) DESC")) }
@@ -120,5 +123,12 @@ class Organization < ApplicationRecord
     sync_fts!
   rescue ActiveRecord::StatementInvalid
     nil
+  end
+
+  def propagate_name_change
+    return if skip_name_propagation || !saved_change_to_name?
+
+    old_name, new_name = saved_change_to_name
+    PersonNamePropagation.call(self, old_name: old_name, new_name: new_name)
   end
 end

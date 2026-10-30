@@ -7,6 +7,8 @@ class Person < ApplicationRecord
   belongs_to :client, touch: true, optional: true
   belongs_to :lead, touch: true, optional: true
 
+  attr_accessor :skip_name_propagation
+
   before_destroy :preserve_linked_source_history, prepend: true
 
   before_validation :normalize_email
@@ -19,6 +21,7 @@ class Person < ApplicationRecord
   after_save :refresh_owner_search
   after_destroy :refresh_owner_search
   after_save :record_owner_redirect_on_email_change
+  after_update :propagate_name_change
 
   def owner
     client || lead
@@ -101,5 +104,12 @@ class Person < ApplicationRecord
     end
   rescue ActiveRecord::StatementInvalid
     nil
+  end
+
+  def propagate_name_change
+    return if skip_name_propagation || !saved_change_to_name?
+
+    old_name, new_name = saved_change_to_name
+    PersonNamePropagation.call(self, old_name: old_name, new_name: new_name)
   end
 end

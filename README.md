@@ -615,7 +615,13 @@ a compact read-only Trip in PerfectBook (the Upcoming follow-up-tasks card and t
 behind Thread, Details, and Files tabs. Each visit starts on Thread
 unless an explicit link targets another panel. Use New client to create a
 record, and Edit to update facts or add another
-person in the blank People fields. Archive lives in the More menu and
+person in the blank People fields. Renaming a lead, client, person, or
+organization updates linked PerfectCRM records for that same person (converted
+or origin leads, matching client, linked people, open tasks, scheduled-call
+notes, unsent drafts, and unbundled draft quotes), refreshes the FTS5 search
+index, and logs a `name_change` timeline event while leaving sent messages,
+sent or accepted quotes, past activity events, and synced PerfectBook contacts
+untouched. Archive lives in the More menu and
 moves a client to the Archived tab, where Restore makes it active again.
 Archived client and lead pages keep their history readable, with editing
 controls and composer hidden. Restore is the sole header action
