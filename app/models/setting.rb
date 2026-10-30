@@ -113,11 +113,6 @@ class Setting < ApplicationRecord
     self
   end
 
-  def remember_signature_logo_checksum!
-    checksums = collected_signature_logo_checksums
-    update_column(:signature_logo_checksums, checksums) if persisted? && checksums != Array(signature_logo_checksums)
-  end
-
   private
 
   def outbound_endpoints
@@ -155,14 +150,7 @@ class Setting < ApplicationRecord
   end
 
   def remember_signature_logo_checksums
-    self.signature_logo_checksums = collected_signature_logo_checksums
-  end
-
-  def collected_signature_logo_checksums
-    stored = ActiveStorage::Blob.joins(:attachments)
-      .where(active_storage_attachments: { record_type: "Setting", name: "signature_logo" })
-      .pluck(:checksum)
     current = signature_logo.blob&.checksum if signature_logo.attached?
-    (Array(signature_logo_checksums) + stored + [ current ]).filter_map { |value| value.to_s.presence }.uniq
+    self.signature_logo_checksums = (Array(signature_logo_checksums) + [ current ]).filter_map { |value| value.to_s.presence }.uniq
   end
 end
