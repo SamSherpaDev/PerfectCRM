@@ -82,7 +82,7 @@ module RecordPage
       .select(:id, :sent_at, :created_at, :direction, :from_address, :held_attachments)
       .includes(files_attachments: :blob).find_each do |message|
       at = message.sent_at || message.created_at
-      message.files.each { |file| rows << FileRow.new(at, :attachment, file, message) }
+      listed_files(message).each { |file| rows << FileRow.new(at, :attachment, file, message) }
       Array(message.held_attachments).each { |held| rows << FileRow.new(at, :held, held, message) }
     end
     record_quotes(record).ordered.includes(:lines).each do |quote|

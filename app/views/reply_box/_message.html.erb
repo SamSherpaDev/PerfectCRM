@@ -14,9 +14,10 @@
         <p class="text-[13px] font-medium text-ink-2"><%= message.subject %></p>
       <% end %>
       <div class="mt-1 text-sm leading-relaxed text-ink-2 whitespace-pre-line"><%= message.text_body %></div>
-      <% if message.files.attached? %>
+      <% files = listed_files(message) %>
+      <% if files.any? %>
         <ul class="mt-2 space-y-1" aria-label="Attachments">
-          <% message.files.each do |file| %>
+          <% files.each do |file| %>
             <li class="text-xs">
               <%= link_to file.filename.to_s, attachment_path(file.id),
                     class: "link", download: file.filename.to_s %>

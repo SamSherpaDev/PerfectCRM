@@ -191,7 +191,11 @@ The preview and outgoing HTML mail use the same layout, with the uploaded logo
 beside the signature. When its dimensions can be read, the logo fits within
 120 × 44 pixels without stretching or enlarging it. It travels embedded by
 Content-ID, rather than as a remote image; display still depends on the
-recipient's mail client.
+recipient's mail client. Attachments matching the uploaded signature logo
+(including earlier logos after a replacement), such as the logo quoted back on
+a reply, stay stored on the message but are never listed as files: not in a
+record's Files card or counts, nor among a message's attachments on the record
+timeline, Inbox thread, or Email card.
 
 Existing formatted signatures retain their sanitized text, formatting, and
 safe links until you change the displayed lines. Legacy images are omitted;

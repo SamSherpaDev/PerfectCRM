@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_30_030200) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_30_180658) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -846,6 +846,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_30_030200) do
     t.datetime "relay_last_used_at"
     t.text "relay_secret"
     t.string "sender_name", default: "", null: false
+    t.text "signature_logo_checksums", default: "[]", null: false
     t.integer "singleton_key", default: 1, null: false
     t.string "site_key"
     t.datetime "site_key_last_used_at"

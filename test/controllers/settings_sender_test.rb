@@ -108,6 +108,7 @@ class SettingsSenderTest < ActionDispatch::IntegrationTest
     patch settings_path, params: { setting: { signature_logo: uploaded_logo } }
     assert_redirected_to edit_settings_path
     assert Setting.current.reload.signature_logo.attached?
+    assert_equal [ Digest::MD5.base64digest(LOGO_BYTES) ], Setting.current.signature_logo_checksums
     follow_redirect!
     assert_select "img[alt='Signature logo']"
   end
@@ -147,13 +148,14 @@ class SettingsSenderTest < ActionDispatch::IntegrationTest
     assert_equal "image/png", response.media_type
   end
 
-  test "remove logo purges the attachment" do
+  test "remove logo purges the attachment and still recognizes the removed logo" do
     sign_in
     Setting.current.signature_logo.attach(
       io: StringIO.new(LOGO_BYTES), filename: "logo.png", content_type: "image/png")
     delete signature_logo_settings_path
     assert_redirected_to edit_settings_path
     assert_not Setting.current.reload.signature_logo.attached?
+    assert_equal [ Digest::MD5.base64digest(LOGO_BYTES) ], EmailSignature.logo_checksums
   end
 
   test "settings page previews the app-owned block with the served logo" do

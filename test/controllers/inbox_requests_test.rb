@@ -207,4 +207,35 @@ class InboxRequestsTest < ActionDispatch::IntegrationTest
     assert_select "#message-#{long.id} details strong", text: "Unique ending", count: 1
     assert_equal 1, css_select("#message-#{long.id}").first.text.scan("Unique ending").length
   end
+
+  test "thread rows leave out the CRM signature logo on inbound and outbound mail while listing real files" do
+    logo = "\x89PNG\r\n\x1A\n".b + [ 13 ].pack("N") + "IHDR" + [ 120, 40 ].pack("NN") + "\x08\x02\x00\x00\x00inbox-logo".b
+    Setting.current.signature_logo.attach(io: StringIO.new(logo), filename: "signature-logo.png", content_type: "image/png")
+    client = Client.create!(name: "Daniel Loveless", email: "daniel@example.com")
+    conversation = Conversation.create!(subject: "Everest Base Camp", linkable: client, last_message_at: Time.current)
+    outbound = conversation.messages.create!(direction: "out", status: "sent", to_addrs: client.email,
+      subject: "Everest Base Camp", text_body: "Here is your itinerary.", sent_at: 2.days.ago)
+    outbound.files.attach(io: StringIO.new("%PDF-1.4 itinerary"), filename: "itinerary.pdf", content_type: "application/pdf")
+    outbound.files.attach(io: StringIO.new(logo), filename: "signature-logo.png", content_type: "image/png")
+    reply = conversation.messages.create!(direction: "in", from_address: client.email,
+      subject: "Re: Everest Base Camp", text_body: "Looks great!", sent_at: 1.day.ago)
+    reply.files.attach(io: StringIO.new(logo), filename: "signature-logo.png", content_type: "image/png")
+    itinerary = outbound.reload.files.find { |file| file.filename.to_s == "itinerary.pdf" }
+    logo_files = [ outbound.files.find { |file| file.filename.to_s == "signature-logo.png" }, reply.reload.files.first ]
+
+    get inbox_thread_path(conversation)
+    assert_response :success
+    assert_select "ul.thread-attachments", count: 1
+    assert_select "ul.thread-attachments li.attachment-row", count: 1
+    assert_select "li.attachment-row", text: /itinerary\.pdf/, count: 1
+    assert_select "li.attachment-row a[href=?]", new_document_handoff_path(attachment_id: itinerary.id), count: 1
+    logo_files.each do |file|
+      assert_select "a[href=?]", attachment_path(file.id), count: 0
+      assert_select "a[href=?]", new_document_handoff_path(attachment_id: file.id), count: 0
+    end
+    assert_equal 2, outbound.files.count
+    assert_equal 1, reply.files.count
+  ensure
+    Setting.current.signature_logo.purge if Setting.current.signature_logo.attached?
+  end
 end

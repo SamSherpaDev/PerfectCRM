@@ -2,6 +2,7 @@ class Setting < ApplicationRecord
   APPEARANCES = %w[paper night].freeze
 
   has_one_attached :signature_logo
+  serialize :signature_logo_checksums, coder: JSON
 
   encrypts :relay_secret, deterministic: false
 
@@ -24,6 +25,7 @@ class Setting < ApplicationRecord
   validate :outbound_endpoints
 
   before_save :normalize_signature
+  before_save :remember_signature_logo_checksums
   before_validation { self.google_review_url = google_review_url.to_s.strip }
 
   normalizes :weekly_report_recipient, with: ->(value) { value.to_s.strip.downcase }
@@ -145,5 +147,10 @@ class Setting < ApplicationRecord
   def normalize_signature
     self.email_signature_html = EmailSignature.sanitize(email_signature_html)
     self[:email_signature] = EmailSignature.text_for(self).to_s.gsub("\r\n", "\n")
+  end
+
+  def remember_signature_logo_checksums
+    current = signature_logo.blob&.checksum if signature_logo.attached?
+    self.signature_logo_checksums = (Array(signature_logo_checksums) + [ current ]).filter_map { |value| value.to_s.presence }.uniq
   end
 end

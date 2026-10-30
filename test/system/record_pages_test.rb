@@ -214,36 +214,49 @@ class RecordPagesTest < ApplicationSystemTestCase
   end
 
   test "files include only owned attachments and holdings with message metadata" do
+    logo_v1 = "\x89PNG\r\n\x1A\n".b + [ 13 ].pack("N") + "IHDR" + [ 120, 40 ].pack("NN") + "\x08\x02\x00\x00\x00sys-logo-v1".b
+    logo_v2 = "\x89PNG\r\n\x1A\n".b + [ 13 ].pack("N") + "IHDR" + [ 100, 36 ].pack("NN") + "\x08\x02\x00\x00\x00sys-logo-v2".b
+    Setting.current.signature_logo.attach(io: StringIO.new(logo_v1), filename: "signature-logo.png", content_type: "image/png")
+    Setting.current.signature_logo.attach(io: StringIO.new(logo_v2), filename: "signature-logo.png", content_type: "image/png")
+
     client = Client.create!(name: "Files client", email: "files@example.com")
     conversation = client.conversations.create!(subject_line: "Files")
     plain = conversation.messages.create!(direction: "in", text_body: "No files")
+    quoted_logo = conversation.messages.create!(direction: "in", from_address: client.email,
+      text_body: "Quoted signature logo only", held_attachments: [])
+    quoted_logo.files.attach(io: StringIO.new(logo_v1), filename: "signature-logo.png", content_type: "image/png")
     attached = conversation.messages.create!(direction: "in", from_address: client.email,
       text_body: "Large body", held_attachments: [])
     attached.files.attach(io: StringIO.new("file"), filename: "passport.txt",
       content_type: "text/plain", metadata: { sensitive: true })
+    attached.files.attach(io: StringIO.new(logo_v2), filename: "signature-logo.png", content_type: "image/png")
     held = conversation.messages.create!(direction: "in",
       held_attachments: [ { "filename" => "held.pdf", "status" => "expired", "byte_size" => 42 } ])
     other = Client.create!(name: "Other client")
     other.conversations.create!(subject_line: "Private").messages.create!(direction: "in",
       held_attachments: [ { "filename" => "private.pdf", "status" => "expired" } ])
 
-    loader = Object.new.extend(RecordPage)
+    loader = ClientsController.new
     rows = loader.send(:files_for, client)
     assert_equal [ attached.id, held.id ].sort, rows.map { |row| row.message.id }.sort
-    assert rows.none? { |row| row.message.id == plain.id }
+    assert rows.none? { |row| row.message.id == plain.id || row.message.id == quoted_logo.id }
     rows.each do |row|
       assert_not row.message.has_attribute?(:text_body)
       assert_not row.message.has_attribute?(:html_body)
     end
 
     visit client_path(client)
+    assert_selector "[data-tab='files'] .tab-count", text: "2", exact_text: true, visible: :all
     within("section[aria-labelledby='files-heading']") do
       assert_text "passport.txt"
       assert_text "Potentially sensitive"
       assert_text "held.pdf"
+      assert_no_text "signature-logo.png"
       assert_no_text "private.pdf"
       assert_link "Download", href: attachment_path(attached.files.first.id)
     end
+  ensure
+    Setting.current.signature_logo.purge if Setting.current.signature_logo.attached?
   end
 
   test "lead nudge uses trip interest and envelope summary follows edits and insertion" do

@@ -19,10 +19,11 @@
 <% else %>
   <%= body_content %>
 <% end %>
-<% if message.files.attached? %>
+<% files = listed_files(message) %>
+<% if files.any? %>
   <% if attachments == :chips %>
     <div class="chips mt-3" aria-label="Attachments">
-      <% message.files.each do |file| %>
+      <% files.each do |file| %>
         <%= link_to attachment_path(file.id), class: "chip chip-tag" do %>
           <%= render "shared/icon", name: :copy %><%= file.filename %>
           <% if file.blob.metadata["sensitive"] %><%= badge "Sensitive", :warning %><% end %>
@@ -31,7 +32,7 @@
     </div>
   <% else %>
     <ul class="thread-attachments" aria-label="Attachments">
-      <% message.files.each do |file| %>
+      <% files.each do |file| %>
         <li class="attachment-row">
           <%= render "shared/icon", name: :copy, class: "h-3.5 w-3.5" %>
           <span class="min-w-0 flex-1 truncate"><%= file.filename %> · <%= number_to_human_size(file.byte_size) %></span>
