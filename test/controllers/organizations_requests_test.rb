@@ -9,16 +9,27 @@ class OrganizationsRequestsTest < ActionDispatch::IntegrationTest
   end
 
   test "show renders facts, referrals, notes, and timeline" do
-    org = Organization.create!(name: "Himalayan Ground", kind: "operator", email: "ops@example.com", perfectbook_contact_id: 55)
+    org = Organization.create!(name: "Himalayan Ground", kind: "operator", email: "ops@example.com", phone: "+16097810024", perfectbook_contact_id: 55)
     client = Client.create!(name: "Tashi", referred_by_organization: org)
     Note.create!(notable: org, body: "Reliable")
     get organization_path(org)
     assert_response :success
     assert_select "h1", "Himalayan Ground"
+    assert_select "dd", text: "609-781-0024"
     assert_select "a", text: "Open in PerfectBook"
     assert_select "a", text: "Tashi"
     assert_select "h2", text: "Notes"
     assert_select "h2", text: "Timeline"
+  end
+
+  test "show dashes a typed US phone but keeps a Nepal operator's local number as entered" do
+    us = Organization.create!(name: "Bay Advisors", kind: "advisor", phone: "(609) 781-0024", country: "US")
+    nepal = Organization.create!(name: "Kathmandu Treks", kind: "operator", phone: "9841234567", country: "Nepal")
+    get organization_path(us)
+    assert_select "dd", text: "609-781-0024"
+    get organization_path(nepal)
+    assert_select "dd", text: "9841234567"
+    assert_select "dd", text: "984-123-4567", count: 0
   end
 
   test "show leaves the CRM signature logo out of mail rows and the outbound timeline while listing real files" do

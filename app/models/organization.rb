@@ -3,6 +3,10 @@ class Organization < ApplicationRecord
 
   encrypts :phone
 
+  def display_phone
+    Leads::Phone.format(phone, country: country)
+  end
+
   has_many :referred_clients, class_name: "Client",
     foreign_key: :referred_by_organization_id, dependent: :nullify, inverse_of: :referred_by_organization
   has_many :notes, as: :notable, dependent: :destroy

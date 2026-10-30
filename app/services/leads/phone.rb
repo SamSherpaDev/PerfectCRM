@@ -14,5 +14,13 @@ module Leads
         "+#{compact}"
       end
     end
+
+    def self.format(raw, country: nil)
+      value = raw.presence
+      return nil unless value
+
+      digits = normalize(value, country: country)&.[](/\A\+1(\d{10})\z/, 1)
+      digits ? "#{digits[0, 3]}-#{digits[3, 3]}-#{digits[6, 4]}" : value
+    end
   end
 end

@@ -422,7 +422,7 @@ class Lead < ApplicationRecord
   end
 
   def display_phone
-    phone.presence || phone_raw.presence
+    Leads::Phone.format(phone.presence || phone_raw.presence, country: country)
   end
 
   def display_email

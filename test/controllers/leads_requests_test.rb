@@ -437,7 +437,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     client.update!(phone: "+14155550134")
     get client_path(client)
     assert_response :success
-    assert_select "dd", text: "+14155550134"
+    assert_select "dd", text: "415-555-0134"
     assert_select "dd", text: "ask for Alex at reception", count: 0
   end
 

@@ -7,7 +7,7 @@ class Client < ApplicationRecord
   encrypts :phone, :phone_raw
 
   def display_phone
-    phone.presence || phone_raw.presence
+    Leads::Phone.format(phone.presence || phone_raw.presence, country: country)
   end
 
   belongs_to :referred_by_organization, class_name: "Organization", optional: true

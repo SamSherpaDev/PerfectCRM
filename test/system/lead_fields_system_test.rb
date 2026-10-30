@@ -40,9 +40,10 @@ class LeadFieldsSystemTest < ApplicationSystemTestCase
         lead.reload
         assert_equal [ 4, 2027, 3, "4000_7000", "Synthetic friend" ], [ lead.travel_month, lead.travel_year, lead.party_size, lead.budget_band, lead.reported_source_detail ]
       end
+      displayed = Leads::Phone.format(expected || raw)
       visit lead_path(lead)
-      assert_text(expected || raw) unless raw.empty?
-      find("dd", text: expected || raw, exact_text: true).execute_script("this.scrollIntoView({block: 'center'})") unless raw.empty?
+      assert_text(displayed) unless raw.empty?
+      find("dd", text: displayed, exact_text: true).execute_script("this.scrollIntoView({block: 'center'})") unless raw.empty?
       if index.in?([ 0, 7 ])
         page.save_screenshot(File.join(EVIDENCE, "lead-#{index}.png"))
       end
@@ -51,8 +52,8 @@ class LeadFieldsSystemTest < ApplicationSystemTestCase
       client = lead.reload.converted_client
       expected.nil? ? assert_nil(client.phone) : assert_equal(expected, client.phone)
       raw.empty? ? assert_nil(client.phone_raw) : assert_equal(raw, client.phone_raw)
-      assert_text(expected || raw) unless raw.empty?
-      find("dd", text: expected || raw, exact_text: true).execute_script("this.scrollIntoView({block: 'center'})") unless raw.empty?
+      assert_text(displayed) unless raw.empty?
+      find("dd", text: displayed, exact_text: true).execute_script("this.scrollIntoView({block: 'center'})") unless raw.empty?
       page.save_screenshot(File.join(EVIDENCE, "client-#{index}.png")) if index.in?([ 0, 7 ])
       transcript << { raw: raw, response: JSON.parse(response.body), phone: client.phone, raw_retained: client.phone_raw, country: client.country }
     end

@@ -172,14 +172,15 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
       assert_response :accepted
       lead = Lead.find(response.parsed_body.fetch("id"))
       expected = format == "international" ? "+442079460958" : "+14155550134"
+      expected_display = format == "international" ? "+442079460958" : "415-555-0134"
       assert_equal expected, lead.phone
       assert_equal raw, lead.phone_raw
-      assert_equal expected, lead.display_phone
+      assert_equal expected_display, lead.display_phone
       assert_nil lead.country # A parsing default is not evidence of residence.
       client = lead.convert_to_client!
       assert_equal expected, client.phone
       assert_equal raw, client.phone_raw
-      assert_equal expected, client.display_phone
+      assert_equal expected_display, client.display_phone
       assert_not_includes client.attributes_before_type_cast["phone_raw"], raw
     end
   end
@@ -271,6 +272,15 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     assert_equal "GB", Lead.last.country
     assert_nil Lead.last.phone
     assert_equal "020 7946 0958", Lead.last.display_phone
+  end
+
+  test "a non-US ten-digit phone keeps its own spelling through display and conversion" do
+    post_intake intake_body("contact" => { "phone_raw" => "9841234567", "country" => "Nepal" })
+    assert_response :accepted
+    lead = Lead.find(response.parsed_body.fetch("id"))
+    assert_nil lead.phone
+    assert_equal "9841234567", lead.display_phone
+    assert_equal "9841234567", lead.convert_to_client!.display_phone
   end
 
   test "bare domain origin is accepted" do
