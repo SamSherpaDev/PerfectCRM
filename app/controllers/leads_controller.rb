@@ -50,7 +50,7 @@ class LeadsController < ApplicationController
   end
 
   def show
-    @lead_action_return_to = safe_leads_return_path(params[:return_to]) || leads_path(tab: "new")
+    @lead_action_return_to = remembered_leads_return_path
     @matching_client = @lead.matching_client unless @lead.converted?
     @note = Note.new
     load_reply_box(@lead)
@@ -244,6 +244,17 @@ class LeadsController < ApplicationController
 
   def lead_action_return_to
     safe_leads_return_path(params[:return_to]) || leads_path(tab: "new")
+  end
+
+  def remembered_leads_return_path
+    if (path = safe_leads_return_path(params[:return_to]))
+      session[:lead_return_to] = { "lead_id" => @lead.id, "path" => path }
+      path
+    elsif session.dig(:lead_return_to, "lead_id") == @lead.id
+      session[:lead_return_to]["path"]
+    else
+      leads_path(tab: "new")
+    end
   end
 
   def lead_destination_tab

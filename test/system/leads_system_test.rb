@@ -204,6 +204,72 @@ class LeadsSystemTest < ApplicationSystemTestCase
     end
   end
 
+  test "back after a note returns to the same lead area, and only to where the captain last was" do
+    OmniAuth.config.mock_auth[:google_oauth2] = OmniAuth::AuthHash.new(
+      provider: "google_oauth2", uid: "google-captain",
+      extra: { id_token: JWT.encode(@claims, @key, "RS256") }
+    )
+    Google::Auth::IDTokens.stub(:oidc_key_source, @source) do
+      visit "/auth/google_oauth2/callback"
+      assert_selector "h1", text: "Today"
+    end
+    page.current_window.resize_to(1400, 900)
+
+    new_leads = (1..24).map do |i|
+      lead = Lead.create!(name: format("Origin New %02d", i), source: "website_form", campaign_name: "scroll-check", status: "new")
+      lead.update_column(:last_activity_at, i.minutes.ago)
+      lead
+    end
+    potential_leads = (1..24).map do |i|
+      lead = Lead.create!(name: format("Note Back %02d", i), source: "website_form", campaign_name: "scroll-check", status: "new")
+      lead.mark_potential!
+      lead.update_column(:last_activity_at, i.minutes.ago)
+      lead
+    end
+    target = potential_leads[18]
+    list_url = leads_path(tab: "potential", q: "Note Back", sort: "name")
+
+    visit list_url
+    assert_selector "h2", text: "Potential", exact_text: true
+    link = find_link(target.name)
+    page.execute_script("arguments[0].scrollIntoView({ block: 'center' })", link)
+    scroll_y = page.evaluate_script("window.scrollY")
+    row_top = link.evaluate_script("this.getBoundingClientRect().top")
+    assert_operator scroll_y, :>, 600
+
+    link.click
+    assert_selector "h1", text: target.name
+    choose "Note", allow_label_click: true
+    fill_in "Add a note", with: "Asked about May departures"
+    click_button "Save note"
+    assert_text "Note saved"
+    within("header.page-header") { click_link "Leads" }
+    assert_selector "h2", text: "Potential", exact_text: true
+    assert_equal list_url, page.evaluate_script("window.location.pathname + window.location.search")
+    assert_in_delta scroll_y, page.evaluate_script("window.scrollY"), 5
+    assert_in_delta row_top, find_link(target.name).evaluate_script("this.getBoundingClientRect().top"), 5
+
+    page.execute_script("window.scrollTo(0, 0)")
+    within("nav.tabs") { click_link "New" }
+    assert_selector "h2", text: "New", exact_text: true
+    page.go_back
+    assert_selector "h2", text: "Potential", exact_text: true
+    assert_in_delta 0, page.evaluate_script("window.scrollY"), 5
+
+    visit leads_path(tab: "new")
+    assert_selector "h2", text: "New", exact_text: true
+    new_link = find_link(new_leads[18].name)
+    page.execute_script("arguments[0].scrollIntoView({ block: 'center' })", new_link)
+    assert_operator page.evaluate_script("window.scrollY"), :>, 600
+    new_link.click
+    assert_selector "h1", text: new_leads[18].name
+    visit lead_path(new_leads[2])
+    assert_selector "h1", text: new_leads[2].name
+    within("header.page-header") { click_link "Leads" }
+    assert_selector "h2", text: "New", exact_text: true
+    assert_in_delta 0, page.evaluate_script("window.scrollY"), 5
+  end
+
   private
 
   def assert_no_overflow(context)

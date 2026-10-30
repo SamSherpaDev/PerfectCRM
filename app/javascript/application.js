@@ -11,15 +11,13 @@ function loadScrollState() {
       const parsed = JSON.parse(raw)
       return {
         lists: parsed.lists && typeof parsed.lists === "object" ? parsed.lists : {},
-        restorations: parsed.restorations && typeof parsed.restorations === "object" ? parsed.restorations : {},
-        lastPageUrl: typeof parsed.lastPageUrl === "string" ? parsed.lastPageUrl : null,
-        pendingBackRestore: Boolean(parsed.pendingBackRestore)
+        linkedFrom: typeof parsed.linkedFrom === "string" ? parsed.linkedFrom : null
       }
     }
   } catch {
     // Ignore storage errors in restricted browsing modes.
   }
-  return { lists: {}, restorations: {}, lastPageUrl: null, pendingBackRestore: false }
+  return { lists: {}, linkedFrom: null }
 }
 
 const scrollState = loadScrollState()
@@ -63,18 +61,6 @@ function listKeyForLocation(urlLike, root = document) {
   }
 }
 
-function listFamilyForPath(pathname) {
-  const path = (pathname || "").replace(/\/+$/, "") || "/"
-  if (path === "/leads" || /^\/leads\/[^/]+/.test(path)) return "leads"
-  if (path === "/clients" || /^\/(clients|organizations)\/[^/]+/.test(path)) return "clients"
-  return null
-}
-
-function isRecordPath(pathname) {
-  const path = (pathname || "").replace(/\/+$/, "") || "/"
-  return /^\/(leads|clients|organizations)\/[^/]+/.test(path)
-}
-
 function findRowRecordLink(row) {
   if (!row) return null
   return Array.from(row.querySelectorAll("a[href]")).find((a) => {
@@ -86,23 +72,9 @@ function findRowRecordLink(row) {
   })
 }
 
-function syncTurboRestorationData() {
-  const historyObj = window.Turbo?.navigator?.history
-  if (!historyObj?.restorationData) return
-  for (const [id, pos] of Object.entries(scrollState.restorations)) {
-    if (pos && typeof pos.y === "number" && !historyObj.restorationData[id]?.scrollPosition) {
-      historyObj.restorationData[id] = {
-        ...historyObj.restorationData[id],
-        scrollPosition: { x: pos.x || 0, y: pos.y }
-      }
-    }
-  }
-}
-
 let currentPage = {
-  url: window.location.href,
-  listKey: listKeyForLocation(window.location.href, document),
-  restorationId: window.history.state?.turbo?.restorationIdentifier || null
+  pathname: window.location.pathname,
+  listKey: listKeyForLocation(window.location.href, document)
 }
 let isTransitioning = false
 let popstateRestore = false
@@ -110,44 +82,38 @@ let activeRestoreTarget = null
 let hasHandledInitialLoad = false
 
 function saveCurrentListScroll(clickedElement = null) {
-  if (currentPage.listKey) {
-    const prev = scrollState.lists[currentPage.listKey] || {}
-    const entry = {
-      ...prev,
-      scrollY: window.scrollY,
-      scrollX: window.scrollX
-    }
-    if (clickedElement instanceof Element) {
-      const row = clickedElement.closest("main section.card ul > li")
-      if (row) {
-        const recordLink = findRowRecordLink(row)
-        if (recordLink) {
-          entry.recordPath = new URL(recordLink.href, window.location.origin).pathname
-          entry.viewportOffset = row.getBoundingClientRect().top
-          entry.rowIndex = row.parentElement ? Array.from(row.parentElement.children).indexOf(row) : null
-        }
-      }
-    }
-    scrollState.lists[currentPage.listKey] = entry
+  const prev = scrollState.lists[currentPage.listKey] || {}
+  const entry = {
+    ...prev,
+    scrollY: window.scrollY,
+    scrollX: window.scrollX
   }
-
-  const restorationId = currentPage.restorationId || window.history.state?.turbo?.restorationIdentifier
-  if (restorationId) {
-    scrollState.restorations[restorationId] = { x: window.scrollX, y: window.scrollY }
-    if (window.Turbo?.navigator?.history?.restorationData) {
-      window.Turbo.navigator.history.restorationData[restorationId] = {
-        ...window.Turbo.navigator.history.restorationData[restorationId],
-        scrollPosition: { x: window.scrollX, y: window.scrollY }
+  if (clickedElement instanceof Element) {
+    const row = clickedElement.closest("main section.card ul > li")
+    if (row) {
+      const recordLink = findRowRecordLink(row)
+      if (recordLink) {
+        entry.recordPath = new URL(recordLink.href, window.location.origin).pathname
+        entry.viewportOffset = row.getBoundingClientRect().top
+        entry.rowIndex = row.parentElement ? Array.from(row.parentElement.children).indexOf(row) : null
+        entry.anchorScrollY = entry.scrollY
       }
     }
   }
-
+  scrollState.lists[currentPage.listKey] = entry
   persistScrollState()
 }
 
+function anchorIsCurrent(saved) {
+  return (
+    Boolean(saved.recordPath) &&
+    typeof saved.anchorScrollY === "number" &&
+    Math.abs((saved.scrollY || 0) - saved.anchorScrollY) < 1
+  )
+}
+
 function computeTargetScrollY(saved) {
-  if (!saved) return 0
-  if (saved.recordPath) {
+  if (anchorIsCurrent(saved)) {
     const rows = Array.from(document.querySelectorAll("main section.card ul > li"))
     const matchIndex = rows.findIndex((li) => {
       const link = findRowRecordLink(li)
@@ -181,20 +147,8 @@ function resolveRestoreTarget(newBody = document.body) {
   if (!saved) return null
 
   const visitAction = window.Turbo?.navigator?.currentVisit?.action
-  const prevUrl = currentPage.url !== window.location.href ? currentPage.url : scrollState.lastPageUrl
-  let fromRecordInSameFamily = false
-  if (prevUrl) {
-    try {
-      const prevPathname = new URL(prevUrl, window.location.origin).pathname
-      fromRecordInSameFamily =
-        isRecordPath(prevPathname) &&
-        listFamilyForPath(prevPathname) === listFamilyForPath(window.location.pathname)
-    } catch {
-      fromRecordInSameFamily = false
-    }
-  }
-
-  if (visitAction === "restore" || popstateRestore || scrollState.pendingBackRestore || fromRecordInSameFamily) {
+  const linkedFromSavedRecord = Boolean(scrollState.linkedFrom) && scrollState.linkedFrom === saved.recordPath
+  if (visitAction === "restore" || popstateRestore || linkedFromSavedRecord) {
     return { listKey: newListKey, saved }
   }
   return null
@@ -207,16 +161,12 @@ function applyRestoredScroll(listKey, saved) {
   if (window.Turbo?.navigator?.currentVisit) {
     window.Turbo.navigator.currentVisit.scrolled = true
   }
-  const restorationId = window.history.state?.turbo?.restorationIdentifier
-  if (restorationId) {
-    scrollState.restorations[restorationId] = { x: targetX, y: targetY }
-    if (window.Turbo?.navigator?.history) {
-      window.Turbo.navigator.history.updateRestorationData({
-        scrollPosition: { x: targetX, y: targetY }
-      })
-    }
+  scrollState.lists[listKey] = {
+    ...saved,
+    scrollY: targetY,
+    scrollX: targetX,
+    anchorScrollY: anchorIsCurrent(saved) ? targetY : saved.anchorScrollY
   }
-  scrollState.lists[listKey] = { ...saved, scrollY: targetY, scrollX: targetX }
   persistScrollState()
 }
 
@@ -235,7 +185,6 @@ window.addEventListener(
   () => {
     isTransitioning = true
     popstateRestore = true
-    syncTurboRestorationData()
   },
   true
 )
@@ -256,49 +205,8 @@ document.addEventListener(
     }
     if (!link) return
 
-    if (link.closest(".page-header") && !link.closest(".page-actions")) {
-      scrollState.pendingBackRestore = true
-    } else if (link.closest('nav[aria-label="Primary"], .tabbar, nav.tabs')) {
-      scrollState.pendingBackRestore = false
-    } else {
-      try {
-        const currentPathname = new URL(currentPage.url, window.location.origin).pathname
-        if (isRecordPath(currentPathname) && listKeyForLocation(link.href)) {
-          scrollState.pendingBackRestore = true
-        }
-      } catch {
-        // Ignore invalid URLs.
-      }
-    }
-    scrollState.lastPageUrl = currentPage.url
-    persistScrollState()
-  },
-  true
-)
-
-document.addEventListener(
-  "submit",
-  (event) => {
-    const form = event.target instanceof HTMLFormElement ? event.target : null
-    const submitter = event.submitter instanceof Element ? event.submitter : form
-    if (!isTransitioning && currentPage.listKey) {
-      saveCurrentListScroll(submitter)
-      if (form?.closest("main section.card ul > li")) {
-        scrollState.pendingBackRestore = true
-      } else if (form && (form.getAttribute("method") || "").toLowerCase() === "get") {
-        scrollState.pendingBackRestore = false
-      }
-    } else {
-      try {
-        const currentPathname = new URL(currentPage.url, window.location.origin).pathname
-        if (isRecordPath(currentPathname)) {
-          scrollState.pendingBackRestore = true
-        }
-      } catch {
-        // Ignore invalid URLs.
-      }
-    }
-    scrollState.lastPageUrl = currentPage.url
+    const opensList = listKeyForLocation(link.href) && !link.closest('nav[aria-label="Primary"], .tabbar')
+    scrollState.linkedFrom = opensList ? currentPage.pathname : null
     persistScrollState()
   },
   true
@@ -308,20 +216,11 @@ document.addEventListener("turbo:before-visit", () => {
   if (!isTransitioning && currentPage.listKey) {
     saveCurrentListScroll()
   }
-  scrollState.lastPageUrl = currentPage.url
   isTransitioning = true
-  persistScrollState()
-})
-
-document.addEventListener("turbo:before-cache", () => {
-  document.querySelectorAll("details.call-schedule-pop[open]").forEach((el) => {
-    el.open = false
-  })
 })
 
 document.addEventListener("turbo:before-render", (event) => {
   document.documentElement.dataset.scheme = event.detail.newBody.dataset.scheme || "paper"
-  syncTurboRestorationData()
   activeRestoreTarget = resolveRestoreTarget(event.detail.newBody)
 })
 
@@ -333,7 +232,6 @@ document.addEventListener("turbo:render", () => {
 })
 
 document.addEventListener("turbo:load", () => {
-  syncTurboRestorationData()
   const navEntry = window.performance?.getEntriesByType?.("navigation")?.[0]
   if (!hasHandledInitialLoad && navEntry?.type === "back_forward") {
     popstateRestore = true
@@ -347,12 +245,10 @@ document.addEventListener("turbo:load", () => {
 
   activeRestoreTarget = null
   popstateRestore = false
-  scrollState.pendingBackRestore = false
-  scrollState.lastPageUrl = window.location.href
+  scrollState.linkedFrom = null
   currentPage = {
-    url: window.location.href,
-    listKey: listKeyForLocation(window.location.href, document.body),
-    restorationId: window.history.state?.turbo?.restorationIdentifier || null
+    pathname: window.location.pathname,
+    listKey: listKeyForLocation(window.location.href, document.body)
   }
   isTransitioning = false
   if (currentPage.listKey && !target) {

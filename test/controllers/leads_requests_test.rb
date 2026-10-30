@@ -829,4 +829,28 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     follow_redirect!
     assert_select "header.page-header a[href=?]", return_to, text: "Leads"
   end
+
+  test "notes and calls on a lead keep the back link and actions on the list it was opened from" do
+    lead = Lead.create!(name: "Remembered List Traveler", source: "manual", status: "new")
+    lead.mark_potential!
+    other = Lead.create!(name: "Opened Elsewhere Traveler", source: "manual", status: "new")
+    return_to = leads_path(tab: "potential", q: "Remembered", sort: "name")
+
+    get lead_path(lead, return_to: return_to)
+    assert_select "header.page-header a[href=?]", return_to, text: "Leads"
+
+    post lead_notes_path(lead), params: { note: { body: "Asked about May" } }
+    assert_redirected_to lead_path(lead)
+    follow_redirect!
+    assert_select "header.page-header a[href=?]", return_to, text: "Leads"
+    assert_select "form[action=?] input[name=return_to][value=?]", unmark_potential_lead_path(lead), return_to
+
+    post lead_calls_path(lead), params: { save_key: "remembered-list-call", outcome: "no_answer", direction: "outbound" }
+    assert_redirected_to lead_path(lead, anchor: "record-details")
+    follow_redirect!
+    assert_select "header.page-header a[href=?]", return_to, text: "Leads"
+
+    get lead_path(other)
+    assert_select "header.page-header a[href=?]", leads_path(tab: "new"), text: "Leads"
+  end
 end
