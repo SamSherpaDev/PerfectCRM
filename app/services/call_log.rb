@@ -67,11 +67,11 @@ module CallLog
       .exists?
     return true if reset_event
 
-    [ record, record.existing_client ].compact.any? do |owner|
-      Message.for_owner(owner).inbound
-        .where("COALESCE(messages.sent_at, messages.inbound_received_at, messages.created_at) > ?", first_voicemail.occurred_at)
-        .any? { |message| Mail::ReplyAlerts.reply?(message.from_address, message.subject, message.inquiry_headers) }
-    end
+    inbound = Message.inbound
+      .where("COALESCE(messages.sent_at, messages.inbound_received_at, messages.created_at) > ?", first_voicemail.occurred_at)
+    inbound.where(conversation_id: Conversation.where(linkable: [ record, record.existing_client ].compact).select(:id))
+      .or(inbound.where("LOWER(TRIM(messages.from_address)) IN (?)", record.current_recipient_emails))
+      .any? { |message| Mail::ReplyAlerts.reply?(message.from_address, message.subject, message.inquiry_headers) }
   end
 
   def mark_not_interested_after_three_voicemails!(record, event: nil)

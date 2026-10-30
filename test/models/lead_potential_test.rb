@@ -171,6 +171,26 @@ class LeadPotentialTest < ActiveSupport::TestCase
     assert_equal 0, client.activity_events.where(kind: "not_interested").count
   end
 
+  test "a returning client's email filed on their client record resets the voicemail count for a website lead" do
+    client = Client.create!(name: "Jane Traveler", email: "jane-traveler@example.com")
+    lead = Lead.create!(name: "Jane Traveler", email: "jane-traveler@example.com", source: "website_form")
+    assert_nil lead.existing_client
+    lead.mark_unsure!
+    CallLog.record!(lead, key: "jane-vm-1", occurred_at: 4.days.ago, outcome: "voicemail", direction: "outbound")
+    convo = client.conversations.create!(subject: "Missed call")
+    convo.messages.create!(
+      direction: "in", from_address: "Jane-Traveler@example.com", to_addresses: [ "info@sherpaholidays.com" ],
+      subject: "Missed call", text_body: "Sorry I missed your call, free Thursday?", sent_at: 3.days.ago, status: "received"
+    )
+    CallLog.record!(lead, key: "jane-vm-2", occurred_at: 2.days.ago, outcome: "voicemail", direction: "outbound")
+    CallLog.record!(lead, key: "jane-vm-3", occurred_at: 1.day.ago, outcome: "voicemail", direction: "outbound")
+    assert lead.reload.unsure?
+    assert_equal 0, lead.activity_events.where(kind: "not_interested").count
+
+    CallLog.record!(lead, key: "jane-vm-4", occurred_at: 1.hour.ago, outcome: "voicemail", direction: "outbound")
+    assert lead.reload.not_interested?
+  end
+
   test "Interested again restarts the voicemail count so only voicemails after it can move the lead back" do
     lead = Lead.create!(name: "Second Chance", email: "second-chance@example.com")
     lead.mark_unsure!
