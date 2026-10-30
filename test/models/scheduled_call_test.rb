@@ -115,6 +115,8 @@ class ScheduledCallTest < ActiveSupport::TestCase
 
   test "schedules, reschedules, completes, and cancels calls on active clients and hides archived client calls" do
     client = Client.create!(name: "Amara Okafor", email: "amara@example.com", phone: "+14155550177")
+    Lead.create!(name: "Amara Okafor", reference: "SH-OLD", existing_client: client, created_at: 2.days.ago)
+    chosen = Lead.create!(name: "Amara Okafor", reference: "SH-NEW", existing_client: client)
     call = client.scheduled_calls.create!(
       scheduled_on: "2026-10-21",
       scheduled_time: "11:00",
@@ -129,10 +131,14 @@ class ScheduledCallTest < ActiveSupport::TestCase
     assert_equal Time.zone.local(2026, 10, 22, 14, 0), call.reload.scheduled_at
 
     freeze_time do
-      event = call.complete!(outcome: "connected", save_key: "client-call-complete-1")
+      event = call.complete!(outcome: "connected", save_key: "client-call-complete-1", inquiry_id: chosen.id)
       assert_equal "completed", call.reload.status
+      assert_equal event, call.activity_event
       assert_equal "Call: Talked", event.summary
-      assert_equal client, event.subject
+      assert_equal chosen, event.subject
+      assert_equal 1, chosen.activity_events.where(kind: "call").count
+      assert_equal 0, Lead.find_by!(reference: "SH-OLD").activity_events.where(kind: "call").count
+      assert_equal [ event.id ], client.activity_events.where(kind: "call").map { |mirror| mirror.metadata["from_lead_event_id"] }
       assert_nil client.reload.next_scheduled_call
     end
 
@@ -162,9 +168,34 @@ class ScheduledCallTest < ActiveSupport::TestCase
     call.reschedule!(scheduled_on: "2026-10-24", scheduled_time: "15:00")
     assert_equal Time.zone.local(2026, 10, 24, 15, 0), call.reload.scheduled_at
 
-    call.complete!(outcome: "voicemail", save_key: "converted-client-call-1")
+    call.complete!(outcome: "voicemail", save_key: "converted-client-call-1", inquiry_id: @lead.id)
     assert_equal "completed", call.reload.status
+    assert_equal @lead, call.activity_event.subject
     assert_equal 1, client.activity_events.where(kind: "call").count
+  end
+
+  test "completing a client call refuses a missing or another client's inquiry and never writes an unbound call" do
+    client = Client.create!(name: "Amara Okafor", email: "amara@example.com")
+    other_inquiry = Lead.create!(name: "Someone Else", existing_client: Client.create!(name: "Someone Else"))
+    call = client.scheduled_calls.create!(scheduled_on: "2026-10-21", scheduled_time: "11:00")
+
+    assert_no_difference -> { ActivityEvent.where(kind: "call").count } do
+      [ nil, other_inquiry.id ].each_with_index do |inquiry_id, i|
+        error = assert_raises(ActiveRecord::RecordInvalid) do
+          call.complete!(outcome: "connected", save_key: "client-no-inquiry-#{i}0", inquiry_id: inquiry_id)
+        end
+        assert_includes error.record.errors.full_messages.join(" "), "inquiries"
+      end
+      assert_raises(ArgumentError) do
+        CallLog.record!(client, key: "client-unbound-call", occurred_at: Time.current, outcome: "connected", direction: "outbound")
+      end
+    end
+    assert_equal "scheduled", call.reload.status
+
+    call.reschedule!(scheduled_on: "2026-10-22", scheduled_time: "09:00")
+    assert_equal Time.zone.local(2026, 10, 22, 9, 0), call.reload.scheduled_at
+    call.cancel!
+    assert_equal "cancelled", call.reload.status
   end
 
   test "scheduling a call with a client never enqueues AdConversions::LeadJob or records a call_scheduled conversion" do
@@ -196,11 +227,12 @@ class ScheduledCallTest < ActiveSupport::TestCase
     clear_enqueued_jobs
 
     assert_no_enqueued_jobs only: AdConversions::LeadJob do
-      client.scheduled_calls.create!(
+      call = client.scheduled_calls.create!(
         scheduled_on: "2026-10-25",
         scheduled_time: "11:00",
         notes: "Post-conversion check-in"
       )
+      call.complete!(outcome: "connected", save_key: "client-call-no-conversion", inquiry_id: lead.id)
     end
 
     AdConversions.record!(lead.reload, now: Time.current)

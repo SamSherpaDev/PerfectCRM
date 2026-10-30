@@ -75,7 +75,7 @@
                 <% else %>
                   <% if lead.call_schedulable? %>
                     <%= render "scheduled_calls/popover",
-                      lead: lead,
+                      record: lead,
                       scheduled_call: lead.next_scheduled_call,
                       return_to: @lead_action_return_to,
                       trigger_label: (lead.next_scheduled_call ? "Reschedule" : "Schedule call"),

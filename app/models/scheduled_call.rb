@@ -89,16 +89,21 @@ class ScheduledCall < ApplicationRecord
     end
   end
 
-  def complete!(outcome:, save_key:, occurred_at: Time.current)
+  def complete!(outcome:, save_key:, inquiry_id: nil, occurred_at: Time.current)
     return activity_event if activity_event && activity_event.idempotency_key == save_key
     ensure_scheduled!
     unless CallLog::OUTCOMES.include?(outcome)
       errors.add(:outcome, "is not included in the list")
       raise ActiveRecord::RecordInvalid, self
     end
+    inquiry = client ? client.inquiries.find_by(id: inquiry_id) : lead
+    unless inquiry
+      errors.add(:base, "Choose one of this client's inquiries to log the call")
+      raise ActiveRecord::RecordInvalid, self
+    end
 
     transaction do
-      event = CallLog.record!(lead || owner, key: save_key, occurred_at: occurred_at, outcome: outcome, direction: "outbound")
+      event = CallLog.record!(inquiry, key: save_key, occurred_at: occurred_at, outcome: outcome, direction: "outbound")
       update!(status: "completed", outcome: outcome, completed_at: occurred_at, activity_event: event)
       event
     end

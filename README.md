@@ -852,11 +852,15 @@ page. The record page shows its next scheduled call with one-tap completion
 cancellation. While that call is due (today's or a missed call) it replaces the
 regular one-tap call buttons; for a booking on a later day the regular buttons
 stay and leave the booking open. A double tap on the bar logs and completes
-once. Only an open call can be completed, rescheduled, or cancelled. A call
-logged through the regular call buttons or Add details also completes the
-record's earliest open scheduled call when that call was due on or before the
-logged call's Pacific day (today's or a missed call); a booking on a later day
-stays open. A double save completes one scheduled call at most.
+once. A client's call bar offers one row of buttons per inquiry and logs the
+call only on the chosen inquiry; a client with no inquiry gets the New inquiry
+link instead, and Today offers one-tap completion only when the client has
+exactly one inquiry, otherwise a link to the client page. Only an open call
+can be completed, rescheduled, or cancelled. A call logged through the regular
+call buttons or Add details also completes the record's earliest open
+scheduled call when that call was due on or before the logged call's Pacific
+day (today's or a missed call); a booking on a later day stays open. A double
+save completes one scheduled call at most.
 
 The [intake contract](docs/leads-intake.md#exact-optional-question-and-stable-answers)
 lists the shared answers and stable codes.

@@ -2,7 +2,7 @@
 <%# One tap logs an outbound call now; Add details keeps time, direction and duration. Each rendered form carries one save key, so a double tap logs one call. %>
 <%# Forms skip Turbo so the redirect keeps its #record-details anchor, which reopens the phone Details tab. %>
 <% lead = record.is_a?(Lead) %>
-<% inquiries = lead ? [record] : Lead.where(converted_client_id: record.id).or(Lead.where(existing_client_id: record.id)).order(created_at: :desc) %>
+<% inquiries = lead ? [record] : record.inquiries.order(created_at: :desc) %>
 <% calls_path = lead ? lead_calls_path(record) : client_calls_path(record) %>
 <% call_confirm_msg = "This lead is marked not interested. Log an outbound call anyway?" %>
 <% not_interested_ids = inquiries.select(&:not_interested?).map(&:id) %>

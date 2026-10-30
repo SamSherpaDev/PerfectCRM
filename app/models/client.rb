@@ -119,6 +119,10 @@ class Client < ApplicationRecord
     email.presence || people.map(&:email).find(&:present?)
   end
 
+  def inquiries
+    Lead.where(converted_client_id: id).or(Lead.where(existing_client_id: id))
+  end
+
   def call_schedulable?
     !archived?
   end

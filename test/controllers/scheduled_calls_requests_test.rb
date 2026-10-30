@@ -257,6 +257,7 @@ class ScheduledCallsRequestsTest < ActionDispatch::IntegrationTest
         google_terms_accepted: true
       )
       client = Client.create!(name: "Amara Okafor", email: "amara@example.com", phone: "+14155550144")
+      inquiry = Lead.create!(name: "Amara Okafor", reference: "SH-AMARA", existing_client: client)
 
       assert_no_enqueued_jobs only: AdConversions::LeadJob do
         assert_difference -> { client.scheduled_calls.count }, 1 do
@@ -306,22 +307,107 @@ class ScheduledCallsRequestsTest < ActionDispatch::IntegrationTest
       assert_select "#scheduled-calls-section" do
         assert_select "[aria-label=\"Today's calls\"] a[href=?]", client_path(client), text: "Amara Okafor"
         assert_select "[aria-label='Week calendar'] a[href=?]", client_path(client), text: "Amara Okafor"
+        assert_select "#scheduled_call_#{call.id} form[action=?]", complete_client_scheduled_call_path(client, call) do
+          assert_select "input[name=inquiry_id][value=?]", inquiry.id.to_s
+          assert_select "button[name=outcome]", 3
+        end
       end
 
-      assert_difference -> { client.activity_events.where(kind: "call").count }, 1 do
-        post complete_client_scheduled_call_path(client, call), params: {
-          outcome: "connected",
-          save_key: "client-complete-0001",
-          return_to: client_path(client)
-        }
+      assert_no_enqueued_jobs only: AdConversions::LeadJob do
+        assert_difference -> { inquiry.activity_events.where(kind: "call").count }, 1 do
+          post complete_client_scheduled_call_path(client, call), params: {
+            outcome: "connected",
+            save_key: "client-complete-0001",
+            inquiry_id: inquiry.id,
+            return_to: root_path
+          }
+        end
       end
-      assert_redirected_to client_path(client)
+      assert_redirected_to root_path
       assert_equal "completed", call.reload.status
+      assert_equal inquiry, call.activity_event.subject
 
       second_call = client.scheduled_calls.create!(scheduled_on: "2026-10-25", scheduled_time: "09:00")
       patch cancel_client_scheduled_call_path(client, second_call), params: { return_to: client_path(client) }
       assert_redirected_to client_path(client)
       assert_equal "cancelled", second_call.reload.status
+    end
+  end
+
+  test "a client's call bar logs on the chosen inquiry and refuses another client's inquiry" do
+    travel_to Time.zone.local(2026, 10, 20, 10, 0) do
+      client = Client.create!(name: "Two trips", email: "two@example.com")
+      first = Lead.create!(name: "Two trips", reference: "SH-ONE", existing_client: client, created_at: 2.days.ago)
+      second = Lead.create!(name: "Two trips", reference: "SH-TWO", existing_client: client)
+      other = Lead.create!(name: "Other client", existing_client: Client.create!(name: "Other client"))
+      call = client.scheduled_calls.create!(scheduled_on: "2026-10-20", scheduled_time: "15:00")
+
+      get client_path(client)
+      assert_response :success
+      assert_select "#scheduled-call" do
+        assert_select "[role=group][aria-label='Log this call for SH-TWO'] input[name=inquiry_id][value=?]", second.id.to_s
+        assert_select "[role=group][aria-label='Log this call for SH-ONE'] input[name=inquiry_id][value=?]", first.id.to_s
+        assert_select "[role=group] button[name=outcome]", 6
+      end
+
+      get root_path
+      assert_select "#scheduled_call_#{call.id}" do
+        assert_select "button[name=outcome]", 0
+        assert_select "a[href=?]", client_path(client, anchor: "scheduled-call"), text: "Log on client page"
+      end
+
+      assert_no_difference -> { ActivityEvent.where(kind: "call").count } do
+        post complete_client_scheduled_call_path(client, call), params: {
+          outcome: "connected", save_key: "client-other-0001", inquiry_id: other.id, return_to: client_path(client)
+        }
+      end
+      assert_redirected_to client_path(client)
+      assert_equal "Choose one of this client's inquiries to log the call", flash[:alert]
+      assert_equal "scheduled", call.reload.status
+
+      assert_difference -> { first.activity_events.where(kind: "call").count }, 1 do
+        post complete_client_scheduled_call_path(client, call), params: {
+          outcome: "voicemail", save_key: "client-first-0001", inquiry_id: first.id, return_to: client_path(client)
+        }
+      end
+      assert_equal 0, second.activity_events.where(kind: "call").count
+      assert_equal "completed", call.reload.status
+      assert_equal "voicemail", call.outcome
+    end
+  end
+
+  test "a client without an inquiry gets the New inquiry link instead of call buttons, and reschedule and cancel still work" do
+    travel_to Time.zone.local(2026, 10, 20, 10, 0) do
+      client = Client.create!(name: "No inquiry yet", email: "none@example.com")
+      call = client.scheduled_calls.create!(scheduled_on: "2026-10-20", scheduled_time: "15:00")
+
+      get client_path(client)
+      assert_response :success
+      assert_select "#scheduled-call" do
+        assert_select "button[name=outcome]", 0
+        assert_select "p", text: "Start an inquiry to keep this call separate from past trips."
+        assert_select "a[href=?]", new_lead_path(existing_client_id: client.id, name: client.name, email: client.email, capture_channel: "phone"), text: "New inquiry"
+        assert_select "summary", text: /Reschedule/
+        assert_select "button", text: "Cancel call"
+      end
+
+      get root_path
+      assert_select "#scheduled_call_#{call.id} a[href=?]", client_path(client, anchor: "scheduled-call"), text: "Log on client page"
+
+      assert_no_difference -> { ActivityEvent.where(kind: "call").count } do
+        post complete_client_scheduled_call_path(client, call), params: {
+          outcome: "connected", save_key: "client-none-0001", return_to: client_path(client)
+        }
+      end
+      assert_equal "scheduled", call.reload.status
+
+      patch client_scheduled_call_path(client, call), params: {
+        return_to: client_path(client),
+        scheduled_call: { scheduled_on: "2026-10-21", scheduled_time: "09:00", duration_minutes: "30" }
+      }
+      assert_equal Time.zone.local(2026, 10, 21, 9, 0), call.reload.scheduled_at
+      patch cancel_client_scheduled_call_path(client, call), params: { return_to: client_path(client) }
+      assert_equal "cancelled", call.reload.status
     end
   end
 end

@@ -1,5 +1,6 @@
 <%# locals: (scheduled_call:, return_to:) %>
 <% owner = scheduled_call.owner %>
+<% inquiries = owner.inquiries.limit(2).to_a if owner.is_a?(Client) %>
 <li class="scheduled-call-row<%= ' scheduled-call-row-missed' if scheduled_call.missed? %>" id="scheduled_call_<%= scheduled_call.id %>">
   <div class="scheduled-call-row-main">
     <div class="flex flex-wrap items-center gap-2">
@@ -28,14 +29,11 @@
   </div>
 
   <div class="scheduled-call-row-actions">
-    <%= form_with url: polymorphic_path([:complete, owner, scheduled_call]), method: :post, class: "scheduled-call-outcomes", data: { turbo: false } do |form| %>
-      <%= form.hidden_field :save_key, value: SecureRandom.uuid, id: nil %>
-      <% if return_to.present? %>
-        <%= form.hidden_field :return_to, value: return_to, id: nil %>
-      <% end %>
-      <% CallLog::ONE_TAP.each do |outcome| %>
-        <%= button_tag CallLog::LABELS.fetch(outcome), name: "outcome", value: outcome, class: "btn-secondary btn-xs" %>
-      <% end %>
+    <% if inquiries.nil? || inquiries.one? %>
+      <%= render "scheduled_calls/outcomes", record: owner, scheduled_call: scheduled_call, return_to: return_to,
+        inquiry: inquiries&.first, button_class: "btn-secondary btn-xs" %>
+    <% else %>
+      <%= link_to "Log on client page", client_path(owner, anchor: "scheduled-call"), class: "btn-secondary btn-xs" %>
     <% end %>
 
     <%= render "scheduled_calls/popover",

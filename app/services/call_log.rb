@@ -9,32 +9,13 @@ module CallLog
   module_function
 
   def record!(record, key:, occurred_at:, outcome:, direction:, duration: nil)
-    if record.is_a?(Client)
-      inquiry = Lead.where(converted_client_id: record.id).or(Lead.where(existing_client_id: record.id)).order(created_at: :desc, id: :desc).first
-      if inquiry
-        event = record!(inquiry, key: key, occurred_at: occurred_at, outcome: outcome, direction: direction, duration: duration)
-        record.touch_activity!
-        return event
-      end
-    end
-
-    raise ArgumentError, "Calls need an inquiry" unless record.is_a?(Lead) || record.is_a?(Client)
+    raise ArgumentError, "Calls need an inquiry" unless record.is_a?(Lead)
     raise ArgumentError, "Invalid call" unless key.to_s.match?(/\A[\w-]{8,64}\z/) &&
       OUTCOMES.include?(outcome) && DIRECTIONS.include?(direction) && occurred_at && occurred_at <= Time.current + 5.minutes
     seconds = duration.present? ? Integer(duration) : nil
     raise ArgumentError, "Invalid duration" if seconds && !seconds.between?(0, 86_400)
 
     record.with_lock do
-      if record.is_a?(Client)
-        event = record.activity_events.find_by(kind: "call", idempotency_key: key) ||
-          record.activity_events.create!(kind: "call", idempotency_key: key,
-            summary: "Call: #{LABELS.fetch(outcome)}", occurred_at: occurred_at,
-            metadata: { "client_id" => record.id, "direction" => direction, "outcome" => outcome,
-              "duration_seconds" => seconds, "owner" => Current.user_email })
-        record.touch_activity!
-        return event
-      end
-
       event = record.activity_events.find_by(kind: "call", idempotency_key: key) ||
         record.activity_events.create!(kind: "call", idempotency_key: key,
           summary: "Call: #{LABELS.fetch(outcome)}", occurred_at: occurred_at,
