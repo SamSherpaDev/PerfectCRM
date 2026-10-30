@@ -286,4 +286,8 @@ module ApplicationHelper
     time = call.scheduled_at.in_time_zone
     "#{time.strftime('%a, %b %-d')} · #{time.strftime('%-I:%M %p')} PT · #{call.duration_minutes} min"
   end
+
+  def format_phone(number)
+    Leads::Phone.format(number)
+  end
 end

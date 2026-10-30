@@ -246,6 +246,50 @@ class ScheduledCallsRequestsTest < ActionDispatch::IntegrationTest
       assert_select "a[aria-label='Next month'][href=?]", root_path(view: "month", date: "2026-11-01")
     end
   end
+
+  test "US and Canada phones render with dashes while international numbers and edit inputs stay unchanged" do
+    travel_to Time.zone.local(2026, 10, 20, 10, 0) do
+      us_lead = Lead.create!(name: "US Traveler", email: "us@example.com", phone: "+16097810024", received_at: 2.hours.ago)
+      nepal_lead = Lead.create!(name: "Nepal Guide", email: "np@example.com", phone: "+9779841234567", received_at: 2.hours.ago)
+      us_call = us_lead.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 20, 15, 0))
+      nepal_call = nepal_lead.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 20, 16, 0))
+      uncalled_us = Lead.create!(name: "Uncalled US", email: "uncalled@example.com", phone: "6097810024", received_at: 1.hour.ago)
+
+      get root_path
+      assert_response :success
+      assert_select "#scheduled_call_#{us_call.id}", text: /609-781-0024/
+      assert_select "#scheduled_call_#{us_call.id}", text: /\+16097810024/, count: 0
+      assert_select "#scheduled_call_#{nepal_call.id}", text: /\+9779841234567/
+      assert_select "#call_list_lead_#{uncalled_us.id}", text: /609-781-0024/
+
+      get lead_path(us_lead)
+      assert_response :success
+      assert_select "#scheduled-call", text: /609-781-0024/
+      assert_select "#record-details dd", text: "609-781-0024"
+      assert_select "#record-details dd", text: "+16097810024", count: 0
+
+      get edit_lead_path(us_lead)
+      assert_response :success
+      assert_select "input[name='lead[phone]'][value='+16097810024']"
+
+      get lead_path(nepal_lead)
+      assert_response :success
+      assert_select "#scheduled-call", text: /\+9779841234567/
+      assert_select "#record-details dd", text: "+9779841234567"
+
+      client = us_lead.convert_to_client!
+      assert_equal "+16097810024", client.phone
+      get client_path(client)
+      assert_response :success
+      assert_select "#scheduled-call", text: /609-781-0024/
+      assert_select "#record-details dd", text: "609-781-0024"
+
+      get edit_client_path(client)
+      assert_response :success
+      assert_select "input[name='client[phone]'][value='+16097810024']"
+    end
+  end
+
   test "Today's call rows load lead tags once however many calls are listed" do
     travel_to Time.zone.local(2026, 10, 20, 10, 0) do
       tag_queries = lambda do

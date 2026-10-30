@@ -4,6 +4,10 @@ class Person < ApplicationRecord
   has_many :activity_events, as: :subject, dependent: :destroy
   encrypts :phone
 
+  def display_phone
+    Leads::Phone.format(phone)
+  end
+
   belongs_to :client, touch: true, optional: true
   belongs_to :lead, touch: true, optional: true
 

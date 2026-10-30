@@ -14,5 +14,16 @@ module Leads
         "+#{compact}"
       end
     end
+
+    def self.format(raw)
+      value = raw.presence
+      return nil unless value
+
+      if (match = value.to_s.strip.match(/\A(?:\+1)?(\d{3})(\d{3})(\d{4})\z/))
+        "#{match[1]}-#{match[2]}-#{match[3]}"
+      else
+        value
+      end
+    end
   end
 end
