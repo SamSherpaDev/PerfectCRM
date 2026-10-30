@@ -2495,12 +2495,11 @@
   min-height: 72px;
   transition: min-height 160ms ease-out;
 }
-/* Grow on first focus (reply-box#grow, which keeps it), with text, or once
-   Details opens, and stay grown until the page renders again: growing late
-   or shrinking on blur would move the controls below out from under the
-   pointer mid-click. */
+/* Grow with text, or for good once reply-box#grow sees the first focus or
+   Details opening, and stay grown until the page renders again: growing
+   late or shrinking on blur would move the controls below out from under
+   the pointer mid-click. */
 .composer .reply-body.grown,
-.composer:has(.reply-details[open]) .reply-body,
 .composer .reply-body:not(:placeholder-shown) {
   min-height: 128px;
 }
@@ -2892,7 +2891,6 @@
     gap: 16px;
   }
   .composer .reply-body.grown,
-  .composer:has(.reply-details[open]) .reply-body,
   .composer .reply-body:not(:placeholder-shown) {
     min-height: 128px;
   }

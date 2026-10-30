@@ -92,6 +92,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     page.current_window.resize_to(1400, 1000)
     visit client_path(@client)
     open_envelope_details
+    assert_selector(:field, "Message") { |body| well_height(body) >= 128 }
     fill_in "To", with: ""
     fill_in "Subject", with: ""
     fill_in "Message", with: "Half written"
@@ -99,7 +100,8 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     assert_text "Draft saved"
     assert_equal "Half written", Draft.find_by!(owner: @client).body
     fill_in "Message", with: ""
-    click_button "Save draft"
+    height = well_height
+    assert_equal height, well_height_while_holding(find_button("Save draft"))
     assert_text "Draft cleared"
     assert_not Draft.exists?(owner: @client)
   end
@@ -141,6 +143,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
   end
 
   test "a cleared record well stays grown through a held press on Save draft" do
+    @client.update!(email: nil)
     sign_in_browser
     page.current_window.resize_to(1400, 1000)
     visit client_path(@client)
@@ -265,8 +268,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
       fill_in "Subject", with: "Correct this reply"
       fill_in "Message", with: "  "
       attach_file "Attachments", Rails.root.join("test/fixtures/files/sample.txt")
-      # Submit by keyboard while the editor's blur animation moves the button.
-      find_button("Send").send_keys(:enter)
+      click_button "Send"
       assert_text "Could not send"
       assert_field "To", with: "secondary@example.com"
       assert_field "Subject", with: "Correct this reply"
