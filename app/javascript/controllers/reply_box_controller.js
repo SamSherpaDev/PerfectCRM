@@ -92,6 +92,14 @@ export default class extends Controller {
     if (opening && this.hasBodyTarget) this.bodyTarget.focus({ preventScroll: true })
   }
 
+  // Record composer wells start compact and grow for good on first focus;
+  // the reply well also grows when Details toggles. A well that shrank on
+  // blur would move the controls below it out from under the pointer.
+  grow({ currentTarget }) {
+    const well = currentTarget === this.detailsTarget ? this.bodyTarget : currentTarget
+    well.classList.add("grown")
+  }
+
   // Another booking means another trip/dates/balance behind {{…}}: point
   // the embedded picker at the new context so the next insert fills right.
   bookingChanged() {

@@ -2314,7 +2314,7 @@
 /* ---------------------------------------------------------------------------
  * Record page (leads and clients, app/views/records): three columns on the
  * desktop, Details and Thread on the tablet, three tabs on the phone. The
- * composer well grows on focus and the Upcoming date tiles settle in on
+ * composer well grows once and the Upcoming date tiles settle in on
  * load; both stop under reduced motion. Unlayered like the rest of the kit.
  * ------------------------------------------------------------------------- */
 .page-wide {
@@ -2495,11 +2495,12 @@
   min-height: 72px;
   transition: min-height 160ms ease-out;
 }
-/* Grow on focus or once Details opens, and stay grown while holding text:
-   growing late or shrinking on blur would move Send and Save draft out
-   from under the pointer mid-click. */
+/* Grow on first focus (reply-box#grow, which keeps it), with text, or once
+   Details opens, and stay grown until the page renders again: growing late
+   or shrinking on blur would move the controls below out from under the
+   pointer mid-click. */
+.composer .reply-body.grown,
 .composer:has(.reply-details[open]) .reply-body,
-.composer .reply-body:focus,
 .composer .reply-body:not(:placeholder-shown) {
   min-height: 128px;
 }
@@ -2890,8 +2891,8 @@
   .record-thread {
     gap: 16px;
   }
+  .composer .reply-body.grown,
   .composer:has(.reply-details[open]) .reply-body,
-  .composer .reply-body:focus,
   .composer .reply-body:not(:placeholder-shown) {
     min-height: 128px;
   }

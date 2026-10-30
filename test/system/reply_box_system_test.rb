@@ -123,15 +123,37 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     sign_in_browser
     page.current_window.resize_to(1400, 1000)
     visit client_path(@client)
-    well = find(".composer .reply-body")
-    height = well.evaluate_script("this.getBoundingClientRect().height")
+    height = well_height
     assert_operator height, :<, 128, "the record well should start compact"
-    # A real press: Chrome focuses the chip on mousedown, mouseup follows a beat later.
-    press = page.driver.browser.action.move_to(find_button("Quick hello").native)
-    press.click_and_hold.pause(duration: 0.3).perform
-    assert_equal height, well.evaluate_script("this.getBoundingClientRect().height")
-    press.release.perform
+    assert_equal height, well_height_while_holding(find_button("Quick hello"))
     assert_field "Message", with: "Hello Maya, thinking of [missing: trip]!"
+  end
+
+  test "a focused empty record well stays grown through a held press on a template chip" do
+    sign_in_browser
+    page.current_window.resize_to(1400, 1000)
+    visit client_path(@client)
+    find_field("Message").click
+    assert_selector(:field, "Message") { |body| well_height(body) >= 128 }
+    height = well_height
+    assert_equal height, well_height_while_holding(find_button("Quick hello"))
+    assert_field "Message", with: "Hello Maya, thinking of [missing: trip]!"
+  end
+
+  test "a cleared record well stays grown through a held press on Save draft" do
+    sign_in_browser
+    page.current_window.resize_to(1400, 1000)
+    visit client_path(@client)
+    fill_in "Message", with: "Half written"
+    assert_selector(:field, "Message") { |body| well_height(body) >= 128 }
+    click_button "Save draft"
+    assert_selector "#draft-status", text: "Draft saved"
+    fill_in "Message", with: ""
+    height = well_height
+    assert_operator height, :>=, 128, "the record well should stay grown once focused"
+    assert_equal height, well_height_while_holding(find_button("Save draft"))
+    assert_selector "#draft-status", text: "Draft cleared"
+    assert_not Draft.exists?(owner: @client)
   end
 
   test "saving attachments clears selections before another save and send" do
@@ -434,6 +456,20 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     end
   end
 
+
+  def well_height(body = find_field("Message"))
+    body.evaluate_script("this.getBoundingClientRect().height")
+  end
+
+  # A real press: mousedown moves focus, mouseup follows a beat later. The
+  # well is measured while the button is still held down.
+  def well_height_while_holding(button)
+    press = page.driver.browser.action.move_to(button.native)
+    press.click_and_hold.pause(duration: 0.3).perform
+    height = well_height
+    press.release.perform
+    height
+  end
 
   def assert_no_overflow(context)
     width = page.evaluate_script("document.documentElement.scrollWidth")
