@@ -12,7 +12,7 @@
       <div class="s">
         <span><%= due_label(task) %> · <%= task.kind_label %></span>
         <% unless read_only %>
-          <% if task.template %><%= link_to "Nudge", polymorphic_path(task.subject, template: task.template_id, task: task.id, anchor: "reply-heading"), class: "link-quiet" %><% end %>
+          <% if task.template %><%= link_to "Nudge", polymorphic_path(task.subject, { template: task.template_id, task: task.id, return_to: @lead_action_return_to, anchor: "reply-heading" }.compact), class: "link-quiet" %><% end %>
           <%= render "tasks/snooze", task: task %>
         <% end %>
       </div>

@@ -21,6 +21,7 @@
     </p>
   <% end %>
   <%= hidden_field_tag :conversation_id, conversation&.id, data: { "reply-box-target": "conversation" } %>
+  <%= hidden_field_tag :return_to, @lead_action_return_to, id: nil if @lead_action_return_to %>
   <%= form.hidden_field :template_id, value: draft.template_id, data: { "reply-box-target": "templateId" } %>
 
   <%# Envelope fields fold behind Details: always on the record composer,

@@ -1,10 +1,11 @@
 class CallsController < ApplicationController
+  include ListReturnPath
   include TodayReturnPath
 
   def create
     record = params[:client_id].present? ? Client.find(params[:client_id]) : Lead.find(params[:lead_id])
     inquiry = record.is_a?(Client) ? record.inquiries.find(params[:inquiry_id]) : record
-    back = safe_today_return_path(params[:return_to].to_s) || polymorphic_path(record, anchor: "record-details")
+    back = safe_today_return_path(params[:return_to].to_s) || record_path_keeping_list(record, anchor: "record-details")
     return redirect_to back, alert: "Restore this record before logging a call." if record.archived?
 
     # One-tap buttons send no time: the call happened now.

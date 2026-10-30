@@ -2,6 +2,7 @@
 # fields as Send (via the submit button's formaction).
 class DraftsController < ApplicationController
   include DraftParameters
+  include ListReturnPath
 
   def update
     owner = find_owner
@@ -26,10 +27,10 @@ class DraftsController < ApplicationController
       format.turbo_stream
       format.html do
         if @upload_refused
-          destination = conversation ? inbox_thread_path(conversation) : polymorphic_path(owner, new_thread: 1)
+          destination = conversation ? inbox_thread_path(conversation) : record_path_keeping_list(owner, new_thread: 1)
           redirect_to destination, alert: Outbound::Uploads::REFUSAL
         else
-          redirect_to owner, notice: @saved ? "Draft saved." : "Draft cleared."
+          redirect_to record_path_keeping_list(owner), notice: @saved ? "Draft saved." : "Draft cleared."
         end
       end
     end

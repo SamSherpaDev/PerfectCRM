@@ -809,4 +809,88 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     assert_includes Today::Summary.new.followups_due.to_a, task
     assert_includes Today::Summary.new.replies_waiting, convo
   end
+
+  test "lead edit links cancel and save preserve return_to back to the originating list" do
+    lead = Lead.create!(name: "Return Path Traveler", source: "manual", status: "new")
+    lead.mark_potential!
+    return_to = leads_path(tab: "potential", q: "Return Path", sort: "name")
+
+    get lead_path(lead, return_to: return_to)
+    assert_response :success
+    assert_select "a[href=?]", edit_lead_path(lead, return_to: return_to), text: "Edit"
+    assert_select "a[href=?]", edit_lead_path(lead, return_to: return_to), text: "Edit details"
+
+    get edit_lead_path(lead, return_to: return_to)
+    assert_response :success
+    assert_select "a[href=?]", lead_path(lead, return_to: return_to), text: "Cancel"
+
+    patch lead_path(lead), params: { return_to: return_to, lead: { name: "Return Path Updated" } }
+    assert_redirected_to lead_path(lead, return_to: return_to)
+    follow_redirect!
+    assert_select "header.page-header a[href=?]", return_to, text: "Leads"
+  end
+
+  test "a note, a call and a reply on a lead each keep the back link and actions on the list it was opened from" do
+    lead = Lead.create!(name: "Kept List Traveler", email: "kept-list@example.test", source: "manual", status: "new")
+    lead.mark_potential!
+    return_to = leads_path(tab: "potential", q: "Kept", sort: "name")
+
+    get lead_path(lead, return_to: return_to)
+    note_return_to = rendered_return_to(lead_notes_path(lead))
+    call_return_to = rendered_return_to(lead_calls_path(lead))
+    reply_return_to = rendered_return_to(lead_messages_path(lead))
+    assert_equal [ return_to ] * 3, [ note_return_to, call_return_to, reply_return_to ]
+
+    post lead_notes_path(lead), params: { return_to: note_return_to, note: { body: "Asked about May" } }
+    assert_redirected_to lead_path(lead, return_to: return_to)
+    follow_redirect!
+    assert_select "header.page-header a[href=?]", return_to, text: "Leads"
+    assert_select "form[action=?] input[name=return_to][value=?]", unmark_potential_lead_path(lead), return_to
+
+    post lead_calls_path(lead), params: { return_to: call_return_to, save_key: "kept-list-call", outcome: "no_answer", direction: "outbound" }
+    assert_redirected_to lead_path(lead, return_to: return_to, anchor: "record-details")
+    follow_redirect!
+    assert_select "header.page-header a[href=?]", return_to, text: "Leads"
+
+    post lead_messages_path(lead), params: { return_to: reply_return_to,
+      message: { to: "kept-list@example.test", subject: "May dates", body: "Here are the May dates." } }
+    assert_redirected_to lead_path(lead, return_to: return_to)
+    follow_redirect!
+    assert_select "header.page-header a[href=?]", return_to, text: "Leads"
+  end
+
+  test "two leads opened from different lists keep their own lists, and a lead opened from Today returns to New" do
+    potential = Lead.create!(name: "Potential List Traveler", source: "manual", status: "new")
+    potential.mark_potential!
+    unsure = Lead.create!(name: "Unsure List Traveler", source: "manual", status: "new")
+    unsure.mark_unsure!
+    potential_list = leads_path(tab: "potential", sort: "name")
+    unsure_list = leads_path(tab: "unsure", sort: "newest")
+
+    get lead_path(potential, return_to: potential_list)
+    potential_return_to = rendered_return_to(lead_notes_path(potential))
+    get lead_path(unsure, return_to: unsure_list)
+    unsure_return_to = rendered_return_to(lead_notes_path(unsure))
+
+    post lead_notes_path(potential), params: { return_to: potential_return_to, note: { body: "Potential note" } }
+    follow_redirect!
+    assert_select "header.page-header a[href=?]", potential_list, text: "Leads"
+
+    post lead_notes_path(unsure), params: { return_to: unsure_return_to, note: { body: "Unsure note" } }
+    follow_redirect!
+    assert_select "header.page-header a[href=?]", unsure_list, text: "Leads"
+
+    get lead_path(potential)
+    assert_select "header.page-header a[href=?]", leads_path(tab: "new"), text: "Leads"
+    post lead_notes_path(potential), params: { return_to: rendered_return_to(lead_notes_path(potential)), note: { body: "From Today" } }
+    assert_redirected_to lead_path(potential, return_to: leads_path(tab: "new"))
+    follow_redirect!
+    assert_select "header.page-header a[href=?]", leads_path(tab: "new"), text: "Leads"
+  end
+
+  private
+
+  def rendered_return_to(form_action)
+    css_select("form[action='#{form_action}'] input[name=return_to]").first&.[]("value")
+  end
 end

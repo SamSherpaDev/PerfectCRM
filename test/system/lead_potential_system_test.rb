@@ -332,10 +332,9 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
         end
       end
 
-      # Undo returns the lead to Potential
+      # Undo returns the lead to Potential and, through the logged call, to the list it was opened from
       click_button "Interested again"
-      assert_current_path leads_path(tab: "new")
-      visit leads_path(tab: "not_interested", q: "Declined #{width}", sort: "name")
+      assert_current_path leads_path(tab: "not_interested", q: "Declined #{width}", sort: "name")
       assert_no_link lead.name
       within("nav.tabs") { click_link "Potential" }
       assert_link lead.name
