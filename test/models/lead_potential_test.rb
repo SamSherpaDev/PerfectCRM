@@ -238,7 +238,7 @@ class LeadPotentialTest < ActiveSupport::TestCase
     assert_equal 0, answered.activity_events.where(kind: "not_interested").count
   end
 
-  test "out-of-office replies and bounces are not a response and do not reset the voicemail count" do
+  test "team mail, out-of-office replies, and bounces are not a response and do not reset the voicemail count" do
     lead = Lead.create!(name: "Away Traveler", email: "away-traveler@example.com")
     lead.mark_unsure!
     convo = lead.conversations.create!(subject: "Everest base camp")
@@ -255,6 +255,10 @@ class LeadPotentialTest < ActiveSupport::TestCase
     convo.messages.create!(
       direction: "in", from_address: "mailer-daemon@mail.example.com", to_addresses: [ "info@sherpaholidays.com" ],
       subject: "Returned mail", text_body: "Your message could not be delivered.", sent_at: 3.days.ago + 2.hours, status: "received"
+    )
+    convo.messages.create!(
+      direction: "in", from_address: "pemba@sherpaholidays.com", to_addresses: [ lead.email ], cc_addresses: [ "info@sherpaholidays.com" ],
+      subject: "Re: Everest base camp", text_body: "Following up on my voicemail.", sent_at: 3.days.ago + 3.hours, status: "received"
     )
     CallLog.record!(lead, key: "away-vm-2", occurred_at: 2.days.ago, outcome: "voicemail", direction: "outbound")
     assert lead.reload.unsure?

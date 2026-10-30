@@ -70,7 +70,7 @@ module CallLog
     [ record, record.existing_client ].compact.any? do |owner|
       Message.for_owner(owner).inbound
         .where("COALESCE(messages.sent_at, messages.inbound_received_at, messages.created_at) > ?", first_voicemail.occurred_at)
-        .any? { |message| !Mail::ReplyAlerts.automatic?(message.from_address, message.subject, message.inquiry_headers) }
+        .any? { |message| Mail::ReplyAlerts.reply?(message.from_address, message.subject, message.inquiry_headers) }
     end
   end
 

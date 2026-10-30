@@ -736,9 +736,10 @@ runs the same check, so a lead that already has three unanswered voicemails
 moves straight to Not interested (`Marked as Unsure - moved to Not interested
 after three voicemails.`); leads already in Unsure are not backfilled. A
 response is a `Talked` call, any inbound call, or an inbound message on the
-lead or its existing client; auto-replies, out-of-office notes, and bounces
-(`Mail::ReplyAlerts.automatic?`, the same rule that skips reply alerts) are not
-responses. Clearing a not-interested mark (**Interested again**, or marking
+lead or its existing client that is a real reply (`Mail::ReplyAlerts.reply?`,
+the same rule that decides reply alerts): mail from the team's own
+`@sherpaholidays.com` addresses, auto-replies, out-of-office notes, and bounces
+are not responses. Clearing a not-interested mark (**Interested again**, or marking
 Potential or Unsure) records an `interested_again` timeline note (`Restored
 from Not interested`) and also restarts the count, so only voicemails after the
 latest response or restore count.
