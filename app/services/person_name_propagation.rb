@@ -1,10 +1,9 @@
 # frozen_string_literal: true
 
-# Propagates a name change across every PerfectCRM record that represents the
-# same person, refreshes full-text search indexes, updates open follow-ups,
-# unsent drafts, draft quotes, and open scheduled calls, and appends one
-# timeline entry without rewriting sent messages, delivered quotes, or past
-# activity history.
+# Propagates a name change across every linked PerfectCRM record that still
+# carries the old name, updates open follow-ups, unsent drafts, draft quotes,
+# and open scheduled calls, and appends one timeline entry without rewriting
+# sent messages, delivered quotes, or past activity history.
 class PersonNamePropagation
   def self.call(record, old_name:, new_name:)
     new(record, old_name: old_name, new_name: new_name).call
@@ -31,46 +30,24 @@ class PersonNamePropagation
   def propagate_organization
     update_open_tasks([ @record ])
     update_unsent_drafts([ @record ])
-    @record.sync_fts!
     record_activity_event(@record)
   end
 
   def propagate_person_or_owner
     seed_people, seed_clients, seed_leads, person_emails = gather_seeds
     family_clients, family_leads = expand_owner_family(seed_clients, seed_leads, person_emails)
-
-    owner_identity = @record.is_a?(Client) || @record.is_a?(Lead) ||
-      (family_clients + family_leads).any? { |owner| same_name?(owner.name, @old_name) }
-
-    target_clients = select_target_clients(family_clients, owner_identity)
-    target_leads = select_target_leads(family_leads, target_clients, owner_identity)
     target_people = select_target_people(seed_people, family_clients, family_leads, person_emails)
 
-    update_clients(target_clients)
-    update_leads(target_leads)
+    update_clients(family_clients.select { |client| same_name?(client.name, @old_name) })
+    update_leads(family_leads.select { |lead| same_name?(lead.name, @old_name) })
     update_people(target_people)
 
-    affected_owners = (
-      family_clients + family_leads +
-      target_clients + target_leads +
-      target_people.filter_map(&:owner) +
-      [ (@record.is_a?(Person) ? @record.owner : @record) ]
-    ).compact.uniq
+    affected_owners = (family_clients + family_leads + target_people.filter_map(&:owner)).uniq
+    update_open_tasks(affected_owners)
+    update_unsent_drafts(affected_owners)
+    update_draft_quotes(affected_owners)
+    update_open_scheduled_calls(affected_owners)
 
-    if owner_identity
-      update_open_tasks(affected_owners)
-      update_unsent_drafts(affected_owners)
-      update_draft_quotes(affected_owners)
-      update_open_scheduled_calls(affected_owners)
-    else
-      person_owners = (target_people.filter_map(&:owner) + [ @record.owner ]).compact.uniq
-      update_open_tasks(person_owners)
-      update_unsent_drafts(person_owners)
-      update_draft_quotes(person_owners)
-      update_open_scheduled_calls(person_owners)
-    end
-
-    refresh_fts(affected_owners)
     event_subject = @record.is_a?(Person) ? @record.owner : @record
     record_activity_event(event_subject) if event_subject
   end
@@ -105,6 +82,7 @@ class PersonNamePropagation
       origin_ids = people_by_id.values.filter_map(&:origin_person_id).uniq - ids
       linked = Person.where(origin_person_id: ids).where.not(id: ids).to_a
       linked.concat(Person.where(id: origin_ids).to_a) if origin_ids.any?
+      linked.select! { |person| same_name?(person.name, @old_name) }
       break if linked.empty?
 
       linked.each { |person| people_by_id[person.id] = person }
@@ -136,13 +114,10 @@ class PersonNamePropagation
       new_leads.concat(Lead.where(id: origin_lead_ids).to_a) if origin_lead_ids.any?
       new_leads.concat(Lead.where(origin_lead_id: lead_ids).where.not(id: lead_ids).to_a) if lead_ids.any?
       new_leads.concat(Lead.where(perfectbook_contact_id: pb_ids).where.not(id: lead_ids).to_a) if pb_ids.any?
-      if owner_emails.any?
-        email_leads = Lead.where("lower(email) IN (?)", owner_emails).where.not(id: lead_ids).to_a
-        new_leads.concat(email_leads.select { |lead| same_name?(lead.name, @old_name) || pb_compatible?(lead, pb_ids) })
-      end
+      new_leads.concat(Lead.where("lower(email) IN (?)", owner_emails).where.not(id: lead_ids).to_a) if owner_emails.any?
 
       new_leads.uniq(&:id).each do |lead|
-        next if leads_by_id.key?(lead.id)
+        next if leads_by_id.key?(lead.id) || !same_name?(lead.name, @old_name)
 
         leads_by_id[lead.id] = lead
         added = true
@@ -155,13 +130,10 @@ class PersonNamePropagation
       new_clients.concat(Client.where(id: linked_client_ids).to_a) if linked_client_ids.any?
       new_clients.concat(Client.where(origin_lead_id: lead_ids).where.not(id: client_ids).to_a) if lead_ids.any?
       new_clients.concat(Client.where(perfectbook_contact_id: pb_ids).where.not(id: client_ids).to_a) if pb_ids.any?
-      if owner_emails.any?
-        email_clients = Client.where("lower(email) IN (?)", owner_emails).where.not(id: client_ids).to_a
-        new_clients.concat(email_clients.select { |client| same_name?(client.name, @old_name) || pb_compatible?(client, pb_ids) })
-      end
+      new_clients.concat(Client.where("lower(email) IN (?)", owner_emails).where.not(id: client_ids).to_a) if owner_emails.any?
 
       new_clients.uniq(&:id).each do |client|
-        next if clients_by_id.key?(client.id)
+        next if clients_by_id.key?(client.id) || !same_name?(client.name, @old_name)
 
         clients_by_id[client.id] = client
         added = true
@@ -171,51 +143,6 @@ class PersonNamePropagation
     end
 
     [ clients_by_id.values, leads_by_id.values ]
-  end
-
-  def pb_compatible?(candidate, pb_ids)
-    return true if candidate.perfectbook_contact_id.nil? || pb_ids.empty?
-
-    pb_ids.include?(candidate.perfectbook_contact_id)
-  end
-
-  def select_target_clients(family_clients, owner_identity)
-    family_clients.select do |client|
-      same_name?(client.name, @old_name) ||
-        (owner_identity && client.kind != "company" && structurally_linked_client?(client))
-    end
-  end
-
-  def select_target_leads(family_leads, target_clients, owner_identity)
-    target_client_ids = target_clients.map(&:id)
-    family_leads.select do |lead|
-      same_name?(lead.name, @old_name) ||
-        (owner_identity && lead.kind != "company" && structurally_linked_lead?(lead, target_client_ids))
-    end
-  end
-
-  def structurally_linked_client?(client)
-    return true if @record == client
-    return false unless @record.is_a?(Lead)
-
-    @record.converted_client_id == client.id ||
-      @record.existing_client_id == client.id ||
-      client.origin_lead_id == @record.id ||
-      (@record.perfectbook_contact_id.present? && @record.perfectbook_contact_id == client.perfectbook_contact_id)
-  end
-
-  def structurally_linked_lead?(lead, target_client_ids)
-    return true if @record == lead
-
-    if @record.is_a?(Client)
-      target_client_ids |= [ @record.id ]
-    elsif @record.is_a?(Lead)
-      return true if lead.origin_lead_id == @record.id || @record.origin_lead_id == lead.id ||
-        (@record.perfectbook_contact_id.present? && @record.perfectbook_contact_id == lead.perfectbook_contact_id)
-    end
-
-    (lead.converted_client_id.present? && target_client_ids.include?(lead.converted_client_id)) ||
-      (lead.existing_client_id.present? && target_client_ids.include?(lead.existing_client_id))
   end
 
   def select_target_people(seed_people, family_clients, family_leads, person_emails)
@@ -342,22 +269,12 @@ class PersonNamePropagation
     lead_ids = owners.select { |o| o.is_a?(Lead) }.map(&:id)
     return if lead_ids.empty?
 
-    ScheduledCall.scheduled.where(lead_id: lead_ids).find_each do |call|
+    ScheduledCall.visible.scheduled.where(lead_id: lead_ids).find_each do |call|
       next if call.notes.blank?
 
       allow_first = first_name_replaceable_for?(call.lead)
       updated_notes = replace_name_in_text(call.notes, allow_first_name: allow_first)
       call.update!(notes: updated_notes) if updated_notes != call.notes
-    end
-  end
-
-  def refresh_fts(owners)
-    owners.each do |owner|
-      next unless owner.respond_to?(:sync_fts!) && owner.persisted?
-
-      owner.reload.sync_fts!
-    rescue ActiveRecord::RecordNotFound, ActiveRecord::StatementInvalid
-      nil
     end
   end
 
@@ -379,27 +296,27 @@ class PersonNamePropagation
   def replace_name_in_text(text, allow_first_name: false)
     return text if text.blank?
 
-    pattern = if @new_name.downcase.start_with?("#{@old_name.downcase} ")
-      suffix = @new_name[@old_name.length..].strip
-      /(?<![\w.@+-])#{Regexp.escape(@old_name)}(?!\s+#{Regexp.escape(suffix)})(?![\w.@+-])/i
-    else
-      /(?<![\w.@+-])#{Regexp.escape(@old_name)}(?![\w.@+-])/i
+    full_name = "(?i:#{Regexp.escape(@new_name)}|#{Regexp.escape(@old_name)})"
+    first_name = allow_first_name ? "|#{Regexp.escape(old_first_name)}" : ""
+    pattern = /(?<![\w.@+-])(?:#{full_name}#{first_name})(?![\w.@+-])/
+    text.gsub(pattern) do |match|
+      if match.casecmp?(@old_name)
+        @new_name
+      elsif allow_first_name && match == old_first_name
+        new_first_name
+      else
+        match
+      end
     end
-    updated = text.gsub(pattern, @new_name)
-
-    if allow_first_name
-      updated = updated.gsub(/(?<![\w.@+-])#{Regexp.escape(old_first_name)}(?![\w.@+-])/, new_first_name)
-    end
-    updated
   end
 
   def first_name_replaceable_for?(owner)
+    return false unless (owner.is_a?(Client) || owner.is_a?(Lead)) && owner.kind != "company"
     return false unless @old_name.split.size >= 2
     return false if old_first_name.length < 2 || new_first_name.blank? || old_first_name == new_first_name
-    return true unless owner.respond_to?(:people)
 
-    owner.people.reload.none? do |person|
-      person.name.to_s.split.first.to_s.casecmp?(old_first_name)
+    ([ owner.name ] + owner.people.reload.map(&:name)).none? do |name|
+      name.to_s.split.first.to_s.casecmp?(old_first_name)
     end
   end
 

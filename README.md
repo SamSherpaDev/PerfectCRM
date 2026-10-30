@@ -617,9 +617,9 @@ unless an explicit link targets another panel. Use New client to create a
 record, and Edit to update facts or add another
 person in the blank People fields. Renaming a lead, client, person, or
 organization updates linked PerfectCRM records for that same person (converted
-or origin leads, matching client, linked people, open tasks, scheduled-call
-notes, unsent drafts, and unbundled draft quotes), refreshes the FTS5 search
-index, and logs a `name_change` timeline event while leaving sent messages,
+or origin leads, matching client, and linked people that still carry the old
+name, plus open tasks, open scheduled-call notes, unsent drafts, and unbundled
+draft quotes), refreshes the FTS5 search index, and logs a `name_change` timeline event while leaving sent messages,
 sent or accepted quotes, past activity events, and synced PerfectBook contacts
 untouched. Archive lives in the More menu and
 moves a client to the Archived tab, where Restore makes it active again.

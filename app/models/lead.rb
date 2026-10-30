@@ -483,8 +483,7 @@ class Lead < ApplicationRecord
 
   def sync_fts!
     self.class.ensure_fts!
-    person_names = people.reload.map(&:name).compact.join(" ")
-    person_emails = people.map(&:email).compact.join(" ")
+    person_emails = people.reload.map(&:email).compact.join(" ")
     tag_text = tags.reload.order(:name).pluck(:name).join(" ")
     note_text = notes.reload.order(:created_at).pluck(:body).join("\n")
     tails = ([ phone ] + people.map(&:phone)).map { |number| number.to_s.gsub(/\D/, "").last(7).to_s }.reject(&:blank?).uniq.join(" ")
@@ -494,7 +493,7 @@ class Lead < ApplicationRecord
     self.class.connection.execute(
       self.class.sanitize_sql([
         "INSERT INTO leads_fts (rowid, name, email, phone_tail, tags, notes) VALUES (?, ?, ?, ?, ?, ?)",
-        id, [ name.to_s, person_names ].join(" ").strip, [ email.to_s, person_emails ].join(" ").strip, tails, tag_text, note_text
+        id, name.to_s, [ email.to_s, person_emails ].join(" ").strip, tails, tag_text, note_text
       ])
     )
   end
