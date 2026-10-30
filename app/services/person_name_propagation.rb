@@ -284,13 +284,16 @@ class PersonNamePropagation
   end
 
   def update_open_scheduled_calls(owners)
+    client_ids = owners.select { |o| o.is_a?(Client) }.map(&:id)
     lead_ids = owners.select { |o| o.is_a?(Lead) }.map(&:id)
-    return if lead_ids.empty?
+    return if client_ids.empty? && lead_ids.empty?
 
-    ScheduledCall.visible.scheduled.where(lead_id: lead_ids).find_each do |call|
+    # A call belongs to its client when it has one, else to its lead (ScheduledCall#owner).
+    owned = ScheduledCall.where(client_id: client_ids).or(ScheduledCall.where(client_id: nil, lead_id: lead_ids))
+    ScheduledCall.visible.scheduled.merge(owned).find_each do |call|
       next if call.notes.blank?
 
-      allow_first = first_name_replaceable_for?(call.lead)
+      allow_first = first_name_replaceable_for?(call.owner)
       updated_notes = replace_name_in_prose(call.notes, allow_first_name: allow_first)
       save_linked(call) { call.update!(notes: updated_notes) } if updated_notes != call.notes
     end

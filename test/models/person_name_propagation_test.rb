@@ -306,16 +306,18 @@ class PersonNamePropagationTest < ActiveSupport::TestCase
     assert_equal "Johnny Smith", john.reload.name
   end
 
-  test "renaming a client succeeds when its converted lead still holds a scheduled call" do
+  test "renaming a client updates its open calls, including the ones carried over from its converted lead" do
     lead = Lead.create!(name: "Tom Becker", email: "primary7@example.com", source: "google_ads")
-    call = lead.scheduled_calls.create!(scheduled_at: 1.day.from_now, duration_minutes: 30, notes: "Call Tom Becker about dates")
+    carried_call = lead.scheduled_calls.create!(scheduled_at: 1.day.from_now, duration_minutes: 30, notes: "Call Tom Becker about dates")
     client = lead.convert_to_client!
+    client_call = client.scheduled_calls.create!(scheduled_at: 2.days.from_now, duration_minutes: 30, notes: "Hi Tom, Tom Becker asked for a callback")
 
     assert client.update(name: "Thomas Becker"), client.errors.full_messages.to_sentence
 
     assert_equal "Thomas Becker", client.reload.name
     assert_equal "Thomas Becker", lead.reload.name
-    assert_equal "Call Tom Becker about dates", call.reload.notes
+    assert_equal "Call Thomas Becker about dates", carried_call.reload.notes
+    assert_equal "Hi Thomas, Thomas Becker asked for a callback", client_call.reload.notes
     assert_equal 0, Current.name_change_skips.to_i
   end
 
