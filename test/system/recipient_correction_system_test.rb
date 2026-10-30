@@ -133,6 +133,7 @@ class RecipientCorrectionSystemTest < ApplicationSystemTestCase
     assert_equal count, Message.count
     assert_equal 0, GroupSend.count
     tolerate_submit_navigation { click_button "Preview merge" }
+    tolerate_navigation_assertion { assert_no_selector ".flash-alert" }
     check "I confirm the listed recipients for Restored traveler."
     tolerate_submit_navigation { click_button "Send 2 personal emails" }
     tolerate_navigation_assertion { assert_selector "h1", text: "Send summary" }
@@ -357,6 +358,7 @@ class RecipientCorrectionSystemTest < ApplicationSystemTestCase
       assert_equal count, Message.count
       assert_equal 0, GroupSend.count
       tolerate_submit_navigation { click_button "Preview merge" }
+      tolerate_navigation_assertion { assert_no_selector ".flash-alert" }
       check "I confirm the listed recipients for Intended Traveler."
       tolerate_submit_navigation { click_button "Send 1 personal emails" }
       tolerate_navigation_assertion { assert_selector "h1", text: "Send summary" }

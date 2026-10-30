@@ -41,6 +41,9 @@ class CallSchedulingSystemTest < ApplicationSystemTestCase
       assert_text "2:00 PM PT"
     end
 
+    week_start = Time.zone.today.beginning_of_week(:monday)
+    next_week_start = week_start + 7.days
+
     visit root_path
     within("#scheduled-calls-section") do
       within("[aria-label='Missed calls']") do
@@ -53,11 +56,17 @@ class CallSchedulingSystemTest < ApplicationSystemTestCase
       end
       click_link "Next →"
     end
-    assert_selector "#call-calendar"
+    assert_current_path root_path(view: "week", date: next_week_start.iso8601)
+    assert_selector "[aria-label='Week calendar'] [data-date='#{next_week_start.iso8601}']"
     within("#scheduled-calls-section") do
       click_link "← Prev"
+    end
+    assert_current_path root_path(view: "week", date: week_start.iso8601)
+    assert_selector "[aria-label='Week calendar'] [data-date='#{week_start.iso8601}']"
+    within("#scheduled-calls-section") do
       click_link "Month"
     end
+    assert_current_path root_path(view: "month", date: week_start.iso8601)
     within("[aria-label='Month calendar']") do
       assert_selector "a", text: "Ang Phurba"
     end

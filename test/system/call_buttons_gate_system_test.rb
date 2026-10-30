@@ -23,7 +23,7 @@ class CallButtonsGateSystemTest < ApplicationSystemTestCase
     within("[aria-label='Calls for SH-FIRST']") do
       tolerate_submit_navigation { click_button "Talked" }
     end
-    assert_text "Call logged: Talked."
+    tolerate_navigation_assertion { assert_text "Call logged: Talked." }
     assert_equal 1, first.activity_events.where(kind: "call").count
     assert_equal 0, second.activity_events.where(kind: "call").count
     within("[aria-label='Calls for SH-SECOND']") do

@@ -315,6 +315,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
       fill_in "Message", with: "  "
       click_button "Send"
       assert_text "Could not send"
+      assert_selector "#draft-status", text: "Draft saved"
       assert_equal id.to_s, find_field("Placeholders fill from").value
       assert_equal id, Draft.find_by!(owner: @client, conversation_id: nil).perfectbook_booking_id
       fill_in "Message", with: ""
