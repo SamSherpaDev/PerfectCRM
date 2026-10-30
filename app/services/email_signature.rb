@@ -162,12 +162,6 @@ module EmailSignature
       checksums.include?(blob.checksum)
     end
 
-    def signature_logo_data?(data, checksums:)
-      return false if data.blank? || checksums.empty?
-
-      checksums.include?(Digest::MD5.base64digest(data.to_s))
-    end
-
     # A template that renders {{signature}} signs its own body, so nothing
     # appends a second signature after it.
     def template_carries_signature?(template_id)

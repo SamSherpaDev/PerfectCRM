@@ -76,18 +76,13 @@ module RecordPage
   # version, newest first. Traveler documents render from @bookings.
   def files_for(record)
     rows = []
-    logo_checksums = signature_logo_checksums
     attached_ids = ActiveStorage::Attachment.where(record_type: "Message", name: "files").select(:record_id)
     messages = record_messages(record)
     messages.where(id: attached_ids).or(messages.where("json_array_length(messages.held_attachments) > 0"))
       .select(:id, :sent_at, :created_at, :direction, :from_address, :held_attachments)
       .includes(files_attachments: :blob).find_each do |message|
       at = message.sent_at || message.created_at
-      message.files.each do |file|
-        next if EmailSignature.signature_logo_blob?(file.blob, checksums: logo_checksums)
-
-        rows << FileRow.new(at, :attachment, file, message)
-      end
+      listed_files(message).each { |file| rows << FileRow.new(at, :attachment, file, message) }
       Array(message.held_attachments).each { |held| rows << FileRow.new(at, :held, held, message) }
     end
     record_quotes(record).ordered.includes(:lines).each do |quote|

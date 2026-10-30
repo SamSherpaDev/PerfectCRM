@@ -1,7 +1,7 @@
 class ApplicationController < ActionController::Base
   before_action :require_sign_in
   before_action :set_current_actor
-  helper_method :current_user, :signature_logo_checksums
+  helper_method :current_user, :listed_files
 
   # Only allow modern browsers supporting webp images, web push, badges, import maps, CSS nesting, and CSS :has.
   allow_browser versions: :modern
@@ -44,10 +44,12 @@ class ApplicationController < ActionController::Base
     Current.user_email = current_user&.email
   end
 
-  # The CRM's own signature logo checksums, loaded once per request for
-  # every message attachment list and the record Files card.
-  def signature_logo_checksums
+  # A message's attachments as listed and counted everywhere: the CRM's own
+  # signature logo, quoted back on replies, stays stored but is never shown
+  # as a file. The logo checksums load once per request.
+  def listed_files(message)
     @signature_logo_checksums ||= EmailSignature.logo_checksums
+    message.files.reject { |file| EmailSignature.signature_logo_blob?(file.blob, checksums: @signature_logo_checksums) }
   end
 
   def with_name_change_skips(notice)

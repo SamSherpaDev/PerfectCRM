@@ -185,6 +185,73 @@ class ClientsRequestsTest < ActionDispatch::IntegrationTest
     Setting.current.signature_logo.purge if Setting.current.signature_logo.attached?
   end
 
+  test "a newly imported reply quoting the CRM signature logo stores it but lists and counts nothing" do
+    first_logo = "\x89PNG\r\n\x1A\n".b + [ 13 ].pack("N") + "IHDR" + [ 120, 40 ].pack("NN") + "\x08\x02\x00\x00\x00first-logo".b
+    second_logo = "\x89PNG\r\n\x1A\n".b + [ 13 ].pack("N") + "IHDR" + [ 100, 36 ].pack("NN") + "\x08\x02\x00\x00\x00second-logo".b
+    customer_png = "\x89PNG\r\n\x1A\n".b + [ 13 ].pack("N") + "IHDR" + [ 80, 80 ].pack("NN") + "\x08\x02\x00\x00\x00customer-photo".b
+    itinerary = "Day 1: Kathmandu arrival"
+    setting = Setting.current
+    setting.update!(email_signature: "Sam Sherpa\nSherpaHolidays")
+    setting.signature_logo.attach(io: StringIO.new(first_logo), filename: "logo-v1.png", content_type: "image/png")
+
+    client = Client.create!(name: "Daniel Loveless", email: "daniel@example.com")
+    conversation = client.conversations.create!(subject: "Everest itinerary", provider_thread_id: "thread-daniel")
+    outbound = conversation.messages.create!(
+      direction: "out", status: "sent", from_address: "info@sherpaholidays.com",
+      to_addrs: client.email, subject: "Everest itinerary", sent_at: 1.day.ago,
+      text_body: "Hi Daniel,\n\nSam Sherpa\nSherpaHolidays", message_id: "out-1@sherpaholidays.com"
+    )
+    inline_logo = ClientMailer.outbound(outbound).attachments.find { |part| part.content_id == "<#{EmailSignature::CID}>" }
+    assert_equal first_logo, inline_logo.decoded
+    setting.signature_logo.attach(io: StringIO.new(second_logo), filename: "logo-v2.png", content_type: "image/png")
+
+    reply = ::Mail.new do
+      from "daniel@example.com"
+      to "info@sherpaholidays.com"
+      subject "Re: Everest itinerary"
+      message_id "<reply-daniel-1@test>"
+      in_reply_to "<out-1@sherpaholidays.com>"
+      text_part { body "Looks great, thank you!" }
+      html_part do
+        content_type "text/html; charset=UTF-8"
+        body "<p>Looks great!</p><blockquote><img src=\"cid:#{EmailSignature::CID}\"></blockquote>"
+      end
+    end
+    reply.attachments.inline["signature-logo.png"] = {
+      mime_type: "image/png", content: inline_logo.decoded, content_id: "<#{EmailSignature::CID}>"
+    }
+    reply.attachments.inline["image001.png"] = {
+      mime_type: "image/png", content: second_logo, content_id: "<quoted-v2@perfectcrm>"
+    }
+    reply.attachments["signature-logo.png"] = { mime_type: "image/png", content: customer_png }
+    reply.attachments["itinerary.txt"] = { mime_type: "text/plain", content: itinerary }
+
+    message = Mail::Ingester.ingest(parsed: Mail::Ingester.parse_raw(reply.to_s), provider: { thread_id: "thread-daniel" })[:message]
+    assert_equal conversation, message.conversation
+    stored = message.files.map { |file| file.download }
+    assert_equal [ first_logo, second_logo, customer_png, itinerary ].sort, stored.sort
+    logos, listed = message.files.partition { |file| [ first_logo, second_logo ].include?(file.download) }
+
+    get client_path(client)
+    assert_response :success
+    assert_select "[data-tab='files'] .tab-count", text: "2"
+    assert_select "section[aria-labelledby='files-heading'] ul.files > li", count: 2
+    assert_select "ol.timeline .chips a.chip", count: 2
+    listed.each { |file| assert_select "ol.timeline .chips a.chip[href=?]", attachment_path(file.id), count: 1 }
+    logos.each { |file| assert_select "a[href=?]", attachment_path(file.id), count: 0 }
+
+    get inbox_thread_path(conversation)
+    assert_response :success
+    assert_select "li.attachment-row", count: 2
+    listed.each { |file| assert_select "li.attachment-row a[href=?]", new_document_handoff_path(attachment_id: file.id), count: 1 }
+    logos.each do |file|
+      assert_select "a[href=?]", attachment_path(file.id), count: 0
+      assert_select "a[href=?]", new_document_handoff_path(attachment_id: file.id), count: 0
+    end
+  ensure
+    Setting.current.signature_logo.purge if Setting.current.signature_logo.attached?
+  end
+
   test "new and create with inline person and tags" do
     get new_client_path
     assert_response :success
