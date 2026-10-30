@@ -1,7 +1,7 @@
 class LeadsController < ApplicationController
   include ReplyBox
   include RecordPage
-  include LeadsReturnPath
+  include ListReturnPath
 
   before_action :set_lead, only: %i[show edit update convert refresh_bookings archive unarchive mark_as_spam not_spam mark_potential unmark_potential mark_unsure unmark_unsure mark_not_interested unmark_not_interested]
   before_action :block_converted_edit, only: %i[edit update]

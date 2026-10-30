@@ -1,10 +1,11 @@
 <%# locals: (scheduled_call:, return_to:) %>
-<% lead = scheduled_call.lead %>
+<% owner = scheduled_call.owner %>
+<% inquiries = owner.inquiries.limit(2).to_a if owner.is_a?(Client) %>
 <li class="scheduled-call-row<%= ' scheduled-call-row-missed' if scheduled_call.missed? %>" id="scheduled_call_<%= scheduled_call.id %>">
   <div class="scheduled-call-row-main">
     <div class="flex flex-wrap items-center gap-2">
-      <%= link_to lead.name, lead_path(lead), class: "link font-medium" %>
-      <% if lead.potential? %><%= badge "Potential", :brand %><% end %>
+      <%= link_to owner.name, polymorphic_path(owner), class: "link font-medium" %>
+      <% if owner.respond_to?(:potential?) && owner.potential? %><%= badge "Potential", :brand %><% end %>
       <% if scheduled_call.missed? %>
         <%= badge "Missed", :danger, dot: true %>
       <% elsif scheduled_call.today? %>
@@ -15,10 +16,10 @@
       <time datetime="<%= scheduled_call.scheduled_at.iso8601 %>" class="font-medium text-ink-2">
         <%= scheduled_call_stamp(scheduled_call) %>
       </time>
-      <% if lead.display_phone.present? %>
-        <span><%= lead.display_phone %></span>
+      <% if owner.display_phone.present? %>
+        <span><%= owner.display_phone %></span>
       <% end %>
-      <% if (trip = lead.trip_interest.presence || lead.trip_title.presence) %>
+      <% if owner.respond_to?(:trip_interest) && (trip = owner.trip_interest.presence || owner.trip_title.presence) %>
         <span><%= trip %></span>
       <% end %>
     </div>
@@ -28,18 +29,15 @@
   </div>
 
   <div class="scheduled-call-row-actions">
-    <%= form_with url: complete_lead_scheduled_call_path(lead, scheduled_call), method: :post, class: "scheduled-call-outcomes", data: { turbo: false } do |form| %>
-      <%= form.hidden_field :save_key, value: SecureRandom.uuid, id: nil %>
-      <% if return_to.present? %>
-        <%= form.hidden_field :return_to, value: return_to, id: nil %>
-      <% end %>
-      <% CallLog::ONE_TAP.each do |outcome| %>
-        <%= button_tag CallLog::LABELS.fetch(outcome), name: "outcome", value: outcome, class: "btn-secondary btn-xs" %>
-      <% end %>
+    <% if inquiries.nil? || inquiries.one? %>
+      <%= render "scheduled_calls/outcomes", record: owner, scheduled_call: scheduled_call, return_to: return_to,
+        inquiry: inquiries&.first, button_class: "btn-secondary btn-xs" %>
+    <% else %>
+      <%= link_to "Log on client page", client_path(owner, anchor: "scheduled-call"), class: "btn-secondary btn-xs" %>
     <% end %>
 
     <%= render "scheduled_calls/popover",
-      lead: lead,
+      record: owner,
       scheduled_call: scheduled_call,
       return_to: return_to,
       trigger_label: "Reschedule",
@@ -47,7 +45,7 @@
       id_prefix: "today_reschedule_#{scheduled_call.id}" %>
 
     <%= button_to "Cancel",
-      cancel_lead_scheduled_call_path(lead, scheduled_call),
+      polymorphic_path([:cancel, owner, scheduled_call]),
       method: :patch,
       params: { return_to: return_to },
       class: "btn-secondary btn-xs" %>

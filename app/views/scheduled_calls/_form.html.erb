@@ -1,9 +1,9 @@
-<%# locals: (lead:, scheduled_call: nil, return_to: nil, submit_label: nil, id_prefix: nil) %>
-<% call = scheduled_call || ScheduledCall.new(lead: lead) %>
+<%# locals: (record:, scheduled_call: nil, return_to: nil, submit_label: nil, id_prefix: nil) %>
+<% call = scheduled_call || ScheduledCall.new(record.is_a?(Client) ? { client: record } : { lead: record }) %>
 <% persisted = call.persisted? %>
-<% url = persisted ? lead_scheduled_call_path(lead, call) : lead_scheduled_calls_path(lead) %>
+<% url = persisted ? polymorphic_path([record, call]) : polymorphic_path([record, :scheduled_calls]) %>
 <% method = persisted ? :patch : :post %>
-<% prefix = id_prefix.presence || (persisted ? "reschedule_call_#{call.id}" : "schedule_call_lead_#{lead.id}") %>
+<% prefix = id_prefix.presence || (persisted ? "reschedule_call_#{call.id}" : "schedule_call_#{record.model_name.param_key}_#{record.id}") %>
 <% today_date = Time.zone.today %>
 <% tomorrow_date = today_date + 1.day %>
 <% next_monday = today_date.next_occurring(:monday) %>
@@ -12,13 +12,13 @@
 <% default_duration = call.duration_minutes.presence || 30 %>
 <% button_text = submit_label.presence || (persisted ? "Save changes" : "Schedule call") %>
 
-<%= form_with model: [lead, call], url: url, method: method, class: "call-schedule-form", data: { controller: "call-schedule" } do |form| %>
+<%= form_with model: [record, call], url: url, method: method, class: "call-schedule-form", data: { controller: "call-schedule" } do |form| %>
   <% if return_to.present? %>
     <%= hidden_field_tag :return_to, return_to, id: nil %>
   <% end %>
 
   <div class="call-schedule-header">
-    <span class="call-schedule-title"><%= persisted ? "Reschedule call" : "Schedule call" %> · <%= lead.name %></span>
+    <span class="call-schedule-title"><%= persisted ? "Reschedule call" : "Schedule call" %> · <%= record.name %></span>
     <span class="call-schedule-tz">Pacific (<%= Time.zone.now.strftime("%Z") %>)</span>
   </div>
 

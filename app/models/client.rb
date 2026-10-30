@@ -21,6 +21,7 @@ class Client < ApplicationRecord
   has_many :tags, -> { order(:name) }, through: :taggings
   has_many :activity_events, as: :subject, dependent: :destroy
   has_many :conversations, as: :linkable, dependent: :destroy
+  has_many :scheduled_calls, -> { order(:scheduled_at, :id) }, dependent: :destroy, inverse_of: :client
 
   accepts_nested_attributes_for :people, allow_destroy: true,
     reject_if: proc { |attrs| attrs["name"].blank? && attrs["email"].blank? && attrs["phone"].blank? }
@@ -29,6 +30,7 @@ class Client < ApplicationRecord
   include NestedPeople
   include ReferralCode
   include EmailRedirects
+  include ScheduledCallOwner
 
   before_validation :normalize_email
 
@@ -116,6 +118,14 @@ class Client < ApplicationRecord
 
   def display_email
     email.presence || people.map(&:email).find(&:present?)
+  end
+
+  def inquiries
+    Lead.where(converted_client_id: id).or(Lead.where(existing_client_id: id))
+  end
+
+  def call_schedulable?
+    !archived?
   end
 
   def touch_activity!

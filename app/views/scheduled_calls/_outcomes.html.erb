@@ -1,0 +1,15 @@
+<%# locals: (record:, scheduled_call:, return_to:, inquiry: nil, button_class: "btn-secondary btn-sm") %>
+<% confirm_call = inquiry&.not_interested? %>
+<%= form_with url: polymorphic_path([:complete, record, scheduled_call]), method: :post, class: "scheduled-call-outcomes", data: { turbo: false, controller: ("contact-confirm" if confirm_call), "contact-confirm-message-value": (CallLog::NOT_INTERESTED_CONFIRM if confirm_call) }.compact do |form| %>
+  <%= form.hidden_field :save_key, value: SecureRandom.uuid, id: nil %>
+  <% if inquiry %>
+    <%= form.hidden_field :inquiry_id, value: inquiry.id, id: nil %>
+  <% end %>
+  <% if return_to.present? %>
+    <%= form.hidden_field :return_to, value: return_to, id: nil %>
+  <% end %>
+  <% CallLog::ONE_TAP.each do |outcome| %>
+    <%= button_tag CallLog::LABELS.fetch(outcome), name: "outcome", value: outcome, class: button_class,
+          data: (confirm_call ? { action: "click->contact-confirm#confirm" } : {}) %>
+  <% end %>
+<% end %>

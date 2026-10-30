@@ -3164,6 +3164,22 @@
   flex-wrap: wrap;
   gap: 6px;
 }
+.scheduled-call-inquiry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--pb-rule-2);
+}
+.scheduled-call-inquiry-for {
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--pb-ink-2);
+  overflow-wrap: anywhere;
+}
 
 .scheduled-calls-group {
   margin-top: 14px;

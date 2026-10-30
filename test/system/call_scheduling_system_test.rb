@@ -383,9 +383,57 @@ class CallSchedulingSystemTest < ApplicationSystemTestCase
     assert_operator layout["sheetBottom"], :<=, layout["viewportHeight"] - 16, "Schedule call sheet must keep a margin above the window bottom: #{layout.inspect}"
   end
 
+  test "schedule call from a client page, reschedule and complete on the client page" do
+    client = Client.create!(name: "Amara Okafor", email: "amara@example.com", phone: "+14155550144")
+    Lead.create!(name: "Amara Okafor", reference: "SH-EARLIER", existing_client: client, created_at: 2.days.ago)
+    inquiry = Lead.create!(name: "Amara Okafor", reference: "SH-AMARA", trip_interest: "Annapurna circuit", existing_client: client)
+
+    visit client_path(client)
+    assert_selector "h1", text: "Amara Okafor"
+
+    within(".page-actions") do
+      find("summary", text: "Schedule call").click
+      click_button "Tomorrow"
+      click_button "11:00 AM"
+      select "30 min", from: "Duration"
+      fill_in "Note (optional)", with: "Confirm Kathmandu arrival flight"
+      tolerate_submit_navigation { click_button "Schedule call" }
+    end
+
+    tolerate_navigation_assertion { assert_text "Call scheduled with Amara Okafor" }
+    within("#scheduled-call") do
+      assert_text "Next call"
+      assert_text "11:00 AM PT · 30 min"
+      assert_text "Confirm Kathmandu arrival flight"
+
+      find("summary", text: "Reschedule").click
+      click_button "2:00 PM"
+      fill_in "Note (optional)", with: "Moved to 2pm Pacific"
+      tolerate_submit_navigation { click_button "Save changes" }
+    end
+
+    tolerate_navigation_assertion { assert_text "Call with Amara Okafor rescheduled" }
+    within("#scheduled-call") do
+      assert_text "2:00 PM PT"
+      assert_text "Moved to 2pm Pacific"
+      assert_selector "[role=group][aria-label='Log this call for SH-EARLIER']"
+      within("[role=group][aria-label='Log this call for SH-AMARA']") do
+        assert_text "For SH-AMARA · Annapurna circuit"
+        tolerate_submit_navigation { click_button "Talked" }
+      end
+    end
+
+    tolerate_navigation_assertion { assert_text "Call logged: Talked." }
+    assert_no_selector "#scheduled-call"
+    within(".timeline") do
+      assert_text "Call: Talked"
+    end
+    assert_equal [ inquiry.id ], ActivityEvent.where(kind: "call", subject_type: "Lead").pluck(:subject_id)
+  end
+
   private
-    # The sheet is positioned from the async details toggle event, so retry the
-    # measurement until it settles, then return the last one for the assertions.
+    # Retry the measurement until the open sheet settles, then return the last
+    # one for the assertions.
     def settled_layout(script)
       layout = nil
       page.document.synchronize do

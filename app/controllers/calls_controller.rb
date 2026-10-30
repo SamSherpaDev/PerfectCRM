@@ -3,11 +3,7 @@ class CallsController < ApplicationController
 
   def create
     record = params[:client_id].present? ? Client.find(params[:client_id]) : Lead.find(params[:lead_id])
-    inquiry = if record.is_a?(Client)
-      Lead.where(converted_client_id: record.id).or(Lead.where(existing_client_id: record.id)).find(params[:inquiry_id])
-    else
-      record
-    end
+    inquiry = record.is_a?(Client) ? record.inquiries.find(params[:inquiry_id]) : record
     back = safe_today_return_path(params[:return_to].to_s) || polymorphic_path(record, anchor: "record-details")
     return redirect_to back, alert: "Restore this record before logging a call." if record.archived?
 

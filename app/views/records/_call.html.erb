@@ -2,9 +2,9 @@
 <%# One tap logs an outbound call now; Add details keeps time, direction and duration. Each rendered form carries one save key, so a double tap logs one call. %>
 <%# Forms skip Turbo so the redirect keeps its #record-details anchor, which reopens the phone Details tab. %>
 <% lead = record.is_a?(Lead) %>
-<% inquiries = lead ? [record] : Lead.where(converted_client_id: record.id).or(Lead.where(existing_client_id: record.id)).order(created_at: :desc) %>
+<% inquiries = lead ? [record] : record.inquiries.order(created_at: :desc) %>
 <% calls_path = lead ? lead_calls_path(record) : client_calls_path(record) %>
-<% call_confirm_msg = "This lead is marked not interested. Log an outbound call anyway?" %>
+<% call_confirm_msg = CallLog::NOT_INTERESTED_CONFIRM %>
 <% not_interested_ids = inquiries.select(&:not_interested?).map(&:id) %>
 <% if inquiries.any? %>
   <section class="calls" aria-labelledby="calls-heading">
@@ -16,8 +16,8 @@
         <% unless lead %>
           <p class="calls-for">For <%= inquiry_name %><% if (trip = inquiry.trip_interest.presence || inquiry.trip_title.presence) %><span class="muted"> · <%= trip %></span><% end %></p>
         <% end %>
-        <% next_call = inquiry.next_scheduled_call %>
-        <% if lead && record.call_schedulable? && next_call&.due_by?(Time.current) %>
+        <% next_call = record.next_scheduled_call %>
+        <% if record.call_schedulable? && next_call&.due_by?(Time.current) %>
           <p class="hint">Next call: <%= scheduled_call_stamp(next_call) %>. Log the outcome in the scheduled call bar above, or add details below.</p>
         <% else %>
           <%= form_with url: calls_path, class: "call-choices", data: { turbo: false, controller: ("contact-confirm" if confirm_call), "contact-confirm-message-value": (call_confirm_msg if confirm_call) }.compact do |form| %>

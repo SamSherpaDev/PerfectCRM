@@ -546,7 +546,8 @@ marker on inquiries flagged as looking like spam, wait time, and one-tap
 `Talked` / `Voicemail` / `No answer` logging plus `Schedule call`. Leads drop
 off the list once a call connects (`Talked`), they are marked
 `Not interested`, `spam`, or `archived`, have an open scheduled call, or have
-used 3 attempts.
+used 3 attempts. An open call booked on a client also takes that client's open
+inquiries off the list, so the person shows once, under Scheduled calls.
 
 Tasks belong to clients, leads, or organizations. Today lists overdue tasks
 and those due through the next 7 days, using the Pacific date. Tap the
@@ -589,7 +590,7 @@ the empty mapping currently proposes no tasks.
 remaining calls, and the next ten calls on later days, with one-tap outcome
 logging (`Talked`, `Voicemail`, `No answer`), rescheduling, and cancellation,
 followed by a Pacific week or month calendar
-(`/?view=week|month&date=YYYY-MM-DD`) linking each scheduled call to its lead.
+(`/?view=week|month&date=YYYY-MM-DD`) linking each scheduled call to its lead or client.
 
 The production 7am Pacific digest (`TodayDigestJob` + `CaptainDigestMailer`,
 same schedule file) emails today's follow-ups, overdue items, missed and
@@ -841,17 +842,23 @@ task. Double saves with the same save UUID produce one event. Client calls
 always name an inquiry (one row of buttons per inquiry); no unbound calls are
 counted as inquiry outcomes.
 
-Active, unconverted leads also offer **Schedule call** on the lead page and on
-each row in the Leads list (`ScheduledCall`, Pacific date and time, default
-30-minute duration, optional note, with quick picks for Today/Tomorrow/Next Mon
-and common times). Saving keeps the captain on the current page. The lead page
-shows its next scheduled call with one-tap completion (`Talked`, `Voicemail`,
-`No answer` via `CallLog.record!`), rescheduling, and cancellation. While that
-call is due (today's or a missed call) it replaces the regular one-tap call
-buttons; for a booking on a later day the regular buttons stay and leave the
-booking open. A double tap on the bar logs and completes once. Only an open
-call can be completed, rescheduled, or cancelled. A call logged through the
-regular call buttons or Add details also completes the inquiry's earliest open
+Active, unconverted leads and active clients also offer **Schedule call** on the
+record page and on each row in the Leads and Clients lists (`ScheduledCall`,
+Pacific date and time, default 30-minute duration, optional note, with quick
+picks for Today/Tomorrow/Next Mon and common times). Converting a lead to a
+client keeps its scheduled calls on the client, and scheduling a call on a
+client never sends an ad conversion. Saving keeps the captain on the current
+page. The record page shows its next scheduled call with one-tap completion
+(`Talked`, `Voicemail`, `No answer` via `CallLog.record!`), rescheduling, and
+cancellation. While that call is due (today's or a missed call) it replaces the
+regular one-tap call buttons; for a booking on a later day the regular buttons
+stay and leave the booking open. A double tap on the bar logs and completes
+once. A client's call bar offers one row of buttons per inquiry and logs the
+call only on the chosen inquiry; a client with no inquiry gets the New inquiry
+link instead, and Today offers one-tap completion only when the client has
+exactly one inquiry, otherwise a link to the client page. Only an open call
+can be completed, rescheduled, or cancelled. A call logged through the regular
+call buttons or Add details also completes the record's earliest open
 scheduled call when that call was due on or before the logged call's Pacific
 day (today's or a missed call); a booking on a later day stays open. A double
 save completes one scheduled call at most.

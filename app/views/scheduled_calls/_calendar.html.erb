@@ -47,7 +47,7 @@
   <% end %>
 
   <% if summary.missed_calls.empty? && summary.upcoming_calls.empty? %>
-    <p class="mt-2 text-xs muted">No calls scheduled yet. Use "Schedule call" on any lead to put a call on the calendar.</p>
+    <p class="mt-2 text-xs muted">No calls scheduled yet. Use "Schedule call" on any lead or client to put a call on the calendar.</p>
   <% end %>
 
   <div class="call-calendar mt-4" id="call-calendar" aria-label="Call calendar">
@@ -96,9 +96,10 @@
               <% end %>
               <ul class="cal-month-events">
                 <% day_calls.each do |call| %>
+                  <% owner = call.owner %>
                   <li class="cal-event<%= ' cal-event-missed' if call.missed?(summary.now) %>">
                     <time datetime="<%= call.scheduled_at.iso8601 %>" class="cal-event-time"><%= scheduled_call_time_label(call) %></time>
-                    <%= link_to call.lead.name, lead_path(call.lead), class: "cal-event-lead link" %>
+                    <%= link_to owner.name, polymorphic_path(owner), class: "cal-event-lead link" %>
                   </li>
                 <% end %>
               </ul>
@@ -118,9 +119,10 @@
             <% if day_calls.any? %>
               <ul class="cal-day-events">
                 <% day_calls.each do |call| %>
+                  <% owner = call.owner %>
                   <li class="cal-event<%= ' cal-event-missed' if call.missed?(summary.now) %>">
                     <time datetime="<%= call.scheduled_at.iso8601 %>" class="cal-event-time"><%= scheduled_call_time_label(call) %></time>
-                    <%= link_to call.lead.name, lead_path(call.lead), class: "cal-event-lead link" %>
+                    <%= link_to owner.name, polymorphic_path(owner), class: "cal-event-lead link" %>
                     <% if call.notes.present? %>
                       <span class="cal-event-note"><%= call.notes %></span>
                     <% end %>

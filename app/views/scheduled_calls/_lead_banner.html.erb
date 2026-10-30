@@ -1,4 +1,5 @@
-<%# locals: (lead:, scheduled_call:, return_to:) %>
+<%# locals: (record:, scheduled_call:, return_to:) %>
+<% inquiries = record.inquiries.order(created_at: :desc).to_a if record.is_a?(Client) %>
 <section class="card card-pad mb-5 scheduled-call-banner<%= ' scheduled-call-banner-missed' if scheduled_call.missed? %>" id="scheduled-call" aria-label="Next scheduled call">
   <div class="scheduled-call-banner-body">
     <div class="scheduled-call-banner-info">
@@ -7,8 +8,8 @@
         <time datetime="<%= scheduled_call.scheduled_at.iso8601 %>" class="scheduled-call-when">
           <%= scheduled_call_stamp(scheduled_call) %>
         </time>
-        <% if lead.display_phone.present? %>
-          <span class="muted text-xs">· <%= lead.display_phone %></span>
+        <% if record.display_phone.present? %>
+          <span class="muted text-xs">· <%= record.display_phone %></span>
         <% end %>
       </div>
       <% if scheduled_call.notes.present? %>
@@ -17,18 +18,12 @@
     </div>
 
     <div class="scheduled-call-banner-actions">
-      <%= form_with url: complete_lead_scheduled_call_path(lead, scheduled_call), method: :post, class: "scheduled-call-outcomes", data: { turbo: false } do |form| %>
-        <%= form.hidden_field :save_key, value: SecureRandom.uuid, id: nil %>
-        <% if return_to.present? %>
-          <%= form.hidden_field :return_to, value: return_to, id: nil %>
-        <% end %>
-        <% CallLog::ONE_TAP.each do |outcome| %>
-          <%= button_tag CallLog::LABELS.fetch(outcome), name: "outcome", value: outcome, class: "btn-secondary btn-sm" %>
-        <% end %>
+      <% unless inquiries %>
+        <%= render "scheduled_calls/outcomes", record: record, scheduled_call: scheduled_call, return_to: return_to %>
       <% end %>
 
       <%= render "scheduled_calls/popover",
-        lead: lead,
+        record: record,
         scheduled_call: scheduled_call,
         return_to: return_to,
         trigger_label: "Reschedule",
@@ -36,10 +31,25 @@
         id_prefix: "lead_banner_reschedule_#{scheduled_call.id}" %>
 
       <%= button_to "Cancel call",
-        cancel_lead_scheduled_call_path(lead, scheduled_call),
+        polymorphic_path([:cancel, record, scheduled_call]),
         method: :patch,
         params: { return_to: return_to },
         class: "btn-secondary btn-sm" %>
     </div>
   </div>
+
+  <% if inquiries&.any? %>
+    <% inquiries.each do |inquiry| %>
+      <% inquiry_name = inquiry.reference.presence || inquiry.name %>
+      <div class="scheduled-call-inquiry" role="group" aria-label="Log this call for <%= inquiry_name %>">
+        <p class="scheduled-call-inquiry-for">For <%= inquiry_name %><% if (trip = inquiry.trip_interest.presence || inquiry.trip_title.presence) %><span class="muted"> · <%= trip %></span><% end %></p>
+        <%= render "scheduled_calls/outcomes", record: record, scheduled_call: scheduled_call, return_to: return_to, inquiry: inquiry %>
+      </div>
+    <% end %>
+  <% elsif inquiries %>
+    <div class="scheduled-call-inquiry">
+      <p class="text-xs leading-relaxed muted">Start an inquiry to keep this call separate from past trips.</p>
+      <%= link_to "New inquiry", new_lead_path(existing_client_id: record.id, name: record.name, email: record.email, capture_channel: "phone"), class: "link text-xs" %>
+    </div>
+  <% end %>
 </section>

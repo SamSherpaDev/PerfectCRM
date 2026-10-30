@@ -80,6 +80,9 @@
                     <%= badge client.source.humanize, :neutral %>
                   <% end %>
                   <%= badge client.kind.humanize, :info %>
+                  <% if client.call_schedulable? && (next_call = client.next_scheduled_call) %>
+                    <%= badge "Call #{next_call.scheduled_at.in_time_zone.strftime('%b %-d, %-I:%M %p')} PT", (next_call.missed? ? :danger : :info), dot: true %>
+                  <% end %>
                   <% client.tags.each do |tag| %>
                     <%= badge tag.name, :brand %>
                   <% end %>
@@ -90,6 +93,15 @@
               </div>
               <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs muted sm:justify-end">
                 <span>Active <%= date_short(client.last_activity) %></span>
+                <% if client.call_schedulable? %>
+                  <%= render "scheduled_calls/popover",
+                    record: client,
+                    scheduled_call: client.next_scheduled_call,
+                    return_to: clients_path({ tab: (@tab if @tab != "clients"), q: @query.presence, sort: (@sort if @sort != "activity") }.compact),
+                    trigger_label: (client.next_scheduled_call ? "Reschedule" : "Schedule call"),
+                    trigger_class: "btn-secondary btn btn-sm",
+                    id_prefix: "index_schedule_call_client_#{client.id}" %>
+                <% end %>
                 <% if client.perfectbook_contact_id.present? %>
                   <%= link_to perfectbook_contact_url(client.perfectbook_contact_id), class: "link-quiet inline-flex items-center gap-1", target: "_blank", rel: "noopener" do %>
                     <%= render "shared/icon", name: :external, class: "h-3.5 w-3.5" %>Open in PerfectBook

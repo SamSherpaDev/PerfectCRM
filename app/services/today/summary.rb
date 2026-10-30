@@ -69,7 +69,8 @@ module Today
     # A cadence is the run of calls within 14 days before the latest call,
     # and a lead leaves the list once its latest call is over 14 days old.
     # Leads drop off once a call connects, they are marked Not interested,
-    # spam or archived, have a scheduled call, or have used 3 attempts.
+    # spam or archived, have a scheduled call, or have used 3 attempts. An
+    # open call booked on a client also takes that client's open inquiries off.
     # Leads flagged as suspected spam stay on the list for a check.
     def call_entries
       @call_entries ||= begin
@@ -77,11 +78,13 @@ module Today
         cadence_start = CALL_CADENCE_STARTS_ON.in_time_zone
         recently_called = ActivityEvent.where(subject_type: "Lead", kind: "call")
           .where("activity_events.subject_id = leads.id").where("activity_events.occurred_at >= ?", [ window_start, cadence_start ].max)
+        booked_clients = ScheduledCall.visible.scheduled.where.not(client_id: nil).select(:client_id)
         candidates = Lead.open
           .where(not_interested_marked_at: nil, spam_marked_at: nil)
           .where("TRIM(COALESCE(leads.phone, '')) <> '' OR TRIM(COALESCE(leads.phone_raw, '')) <> ''")
           .where("(leads.status = 'new' AND COALESCE(leads.received_at, leads.created_at) >= ?) OR EXISTS (#{recently_called.select(:id).to_sql})", window_start)
-          .where.not(id: ScheduledCall.scheduled.select(:lead_id))
+          .where.not(id: ScheduledCall.scheduled.where.not(lead_id: nil).select(:lead_id))
+          .where("leads.existing_client_id IS NULL OR leads.existing_client_id NOT IN (#{booked_clients.to_sql})")
           .includes(:tags)
           .to_a
         calls_by_lead = ActivityEvent.where(subject_type: "Lead", kind: "call", subject_id: candidates.map(&:id))
@@ -178,22 +181,22 @@ module Today
     end
 
     def missed_calls
-      @missed_calls ||= ScheduledCall.visible.missed(@now).includes(lead: :tags).to_a
+      @missed_calls ||= ScheduledCall.visible.missed(@now).includes(:client, lead: :tags).to_a
     end
 
     def todays_calls
       @todays_calls ||= ScheduledCall.visible.scheduled.for_day(@today)
-        .where("scheduled_calls.scheduled_at >= ?", @now).includes(lead: :tags).to_a
+        .where("scheduled_calls.scheduled_at >= ?", @now).includes(:client, lead: :tags).to_a
     end
 
     def upcoming_calls
-      @upcoming_calls ||= ScheduledCall.visible.upcoming(@now).includes(lead: :tags).to_a
+      @upcoming_calls ||= ScheduledCall.visible.upcoming(@now).includes(:client, lead: :tags).to_a
     end
 
     def later_upcoming_calls
       @later_upcoming_calls ||= ScheduledCall.visible.scheduled
         .where("scheduled_calls.scheduled_at > ?", @today.in_time_zone.end_of_day)
-        .order(scheduled_at: :asc, id: :asc).includes(lead: :tags).to_a
+        .order(scheduled_at: :asc, id: :asc).includes(:client, lead: :tags).to_a
     end
 
     def week_start
@@ -242,7 +245,7 @@ module Today
         range_end = @calendar_view == "month" ? month_grid_end : week_end
         calls = ScheduledCall.visible.scheduled
           .between(range_start.in_time_zone.beginning_of_day, range_end.in_time_zone.end_of_day)
-          .includes(:lead).to_a
+          .includes(:client, :lead).to_a
         calls.group_by { |call| call.scheduled_at.in_time_zone.to_date }
       end
     end

@@ -8,7 +8,8 @@ class ScheduledCall < ApplicationRecord
     [ "4:00 PM", "16:00" ]
   ].freeze
 
-  belongs_to :lead
+  belongs_to :lead, optional: true
+  belongs_to :client, optional: true
   belongs_to :activity_event, optional: true
 
   attr_writer :scheduled_on, :scheduled_time
@@ -20,12 +21,18 @@ class ScheduledCall < ApplicationRecord
   validates :status, inclusion: { in: STATUSES }
   validates :outcome, inclusion: { in: CallLog::OUTCOMES }, allow_blank: true
   validate :validate_schedule_inputs
-  validate :lead_must_be_schedulable, if: :scheduled?
+  validate :owner_must_be_schedulable, if: :scheduled?
 
   after_create_commit :enqueue_ad_conversion
 
   scope :scheduled, -> { where(status: "scheduled") }
-  scope :visible, -> { joins(:lead).merge(Lead.active.where(converted_client_id: nil, not_interested_marked_at: nil)) }
+  scope :visible, -> {
+    left_joins(:lead, :client).where(
+      "(scheduled_calls.client_id IS NOT NULL AND clients.archived_at IS NULL) OR " \
+      "(scheduled_calls.client_id IS NULL AND scheduled_calls.lead_id IS NOT NULL AND " \
+      "leads.archived_at IS NULL AND leads.converted_client_id IS NULL AND leads.not_interested_marked_at IS NULL)"
+    )
+  }
   scope :missed, ->(now = Time.current) { scheduled.where("scheduled_calls.scheduled_at < ?", now).order(scheduled_at: :asc, id: :asc) }
   scope :upcoming, ->(now = Time.current) { scheduled.where("scheduled_calls.scheduled_at >= ?", now).order(scheduled_at: :asc, id: :asc) }
   scope :between, ->(range_start, range_end) {
@@ -35,6 +42,10 @@ class ScheduledCall < ApplicationRecord
     day = date.to_date
     between(day.in_time_zone.beginning_of_day, day.in_time_zone.end_of_day)
   }
+
+  def owner
+    client || lead
+  end
 
   def scheduled?
     status == "scheduled"
@@ -69,23 +80,31 @@ class ScheduledCall < ApplicationRecord
     lead.with_lock do
       next if exists?(activity_event: event)
 
-      call = lead.scheduled_calls.scheduled.first
+      calls = scheduled.where(lead_id: lead.id)
+      client = lead.converted_client || lead.existing_client
+      calls = calls.or(scheduled.where(client_id: client.id)) if client
+      call = calls.order(:scheduled_at, :id).first
       next unless call&.due_by?(event.occurred_at)
 
       call.update!(status: "completed", outcome: event.metadata["outcome"], completed_at: event.occurred_at, activity_event: event)
     end
   end
 
-  def complete!(outcome:, save_key:, occurred_at: Time.current)
+  def complete!(outcome:, save_key:, inquiry_id: nil, occurred_at: Time.current)
     return activity_event if activity_event && activity_event.idempotency_key == save_key
     ensure_scheduled!
     unless CallLog::OUTCOMES.include?(outcome)
       errors.add(:outcome, "is not included in the list")
       raise ActiveRecord::RecordInvalid, self
     end
+    inquiry = client ? client.inquiries.find_by(id: inquiry_id) : lead
+    unless inquiry
+      errors.add(:base, "Choose one of this client's inquiries to log the call")
+      raise ActiveRecord::RecordInvalid, self
+    end
 
     transaction do
-      event = CallLog.record!(lead, key: save_key, occurred_at: occurred_at, outcome: outcome, direction: "outbound")
+      event = CallLog.record!(inquiry, key: save_key, occurred_at: occurred_at, outcome: outcome, direction: "outbound")
       update!(status: "completed", outcome: outcome, completed_at: occurred_at, activity_event: event)
       event
     end
@@ -144,14 +163,20 @@ class ScheduledCall < ApplicationRecord
     errors.add(:scheduled_at, "is not a valid Pacific date and time")
   end
 
-  def lead_must_be_schedulable
-    return unless lead.present? && !lead.call_schedulable?
-
-    errors.add(:base, "Calls can only be scheduled for active, unconverted leads")
+  def owner_must_be_schedulable
+    if owner.nil?
+      errors.add(:base, "Calls must belong to a lead or client")
+    elsif client.present?
+      errors.add(:base, "Calls can only be scheduled for active clients") unless client.call_schedulable?
+    elsif !lead.call_schedulable?
+      errors.add(:base, "Calls can only be scheduled for active, unconverted leads")
+    end
   end
 
   def enqueue_ad_conversion
-    AdConversions::LeadJob.perform_later(lead_id) if lead && AdConversions.reportable?(lead)
+    return if client_id.present? || lead.nil?
+
+    AdConversions::LeadJob.perform_later(lead_id) if AdConversions.reportable?(lead)
   rescue StandardError => error
     Rails.logger.error("[scheduled_call] ad conversion enqueue failed: #{error.class}")
   end
