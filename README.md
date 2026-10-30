@@ -621,8 +621,12 @@ or origin leads, matching client, and linked people that still carry the old
 name, plus open tasks, open scheduled-call notes, unsent drafts, and unbundled
 draft quotes), refreshes the FTS5 search index, and logs a `name_change` timeline event while leaving sent messages,
 sent or accepted quotes, past activity events, and synced PerfectBook contacts
-untouched. Text rewrites replace the full old name anywhere and the bare first
-name only after a leading Hi, Hello, Hey, or Dear. Renaming the only person
+untouched. Free text (task titles and notes, draft subjects and bodies, quote
+and call notes) changes only when the old name has two or more words: the full
+old name is replaced only in its exact letter case, and the bare first name only
+after a leading Hi, Hello, Hey, or Dear. Draft recipients and quote traveler
+lists match the full old name in any letter case, so a one-word name such as
+Info still updates there. Renaming the only person
 on a record who carries its display name renames the display name and linked
 records with that name too; on a record with two or more people, changing just
 the display name relabels that record alone, and adding a person never renames

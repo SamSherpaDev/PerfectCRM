@@ -351,15 +351,9 @@ class PersonNamePropagationTest < ActiveSupport::TestCase
   end
 
   test "renaming keeps text that already holds the new name from doubling" do
-    lead = Lead.create!(name: "Rossi", email: "rossi@example.com", source: "referral")
-    task = lead.tasks.create!(title: "Call Elena Rossi", notes: "Ask Rossi about dates", due_on: Date.current)
+    lead = Lead.create!(name: "Elena Rossi", email: "rossi@example.com", source: "referral")
+    task = lead.tasks.create!(title: "Call Elena Rossi", notes: "Maria Elena Rossi confirmed", due_on: Date.current)
 
-    lead.update!(name: "Elena Rossi")
-
-    assert_equal "Call Elena Rossi", task.reload.title
-    assert_equal "Ask Elena Rossi about dates", task.notes
-
-    task.update!(notes: "Maria Elena Rossi confirmed")
     lead.update!(name: "Maria Elena Rossi")
 
     assert_equal "Call Maria Elena Rossi", task.reload.title
@@ -562,7 +556,6 @@ class PersonNamePropagationTest < ActiveSupport::TestCase
 
   test "renaming a record with no people while adding its first person under the new name carries the rename" do
     lead = Lead.create!(name: "Maria", email: "maria.l@example.com", source: "website_form")
-    task = lead.tasks.create!(title: "Reply to Maria", due_on: Date.current)
     draft = Draft.create!(owner: lead, to_addrs: "Maria <maria.l@example.com>", body: "Here are the dates.")
 
     lead.update!(
@@ -572,7 +565,6 @@ class PersonNamePropagationTest < ActiveSupport::TestCase
 
     assert_equal "Maria Lopez", lead.reload.name
     assert_equal [ "Maria Lopez" ], lead.people.map(&:name)
-    assert_equal "Reply to Maria Lopez", task.reload.title
     assert_equal "Maria Lopez <maria.l@example.com>", draft.reload.to_addrs
   end
 
@@ -596,14 +588,32 @@ class PersonNamePropagationTest < ActiveSupport::TestCase
     assert_equal "Tom Becker", lead_tom.reload.name
   end
 
-  test "names followed by a sentence-ending period are replaced without touching addresses" do
-    lead = Lead.create!(name: "Rossi", email: "rossi@example.com", source: "referral")
-    task = lead.tasks.create!(title: "Follow up with Rossi.", notes: "Met Rossi. Site rossi.travel, mail rossi@example.com",
+  test "names followed by a sentence-ending period are replaced and prose needs the exact letter case" do
+    lead = Lead.create!(name: "Elena Rossi", email: "elena.rossi@example.com", source: "referral")
+    task = lead.tasks.create!(title: "Follow up with Elena Rossi.", notes: "Met Elena Rossi. Ask about elena rossi tours",
       due_on: Date.current)
+    draft = Draft.create!(owner: lead, to_addrs: "elena rossi <elena.rossi@example.com>", body: "Here are the dates.")
 
-    lead.update!(name: "Conti")
+    lead.update!(name: "Elena Conti")
 
-    assert_equal "Follow up with Conti.", task.reload.title
-    assert_equal "Met Conti. Site rossi.travel, mail rossi@example.com", task.notes
+    assert_equal "Follow up with Elena Conti.", task.reload.title
+    assert_equal "Met Elena Conti. Ask about elena rossi tours", task.notes
+    assert_equal "Elena Conti <elena.rossi@example.com>", draft.reload.to_addrs
+  end
+
+  test "a one-word old name renames the record and its addresses but leaves prose alone" do
+    lead = Lead.create!(name: "Info", email: "info@acme-travel.com", source: "email")
+    task = lead.tasks.create!(title: "Reply to Info", notes: "Send more info", due_on: Date.current)
+    draft = Draft.create!(owner: lead, to_addrs: "Info <info@acme-travel.com>", subject: "Re: Trip info",
+      body: "Thanks for the info. Here is more info about Annapurna.")
+
+    lead.update!(name: "Maria Lopez")
+
+    assert_equal "Maria Lopez", lead.reload.name
+    assert_equal "Maria Lopez <info@acme-travel.com>", draft.reload.to_addrs
+    assert_equal "Re: Trip info", draft.subject
+    assert_equal "Thanks for the info. Here is more info about Annapurna.", draft.body
+    assert_equal "Reply to Info", task.reload.title
+    assert_equal "Send more info", task.notes
   end
 end

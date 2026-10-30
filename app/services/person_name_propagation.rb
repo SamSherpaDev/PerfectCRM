@@ -225,8 +225,8 @@ class PersonNamePropagation
 
     Task.open.where(subject: owners).find_each do |task|
       allow_first = first_name_replaceable_for?(task.subject)
-      new_title = replace_name_in_text(task.title, allow_first_name: allow_first)
-      new_notes = replace_name_in_text(task.notes, allow_first_name: allow_first)
+      new_title = replace_name_in_prose(task.title, allow_first_name: allow_first)
+      new_notes = replace_name_in_prose(task.notes, allow_first_name: allow_first)
       if new_title != task.title || new_notes != task.notes
         save_linked(task) { task.update!(title: new_title, notes: new_notes) }
       end
@@ -241,11 +241,11 @@ class PersonNamePropagation
     scope.find_each do |draft|
       allow_first = first_name_replaceable_for?(draft.owner)
       attrs = {
-        to_addrs: replace_name_in_text(draft.to_addrs, allow_first_name: false),
-        cc_addrs: replace_name_in_text(draft.cc_addrs, allow_first_name: false),
-        bcc_addrs: replace_name_in_text(draft.bcc_addrs, allow_first_name: false),
-        subject: replace_name_in_text(draft.subject, allow_first_name: allow_first),
-        body: replace_name_in_text(draft.body, allow_first_name: allow_first)
+        to_addrs: replace_name_in_field(draft.to_addrs),
+        cc_addrs: replace_name_in_field(draft.cc_addrs),
+        bcc_addrs: replace_name_in_field(draft.bcc_addrs),
+        subject: replace_name_in_prose(draft.subject, allow_first_name: allow_first),
+        body: replace_name_in_prose(draft.body, allow_first_name: allow_first)
       }
       draft.update_columns(attrs) if attrs.any? { |key, value| draft.public_send(key) != value }
     end
@@ -265,7 +265,7 @@ class PersonNamePropagation
       changed = false
       details = quote.disclosure_details.is_a?(Hash) ? quote.disclosure_details.deep_dup : nil
       if details && details["travelers"].present?
-        updated_travelers = replace_name_in_text(details["travelers"], allow_first_name: false)
+        updated_travelers = replace_name_in_field(details["travelers"])
         if updated_travelers != details["travelers"]
           details["travelers"] = updated_travelers
           quote.disclosure_details = details
@@ -273,7 +273,7 @@ class PersonNamePropagation
         end
       end
       if quote.notes.present?
-        updated_notes = replace_name_in_text(quote.notes, allow_first_name: false)
+        updated_notes = replace_name_in_prose(quote.notes)
         if updated_notes != quote.notes
           quote.notes = updated_notes
           changed = true
@@ -291,7 +291,7 @@ class PersonNamePropagation
       next if call.notes.blank?
 
       allow_first = first_name_replaceable_for?(call.lead)
-      updated_notes = replace_name_in_text(call.notes, allow_first_name: allow_first)
+      updated_notes = replace_name_in_prose(call.notes, allow_first_name: allow_first)
       save_linked(call) { call.update!(notes: updated_notes) } if updated_notes != call.notes
     end
   end
@@ -318,22 +318,28 @@ class PersonNamePropagation
     )
   end
 
-  def replace_name_in_text(text, allow_first_name: false)
-    return text if text.blank?
+  def replace_name_in_prose(text, allow_first_name: false)
+    return text if text.blank? || @old_name.split.size < 2
 
-    full_names = [ @old_name, @new_name ].sort_by { |name| -name.length }.map { |name| Regexp.escape(name) }
-    updated = text.gsub(/(?<![\w.@+-])(?:#{full_names.join("|")})(?![\w@+-]|\.\w)/i) do |match|
-      match.casecmp?(@old_name) ? @new_name : match
-    end
+    updated = replace_name_in_field(text, exact_case: true)
     return updated unless allow_first_name
 
     salutation = /^([ \t]*(?i:hi|hello|hey|dear)[ \t]+)#{Regexp.escape(old_first_name)}(?![\w@+-]|\.\w)/
     updated.gsub(salutation) { "#{Regexp.last_match(1)}#{new_first_name}" }
   end
 
+  def replace_name_in_field(text, exact_case: false)
+    return text if text.blank?
+
+    full_names = [ @old_name, @new_name ].sort_by { |name| -name.length }.map { |name| Regexp.escape(name) }
+    text.gsub(/(?<![\w.@+-])(?:#{full_names.join("|")})(?![\w@+-]|\.\w)/i) do |match|
+      matches_old = exact_case ? match == @old_name : match.casecmp?(@old_name)
+      matches_old ? @new_name : match
+    end
+  end
+
   def first_name_replaceable_for?(owner)
     return false unless (owner.is_a?(Client) || owner.is_a?(Lead)) && owner.kind != "company"
-    return false unless @old_name.split.size >= 2
     return false if old_first_name.length < 2 || new_first_name.blank? || old_first_name == new_first_name
 
     ([ owner.name ] + owner.people.reload.map(&:name)).none? do |name|
