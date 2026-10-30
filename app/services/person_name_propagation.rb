@@ -36,23 +36,24 @@ class PersonNamePropagation
   end
 
   def propagate_person_or_owner
+    event_subject = @record.is_a?(Person) ? @record.owner : @record
+    record_activity_event(event_subject) if event_subject
+    return unless @record.is_a?(Person) || @record.name_identity_person_ids
+
     seed_people, seed_clients, seed_leads, person_emails = gather_seeds
     if @record.is_a?(Person) && namesake_shares_owner?(seed_people)
       update_people(seed_people)
     else
       propagate_to_family(seed_people, seed_clients, seed_leads, person_emails)
     end
-
-    event_subject = @record.is_a?(Person) ? @record.owner : @record
-    record_activity_event(event_subject) if event_subject
   end
 
   def propagate_to_family(seed_people, seed_clients, seed_leads, person_emails)
     family_clients, family_leads = expand_owner_family(seed_clients, seed_leads, person_emails)
     target_people = select_target_people(seed_people, family_clients, family_leads, person_emails)
 
-    update_clients(family_clients.select { |client| same_name?(client.name, @old_name) })
-    update_leads(family_leads.select { |lead| same_name?(lead.name, @old_name) })
+    update_clients(family_clients.select { |client| renamable_owner?(client) })
+    update_leads(family_leads.select { |lead| renamable_owner?(lead) })
     update_people(target_people)
 
     affected_owners = (family_clients + family_leads + target_people.filter_map(&:owner)).uniq
@@ -69,6 +70,13 @@ class PersonNamePropagation
       .any? { |person| same_name?(person.name, @old_name) }
   end
 
+  def renamable_owner?(owner)
+    return false unless same_name?(owner.name, @old_name)
+
+    names = owner.association(:people).scope.map { |person| person == @record ? @old_name : person.name }
+    NestedPeople.same_identity?(owner.name, names)
+  end
+
   def sole_namesakes(people)
     people.select { |person| same_name?(person.name, @old_name) }
       .group_by { |person| [ person.client_id, person.lead_id ] }
@@ -83,9 +91,10 @@ class PersonNamePropagation
       emails = seed_people.filter_map { |person| normalize_email(person.email) }.uniq
       [ seed_people, seed_clients, seed_leads, emails ]
     else
-      own_people = @record.people.reload.to_a
-      matching_people = sole_namesakes(own_people) + own_people.select { |person| same_name?(person.name, @new_name) }
-      seed_people = expand_origin_people(matching_people)
+      self_people = Person.where(id: @record.name_identity_person_ids).select do |person|
+        same_name?(person.name, @old_name) || same_name?(person.name, @new_name)
+      end
+      seed_people = expand_origin_people(self_people)
       seed_clients = @record.is_a?(Client) ? [ @record ] : []
       seed_leads = @record.is_a?(Lead) ? [ @record ] : []
       seed_clients |= Client.where(id: seed_people.filter_map(&:client_id).uniq).to_a
@@ -320,12 +329,12 @@ class PersonNamePropagation
     return text if text.blank?
 
     full_names = [ @old_name, @new_name ].sort_by { |name| -name.length }.map { |name| Regexp.escape(name) }
-    updated = text.gsub(/(?<![\w.@+-])(?:#{full_names.join("|")})(?![\w.@+-])/i) do |match|
+    updated = text.gsub(/(?<![\w.@+-])(?:#{full_names.join("|")})(?![\w@+-]|\.\w)/i) do |match|
       match.casecmp?(@old_name) ? @new_name : match
     end
     return updated unless allow_first_name
 
-    salutation = /^([ \t]*(?i:hi|hello|hey|dear)[ \t]+)#{Regexp.escape(old_first_name)}(?![\w.@+-])/
+    salutation = /^([ \t]*(?i:hi|hello|hey|dear)[ \t]+)#{Regexp.escape(old_first_name)}(?![\w@+-]|\.\w)/
     updated.gsub(salutation) { "#{Regexp.last_match(1)}#{new_first_name}" }
   end
 

@@ -76,7 +76,10 @@ class RenamePersonSystemTest < ApplicationSystemTestCase
     assert_selector "h1", text: "Edit client"
 
     fill_in "Display name", with: "Marcus Vance"
-    companion_field = all("input[name*='[people_attributes]'][name$='[name]']").find { |el| el.value == "Lena Weber" }
+    person_fields = all("input[name*='[people_attributes]'][name$='[name]']")
+    primary_field = person_fields.find { |el| el.value == "Tom Becker" }
+    companion_field = person_fields.find { |el| el.value == "Lena Weber" }
+    primary_field.fill_in(with: "Marcus Vance")
     companion_field.fill_in(with: "Clara Meyer")
     click_button "Save"
 
@@ -90,7 +93,7 @@ class RenamePersonSystemTest < ApplicationSystemTestCase
       assert_no_text "Lena Weber"
     end
 
-    assert_equal "Marcus Vance", origin_lead.reload.name
+    assert_equal "Tom Becker", origin_lead.reload.name
     assert_equal [ "Clara Meyer", "Marcus Vance" ], origin_lead.people.reload.map(&:name).sort
 
     # Verify phone layout (390x844)

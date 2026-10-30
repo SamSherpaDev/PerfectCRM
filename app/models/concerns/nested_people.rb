@@ -1,28 +1,33 @@
 module NestedPeople
   extend ActiveSupport::Concern
 
+  def self.same_identity?(owner_name, people_names)
+    people_names.size <= 1 && people_names.all? { |name| name.to_s.strip.casecmp?(owner_name.to_s.strip) }
+  end
+
   included do
     before_validation :sync_nested_same_person_name
     validate :preserve_linked_people
     before_save :release_reassigned_person_emails
   end
 
+  attr_reader :name_identity_person_ids
+
   private
 
   def sync_nested_same_person_name
+    @name_identity_person_ids = nil
     return unless persisted?
+    return unless will_save_change_to_name? || association(:people).target.any?(&:will_save_change_to_name?)
     return if respond_to?(:converted?) && (converted? || converted_client_id_in_database.present?) && !allow_converted_name_sync
 
-    old_owner_name = name_in_database.to_s.strip
-    return if old_owner_name.blank?
+    rows = association(:people).scope.pluck(:id, :name)
+    return unless NestedPeople.same_identity?(name_in_database, rows.map(&:last))
 
-    same_people = association(:people).target.select do |person|
-      person.persisted? && !person.marked_for_destruction? &&
-        person.name_in_database.to_s.strip.casecmp?(old_owner_name)
-    end
-    return unless same_people.one?
+    @name_identity_person_ids = rows.map(&:first)
+    person = association(:people).target.find { |candidate| candidate.id == @name_identity_person_ids.first }
+    return if person.nil? || person.marked_for_destruction?
 
-    person = same_people.first
     if will_save_change_to_name?
       return if name.to_s.strip.blank?
 
