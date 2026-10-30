@@ -17,84 +17,86 @@ class CallSchedulingSystemTest < ApplicationSystemTestCase
   end
 
   test "schedule call from Potential leads list, reschedule and complete on lead page, and browse Today calendar" do
-    lead = Lead.create!(name: "Ang Phurba", email: "ang@example.com", phone: "+14155550199")
-    lead.mark_potential!
-    missed_lead = Lead.create!(name: "Pasang Lhamu", email: "pasang@example.com")
-    missed_lead.mark_potential!
-    missed_lead.scheduled_calls.create!(scheduled_at: 2.hours.ago, notes: "Follow up on October dates")
+    travel_to Date.current.next_occurring(:wednesday).in_time_zone.change(hour: 10) do
+      lead = Lead.create!(name: "Ang Phurba", email: "ang@example.com", phone: "+14155550199")
+      lead.mark_potential!
+      missed_lead = Lead.create!(name: "Pasang Lhamu", email: "pasang@example.com")
+      missed_lead.mark_potential!
+      missed_lead.scheduled_calls.create!(scheduled_at: 2.hours.ago, notes: "Follow up on October dates")
 
-    visit leads_path(tab: "potential")
-    assert_selector "a", text: "Ang Phurba"
-
-    within("li", text: "Ang Phurba") do
-      find("summary", text: "Schedule call").click
-      click_button "Tomorrow"
-      click_button "2:00 PM"
-      select "45 min", from: "Duration"
-      fill_in "Note (optional)", with: "Talk through Gokyo itinerary"
-      tolerate_submit_navigation { click_button "Schedule call" }
-    end
-
-    tolerate_navigation_assertion { assert_text "Call scheduled with Ang Phurba" }
-    assert_current_path leads_path(tab: "potential", q: "", sort: "activity")
-    within("li", text: "Ang Phurba") do
-      assert_text "2:00 PM PT"
-    end
-
-    week_start = Time.zone.today.beginning_of_week(:monday)
-    next_week_start = week_start + 7.days
-
-    visit root_path
-    within("#scheduled-calls-section") do
-      within("[aria-label='Missed calls']") do
-        assert_selector "a", text: "Pasang Lhamu"
-        assert_text "Follow up on October dates"
-      end
-      within("[aria-label='Week calendar']") do
-        assert_selector "a", text: "Ang Phurba"
-        assert_selector "a", text: "Pasang Lhamu"
-      end
-      click_link "Next →"
-    end
-    assert_current_path root_path(view: "week", date: next_week_start.iso8601)
-    assert_selector "[aria-label='Week calendar'] [data-date='#{next_week_start.iso8601}']"
-    within("#scheduled-calls-section") do
-      click_link "← Prev"
-    end
-    assert_current_path root_path(view: "week", date: week_start.iso8601)
-    assert_selector "[aria-label='Week calendar'] [data-date='#{week_start.iso8601}']"
-    within("#scheduled-calls-section") do
-      click_link "Month"
-    end
-    assert_current_path root_path(view: "month", date: week_start.iso8601)
-    within("[aria-label='Month calendar']") do
+      visit leads_path(tab: "potential")
       assert_selector "a", text: "Ang Phurba"
-    end
 
-    click_link "Ang Phurba", match: :first
-    assert_selector "h1", text: "Ang Phurba"
-    within("#scheduled-call") do
-      assert_text "Next call"
-      assert_text "2:00 PM PT · 45 min"
-      assert_text "Talk through Gokyo itinerary"
+      within("li", text: "Ang Phurba") do
+        find("summary", text: "Schedule call").click
+        click_button "Tomorrow"
+        click_button "2:00 PM"
+        select "45 min", from: "Duration"
+        fill_in "Note (optional)", with: "Talk through Gokyo itinerary"
+        tolerate_submit_navigation { click_button "Schedule call" }
+      end
 
-      find("summary", text: "Reschedule").click
-      click_button "4:00 PM"
-      fill_in "Note (optional)", with: "Moved to 4pm Pacific"
-      tolerate_submit_navigation { click_button "Save changes" }
-    end
+      tolerate_navigation_assertion { assert_text "Call scheduled with Ang Phurba" }
+      assert_current_path leads_path(tab: "potential", q: "", sort: "activity")
+      within("li", text: "Ang Phurba") do
+        assert_text "2:00 PM PT"
+      end
 
-    tolerate_navigation_assertion { assert_text "Call with Ang Phurba rescheduled" }
-    within("#scheduled-call") do
-      assert_text "4:00 PM PT"
-      assert_text "Moved to 4pm Pacific"
-      tolerate_submit_navigation { click_button "Talked" }
-    end
+      week_start = Time.zone.today.beginning_of_week(:monday)
+      next_week_start = week_start + 7.days
 
-    tolerate_navigation_assertion { assert_text "Call logged: Talked." }
-    assert_no_selector "#scheduled-call"
-    within(".timeline") do
-      assert_text "Call: Talked"
+      visit root_path
+      within("#scheduled-calls-section") do
+        within("[aria-label='Missed calls']") do
+          assert_selector "a", text: "Pasang Lhamu"
+          assert_text "Follow up on October dates"
+        end
+        within("[aria-label='Week calendar']") do
+          assert_selector "a", text: "Ang Phurba"
+          assert_selector "a", text: "Pasang Lhamu"
+        end
+        click_link "Next →"
+      end
+      assert_current_path root_path(view: "week", date: next_week_start.iso8601)
+      assert_selector "[aria-label='Week calendar'] [data-date='#{next_week_start.iso8601}']"
+      within("#scheduled-calls-section") do
+        click_link "← Prev"
+      end
+      assert_current_path root_path(view: "week", date: week_start.iso8601)
+      assert_selector "[aria-label='Week calendar'] [data-date='#{week_start.iso8601}']"
+      within("#scheduled-calls-section") do
+        click_link "Month"
+      end
+      assert_current_path root_path(view: "month", date: week_start.iso8601)
+      within("[aria-label='Month calendar']") do
+        assert_selector "a", text: "Ang Phurba"
+      end
+
+      click_link "Ang Phurba", match: :first
+      assert_selector "h1", text: "Ang Phurba"
+      within("#scheduled-call") do
+        assert_text "Next call"
+        assert_text "2:00 PM PT · 45 min"
+        assert_text "Talk through Gokyo itinerary"
+
+        find("summary", text: "Reschedule").click
+        click_button "4:00 PM"
+        fill_in "Note (optional)", with: "Moved to 4pm Pacific"
+        tolerate_submit_navigation { click_button "Save changes" }
+      end
+
+      tolerate_navigation_assertion { assert_text "Call with Ang Phurba rescheduled" }
+      within("#scheduled-call") do
+        assert_text "4:00 PM PT"
+        assert_text "Moved to 4pm Pacific"
+        tolerate_submit_navigation { click_button "Talked" }
+      end
+
+      tolerate_navigation_assertion { assert_text "Call logged: Talked." }
+      assert_no_selector "#scheduled-call"
+      within(".timeline") do
+        assert_text "Call: Talked"
+      end
     end
   end
 

@@ -50,25 +50,17 @@ Capybara::Selenium::Driver.prepend(
 module NarrowViewportResize
   def resize_to(width, height)
     target_width = Integer(width)
-    target_height = Integer(height)
-    rect = super(target_width, target_height)
-    sync_viewport_override(rect, target_width, target_height)
+    rect = super(target_width, Integer(height))
+    sync_viewport_override(rect["width"], target_width)
     rect
-  end
-
-  def size=(dimension)
-    super.tap do |rect|
-      sync_viewport_override(rect, Integer(dimension.width), Integer(dimension.height))
-    end
   end
 
   private
 
-  def sync_viewport_override(rect, target_width, target_height)
+  def sync_viewport_override(actual_width, target_width)
     return unless @bridge.respond_to?(:send_command)
 
-    actual_width = rect.is_a?(Hash) ? rect["width"] : (rect.width if rect.respond_to?(:width))
-    if actual_width && actual_width > target_width
+    if actual_width > target_width
       @bridge.send_command(
         cmd: "Emulation.setDeviceMetricsOverride",
         params: { width: target_width, height: 0, deviceScaleFactor: 1, mobile: false }
@@ -145,7 +137,7 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
   # (see tolerate_submit_navigation).
   def tolerate_navigation_assertion
     yield
-  rescue Selenium::WebDriver::Error::UnknownError, Selenium::WebDriver::Error::StaleElementReferenceError
+  rescue Selenium::WebDriver::Error::UnknownError
     yield
   end
 end
