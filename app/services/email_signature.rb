@@ -150,8 +150,8 @@ module EmailSignature
       setting.signature_logo.attached? && setting.signature_logo.attachment.persisted?
     end
 
-    # Checksums of every signature logo configured on Settings, including the
-    # currently attached logo and any logo it later replaced.
+    # Checksums Settings recorded for every attached signature logo: the
+    # current one and earlier ones, kept after replacement or removal.
     def logo_checksums
       Array(Setting.current.signature_logo_checksums)
     end
