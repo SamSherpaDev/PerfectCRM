@@ -99,8 +99,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     assert_text "Draft saved"
     assert_equal "Half written", Draft.find_by!(owner: @client).body
     fill_in "Message", with: ""
-    # Blurring the body animates its height and moves the button below it.
-    find_button("Save draft").send_keys(:enter)
+    click_button "Save draft"
     assert_text "Draft cleared"
     assert_not Draft.exists?(owner: @client)
   end
@@ -128,8 +127,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     fill_in "Subject", with: "Attachment"
     fill_in "Message", with: "See attached"
     attach_file "Attachments", Rails.root.join("test/fixtures/files/sample.txt")
-    # Submit by keyboard while the editor's blur animation moves the button.
-    find_button("Save draft").send_keys(:enter)
+    click_button "Save draft"
     assert_selector "[aria-label='Draft attachments'] li", text: "sample.txt", count: 1
     capture_outbound_evidence("saved-attachment")
     assert_equal "", find_field("Attachments").value
