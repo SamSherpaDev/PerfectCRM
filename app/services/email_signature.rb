@@ -152,9 +152,8 @@ module EmailSignature
 
     # Checksums of every signature logo configured on Settings, including the
     # currently attached logo and any logo it later replaced.
-    def logo_checksums(setting = Setting.current)
-      return [] unless setting
-
+    def logo_checksums
+      setting = Setting.current
       checksums = Array(setting.signature_logo_checksums).dup
       checksums << setting.signature_logo.blob.checksum if logo_attached?(setting)
       checksums.filter_map { |value| value.to_s.presence }.uniq

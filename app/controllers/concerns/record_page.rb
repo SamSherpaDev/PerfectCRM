@@ -77,11 +77,7 @@ module RecordPage
   def files_for(record)
     rows = []
     logo_checksums = signature_logo_checksums
-    attachments = ActiveStorage::Attachment.where(record_type: "Message", name: "files")
-    if logo_checksums.any?
-      attachments = attachments.joins(:blob).where.not(active_storage_blobs: { checksum: logo_checksums })
-    end
-    attached_ids = attachments.select(:record_id)
+    attached_ids = ActiveStorage::Attachment.where(record_type: "Message", name: "files").select(:record_id)
     messages = record_messages(record)
     messages.where(id: attached_ids).or(messages.where("json_array_length(messages.held_attachments) > 0"))
       .select(:id, :sent_at, :created_at, :direction, :from_address, :held_attachments)
