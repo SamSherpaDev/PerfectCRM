@@ -94,6 +94,12 @@ module ApplicationHelper
     badge(status.to_s.humanize, tone, dot: true)
   end
 
+  # A message's attachments as listed: the CRM's own signature logo, quoted
+  # back on replies, stays stored but is never shown as a file.
+  def listed_files(message)
+    message.files.reject { |file| EmailSignature.signature_logo_blob?(file.blob, checksums: signature_logo_checksums) }
+  end
+
   # One plain-language line under a card or table title: what it shows and what to do with it.
   def card_caption(text)
     content_tag :p, text, class: "card-caption"

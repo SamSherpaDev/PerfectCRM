@@ -12,10 +12,7 @@ class AddSignatureLogoChecksumsToSettings < ActiveRecord::Migration[8.1]
     SQL
     return if checksums.empty?
 
-    execute sanitize_sql_array([
-      "UPDATE settings SET signature_logo_checksums = ?",
-      checksums.uniq.to_json
-    ])
+    execute "UPDATE settings SET signature_logo_checksums = #{connection.quote(checksums.uniq.to_json)}"
   end
 
   def down

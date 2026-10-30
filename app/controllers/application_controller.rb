@@ -1,7 +1,7 @@
 class ApplicationController < ActionController::Base
   before_action :require_sign_in
   before_action :set_current_actor
-  helper_method :current_user
+  helper_method :current_user, :signature_logo_checksums
 
   # Only allow modern browsers supporting webp images, web push, badges, import maps, CSS nesting, and CSS :has.
   allow_browser versions: :modern
@@ -42,6 +42,12 @@ class ApplicationController < ActionController::Base
 
   def set_current_actor
     Current.user_email = current_user&.email
+  end
+
+  # The CRM's own signature logo checksums, loaded once per request for
+  # every message attachment list and the record Files card.
+  def signature_logo_checksums
+    @signature_logo_checksums ||= EmailSignature.logo_checksums
   end
 
   def with_name_change_skips(notice)

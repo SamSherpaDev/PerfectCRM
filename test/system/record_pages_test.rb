@@ -236,7 +236,7 @@ class RecordPagesTest < ApplicationSystemTestCase
     other.conversations.create!(subject_line: "Private").messages.create!(direction: "in",
       held_attachments: [ { "filename" => "private.pdf", "status" => "expired" } ])
 
-    loader = Object.new.extend(RecordPage)
+    loader = ClientsController.new
     rows = loader.send(:files_for, client)
     assert_equal [ attached.id, held.id ].sort, rows.map { |row| row.message.id }.sort
     assert rows.none? { |row| row.message.id == plain.id || row.message.id == quoted_logo.id }

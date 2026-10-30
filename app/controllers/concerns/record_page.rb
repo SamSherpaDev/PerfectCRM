@@ -76,7 +76,7 @@ module RecordPage
   # version, newest first. Traveler documents render from @bookings.
   def files_for(record)
     rows = []
-    logo_checksums = EmailSignature.logo_checksums
+    logo_checksums = signature_logo_checksums
     attachments = ActiveStorage::Attachment.where(record_type: "Message", name: "files")
     if logo_checksums.any?
       attachments = attachments.joins(:blob).where.not(active_storage_blobs: { checksum: logo_checksums })

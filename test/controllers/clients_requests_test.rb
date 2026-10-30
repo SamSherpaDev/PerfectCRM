@@ -131,7 +131,7 @@ class ClientsRequestsTest < ActionDispatch::IntegrationTest
     assert_select "ol li", text: /Note added/, count: 0
   end
 
-  test "show excludes the CRM signature logo from Files and counts while keeping real files and stored attachments" do
+  test "show leaves the CRM signature logo out of Files, counts, and timeline chips while keeping real files and stored attachments" do
     first_logo = "\x89PNG\r\n\x1A\n".b + [ 13 ].pack("N") + "IHDR" + [ 120, 40 ].pack("NN") + "\x08\x02\x00\x00\x00sig-v1".b
     second_logo = "\x89PNG\r\n\x1A\n".b + [ 13 ].pack("N") + "IHDR" + [ 100, 36 ].pack("NN") + "\x08\x02\x00\x00\x00sig-v2".b
     customer_image = "\x89PNG\r\n\x1A\n".b + [ 13 ].pack("N") + "IHDR" + [ 64, 64 ].pack("NN") + "\x08\x02\x00\x00\x00customer".b
@@ -149,12 +149,13 @@ class ClientsRequestsTest < ActionDispatch::IntegrationTest
     outbound.files.attach(io: StringIO.new("%PDF-1.4 itinerary"), filename: "itinerary.pdf", content_type: "application/pdf")
     outbound.files.attach(io: StringIO.new(first_logo), filename: "signature-logo.png", content_type: "image/png")
 
-    [ first_logo, second_logo ].each_with_index do |logo_bytes, idx|
+    replies = [ first_logo, second_logo ].each_with_index.map do |logo_bytes, idx|
       reply = conversation.messages.create!(
         direction: "in", from_address: client.email,
         subject: "Re: Everest Base Camp", text_body: "Reply #{idx}", sent_at: (2 - idx).days.ago
       )
       reply.files.attach(io: StringIO.new(logo_bytes), filename: "signature-logo.png", content_type: "image/png")
+      reply
     end
 
     customer_msg = conversation.messages.create!(
@@ -169,7 +170,17 @@ class ClientsRequestsTest < ActionDispatch::IntegrationTest
     assert_select "section[aria-labelledby='files-heading'] ul.files > li", count: 2
     assert_select "section[aria-labelledby='files-heading'] ul.files .n", text: "itinerary.pdf", count: 1
     assert_select "section[aria-labelledby='files-heading'] ul.files .n", text: "signature-logo.png", count: 1
-    assert_equal 2, outbound.reload.files.count
+
+    itinerary = outbound.reload.files.find { |file| file.filename.to_s == "itinerary.pdf" }
+    logo_files = [ outbound, *replies ].flat_map { |message| message.files.select { |file| file.filename.to_s == "signature-logo.png" } }
+    assert_equal 3, logo_files.size
+    assert_select "ol.timeline .chips[aria-label='Attachments']", count: 2
+    assert_select "ol.timeline .chips a.chip", count: 2
+    assert_select "ol.timeline .chips a.chip[href=?]", attachment_path(itinerary.id), text: /itinerary\.pdf/, count: 1
+    assert_select "ol.timeline .chips a.chip[href=?]", attachment_path(customer_msg.files.first.id), text: /signature-logo\.png/, count: 1
+    logo_files.each { |file| assert_select "a[href=?]", attachment_path(file.id), count: 0 }
+    assert_equal 2, outbound.files.count
+    replies.each { |reply| assert_equal 1, reply.reload.files.count }
   ensure
     Setting.current.signature_logo.purge if Setting.current.signature_logo.attached?
   end

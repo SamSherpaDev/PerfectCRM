@@ -160,20 +160,16 @@ module EmailSignature
       checksums.filter_map { |value| value.to_s.presence }.uniq
     end
 
-    def signature_logo_blob?(blob, setting = Setting.current, checksums: nil)
+    def signature_logo_blob?(blob, checksums:)
       return false if blob.nil? || blob.checksum.blank?
 
-      known = checksums || logo_checksums(setting)
-      known.include?(blob.checksum)
+      checksums.include?(blob.checksum)
     end
 
-    def signature_logo_data?(data, setting = Setting.current, checksums: nil)
-      return false if data.blank?
+    def signature_logo_data?(data, checksums:)
+      return false if data.blank? || checksums.empty?
 
-      known = checksums || logo_checksums(setting)
-      return false if known.empty?
-
-      known.include?(Digest::MD5.base64digest(data.to_s))
+      checksums.include?(Digest::MD5.base64digest(data.to_s))
     end
 
     # A template that renders {{signature}} signs its own body, so nothing
