@@ -615,11 +615,13 @@ a compact read-only Trip in PerfectBook (the Upcoming follow-up-tasks card and t
 behind Thread, Details, and Files tabs. Each visit starts on Thread
 unless an explicit link targets another panel. Use New client to create a
 record, and Edit to update facts or add another
-person in the blank People fields. Renaming a lead, client, person, or
-organization updates linked PerfectCRM records for that same person (converted
-or origin leads, matching client, and linked people that still carry the old
-name, plus open tasks, open scheduled-call notes, unsent drafts, and unbundled
-draft quotes), refreshes the FTS5 search index, and logs a `name_change` timeline event while leaving sent messages,
+person in the blank People fields. Renaming a lead, client, or person updates
+linked PerfectCRM records for that same person (converted or origin leads,
+matching client, and linked people that still carry the old name, plus open
+tasks, open scheduled-call notes, unsent drafts, and unbundled draft quotes);
+renaming an organization updates only its own open tasks and unsent drafts.
+Every rename refreshes the FTS5 search index and logs a `name_change` timeline
+event while leaving sent messages,
 sent or accepted quotes, past activity events, and synced PerfectBook contacts
 untouched. Free text (task titles and notes, draft subjects and bodies, quote
 and call notes) changes only when the old name has two or more words: the full
@@ -799,7 +801,8 @@ referrer. CRM records who sent the enquiry; PerfectBook owns commissions.
 Only clients created by conversion show Started as a lead.
 Both paths transfer the lead's tasks, drafts, linked conversations, and remembered
 email identities to the client, then link forward and freeze the lead read-only,
-with no reverse path.
+with no reverse path. Only a rename carried over from a linked record (see
+[Clients](#clients)) still changes the frozen lead's name.
 
 Fit labels and bar colors use the supplied fit band; the CRM does not
 derive a band from the numeric score. The AI fit score bar, Best fit sort option, Set your fit buttons, interactive Confirm source form, New quote buttons, and unused pipeline/AI/value fields on the lead form are hidden from the UI while their model attributes and endpoints remain intact.
