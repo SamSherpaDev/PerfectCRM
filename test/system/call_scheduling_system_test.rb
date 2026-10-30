@@ -432,8 +432,8 @@ class CallSchedulingSystemTest < ApplicationSystemTestCase
   end
 
   private
-    # The sheet is positioned from the async details toggle event, so retry the
-    # measurement until it settles, then return the last one for the assertions.
+    # Retry the measurement until the open sheet settles, then return the last
+    # one for the assertions.
     def settled_layout(script)
       layout = nil
       page.document.synchronize do

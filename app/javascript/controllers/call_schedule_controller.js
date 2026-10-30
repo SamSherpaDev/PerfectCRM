@@ -9,17 +9,17 @@ export default class extends Controller {
     this.sheet = this.element.closest(".call-schedule-sheet")
     if (!this.details) return
 
-    this.boundToggle = this.handleToggle.bind(this)
     this.boundOutsideClick = this.handleOutsideClick.bind(this)
     this.boundKeydown = this.handleKeydown.bind(this)
-    this.details.addEventListener("toggle", this.boundToggle)
+    // Watch the open attribute rather than the async toggle event, which can
+    // land after the sheet has painted (and taken a click) in its unplaced spot.
+    this.openObserver = new MutationObserver(() => this.handleToggle())
+    this.openObserver.observe(this.details, { attributes: true, attributeFilter: ["open"] })
     if (this.details.open) this.handleToggle()
   }
 
   disconnect() {
-    if (this.details && this.boundToggle) {
-      this.details.removeEventListener("toggle", this.boundToggle)
-    }
+    this.openObserver?.disconnect()
     this.removeDocumentListeners()
   }
 
