@@ -43,4 +43,40 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
     end
     assert_select ".call-choices input[name=direction][value=outbound]"
   end
+
+  test "logging a third unanswered voicemail via the one-tap endpoint moves an Unsure lead to Not interested, completes due scheduled calls, cancels future scheduled calls, and supports undo" do
+    travel_to Time.zone.local(2026, 10, 20, 10, 0) do
+      lead = Lead.create!(name: "Unsure Three Voicemails", email: "unsure-3vm@example.com")
+      lead.mark_unsure!
+      CallLog.record!(lead, key: "req-vm-1", occurred_at: 3.days.ago, outcome: "voicemail", direction: "outbound")
+      CallLog.record!(lead, key: "req-vm-2", occurred_at: 2.days.ago, outcome: "voicemail", direction: "outbound")
+      due_call = lead.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 20, 9, 0))
+      future_call = lead.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 25, 11, 0))
+
+      2.times do
+        post lead_calls_path(lead), params: { save_key: "req-vm-3", outcome: "voicemail", direction: "outbound" }
+      end
+      assert_redirected_to lead_path(lead, anchor: "record-details")
+      assert_equal "Call logged: Voicemail.", flash[:notice]
+
+      lead.reload
+      assert lead.not_interested?
+      assert_not lead.unsure?
+      assert_equal [ "completed", "voicemail" ], [ due_call.reload.status, due_call.outcome ]
+      assert_equal "cancelled", future_call.reload.status
+      assert_equal 1, lead.activity_events.where(kind: "not_interested").count
+
+      get lead_path(lead)
+      assert_response :success
+      assert_select "[role=alert][aria-label='Not interested warning']", text: /Not interested - do not contact/
+      assert_select ".timeline", text: /Moved to Not interested automatically after three voicemails/
+      assert_select "button", text: "Interested again"
+
+      patch unmark_not_interested_lead_path(lead), params: { return_to: leads_path(tab: "not_interested") }
+      assert_redirected_to leads_path(tab: "not_interested")
+      assert_equal "Interested again - moved to Unsure.", flash[:notice]
+      assert lead.reload.unsure?
+      assert_not lead.not_interested?
+    end
+  end
 end

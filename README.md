@@ -725,7 +725,12 @@ previous tab (`Potential`, `Unsure`, `Quoted`, `New`, or `Archived`). Marking
 Potential or Unsure on a not-interested lead also clears `not_interested_marked_at`.
 Not interested is not spam: it does not set `spam_marked_at` or the
 `suspected_spam` tag, and it does not alter spam reports or ad conversions
-already sent.
+already sent. Logging a `Voicemail` call on a lead in Unsure that now has three
+`Voicemail` outcomes with no response (`Talked` call or inbound message) since
+the first of those three also marks the lead not interested automatically via
+`Lead#mark_not_interested!` and records a `not_interested` timeline note
+(`Moved to Not interested automatically after three voicemails`), while keeping
+`unsure_marked_at` intact for **Interested again**.
 
 While marked not interested, a lead is excluded from Today's Calls to make today,
 New leads, Quotes out, Follow-ups, Replies waiting, and Scheduled calls, from

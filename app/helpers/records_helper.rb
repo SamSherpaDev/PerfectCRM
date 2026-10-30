@@ -82,7 +82,8 @@ module RecordsHelper
   EVENT_ACTORS = {
     "conversion" => "Converted", "stage_change" => "Stage", "quote" => "Quote",
     "task" => "Follow-up", "email" => "Email", "duplicate_inquiry" => "Duplicate inquiry",
-    "spam_review" => "Spam review", "scheduled_call" => "Scheduled call", "name_change" => "Name"
+    "spam_review" => "Spam review", "scheduled_call" => "Scheduled call", "name_change" => "Name",
+    "not_interested" => "Not interested"
   }.freeze
 
   def event_actor(event)
