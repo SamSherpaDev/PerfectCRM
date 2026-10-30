@@ -255,6 +255,9 @@ class TemplateSubjectFallbackSystemTest < ApplicationSystemTestCase
   def open_details
     details = find(".reply-details")
     details.find("summary").click unless details["open"] == "true"
+    # Opening Details grows the record well over 160ms; let it settle so
+    # controls below it do not shift out from under the next click.
+    assert_selector(:field, "Message") { |body| body.evaluate_script("this.getBoundingClientRect().height") >= 128 }
   end
 
   def capture(name)
