@@ -1,5 +1,5 @@
 class ScheduledCallsController < ApplicationController
-  include LeadsReturnPath
+  include ListReturnPath
   include TodayReturnPath
 
   before_action :set_owner
@@ -71,25 +71,6 @@ class ScheduledCallsController < ApplicationController
   def return_destination
     value = params[:return_to].to_s
     safe_leads_return_path(value) || safe_clients_return_path(value) || safe_today_return_path(value) || safe_record_return_path(value) || polymorphic_path(@owner)
-  end
-
-  def safe_clients_return_path(value)
-    return unless value.present?
-
-    uri = URI.parse(value)
-    return unless uri.relative? && uri.host.nil? && uri.path == clients_path && uri.fragment.nil?
-
-    pairs = URI.decode_www_form(uri.query.to_s)
-    return unless pairs.map(&:first).uniq.length == pairs.length
-    return unless (pairs.map(&:first) - %w[tab q sort]).empty?
-
-    query = pairs.to_h
-    return if query["tab"].present? && !%w[clients organizations archived].include?(query["tab"])
-    return if query["sort"].present? && !%w[activity name newest].include?(query["sort"])
-
-    clients_path(query)
-  rescue URI::InvalidURIError, ArgumentError
-    nil
   end
 
   def safe_record_return_path(value)

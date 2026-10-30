@@ -4,7 +4,7 @@
 <% lead = record.is_a?(Lead) %>
 <% inquiries = lead ? [record] : record.inquiries.order(created_at: :desc) %>
 <% calls_path = lead ? lead_calls_path(record) : client_calls_path(record) %>
-<% call_confirm_msg = "This lead is marked not interested. Log an outbound call anyway?" %>
+<% call_confirm_msg = CallLog::NOT_INTERESTED_CONFIRM %>
 <% not_interested_ids = inquiries.select(&:not_interested?).map(&:id) %>
 <% if inquiries.any? %>
   <section class="calls" aria-labelledby="calls-heading">

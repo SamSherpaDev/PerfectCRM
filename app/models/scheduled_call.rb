@@ -76,13 +76,14 @@ class ScheduledCall < ApplicationRecord
   end
 
   def self.complete_due_by!(event)
-    subject = event.subject
-    subject.with_lock do
+    lead = event.subject
+    lead.with_lock do
       next if exists?(activity_event: event)
 
-      client = subject.is_a?(Client) ? subject : (subject.converted_client || subject.existing_client)
-      call = subject.scheduled_calls.scheduled.first
-      call ||= client.scheduled_calls.scheduled.first if client
+      calls = scheduled.where(lead_id: lead.id)
+      client = lead.converted_client || lead.existing_client
+      calls = calls.or(scheduled.where(client_id: client.id)) if client
+      call = calls.order(:scheduled_at, :id).first
       next unless call&.due_by?(event.occurred_at)
 
       call.update!(status: "completed", outcome: event.metadata["outcome"], completed_at: event.occurred_at, activity_event: event)

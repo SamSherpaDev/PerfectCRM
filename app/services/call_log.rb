@@ -6,6 +6,7 @@ module CallLog
   # What the captain sees, in button order; "Talked" is the stored `connected`.
   LABELS = { "connected" => "Talked", "voicemail" => "Voicemail", "no_answer" => "No answer", "attempted" => "Attempted" }.freeze
   ONE_TAP = %w[connected voicemail no_answer].freeze
+  NOT_INTERESTED_CONFIRM = "This lead is marked not interested. Log an outbound call anyway?"
   module_function
 
   def record!(record, key:, occurred_at:, outcome:, direction:, duration: nil)

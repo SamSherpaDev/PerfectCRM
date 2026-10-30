@@ -183,6 +183,27 @@ class ScheduledCallsRequestsTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "logging a call on an inquiry completes the earliest due call across the inquiry and its client" do
+    travel_to Time.zone.local(2026, 10, 20, 10, 0) do
+      converted_later = @lead.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 26, 10, 0))
+      client = @lead.convert_to_client!
+      client_today = client.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 20, 16, 0))
+
+      post client_calls_path(client), params: { save_key: "converted-due-01", outcome: "connected", direction: "outbound", inquiry_id: @lead.id }
+      assert_equal [ "completed", "connected" ], [ client_today.reload.status, client_today.outcome ]
+      assert_equal "scheduled", converted_later.reload.status
+
+      returning_client = Client.create!(name: "Returning traveler", email: "returning@example.com")
+      returning = Lead.create!(name: "Returning traveler", existing_client: returning_client)
+      returning_later = returning.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 27, 10, 0))
+      returning_today = returning_client.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 20, 15, 0))
+
+      post lead_calls_path(returning), params: { save_key: "returning-due-01", outcome: "voicemail", direction: "outbound" }
+      assert_equal [ "completed", "voicemail" ], [ returning_today.reload.status, returning_today.outcome ]
+      assert_equal "scheduled", returning_later.reload.status
+    end
+  end
+
   test "Today shows missed, today, and upcoming calls plus week and month calendars with stepping" do
     travel_to Time.zone.local(2026, 10, 20, 10, 0) do
       missed_lead = Lead.create!(name: "Missed Mingma")
@@ -408,6 +429,35 @@ class ScheduledCallsRequestsTest < ActionDispatch::IntegrationTest
       assert_equal Time.zone.local(2026, 10, 21, 9, 0), call.reload.scheduled_at
       patch cancel_client_scheduled_call_path(client, call), params: { return_to: client_path(client) }
       assert_equal "cancelled", call.reload.status
+    end
+  end
+
+  test "a client's scheduled call outcomes ask before logging on a not-interested inquiry" do
+    travel_to Time.zone.local(2026, 10, 20, 10, 0) do
+      client = Client.create!(name: "Two trips", email: "two@example.com")
+      declined = Lead.create!(name: "Two trips", reference: "SH-DECLINED", existing_client: client, created_at: 2.days.ago)
+      declined.mark_not_interested!
+      open = Lead.create!(name: "Two trips", reference: "SH-OPEN", existing_client: client)
+      call = client.scheduled_calls.create!(scheduled_on: "2026-10-20", scheduled_time: "15:00")
+      message = "This lead is marked not interested. Log an outbound call anyway?"
+
+      get client_path(client)
+      assert_response :success
+      assert_select "#scheduled-call" do
+        assert_select "[aria-label='Log this call for SH-DECLINED'] form[data-controller=contact-confirm][data-contact-confirm-message-value=?]", message do
+          assert_select "button[name=outcome][data-action='click->contact-confirm#confirm']", 3
+        end
+        assert_select "[aria-label='Log this call for SH-OPEN'] form" do |forms|
+          assert forms.none? { |form| form["data-controller"] }
+        end
+        assert_select "[aria-label='Log this call for SH-OPEN'] button[data-action]", 0
+      end
+
+      open.destroy!
+      get root_path
+      assert_select "#scheduled_call_#{call.id} form[data-controller=contact-confirm][data-contact-confirm-message-value=?]", message do
+        assert_select "button[name=outcome][data-action='click->contact-confirm#confirm']", 3
+      end
     end
   end
 end

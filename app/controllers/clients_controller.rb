@@ -2,12 +2,15 @@ class ClientsController < ApplicationController
   include ReplyBox
   include RecordPage
 
+  TABS = %w[clients organizations archived].freeze
+  SORTS = %w[activity name newest].freeze
+
   before_action :set_client, only: %i[show edit update archive unarchive refresh_bookings]
 
   def index
-    @tab = %w[clients organizations archived].include?(params[:tab]) ? params[:tab] : "clients"
+    @tab = TABS.include?(params[:tab]) ? params[:tab] : "clients"
     @query = params[:q].to_s.strip
-    @sort = %w[activity name newest].include?(params[:sort]) ? params[:sort] : "activity"
+    @sort = SORTS.include?(params[:sort]) ? params[:sort] : "activity"
 
     @clients_count = Client.active.count
     @organizations_count = Organization.count
