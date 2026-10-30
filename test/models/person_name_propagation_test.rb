@@ -13,6 +13,7 @@ class PersonNamePropagationTest < ActiveSupport::TestCase
       message: "Hi, I am Elena Rossi asking about October."
     )
     lead_self_person = lead.people.create!(name: "Elena Rossi", email: "traveler1@example.com", role: "Lead traveler")
+    companion = lead.people.create!(name: "Marco Bianchi", email: "companion1@example.com", role: "Spouse")
 
     open_task = lead.tasks.create!(title: "Call Elena Rossi about the November departure", due_on: Date.current)
     done_task = lead.tasks.create!(title: "Send brochure to Elena Rossi", due_on: Date.current - 1, done_at: 1.day.ago)
@@ -44,17 +45,19 @@ class PersonNamePropagationTest < ActiveSupport::TestCase
       notes: "Prepared for Elena Rossi"
     )
 
-    # Simulate the lead edit form where Display name is changed and nested
-    # people_attributes still submits the old name from the bottom of the form.
+    # Simulate the lead edit form where Display name and the traveler's own
+    # People row are changed together while the companion row stays as is.
     lead.update!(
       name: "Sofia Conti",
       people_attributes: {
-        "0" => { id: lead_self_person.id, name: "Elena Rossi", email: "traveler1@example.com", role: "Lead traveler" }
+        "0" => { id: lead_self_person.id, name: "Sofia Conti", email: "traveler1@example.com", role: "Lead traveler" },
+        "1" => { id: companion.id, name: "Marco Bianchi", email: "companion1@example.com", role: "Spouse" }
       }
     )
 
     assert_equal "Sofia Conti", lead.reload.name
     assert_equal "Sofia Conti", lead_self_person.reload.name
+    assert_equal "Marco Bianchi", companion.reload.name
     assert_equal "Sofia Conti", existing_client.reload.name
     assert_equal "Sofia Conti", client_self_person.reload.name
 
@@ -510,6 +513,71 @@ class PersonNamePropagationTest < ActiveSupport::TestCase
     assert_equal "Ana Díaz", lead.reload.name
     assert_equal "Ana Díaz", lead_person.reload.name
     assert_equal "Send Ana Díaz the dates", task.reload.title
+  end
+
+  test "renaming the only person carrying a two-person display name renames it and its converted lead" do
+    lead = Lead.create!(name: "Tom Becker", email: "tom@example.com", source: "referral")
+    lead_tom = lead.people.create!(name: "Tom Becker", email: "tom@example.com", role: "Lead traveler")
+    lead_lena = lead.people.create!(name: "Lena Weber", email: "lena@example.com", role: "Spouse")
+    client = lead.convert_to_client!
+    tom = client.people.find_by!(origin_person_id: lead_tom.id)
+    lena = client.people.find_by!(origin_person_id: lead_lena.id)
+    task = client.tasks.create!(title: "Call Tom Becker about dates", due_on: Date.current)
+    draft = Draft.create!(owner: client, to_addrs: "Tom Becker <tom@example.com>",
+      subject: "Dates for Tom Becker", body: "Hi Tom,\n\nHere are the dates.")
+
+    client.update!(
+      name: "Tom Becker",
+      people_attributes: {
+        "0" => { id: tom.id, name: "Thomas Becker", email: "tom@example.com", role: "Lead traveler" },
+        "1" => { id: lena.id, name: "Lena Weber", email: "lena@example.com", role: "Spouse" }
+      }
+    )
+
+    assert_equal "Thomas Becker", client.reload.name
+    assert_equal "Thomas Becker", tom.reload.name
+    assert_equal "Thomas Becker", lead.reload.name
+    assert_equal "Thomas Becker", lead_tom.reload.name
+    assert_equal "Lena Weber", lena.reload.name
+    assert_equal "Lena Weber", lead_lena.reload.name
+    assert_equal "Call Thomas Becker about dates", task.reload.title
+    assert_equal "Thomas Becker <tom@example.com>", draft.reload.to_addrs
+    assert_equal "Dates for Thomas Becker", draft.subject
+    assert_equal "Hi Thomas,\n\nHere are the dates.", draft.body
+    assert_equal 1, client.activity_events.where(kind: "name_change").count
+  end
+
+  test "adding the first person to a record leaves its display name and drafts alone" do
+    lead = Lead.create!(name: "Maria Lopez", email: "maria@example.com", source: "website_form")
+    draft = Draft.create!(owner: lead, to_addrs: "Maria Lopez <maria@example.com>", body: "Hi Maria,\n\nHere are the dates.")
+
+    lead.update!(people_attributes: { "0" => { name: "Carlos Lopez", email: "carlos@example.com", role: "Spouse" } })
+
+    assert_equal "Maria Lopez", lead.reload.name
+    assert_equal [ "Carlos Lopez" ], lead.people.map(&:name)
+    assert_equal "Maria Lopez <maria@example.com>", draft.reload.to_addrs
+    assert_equal "Hi Maria,\n\nHere are the dates.", draft.body
+    assert_equal 0, lead.activity_events.where(kind: "name_change").count
+  end
+
+  test "relabeling a one-person display name while adding a second person keeps the first person's name" do
+    lead = Lead.create!(name: "Tom Becker", email: "tom.b@example.com", source: "referral")
+    lead_tom = lead.people.create!(name: "Tom Becker", email: "tom.b@example.com", role: "Lead traveler")
+    client = lead.convert_to_client!
+    tom = client.people.find_by!(origin_person_id: lead_tom.id)
+
+    client.update!(
+      name: "Becker Family",
+      people_attributes: {
+        "0" => { id: tom.id, name: "Tom Becker", email: "tom.b@example.com", role: "Lead traveler" },
+        "1" => { name: "Lena Becker", email: "lena.b@example.com", role: "Spouse" }
+      }
+    )
+
+    assert_equal "Becker Family", client.reload.name
+    assert_equal "Tom Becker", tom.reload.name
+    assert_equal "Tom Becker", lead.reload.name
+    assert_equal "Tom Becker", lead_tom.reload.name
   end
 
   test "names followed by a sentence-ending period are replaced without touching addresses" do

@@ -622,10 +622,11 @@ name, plus open tasks, open scheduled-call notes, unsent drafts, and unbundled
 draft quotes), refreshes the FTS5 search index, and logs a `name_change` timeline event while leaving sent messages,
 sent or accepted quotes, past activity events, and synced PerfectBook contacts
 untouched. Text rewrites replace the full old name anywhere and the bare first
-name only after a leading Hi, Hello, Hey, or Dear. When a record has two or
-more people, or its one person carries a different name, the display name is a
-label: changing it touches nothing else, and renaming a person leaves it alone.
-A linked
+name only after a leading Hi, Hello, Hey, or Dear. Renaming the only person
+on a record who carries its display name renames the display name and linked
+records with that name too; on a record with two or more people, changing just
+the display name relabels that record alone, and adding a person never renames
+it. A linked
 record that fails validation keeps the old name, and the saved notice says how
 many did. Archive lives in the More menu and
 moves a client to the Archived tab, where Restore makes it active again.

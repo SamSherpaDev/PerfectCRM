@@ -14,8 +14,6 @@ class Organization < ApplicationRecord
 
   include TaggedRecord
 
-  attr_accessor :skip_name_propagation
-
   before_validation :normalize_email
   before_validation :normalize_website
 
@@ -126,7 +124,7 @@ class Organization < ApplicationRecord
   end
 
   def propagate_name_change
-    return if skip_name_propagation || !saved_change_to_name?
+    return unless saved_change_to_name?
 
     old_name, new_name = saved_change_to_name
     PersonNamePropagation.call(self, old_name: old_name, new_name: new_name)

@@ -93,7 +93,7 @@ class RenamePersonSystemTest < ApplicationSystemTestCase
       assert_no_text "Lena Weber"
     end
 
-    assert_equal "Tom Becker", origin_lead.reload.name
+    assert_equal "Marcus Vance", origin_lead.reload.name
     assert_equal [ "Clara Meyer", "Marcus Vance" ], origin_lead.people.reload.map(&:name).sort
 
     # Verify phone layout (390x844)

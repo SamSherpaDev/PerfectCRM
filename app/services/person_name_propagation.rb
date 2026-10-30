@@ -52,8 +52,8 @@ class PersonNamePropagation
     family_clients, family_leads = expand_owner_family(seed_clients, seed_leads, person_emails)
     target_people = select_target_people(seed_people, family_clients, family_leads, person_emails)
 
-    update_clients(family_clients.select { |client| renamable_owner?(client) })
-    update_leads(family_leads.select { |lead| renamable_owner?(lead) })
+    update_clients(family_clients.select { |client| same_name?(client.name, @old_name) })
+    update_leads(family_leads.select { |lead| same_name?(lead.name, @old_name) })
     update_people(target_people)
 
     affected_owners = (family_clients + family_leads + target_people.filter_map(&:owner)).uniq
@@ -68,13 +68,6 @@ class PersonNamePropagation
       .or(Person.where(lead_id: seed_people.filter_map(&:lead_id)))
       .where.not(id: seed_people.map(&:id))
       .any? { |person| same_name?(person.name, @old_name) }
-  end
-
-  def renamable_owner?(owner)
-    return false unless same_name?(owner.name, @old_name)
-
-    names = owner.association(:people).scope.map { |person| person == @record ? @old_name : person.name }
-    NestedPeople.same_identity?(owner.name, names)
   end
 
   def sole_namesakes(people)
