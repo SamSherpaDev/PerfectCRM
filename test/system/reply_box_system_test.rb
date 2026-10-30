@@ -119,6 +119,21 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     assert_equal "Short note", Draft.find_by!(owner: @client).body
   end
 
+  test "a held press on a template chip keeps the compact record well still" do
+    sign_in_browser
+    page.current_window.resize_to(1400, 1000)
+    visit client_path(@client)
+    well = find(".composer .reply-body")
+    height = well.evaluate_script("this.getBoundingClientRect().height")
+    assert_operator height, :<, 128, "the record well should start compact"
+    # A real press: Chrome focuses the chip on mousedown, mouseup follows a beat later.
+    press = page.driver.browser.action.move_to(find_button("Quick hello").native)
+    press.click_and_hold.pause(duration: 0.3).perform
+    assert_equal height, well.evaluate_script("this.getBoundingClientRect().height")
+    press.release.perform
+    assert_field "Message", with: "Hello Maya, thinking of [missing: trip]!"
+  end
+
   test "saving attachments clears selections before another save and send" do
     sign_in_browser
     page.current_window.resize_to(1400, 1000)

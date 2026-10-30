@@ -2495,10 +2495,9 @@
   min-height: 72px;
   transition: min-height 160ms ease-out;
 }
-/* Grow when any control in the composer takes focus or Details opens, and
-   stay grown while holding text: growing late or shrinking on blur would
-   move Send and Save draft out from under the pointer mid-click. */
-.composer:focus-within .reply-body,
+/* Grow on focus or once Details opens, and stay grown while holding text:
+   growing late or shrinking on blur would move Send and Save draft out
+   from under the pointer mid-click. */
 .composer:has(.reply-details[open]) .reply-body,
 .composer .reply-body:focus,
 .composer .reply-body:not(:placeholder-shown) {
@@ -2891,7 +2890,6 @@
   .record-thread {
     gap: 16px;
   }
-  .composer:focus-within .reply-body,
   .composer:has(.reply-details[open]) .reply-body,
   .composer .reply-body:focus,
   .composer .reply-body:not(:placeholder-shown) {

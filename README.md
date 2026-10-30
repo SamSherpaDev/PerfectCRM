@@ -166,8 +166,9 @@ it does not pick up later draft edits.
 The lead and client pages put the composer first in the middle column,
 above the one timeline: a Reply | Note segment, a summary of the current
 recipient, subject, and sending mailbox that updates as you edit, a compact
-well that grows on focus, template chips with the full picker behind All
-templates, Save draft, and Send.
+well that grows on focus or once Details opens and stays grown while it
+holds text, template chips with the full picker behind All templates, Save
+draft, and Send.
 Details (recipients, subject, booking choice, attachments) stays folded.
 Note mode swaps Send for Save note and writes a private note onto the
 timeline. The organization and inbox thread views keep the same form
