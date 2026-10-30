@@ -42,9 +42,11 @@ class InquiryCostsSystemTest < ApplicationSystemTestCase
     click_link "Cost per inquiry"
     find("#start_date").set(day)
     find("#end_date").set(day)
-    click_button "View report"
-    assert_current_path inquiry_costs_path, ignore_query: true
-    assert_selector "#start_date[value='#{day.iso8601}']"
+    tolerate_submit_navigation { click_button "View report" }
+    tolerate_navigation_assertion do
+      assert_current_path inquiry_costs_path, ignore_query: true
+      assert_selector "#start_date[value='#{day.iso8601}']"
+    end
     within("section[aria-label='By day']") { assert_text "$30.00 USD"; assert_text "$15.00 USD" }
     within("section[aria-label='Ads by day']") { assert_text "$20.00 USD"; assert_text "$10.00 USD" }
     assert_no_text "Private synthetic person"

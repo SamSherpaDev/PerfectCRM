@@ -382,27 +382,45 @@ class QuotesSystemTest < ApplicationSystemTestCase
     QuoteTripPreference.create!(perfectbook_trip_id: 42, included: "Everest guide and permits")
     QuoteTripPreference.create!(perfectbook_trip_id: 44, included: "Annapurna lodges")
     visit new_quote_path(client_id: client.id)
-    select "Everest", from: "Trip"
-    assert_field "What is included", with: "Everest guide and permits"
-    select "Annapurna", from: "Trip"
-    assert_field "What is included", with: "Everest guide and permits"
+    tolerate_submit_navigation { select "Everest", from: "Trip" }
+    tolerate_navigation_assertion do
+      assert_selector "input[data-description][value='Everest']"
+      assert_field "What is included", with: "Everest guide and permits"
+    end
+    tolerate_submit_navigation { select "Annapurna", from: "Trip" }
+    tolerate_navigation_assertion do
+      assert_selector "input[data-description][value='Annapurna']"
+      assert_field "What is included", with: "Everest guide and permits"
+    end
     fill_in "What is included", with: "Private guide only"
-    select "Everest", from: "Trip"
-    assert_field "What is included", with: "Private guide only"
+    tolerate_submit_navigation { select "Everest", from: "Trip" }
+    tolerate_navigation_assertion do
+      assert_selector "input[data-description][value='Everest']"
+      assert_field "What is included", with: "Private guide only"
+    end
     fill_in "What is included", with: ""
-    select "Annapurna", from: "Trip"
-    assert_field "What is included", with: ""
+    tolerate_submit_navigation { select "Annapurna", from: "Trip" }
+    tolerate_navigation_assertion do
+      assert_selector "input[data-description][value='Annapurna']"
+      assert_field "What is included", with: ""
+    end
 
     visit new_quote_path(client_id: client.id)
     fill_in "What is included", with: "Custom inclusions before choosing"
-    select "Everest", from: "Trip"
-    assert_field "What is included", with: "Custom inclusions before choosing"
+    tolerate_submit_navigation { select "Everest", from: "Trip" }
+    tolerate_navigation_assertion do
+      assert_selector "input[data-description][value='Everest']"
+      assert_field "What is included", with: "Custom inclusions before choosing"
+    end
 
     visit new_quote_path(client_id: client.id)
     fill_in "What is included", with: "Changed my mind"
     fill_in "What is included", with: ""
-    select "Everest", from: "Trip"
-    assert_field "What is included", with: ""
+    tolerate_submit_navigation { select "Everest", from: "Trip" }
+    tolerate_navigation_assertion do
+      assert_selector "input[data-description][value='Everest']"
+      assert_field "What is included", with: ""
+    end
   end
 
   test "departure selection refreshes untouched prices and preserves edited prices" do

@@ -60,7 +60,7 @@ class SourceHistorySystemTest < ApplicationSystemTestCase
       visit lead_path(lead)
       within(".calls") { assert_text "No calls yet." }
       tolerate_submit_navigation { click_button "Voicemail" }
-      assert_text "Call logged: Voicemail."
+      tolerate_navigation_assertion { assert_text "Call logged: Voicemail." }
       within(".calls-recent li") { assert_text "Voicemail"; assert_text "Today #{now.strftime('%H:%M')}" }
       tolerate_submit_navigation { click_button "Talked" }
       tolerate_navigation_assertion { assert_text "Call logged: Talked." }
@@ -78,7 +78,7 @@ class SourceHistorySystemTest < ApplicationSystemTestCase
     visit lead_path(lead)
     find("button[data-tab='details']").click
     tolerate_submit_navigation { click_button "No answer" }
-    assert_text "Call logged: No answer."
+    tolerate_navigation_assertion { assert_text "Call logged: No answer." }
     within(".calls-recent") { assert_text "No answer" }
     assert_selector "button[data-tab='details'][aria-current='true']"
     assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, 390

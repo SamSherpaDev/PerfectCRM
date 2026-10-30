@@ -141,6 +141,7 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
       assert_not lead.reload.potential?
       visit lead_path(lead)
       click_button "Mark Potential"
+      assert_current_path leads_path(tab: "new")
       visit lead_path(lead)
       accept_confirm { click_button "Convert to client" }
       assert_selector "h1", text: lead.name
@@ -182,6 +183,7 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
     visit leads_path(tab: "new", q: lead.name)
     assert_link lead.name
     within("li", text: lead.name) { click_button "Mark Potential" }
+    assert_no_link lead.name
     visit lead_path(lead)
     click_button "Mark Unsure"
     assert_current_path leads_path(tab: "new")
@@ -189,6 +191,7 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
     assert_button "Mark Potential"
     assert_button "Remove Unsure"
     click_button "Mark as spam"
+    assert_current_path leads_path(tab: "new")
     assert_no_button "Mark Unsure"
     assert_nil lead.reload.unsure_marked_at
     visit leads_path(tab: "unsure", q: lead.name)
@@ -318,10 +321,14 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
         end
       end
       assert_difference -> { lead.activity_events.where(kind: "call").count }, 1 do
-        accept_confirm("This lead is marked not interested. Log an outbound call anyway?") do
-          within(".calls") { click_button "No answer" }
+        tolerate_submit_navigation do
+          accept_confirm("This lead is marked not interested. Log an outbound call anyway?") do
+            within(".calls") { click_button "No answer" }
+          end
         end
-        assert_selector ".flash-notice", text: "Call logged: No answer."
+        tolerate_navigation_assertion do
+          assert_selector ".flash-notice", text: "Call logged: No answer."
+        end
       end
       within(".calls") do
         find("summary", text: "Add details").click
