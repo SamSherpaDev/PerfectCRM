@@ -117,6 +117,93 @@ class LeadsSystemTest < ApplicationSystemTestCase
     assert_text "Archive Tashi"
   end
 
+  test "opening a lead and going back keeps the same lead area in view across tabs, filters, and widths" do
+    OmniAuth.config.mock_auth[:google_oauth2] = OmniAuth::AuthHash.new(
+      provider: "google_oauth2", uid: "google-captain",
+      extra: { id_token: JWT.encode(@claims, @key, "RS256") }
+    )
+    Google::Auth::IDTokens.stub(:oidc_key_source, @source) do
+      visit "/auth/google_oauth2/callback"
+      assert_selector "h1", text: "Today"
+    end
+
+    new_leads = (1..24).map do |i|
+      lead = Lead.create!(
+        name: format("Scroll New %02d", i),
+        source: "website_form",
+        campaign_name: "scroll-check",
+        status: "new"
+      )
+      lead.update_column(:last_activity_at, i.minutes.ago)
+      lead
+    end
+    potential_leads = (1..24).map do |i|
+      lead = Lead.create!(
+        name: format("Scroll Potential %02d", i),
+        source: "website_form",
+        campaign_name: "scroll-check",
+        status: "new"
+      )
+      lead.mark_potential!
+      lead.update_column(:last_activity_at, i.minutes.ago)
+      lead
+    end
+
+    target_new = new_leads[18]
+    target_potential = potential_leads[18]
+
+    [ [ 1400, 900 ], [ 390, 844 ] ].each do |width, height|
+      page.current_window.resize_to(width, height)
+
+      visit leads_path(tab: "new")
+      assert_selector "h2", text: "New", exact_text: true
+      link = find_link(target_new.name)
+      page.execute_script("arguments[0].scrollIntoView({ block: 'center' })", link)
+      before_scroll_y = page.evaluate_script("window.scrollY")
+      before_top = link.evaluate_script("this.getBoundingClientRect().top")
+      assert_operator before_scroll_y, :>, 600
+
+      link.click
+      assert_selector "h1", text: target_new.name
+      page.go_back
+      assert_selector "h2", text: "New", exact_text: true
+      assert_in_delta before_scroll_y, page.evaluate_script("window.scrollY"), 5
+      assert_in_delta before_top, find_link(target_new.name).evaluate_script("this.getBoundingClientRect().top"), 5
+
+      find_link(target_new.name).click
+      assert_selector "h1", text: target_new.name
+      within("header.page-header") { click_link "Leads" }
+      assert_selector "h2", text: "New", exact_text: true
+      assert_in_delta before_scroll_y, page.evaluate_script("window.scrollY"), 5
+      assert_in_delta before_top, find_link(target_new.name).evaluate_script("this.getBoundingClientRect().top"), 5
+
+      visit leads_path(tab: "potential", q: "Scroll Potential", sort: "name")
+      assert_selector "h2", text: "Potential", exact_text: true
+      pot_link = find_link(target_potential.name)
+      page.execute_script("arguments[0].scrollIntoView({ block: 'center' })", pot_link)
+      pot_scroll_y = page.evaluate_script("window.scrollY")
+      pot_top = pot_link.evaluate_script("this.getBoundingClientRect().top")
+      assert_operator pot_scroll_y, :>, 600
+
+      pot_link.click
+      assert_selector "h1", text: target_potential.name
+      if width == 1400
+        click_link "Edit details"
+        assert_selector "h1", text: "Edit lead"
+        click_button "Save changes"
+      else
+        click_link "Edit"
+        assert_selector "h1", text: "Edit lead"
+        click_link "Cancel"
+      end
+      assert_selector "h1", text: target_potential.name
+      within("header.page-header") { click_link "Leads" }
+      assert_selector "h2", text: "Potential", exact_text: true
+      assert_in_delta pot_scroll_y, page.evaluate_script("window.scrollY"), 5
+      assert_in_delta pot_top, find_link(target_potential.name).evaluate_script("this.getBoundingClientRect().top"), 5
+    end
+  end
+
   private
 
   def assert_no_overflow(context)

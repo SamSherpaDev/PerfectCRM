@@ -809,4 +809,24 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     assert_includes Today::Summary.new.followups_due.to_a, task
     assert_includes Today::Summary.new.replies_waiting, convo
   end
+
+  test "lead edit links cancel and save preserve return_to back to the originating list" do
+    lead = Lead.create!(name: "Return Path Traveler", source: "manual", status: "new")
+    lead.mark_potential!
+    return_to = leads_path(tab: "potential", q: "Return Path", sort: "name")
+
+    get lead_path(lead, return_to: return_to)
+    assert_response :success
+    assert_select "a[href=?]", edit_lead_path(lead, return_to: return_to), text: "Edit"
+    assert_select "a[href=?]", edit_lead_path(lead, return_to: return_to), text: "Edit details"
+
+    get edit_lead_path(lead, return_to: return_to)
+    assert_response :success
+    assert_select "a[href=?]", lead_path(lead, return_to: return_to), text: "Cancel"
+
+    patch lead_path(lead), params: { return_to: return_to, lead: { name: "Return Path Updated" } }
+    assert_redirected_to lead_path(lead, return_to: return_to)
+    follow_redirect!
+    assert_select "header.page-header a[href=?]", return_to, text: "Leads"
+  end
 end

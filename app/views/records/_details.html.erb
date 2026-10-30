@@ -6,7 +6,7 @@
   <div class="card-header">
     <h2 class="card-title" id="details-heading">Details</h2>
     <% unless read_only %>
-      <%= link_to "Edit details", lead ? edit_lead_path(record) : edit_client_path(record), class: "link-quiet text-xs" %>
+      <%= link_to "Edit details", lead ? edit_lead_path(record, return_to: @lead_action_return_to) : edit_client_path(record), class: "link-quiet text-xs" %>
     <% end %>
   </div>
   <%= card_caption lead ? "Where this ask came from and what they want." : "Who this client is and how they found Sherpa Holidays." %>

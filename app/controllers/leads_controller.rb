@@ -96,7 +96,7 @@ class LeadsController < ApplicationController
     if status_changed
       redirect_to lead_action_return_to, notice: "Marked as #{target_status.humanize} - moved to #{lead_destination_tab}."
     else
-      redirect_to @lead, notice: "Lead saved."
+      redirect_to lead_path(@lead, { return_to: safe_leads_return_path(params[:return_to]) }.compact), notice: "Lead saved."
     end
   rescue ActiveRecord::RecordInvalid
     @lead.people.build unless @lead.people.any?(&:new_record?)
