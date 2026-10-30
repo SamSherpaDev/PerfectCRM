@@ -111,8 +111,8 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
     page.current_window.resize_to(*DEFAULT_SCREEN_SIZE)
   end
 
-  # Runs an action (select, choose, or click) that submits a full-page POST
-  # in the quote builder. When navigation commits before chromedriver
+  # Runs an action (select, choose, or click) that submits a full-page POST.
+  # When navigation commits before chromedriver
   # answers the action, it can report UnknownError
   # ("Node with given id does not belong to the document"), which Capybara
   # does not retry. The submit may already have executed, so control falls
@@ -127,12 +127,10 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
     nil
   end
 
-  # Re-runs a read-only, navigation-adjacent assertion when the builder's
-  # full-page POST commits mid-read (chromedriver reports UnknownError,
-  # "Node with given id does not belong to the document", which Capybara
-  # does not retry). Retry once for this race: the next navigation is
-  # test-driven, so the retried read should see the committed document.
-  # A second error propagates. Only wrap reads here; a
+  # Re-runs a read-only, navigation-adjacent assertion once when it raises an
+  # UnknownError that DetachedNodeStaleGuard does not translate; detached-node
+  # reads already surface as StaleElementReferenceError, which Capybara
+  # retries. A second error propagates. Only wrap reads here; a
   # mutating click retried after a lost response would duplicate the record
   # (see tolerate_submit_navigation).
   def tolerate_navigation_assertion
