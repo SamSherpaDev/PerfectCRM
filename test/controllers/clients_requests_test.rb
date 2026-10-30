@@ -8,6 +8,20 @@ class ClientsRequestsTest < ActionDispatch::IntegrationTest
     sign_in
   end
 
+  test "saving a rename says how many linked records kept the old name" do
+    client = Client.create!(name: "Ana Diaz", email: "ana@example.com", perfectbook_contact_id: 10)
+    lead = Lead.create!(name: "Ana Diaz", email: "ana@example.com", source: "website_form",
+      perfectbook_contact_id: 10, existing_client: client)
+    client.update!(perfectbook_contact_id: 11)
+
+    patch client_path(client), params: { client: { name: "Ana Díaz" } }
+
+    assert_redirected_to client_path(client)
+    assert_equal "Client saved. 1 linked record kept the old name.", flash[:notice]
+    assert_equal "Ana Díaz", client.reload.name
+    assert_equal "Ana Diaz", lead.reload.name
+  end
+
   test "manual forms and requests cannot assign referral codes" do
     get new_client_path
     assert_response :success

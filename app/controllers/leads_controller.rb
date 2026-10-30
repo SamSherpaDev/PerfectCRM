@@ -94,9 +94,9 @@ class LeadsController < ApplicationController
       @lead.update!(attrs)
     end
     if status_changed
-      redirect_to lead_action_return_to, notice: "Marked as #{target_status.humanize} - moved to #{lead_destination_tab}."
+      redirect_to lead_action_return_to, notice: with_name_change_skips("Marked as #{target_status.humanize} - moved to #{lead_destination_tab}.")
     else
-      redirect_to record_path_keeping_list(@lead), notice: "Lead saved."
+      redirect_to record_path_keeping_list(@lead), notice: with_name_change_skips("Lead saved.")
     end
   rescue ActiveRecord::RecordInvalid
     @lead.people.build unless @lead.people.any?(&:new_record?)

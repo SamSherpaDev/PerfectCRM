@@ -56,7 +56,7 @@ class ClientsController < ApplicationController
 
   def update
     if @client.update(client_params)
-      redirect_to @client, notice: "Client saved."
+      redirect_to @client, notice: with_name_change_skips("Client saved.")
     else
       @client.people.build unless @client.people.any?(&:new_record?)
       render :edit, status: :unprocessable_entity

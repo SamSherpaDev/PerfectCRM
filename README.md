@@ -621,7 +621,11 @@ or origin leads, matching client, and linked people that still carry the old
 name, plus open tasks, open scheduled-call notes, unsent drafts, and unbundled
 draft quotes), refreshes the FTS5 search index, and logs a `name_change` timeline event while leaving sent messages,
 sent or accepted quotes, past activity events, and synced PerfectBook contacts
-untouched. Archive lives in the More menu and
+untouched. Text rewrites replace the full old name anywhere and the bare first
+name only after a leading Hi, Hello, Hey, or Dear. A person who shares the
+owner's name with another person on the same record renames alone. A linked
+record that fails validation keeps the old name, and the saved notice says how
+many did. Archive lives in the More menu and
 moves a client to the Archived tab, where Restore makes it active again.
 Archived client and lead pages keep their history readable, with editing
 controls and composer hidden. Restore is the sole header action

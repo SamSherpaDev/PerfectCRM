@@ -13,6 +13,7 @@ class PersonNamePropagation
     @record = record
     @old_name = old_name.to_s.strip
     @new_name = new_name.to_s.strip
+    @skipped = 0
   end
 
   def call
@@ -23,6 +24,7 @@ class PersonNamePropagation
     else
       propagate_person_or_owner
     end
+    Current.name_change_skips = Current.name_change_skips.to_i + @skipped if @skipped.positive?
   end
 
   private
@@ -35,6 +37,17 @@ class PersonNamePropagation
 
   def propagate_person_or_owner
     seed_people, seed_clients, seed_leads, person_emails = gather_seeds
+    if @record.is_a?(Person) && namesake_shares_owner?(seed_people)
+      update_people(seed_people)
+    else
+      propagate_to_family(seed_people, seed_clients, seed_leads, person_emails)
+    end
+
+    event_subject = @record.is_a?(Person) ? @record.owner : @record
+    record_activity_event(event_subject) if event_subject
+  end
+
+  def propagate_to_family(seed_people, seed_clients, seed_leads, person_emails)
     family_clients, family_leads = expand_owner_family(seed_clients, seed_leads, person_emails)
     target_people = select_target_people(seed_people, family_clients, family_leads, person_emails)
 
@@ -47,9 +60,19 @@ class PersonNamePropagation
     update_unsent_drafts(affected_owners)
     update_draft_quotes(affected_owners)
     update_open_scheduled_calls(affected_owners)
+  end
 
-    event_subject = @record.is_a?(Person) ? @record.owner : @record
-    record_activity_event(event_subject) if event_subject
+  def namesake_shares_owner?(seed_people)
+    Person.where(client_id: seed_people.filter_map(&:client_id))
+      .or(Person.where(lead_id: seed_people.filter_map(&:lead_id)))
+      .where.not(id: seed_people.map(&:id))
+      .any? { |person| same_name?(person.name, @old_name) }
+  end
+
+  def sole_namesakes(people)
+    people.select { |person| same_name?(person.name, @old_name) }
+      .group_by { |person| [ person.client_id, person.lead_id ] }
+      .filter_map { |_owner, namesakes| namesakes.first if namesakes.one? }
   end
 
   def gather_seeds
@@ -60,9 +83,8 @@ class PersonNamePropagation
       emails = seed_people.filter_map { |person| normalize_email(person.email) }.uniq
       [ seed_people, seed_clients, seed_leads, emails ]
     else
-      matching_people = @record.people.reload.select do |person|
-        same_name?(person.name, @old_name) || same_name?(person.name, @new_name)
-      end
+      own_people = @record.people.reload.to_a
+      matching_people = sole_namesakes(own_people) + own_people.select { |person| same_name?(person.name, @new_name) }
       seed_people = expand_origin_people(matching_people)
       seed_clients = @record.is_a?(Client) ? [ @record ] : []
       seed_leads = @record.is_a?(Lead) ? [ @record ] : []
@@ -150,12 +172,8 @@ class PersonNamePropagation
     client_ids = family_clients.map(&:id)
     lead_ids = family_leads.map(&:id)
 
-    if client_ids.any?
-      candidates.concat(Person.where(client_id: client_ids).select { |person| same_name?(person.name, @old_name) })
-    end
-    if lead_ids.any?
-      candidates.concat(Person.where(lead_id: lead_ids).select { |person| same_name?(person.name, @old_name) })
-    end
+    candidates.concat(sole_namesakes(Person.where(client_id: client_ids))) if client_ids.any?
+    candidates.concat(sole_namesakes(Person.where(lead_id: lead_ids))) if lead_ids.any?
     if person_emails.any?
       candidates.concat(Person.where("lower(email) IN (?)", person_emails).select { |person| same_name?(person.name, @old_name) })
     end
@@ -168,7 +186,7 @@ class PersonNamePropagation
       next if client == @record || client.name == @new_name
 
       client.skip_name_propagation = true
-      client.update!(name: @new_name)
+      save_linked(client) { client.update!(name: @new_name) }
     ensure
       client.skip_name_propagation = false if client
     end
@@ -180,7 +198,7 @@ class PersonNamePropagation
 
       lead.skip_name_propagation = true
       lead.allow_converted_name_sync = true
-      lead.update!(name: @new_name)
+      save_linked(lead) { lead.update!(name: @new_name) }
     ensure
       if lead
         lead.skip_name_propagation = false
@@ -194,7 +212,7 @@ class PersonNamePropagation
       next if person == @record || person.name == @new_name
 
       person.skip_name_propagation = true
-      person.update!(name: @new_name)
+      save_linked(person) { person.update!(name: @new_name) }
     ensure
       person.skip_name_propagation = false if person
     end
@@ -208,7 +226,7 @@ class PersonNamePropagation
       new_title = replace_name_in_text(task.title, allow_first_name: allow_first)
       new_notes = replace_name_in_text(task.notes, allow_first_name: allow_first)
       if new_title != task.title || new_notes != task.notes
-        task.update!(title: new_title, notes: new_notes)
+        save_linked(task) { task.update!(title: new_title, notes: new_notes) }
       end
     end
   end
@@ -227,9 +245,7 @@ class PersonNamePropagation
         subject: replace_name_in_text(draft.subject, allow_first_name: allow_first),
         body: replace_name_in_text(draft.body, allow_first_name: allow_first)
       }
-      if attrs.any? { |key, value| draft.public_send(key) != value }
-        draft.update!(attrs)
-      end
+      draft.update_columns(attrs) if attrs.any? { |key, value| draft.public_send(key) != value }
     end
   end
 
@@ -261,7 +277,7 @@ class PersonNamePropagation
           changed = true
         end
       end
-      quote.save! if changed
+      save_linked(quote) { quote.save! } if changed
     end
   end
 
@@ -274,8 +290,15 @@ class PersonNamePropagation
 
       allow_first = first_name_replaceable_for?(call.lead)
       updated_notes = replace_name_in_text(call.notes, allow_first_name: allow_first)
-      call.update!(notes: updated_notes) if updated_notes != call.notes
+      save_linked(call) { call.update!(notes: updated_notes) } if updated_notes != call.notes
     end
+  end
+
+  def save_linked(record)
+    yield
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotSaved => error
+    @skipped += 1
+    Rails.logger.warn("[name_change] #{record.class.name} #{record.id} kept the old name: #{error.message}")
   end
 
   def record_activity_event(subject)
@@ -296,18 +319,14 @@ class PersonNamePropagation
   def replace_name_in_text(text, allow_first_name: false)
     return text if text.blank?
 
-    full_name = "(?i:#{Regexp.escape(@new_name)}|#{Regexp.escape(@old_name)})"
-    first_name = allow_first_name ? "|#{Regexp.escape(old_first_name)}" : ""
-    pattern = /(?<![\w.@+-])(?:#{full_name}#{first_name})(?![\w.@+-])/
-    text.gsub(pattern) do |match|
-      if match.casecmp?(@old_name)
-        @new_name
-      elsif allow_first_name && match == old_first_name
-        new_first_name
-      else
-        match
-      end
+    full_names = [ @old_name, @new_name ].sort_by { |name| -name.length }.map { |name| Regexp.escape(name) }
+    updated = text.gsub(/(?<![\w.@+-])(?:#{full_names.join("|")})(?![\w.@+-])/i) do |match|
+      match.casecmp?(@old_name) ? @new_name : match
     end
+    return updated unless allow_first_name
+
+    salutation = /^([ \t]*(?i:hi|hello|hey|dear)[ \t]+)#{Regexp.escape(old_first_name)}(?![\w.@+-])/
+    updated.gsub(salutation) { "#{Regexp.last_match(1)}#{new_first_name}" }
   end
 
   def first_name_replaceable_for?(owner)

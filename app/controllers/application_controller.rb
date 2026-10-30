@@ -43,4 +43,11 @@ class ApplicationController < ActionController::Base
   def set_current_actor
     Current.user_email = current_user&.email
   end
+
+  def with_name_change_skips(notice)
+    skipped = Current.name_change_skips.to_i
+    return notice if skipped.zero?
+
+    "#{notice} #{skipped} linked #{"record".pluralize(skipped)} kept the old name."
+  end
 end

@@ -20,28 +20,21 @@ module NestedPeople
       person.persisted? && !person.marked_for_destruction? &&
         person.name_in_database.to_s.strip.casecmp?(old_owner_name)
     end
-    return if same_people.empty?
+    return unless same_people.one?
 
+    person = same_people.first
     if will_save_change_to_name?
       return if name.to_s.strip.blank?
 
-      same_people.each do |person|
-        if !person.will_save_change_to_name?
-          person.name = name
-          person.skip_name_propagation = true
-        elsif person.name.to_s.strip.casecmp?(name.to_s.strip)
-          person.skip_name_propagation = true
-        end
+      if !person.will_save_change_to_name?
+        person.name = name
+        person.skip_name_propagation = true
+      elsif person.name.to_s.strip.casecmp?(name.to_s.strip)
+        person.skip_name_propagation = true
       end
-    else
-      renamed_person = same_people.find { |person| person.will_save_change_to_name? && person.name.to_s.strip.present? }
-      return unless renamed_person
-
-      self.name = renamed_person.name
-      same_people.each do |person|
-        person.name = renamed_person.name unless person.will_save_change_to_name?
-        person.skip_name_propagation = true if person.name.to_s.strip.casecmp?(renamed_person.name.to_s.strip)
-      end
+    elsif person.will_save_change_to_name? && person.name.to_s.strip.present?
+      self.name = person.name
+      person.skip_name_propagation = true
     end
   end
 
