@@ -81,7 +81,7 @@ module Today
           .where(not_interested_marked_at: nil, spam_marked_at: nil)
           .where("TRIM(COALESCE(leads.phone, '')) <> '' OR TRIM(COALESCE(leads.phone_raw, '')) <> ''")
           .where("(leads.status = 'new' AND COALESCE(leads.received_at, leads.created_at) >= ?) OR EXISTS (#{recently_called.select(:id).to_sql})", window_start)
-          .where.not(id: ScheduledCall.scheduled.select(:lead_id))
+          .where.not(id: ScheduledCall.scheduled.where.not(lead_id: nil).select(:lead_id))
           .includes(:tags)
           .to_a
         calls_by_lead = ActivityEvent.where(subject_type: "Lead", kind: "call", subject_id: candidates.map(&:id))
@@ -178,22 +178,22 @@ module Today
     end
 
     def missed_calls
-      @missed_calls ||= ScheduledCall.visible.missed(@now).includes(lead: :tags).to_a
+      @missed_calls ||= ScheduledCall.visible.missed(@now).includes(:client, lead: :tags).to_a
     end
 
     def todays_calls
       @todays_calls ||= ScheduledCall.visible.scheduled.for_day(@today)
-        .where("scheduled_calls.scheduled_at >= ?", @now).includes(lead: :tags).to_a
+        .where("scheduled_calls.scheduled_at >= ?", @now).includes(:client, lead: :tags).to_a
     end
 
     def upcoming_calls
-      @upcoming_calls ||= ScheduledCall.visible.upcoming(@now).includes(lead: :tags).to_a
+      @upcoming_calls ||= ScheduledCall.visible.upcoming(@now).includes(:client, lead: :tags).to_a
     end
 
     def later_upcoming_calls
       @later_upcoming_calls ||= ScheduledCall.visible.scheduled
         .where("scheduled_calls.scheduled_at > ?", @today.in_time_zone.end_of_day)
-        .order(scheduled_at: :asc, id: :asc).includes(lead: :tags).to_a
+        .order(scheduled_at: :asc, id: :asc).includes(:client, lead: :tags).to_a
     end
 
     def week_start
@@ -242,7 +242,7 @@ module Today
         range_end = @calendar_view == "month" ? month_grid_end : week_end
         calls = ScheduledCall.visible.scheduled
           .between(range_start.in_time_zone.beginning_of_day, range_end.in_time_zone.end_of_day)
-          .includes(:lead).to_a
+          .includes(:client, :lead).to_a
         calls.group_by { |call| call.scheduled_at.in_time_zone.to_date }
       end
     end

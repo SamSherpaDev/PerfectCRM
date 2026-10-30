@@ -2,6 +2,7 @@ require "test_helper"
 require_relative "../support/google_sign_in_test_helper"
 
 class ScheduledCallsRequestsTest < ActionDispatch::IntegrationTest
+  include ActiveJob::TestHelper
   include GoogleSignInTestHelper
 
   setup do
@@ -244,6 +245,83 @@ class ScheduledCallsRequestsTest < ActionDispatch::IntegrationTest
       end
 
       assert_equal one_row, tag_queries.call
+    end
+  end
+
+  test "scheduling, rescheduling, completing, and cancelling a call for a client works across Client show, Clients index, and Today without ad conversions" do
+    travel_to Time.zone.local(2026, 10, 20, 10, 0) do
+      Setting.current.update!(
+        meta_dataset_id: "123456789012345",
+        meta_access_token: "EAAB-secret-token",
+        meta_terms_accepted: true,
+        google_terms_accepted: true
+      )
+      client = Client.create!(name: "Amara Okafor", email: "amara@example.com", phone: "+14155550144")
+
+      assert_no_enqueued_jobs only: AdConversions::LeadJob do
+        assert_difference -> { client.scheduled_calls.count }, 1 do
+          post client_scheduled_calls_path(client), params: {
+            return_to: client_path(client),
+            scheduled_call: {
+              scheduled_on: "2026-10-22",
+              scheduled_time: "11:30",
+              duration_minutes: "30",
+              notes: "Check Lukla flight window"
+            }
+          }
+        end
+      end
+
+      assert_redirected_to client_path(client)
+      follow_redirect!
+      assert_response :success
+      assert_select "#scheduled-call" do
+        assert_select ".badge", text: "Next call"
+        assert_select "time", text: /Oct 22 · 11:30 AM PT · 30 min/
+        assert_select ".scheduled-call-note", text: "Check Lukla flight window"
+      end
+
+      get clients_path
+      assert_response :success
+      assert_select "li", text: /Amara Okafor/ do
+        assert_select ".badge", text: /Call Oct 22, 11:30 AM PT/
+        assert_select "summary", text: /Reschedule/
+      end
+
+      call = client.next_scheduled_call
+      patch client_scheduled_call_path(client, call), params: {
+        return_to: clients_path(q: "Amara"),
+        scheduled_call: {
+          scheduled_on: "2026-10-20",
+          scheduled_time: "15:00",
+          duration_minutes: "45",
+          notes: "Moved to today afternoon"
+        }
+      }
+      assert_redirected_to clients_path(q: "Amara")
+      assert_equal Time.zone.local(2026, 10, 20, 15, 0), call.reload.scheduled_at
+
+      get root_path
+      assert_response :success
+      assert_select "#scheduled-calls-section" do
+        assert_select "[aria-label=\"Today's calls\"] a[href=?]", client_path(client), text: "Amara Okafor"
+        assert_select "[aria-label='Week calendar'] a[href=?]", client_path(client), text: "Amara Okafor"
+      end
+
+      assert_difference -> { client.activity_events.where(kind: "call").count }, 1 do
+        post complete_client_scheduled_call_path(client, call), params: {
+          outcome: "connected",
+          save_key: "client-complete-0001",
+          return_to: client_path(client)
+        }
+      end
+      assert_redirected_to client_path(client)
+      assert_equal "completed", call.reload.status
+
+      second_call = client.scheduled_calls.create!(scheduled_on: "2026-10-25", scheduled_time: "09:00")
+      patch cancel_client_scheduled_call_path(client, second_call), params: { return_to: client_path(client) }
+      assert_redirected_to client_path(client)
+      assert_equal "cancelled", second_call.reload.status
     end
   end
 end

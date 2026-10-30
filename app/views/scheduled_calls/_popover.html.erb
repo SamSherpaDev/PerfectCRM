@@ -1,4 +1,5 @@
-<%# locals: (lead:, scheduled_call: nil, return_to: nil, trigger_label: nil, trigger_class: "btn-secondary btn-sm", submit_label: nil, id_prefix: nil) %>
+<%# locals: (lead: nil, record: nil, scheduled_call: nil, return_to: nil, trigger_label: nil, trigger_class: "btn-secondary btn-sm", submit_label: nil, id_prefix: nil) %>
+<% owner = record || lead || scheduled_call&.owner %>
 <details class="call-schedule-pop">
   <summary class="<%= trigger_class %>">
     <%= render "shared/icon", name: "phone", class: "h-3.5 w-3.5" %>
@@ -6,7 +7,7 @@
   </summary>
   <div class="call-schedule-sheet">
     <%= render "scheduled_calls/form",
-      lead: lead,
+      record: owner,
       scheduled_call: scheduled_call,
       return_to: return_to,
       submit_label: submit_label,

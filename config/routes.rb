@@ -83,6 +83,12 @@ Rails.application.routes.draw do
   end
   resources :clients, except: %i[destroy] do
     resources :calls, only: :create
+    resources :scheduled_calls, only: %i[create update] do
+      member do
+        post :complete
+        patch :cancel
+      end
+    end
     collection do
       get "by-perfectbook/:perfectbook_contact_id", action: :by_perfectbook, as: :by_perfectbook
     end

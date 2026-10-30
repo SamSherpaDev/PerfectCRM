@@ -4,5 +4,11 @@
     <%= render "records/header_actions", record: @client %>
   <% end %>
   <%= render "shared/flash" %>
+  <% if @client.call_schedulable? && (next_call = @client.next_scheduled_call) %>
+    <%= render "scheduled_calls/lead_banner",
+      record: @client,
+      scheduled_call: next_call,
+      return_to: client_path(@client) %>
+  <% end %>
   <%= render "records/record", record: @client, read_only: @client.archived? %>
 </div>

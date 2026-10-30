@@ -19,7 +19,7 @@ class ClientsController < ApplicationController
     else
       base = @tab == "archived" ? Client.archived : Client.active
       scope = @query.present? ? base.search(@query) : base
-      @clients = sort_clients(scope).includes(:tags, :people, :referred_by_organization)
+      @clients = sort_clients(scope).includes(:tags, :people, :referred_by_organization, :scheduled_calls)
     end
   end
 
@@ -101,7 +101,7 @@ class ClientsController < ApplicationController
   private
 
   def set_client
-    @client = Client.includes(:tags, :people, :referred_by_organization).find(params[:id])
+    @client = Client.includes(:tags, :people, :referred_by_organization, :scheduled_calls).find(params[:id])
   end
 
   def sort_clients(scope)

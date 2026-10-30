@@ -393,6 +393,7 @@ class Lead < ApplicationRecord
         )
       end
       tasks.update_all(subject_type: "Client", subject_id: client.id)
+      scheduled_calls.update_all(client_id: client.id)
       Draft.where(owner: self, conversation_id: nil).find_each do |draft|
         draft.update!(conversation: conversations.create!(subject_line: draft.subject.presence || "New message"))
       end

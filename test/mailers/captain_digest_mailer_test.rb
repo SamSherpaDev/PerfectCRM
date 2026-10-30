@@ -67,15 +67,18 @@ class CaptainDigestMailerTest < ActionMailer::TestCase
       upcoming_lead = Lead.create!(name: "Dawa Geljen")
       missed_lead.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 19, 15, 0), notes: "Confirm flights")
       upcoming_lead.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 20, 11, 30), notes: "Discuss Langtang trek")
+      @client.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 20, 14, 0), notes: "Pre-departure check")
 
       body = CaptainDigestMailer.morning.body.encoded
       helpers = Rails.application.routes.url_helpers
       assert_includes body, "Missed calls (1):"
       assert_includes body, "Lakpa Sherpa · Oct 19 at 3:00 PM PT · Confirm flights"
       assert_includes body, helpers.lead_url(missed_lead, host: "example.com")
-      assert_includes body, "Scheduled calls (1):"
+      assert_includes body, "Scheduled calls (2):"
       assert_includes body, "Dawa Geljen · Oct 20 at 11:30 AM PT · Discuss Langtang trek"
       assert_includes body, helpers.lead_url(upcoming_lead, host: "example.com")
+      assert_includes body, "Maya · Oct 20 at 2:00 PM PT · Pre-departure check"
+      assert_includes body, helpers.client_url(@client, host: "example.com")
     end
   end
 end

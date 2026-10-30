@@ -16,8 +16,8 @@
         <% unless lead %>
           <p class="calls-for">For <%= inquiry_name %><% if (trip = inquiry.trip_interest.presence || inquiry.trip_title.presence) %><span class="muted"> · <%= trip %></span><% end %></p>
         <% end %>
-        <% next_call = inquiry.next_scheduled_call %>
-        <% if lead && record.call_schedulable? && next_call&.due_by?(Time.current) %>
+        <% next_call = record.next_scheduled_call %>
+        <% if record.call_schedulable? && next_call&.due_by?(Time.current) %>
           <p class="hint">Next call: <%= scheduled_call_stamp(next_call) %>. Log the outcome in the scheduled call bar above, or add details below.</p>
         <% else %>
           <%= form_with url: calls_path, class: "call-choices", data: { turbo: false, controller: ("contact-confirm" if confirm_call), "contact-confirm-message-value": (call_confirm_msg if confirm_call) }.compact do |form| %>
