@@ -164,6 +164,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     page.current_window.resize_to(1400, 1000)
     visit client_path(@client)
     open_envelope_details
+    assert_selector(:field, "Message") { |body| well_height(body) >= 128 }
     fill_in "Subject", with: "Attachment"
     fill_in "Message", with: "See attached"
     attach_file "Attachments", Rails.root.join("test/fixtures/files/sample.txt")
@@ -264,6 +265,8 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     [ inbox_thread_path(older), client_path(@client, new_thread: 1) ].each_with_index do |path, index|
       visit path
       open_envelope_details
+      # Only the record composer well grows; let it settle before Send.
+      assert_selector(:field, "Message") { |body| well_height(body) >= 128 } if index == 1
       fill_in "To", with: "secondary@example.com"
       fill_in "Subject", with: "Correct this reply"
       fill_in "Message", with: "  "

@@ -51,6 +51,9 @@ class RecipientCorrectionSystemTest < ApplicationSystemTestCase
     fill_in "To", with: "Alice <alice@example.test"
     fill_in "Subject", with: "Unfinished draft"
     fill_in "message_body", with: "Words to keep"
+    # The record well grows over 160ms, and headless Chrome can paint that
+    # growth between finding Save draft and pressing it: let it settle first.
+    assert_selector(:field, "message_body") { |body| body.evaluate_script("this.getBoundingClientRect().height") >= 128 }
     click_button "Save draft"
     assert_selector "#draft-status", text: "Draft saved"
     [ lead_path(lead), inbox_thread_path(original.conversation) ].each do |path|
