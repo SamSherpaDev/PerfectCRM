@@ -27,7 +27,7 @@ class ScheduledCallsController < ApplicationController
 
   def complete
     event = @scheduled_call.complete!(outcome: params[:outcome], save_key: params[:save_key], inquiry_id: params[:inquiry_id])
-    redirect_to return_destination, notice: "Call logged: #{CallLog::LABELS.fetch(event.metadata['outcome'])}."
+    redirect_to return_destination, notice: CallLog.notice(event)
   rescue ActiveRecord::RecordInvalid => e
     redirect_to return_destination,
       alert: e.record.errors.full_messages.to_sentence.presence || "Could not complete call."

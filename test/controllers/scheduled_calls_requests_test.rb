@@ -504,4 +504,18 @@ class ScheduledCallsRequestsTest < ActionDispatch::IntegrationTest
       end
     end
   end
+
+  test "the scheduled call bar says when a third voicemail moved an Unsure lead to Not interested" do
+    lead = Lead.create!(name: "Bar Three Voicemails", email: "bar-3vm@example.com", phone: "+14155550177")
+    lead.mark_unsure!
+    CallLog.record!(lead, key: "bar-vm-1", occurred_at: 3.days.ago, outcome: "voicemail", direction: "outbound")
+    CallLog.record!(lead, key: "bar-vm-2", occurred_at: 2.days.ago, outcome: "voicemail", direction: "outbound")
+    call = lead.scheduled_calls.create!(scheduled_at: 1.hour.ago)
+
+    post complete_lead_scheduled_call_path(lead, call), params: { outcome: "voicemail", save_key: "bar-vm-0003", return_to: lead_path(lead) }
+    assert_redirected_to lead_path(lead)
+    assert_equal "Call logged: Voicemail. Moved to Not interested after three voicemails.", flash[:notice]
+    assert_equal [ "completed", "voicemail" ], [ call.reload.status, call.outcome ]
+    assert lead.reload.not_interested?
+  end
 end

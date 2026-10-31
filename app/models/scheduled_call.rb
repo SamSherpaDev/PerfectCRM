@@ -104,9 +104,9 @@ class ScheduledCall < ApplicationRecord
     end
 
     transaction do
-      event = CallLog.record!(inquiry, key: save_key, occurred_at: occurred_at, outcome: outcome, direction: "outbound")
-      update!(status: "completed", outcome: outcome, completed_at: occurred_at, activity_event: event)
-      event
+      CallLog.record!(inquiry, key: save_key, occurred_at: occurred_at, outcome: outcome, direction: "outbound") do |event|
+        update!(status: "completed", outcome: outcome, completed_at: occurred_at, activity_event: event)
+      end
     end
   end
 

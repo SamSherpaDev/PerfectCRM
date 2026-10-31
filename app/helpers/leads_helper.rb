@@ -12,8 +12,8 @@ module LeadsHelper
   LEAD_TAB_CAPTIONS = {
     "new" => "Leads you have not sorted yet. Mark Potential, Unsure, Not interested, or spam.",
     "potential" => "Leads you want to follow up with, across all stages. Remove Potential when you no longer need the reminder.",
-    "unsure" => "Leads you cannot call yet: voicemail, no reply, maybe spam. Move them on once you know.",
-    "not_interested" => "Leads who said they are not interested. Kept out of call lists, follow-ups, and automatic emails. Choose Interested again to restore.",
+    "unsure" => "Leads you cannot call yet: voicemail, no reply, maybe spam. Move them on once you know. Three unanswered voicemails move a lead to Not interested.",
+    "not_interested" => "Leads who said they are not interested or did not answer three voicemails. Kept out of call lists, follow-ups, and automatic emails. Choose Interested again to restore.",
     "missing_source" => "All inquiries without a discovery answer, including converted records. Tests and spam stay out.",
     "archived" => "Archived, spam, and lost leads. Restore an archived lead any time."
   }.freeze

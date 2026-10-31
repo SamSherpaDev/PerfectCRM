@@ -164,7 +164,7 @@ class LeadsController < ApplicationController
 
   def mark_unsure
     @lead.mark_unsure!
-    redirect_to lead_action_return_to, notice: "Marked as Unsure - moved to Unsure."
+    redirect_to lead_action_return_to, notice: @lead.not_interested? ? "Marked as Unsure - moved to Not interested after three voicemails." : "Marked as Unsure - moved to Unsure."
   rescue ActiveRecord::RecordInvalid => e
     redirect_to record_path_keeping_list(@lead), alert: e.record.errors.full_messages.to_sentence
   end

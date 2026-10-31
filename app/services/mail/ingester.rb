@@ -58,6 +58,7 @@ module Mail
         transaction.after_rollback { uploaded.each(&:delete) }
         conversation = find_conversation(thread_id: thread_id, parsed: parsed)
         direction = Mail.direction_for(parsed.from_addresses)
+        reply = alert && ReplyAlerts.eligible?(parsed, provider)
 
         message = conversation.messages.create!(
           direction: direction,
@@ -76,7 +77,7 @@ module Mail
           inquiry_headers: parsed.headers.transform_keys { |key| key.to_s.downcase }.slice(*Leads::UnlinkedInquiries::HEADERS),
           provider_labels: labels,
           inbound_received_at: parsed.received_at || parsed.sent_at || Time.current,
-          reply_alert_state: ("pending" if alert && ReplyAlerts.eligible?(parsed, provider))
+          reply_alert_state: ("pending" if reply)
         )
         attach_files(message, ordinary, held, uploaded)
         link_conversation(conversation, parsed)
@@ -86,6 +87,7 @@ module Mail
           last_message_at: conversation.messages.maximum(:sent_at)
         )
         conversation.refresh_counters!
+        CallLog.restore_after_reply!(message) if reply
         transaction.after_commit { ReplyAlertJob.perform_later(message.id) } if message.reply_alert_state == "pending"
         { status: :stored, conversation: conversation, message: message }
       end
