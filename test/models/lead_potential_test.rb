@@ -287,6 +287,62 @@ class LeadPotentialTest < ActiveSupport::TestCase
     assert lead.reload.not_interested?
   end
 
+  test "a real reply synced after the automatic move returns the lead to Unsure with a note" do
+    lead = Lead.create!(name: "Back From Trek", email: "back-from-trek@example.com")
+    lead.mark_unsure!
+    3.times do |index|
+      CallLog.record!(lead, key: "back-vm-#{index + 1}", occurred_at: (3 - index).days.ago, outcome: "voicemail", direction: "outbound")
+    end
+    assert lead.reload.not_interested?
+
+    result = ingest_live_reply(from: "Back-From-Trek@example.com", subject: "Re: Your trip")
+    assert_equal "pending", result[:message].reply_alert_state
+    assert lead.reload.unsure?
+    restore = lead.activity_events.where(kind: "interested_again").sole
+    assert_equal "Moved back to Unsure: they replied after the automatic move.", restore.summary
+    assert_equal "automatic", restore.metadata["actor"]
+
+    ingest_live_reply(from: lead.email, subject: "Re: Your trip again")
+    assert_equal 1, lead.activity_events.where(kind: "interested_again").count
+  end
+
+  test "out-of-office replies and bounces leave an automatically moved lead in Not interested" do
+    lead = Lead.create!(name: "Still Away", email: "still-away@example.com")
+    lead.mark_unsure!
+    3.times do |index|
+      CallLog.record!(lead, key: "away-vm-#{index + 1}", occurred_at: (3 - index).days.ago, outcome: "voicemail", direction: "outbound")
+    end
+    assert lead.reload.not_interested?
+
+    ingest_live_reply(from: lead.email, subject: "Automatic reply: Your trip")
+    ingest_live_reply(from: lead.email, subject: "Re: Your trip", header: "Auto-Submitted: auto-replied")
+    ingest_live_reply(from: lead.email, subject: "Re: Your trip", header: "Return-Path: <>")
+    assert lead.reload.not_interested?
+    assert_not lead.activity_events.exists?(kind: "interested_again")
+  end
+
+  test "a reply never restores a lead marked Not interested by hand, even after an automatic move" do
+    by_hand = Lead.create!(name: "Said No", email: "said-no@example.com")
+    by_hand.mark_unsure!
+    by_hand.mark_not_interested!
+    re_marked = Lead.create!(name: "Said No Later", email: "said-no-later@example.com")
+    re_marked.mark_unsure!
+    3.times do |index|
+      CallLog.record!(re_marked, key: "later-vm-#{index + 1}", occurred_at: (3 - index).days.ago, outcome: "voicemail", direction: "outbound")
+    end
+    assert re_marked.reload.not_interested?
+    re_marked.unmark_not_interested!
+    travel 1.minute
+    re_marked.mark_not_interested!
+
+    ingest_live_reply(from: by_hand.email, subject: "Re: Your trip")
+    ingest_live_reply(from: re_marked.email, subject: "Re: Your trip")
+    assert by_hand.reload.not_interested?
+    assert re_marked.reload.not_interested?
+    assert_not by_hand.activity_events.exists?(kind: "interested_again")
+    assert_equal [ "Restored from Not interested" ], re_marked.activity_events.where(kind: "interested_again").pluck(:summary)
+  end
+
   test "three voicemails do not move leads in New, Potential, Quoted, or client inquiries outside Unsure" do
     new_lead = Lead.create!(name: "New Tab Lead")
     potential_lead = Lead.create!(name: "Potential Tab Lead").tap(&:mark_potential!)
@@ -301,5 +357,12 @@ class LeadPotentialTest < ActiveSupport::TestCase
       assert_not lead.reload.not_interested?, "Expected #{lead.name} to stay out of Not interested"
       assert_equal 0, lead.activity_events.where(kind: "not_interested").count
     end
+  end
+
+  private
+
+  def ingest_live_reply(from:, subject:, header: nil)
+    raw = "From: #{from}\r\nTo: info@sherpaholidays.com\r\nSubject: #{subject}\r\n#{"#{header}\r\n" if header}\r\nStill keen, I was away."
+    Mail::Ingester.ingest(parsed: Mail::Ingester.parse_raw(raw), provider: { message_id: SecureRandom.uuid }, alert: true)
   end
 end

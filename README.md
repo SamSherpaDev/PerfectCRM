@@ -743,7 +743,14 @@ email addresses wherever it was filed: mail from the team's own
 are not responses. Clearing a not-interested mark (**Interested again**, or marking
 Potential or Unsure) records an `interested_again` timeline note (`Restored
 from Not interested`) and also restarts the count, so only voicemails after the
-latest response or restore count.
+latest response or restore count. When live mail sync stores a real reply (the
+reply-alert rule, `Mail::ReplyAlerts.eligible?`; history imports never do this)
+from the lead's or its people's email address while its current not-interested
+mark came from that automatic move, `CallLog.restore_after_reply!` returns the
+lead to Unsure through `unmark_not_interested!`, and the `interested_again` note
+reads `Moved back to Unsure: they replied after the automatic move.` A lead
+marked Not interested by hand, including one re-marked by hand after an
+automatic move, is never restored by a reply.
 
 While marked not interested, a lead is excluded from Today's Calls to make today,
 New leads, Quotes out, Follow-ups, Replies waiting, and Scheduled calls, from

@@ -9,6 +9,7 @@ module CallLog
   NOT_INTERESTED_CONFIRM = "This lead is marked not interested. Log an outbound call anyway?"
   AUTO_NOT_INTERESTED_VOICEMAILS = 3
   AUTO_NOT_INTERESTED_SUMMARY = "Moved to Not interested automatically after three voicemails"
+  REPLIED_AFTER_AUTO_MOVE_SUMMARY = "Moved back to Unsure: they replied after the automatic move."
   module_function
 
   def record!(record, key:, occurred_at:, outcome:, direction:, duration: nil)
@@ -89,5 +90,19 @@ module CallLog
         "actor" => Current.user_email.presence || "automatic"
       }.compact
     )
+  end
+
+  def restore_after_reply!(message)
+    sender = message.from_address.to_s.strip.downcase
+    Lead.not_interested.where(email: sender)
+      .or(Lead.not_interested.where(id: Person.where(email: sender).select(:lead_id)))
+      .find_each do |lead|
+        lead.with_lock do
+          move = lead.activity_events.where(kind: "not_interested").order(:id).last
+          next unless lead.not_interested? && move && lead.not_interested_marked_at <= move.created_at
+
+          lead.unmark_not_interested!(summary: REPLIED_AFTER_AUTO_MOVE_SUMMARY, actor: "automatic")
+        end
+      end
   end
 end
