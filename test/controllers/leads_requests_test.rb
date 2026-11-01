@@ -888,21 +888,21 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     assert_select "header.page-header a[href=?]", leads_path(tab: "new"), text: "Leads"
   end
 
-  test "Mark Unsure on a lead with three unanswered voicemails moves it to Not interested and says so" do
+  test "Mark Unsure on a lead with three unanswered calls moves it to Not interested and says so" do
     lead = Lead.create!(name: "Never Picks Up", email: "never-picks-up@example.com")
-    3.times do |i|
-      CallLog.record!(lead, key: "never-vm-#{i + 1}", occurred_at: (3 - i).days.ago, outcome: "voicemail", direction: "outbound")
-    end
+    CallLog.record!(lead, key: "never-vm-1", occurred_at: 3.days.ago, outcome: "voicemail", direction: "outbound")
+    CallLog.record!(lead, key: "never-na-2", occurred_at: 2.days.ago, outcome: "no_answer", direction: "outbound")
+    CallLog.record!(lead, key: "never-vm-3", occurred_at: 1.day.ago, outcome: "voicemail", direction: "outbound")
     assert_not lead.reload.not_interested?
 
     patch mark_unsure_lead_path(lead), params: { return_to: leads_path(tab: "new") }
     assert_redirected_to leads_path(tab: "new")
-    assert_equal "Marked as Unsure - moved to Not interested after three voicemails.", flash[:notice]
+    assert_equal "Marked as Unsure - moved to Not interested after three unanswered calls.", flash[:notice]
     assert lead.reload.not_interested?
 
     get leads_path(tab: "not_interested")
     assert_select "a", text: lead.name
-    assert_select "p.card-caption", text: /did not answer three voicemails/
+    assert_select "p.card-caption", text: /did not answer three calls/
   end
 
   private

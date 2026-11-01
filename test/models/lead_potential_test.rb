@@ -1,4 +1,5 @@
 require "test_helper"
+require_relative "../../db/migrate/20261101202153_move_unanswered_unsure_leads_to_not_interested"
 
 class LeadPotentialTest < ActiveSupport::TestCase
   test "Potential is reversible across stages and independent of fit" do
@@ -44,25 +45,24 @@ class LeadPotentialTest < ActiveSupport::TestCase
     end
   end
 
-  test "three voicemails without a response move an Unsure lead to Not interested with an activity note, cancel open scheduled calls, stay idempotent, and support undo" do
-    lead = Lead.create!(name: "Unreachable Unsure", email: "unreachable@example.com", source: "website_form", received_at: 5.days.ago)
+  test "three unanswered calls (Voicemail or No answer) without a response move an Unsure lead to Not interested with an activity note, leave Attempted uncounted, cancel open scheduled calls, stay idempotent, and support undo" do
+    lead = Lead.create!(name: "Don Campbell", email: "unreachable@example.com", source: "website_form", received_at: 20.days.ago)
     convo = lead.conversations.create!(subject: "Initial inquiry")
     convo.messages.create!(
       direction: "in", from_address: lead.email, to_addresses: [ "info@sherpaholidays.com" ],
-      subject: "Initial inquiry", text_body: "Looking at Everest", sent_at: 5.days.ago, status: "received"
+      subject: "Initial inquiry", text_body: "Looking at Everest", sent_at: 20.days.ago, status: "received"
     )
     lead.mark_unsure!
     open_call = lead.scheduled_calls.create!(scheduled_at: 2.days.from_now.change(hour: 11, min: 0), duration_minutes: 30)
 
-    CallLog.record!(lead, key: "unsure-vm-1", occurred_at: 3.days.ago, outcome: "voicemail", direction: "outbound")
-    CallLog.record!(lead, key: "unsure-na-1", occurred_at: 2.days.ago - 2.hours, outcome: "no_answer", direction: "outbound")
-    CallLog.record!(lead, key: "unsure-att-1", occurred_at: 2.days.ago - 1.hour, outcome: "attempted", direction: "outbound")
-    CallLog.record!(lead, key: "unsure-vm-2", occurred_at: 2.days.ago, outcome: "voicemail", direction: "outbound")
+    CallLog.record!(lead, key: "unsure-vm-1", occurred_at: 13.days.ago, outcome: "voicemail", direction: "outbound")
+    CallLog.record!(lead, key: "unsure-att-1", occurred_at: 4.days.ago, outcome: "attempted", direction: "outbound")
+    CallLog.record!(lead, key: "unsure-na-1", occurred_at: 3.days.ago, outcome: "no_answer", direction: "outbound")
     assert lead.reload.unsure?
     assert_not lead.not_interested?
     assert_equal "scheduled", open_call.reload.status
 
-    third_event = CallLog.record!(lead, key: "unsure-vm-3", occurred_at: 1.day.ago, outcome: "voicemail", direction: "outbound")
+    third_event = CallLog.record!(lead, key: "unsure-vm-2", occurred_at: 1.day.ago, outcome: "voicemail", direction: "outbound")
     lead.reload
     assert lead.not_interested?
     assert_not lead.unsure?
@@ -74,14 +74,14 @@ class LeadPotentialTest < ActiveSupport::TestCase
     note_events = lead.activity_events.where(kind: "not_interested")
     assert_equal 1, note_events.count
     note_event = note_events.sole
-    assert_equal "Moved to Not interested automatically after three voicemails", note_event.summary
-    assert_equal "three_voicemails", note_event.metadata["reason"]
+    assert_equal "Moved to Not interested automatically after three unanswered calls", note_event.summary
+    assert_equal "three_unanswered_calls", note_event.metadata["reason"]
     assert_equal third_event.id, note_event.metadata["call_event_id"]
 
     # Double tap with the same key is idempotent
-    CallLog.record!(lead, key: "unsure-vm-3", occurred_at: 1.day.ago, outcome: "voicemail", direction: "outbound")
+    CallLog.record!(lead, key: "unsure-vm-2", occurred_at: 1.day.ago, outcome: "voicemail", direction: "outbound")
     assert_equal 1, lead.activity_events.where(kind: "not_interested").count
-    assert_equal 5, lead.activity_events.where(kind: "call").count
+    assert_equal 4, lead.activity_events.where(kind: "call").count
 
     # Manual undo restores the lead to Unsure, and re-logging the old key does not re-trigger Not interested
     lead.unmark_not_interested!
@@ -91,10 +91,27 @@ class LeadPotentialTest < ActiveSupport::TestCase
     assert_includes Lead.unsure, lead
     assert_not_includes Lead.not_interested, lead
 
-    CallLog.record!(lead, key: "unsure-vm-3", occurred_at: 1.day.ago, outcome: "voicemail", direction: "outbound")
+    CallLog.record!(lead, key: "unsure-vm-2", occurred_at: 1.day.ago, outcome: "voicemail", direction: "outbound")
     assert lead.reload.unsure?
     assert_not lead.not_interested?
     assert_equal 1, lead.activity_events.where(kind: "not_interested").count
+  end
+
+  test "logging a third unanswered call as No answer also moves an Unsure lead to Not interested while Attempted stays uncounted" do
+    lead = Lead.create!(name: "No Answer Third", email: "no-answer-third@example.com")
+    lead.mark_unsure!
+
+    CallLog.record!(lead, key: "na-third-1", occurred_at: 4.days.ago, outcome: "no_answer", direction: "outbound")
+    CallLog.record!(lead, key: "na-third-att", occurred_at: 3.days.ago, outcome: "attempted", direction: "outbound")
+    CallLog.record!(lead, key: "na-third-2", occurred_at: 2.days.ago, outcome: "voicemail", direction: "outbound")
+    assert lead.reload.unsure?
+    assert_not lead.not_interested?
+
+    third = CallLog.record!(lead, key: "na-third-3", occurred_at: 1.day.ago, outcome: "no_answer", direction: "outbound")
+    assert lead.reload.not_interested?
+    note = lead.activity_events.where(kind: "not_interested").sole
+    assert_equal "Moved to Not interested automatically after three unanswered calls", note.summary
+    assert_equal third.id, note.metadata["call_event_id"]
   end
 
   test "a Talked call or inbound message resets the voicemail count for an Unsure lead" do
@@ -230,12 +247,12 @@ class LeadPotentialTest < ActiveSupport::TestCase
     assert_equal 1, lead.activity_events.where(kind: "interested_again").count
   end
 
-  test "Mark Unsure runs the three-voicemail check and leaves leads that answered in Unsure" do
+  test "Mark Unsure runs the three-unanswered-calls check and leaves leads that answered in Unsure" do
     silent = Lead.create!(name: "Silent Traveler", email: "silent-traveler@example.com")
     open_call = silent.scheduled_calls.create!(scheduled_at: 2.days.from_now.change(hour: 11, min: 0))
-    3.times do |i|
-      CallLog.record!(silent, key: "silent-vm-#{i + 1}", occurred_at: (3 - i).days.ago, outcome: "voicemail", direction: "outbound")
-    end
+    CallLog.record!(silent, key: "silent-vm-1", occurred_at: 3.days.ago, outcome: "voicemail", direction: "outbound")
+    CallLog.record!(silent, key: "silent-na-2", occurred_at: 2.days.ago, outcome: "no_answer", direction: "outbound")
+    CallLog.record!(silent, key: "silent-vm-3", occurred_at: 1.day.ago, outcome: "voicemail", direction: "outbound")
     assert_not silent.reload.not_interested?
 
     silent.mark_unsure!
@@ -244,12 +261,12 @@ class LeadPotentialTest < ActiveSupport::TestCase
     assert_not_nil silent.unsure_marked_at
     assert_equal "cancelled", open_call.reload.status
     note = silent.activity_events.where(kind: "not_interested").sole
-    assert_equal "Moved to Not interested automatically after three voicemails", note.summary
-    assert_equal "three_voicemails", note.metadata["reason"]
+    assert_equal "Moved to Not interested automatically after three unanswered calls", note.summary
+    assert_equal "three_unanswered_calls", note.metadata["reason"]
 
     answered = Lead.create!(name: "Answered Traveler", email: "answered-traveler@example.com")
     CallLog.record!(answered, key: "answered-vm-1", occurred_at: 4.days.ago, outcome: "voicemail", direction: "outbound")
-    CallLog.record!(answered, key: "answered-vm-2", occurred_at: 3.days.ago, outcome: "voicemail", direction: "outbound")
+    CallLog.record!(answered, key: "answered-vm-2", occurred_at: 3.days.ago, outcome: "no_answer", direction: "outbound")
     CallLog.record!(answered, key: "answered-ok-1", occurred_at: 2.days.ago, outcome: "connected", direction: "outbound")
     CallLog.record!(answered, key: "answered-vm-3", occurred_at: 1.day.ago, outcome: "voicemail", direction: "outbound")
 
@@ -357,6 +374,75 @@ class LeadPotentialTest < ActiveSupport::TestCase
       assert_not lead.reload.not_interested?, "Expected #{lead.name} to stay out of Not interested"
       assert_equal 0, lead.activity_events.where(kind: "not_interested").count
     end
+  end
+
+  test "a lead already moved under the legacy three-voicemails note is still restored to Unsure on a real reply" do
+    lead = Lead.create!(name: "Legacy Auto Moved", email: "legacy-auto-moved@example.com")
+    lead.mark_unsure!
+    lead.mark_not_interested!
+    lead.activity_events.create!(
+      kind: "not_interested",
+      summary: "Moved to Not interested automatically after three voicemails",
+      occurred_at: Time.current,
+      metadata: { "reason" => "three_voicemails", "actor" => "automatic" }
+    )
+    assert lead.reload.not_interested?
+
+    ingest_live_reply(from: lead.email, subject: "Re: Your trip")
+    assert lead.reload.unsure?
+    assert_not lead.not_interested?
+    restore = lead.activity_events.where(kind: "interested_again").sole
+    assert_equal "Moved back to Unsure: they replied after the automatic move.", restore.summary
+  end
+
+  test "the one-time backfill migration moves existing qualifying Unsure leads like Don Campbell once and leaves non-qualifying leads untouched" do
+    don = Lead.create!(name: "Don Campbell", email: "don-campbell@example.com", unsure_marked_at: 14.days.ago)
+    open_call = don.scheduled_calls.create!(scheduled_at: 2.days.from_now.change(hour: 11, min: 0))
+    [
+      [ "don-mig-1", "voicemail", Time.zone.local(2026, 10, 19, 10, 0) ],
+      [ "don-mig-2", "no_answer", Time.zone.local(2026, 10, 29, 10, 0) ],
+      [ "don-mig-3", "voicemail", Time.zone.local(2026, 11, 1, 10, 0) ]
+    ].each do |key, outcome, at|
+      don.activity_events.create!(
+        kind: "call", idempotency_key: key, summary: "Call: #{CallLog::LABELS.fetch(outcome)}",
+        occurred_at: at, metadata: { "inquiry_id" => don.id, "direction" => "outbound", "outcome" => outcome }
+      )
+    end
+
+    two_unanswered_plus_attempted = Lead.create!(name: "Two Plus Attempted", email: "two-att@example.com", unsure_marked_at: 10.days.ago)
+    CallLog.record!(two_unanswered_plus_attempted, key: "tpa-call-1", occurred_at: 3.days.ago, outcome: "voicemail", direction: "outbound")
+    CallLog.record!(two_unanswered_plus_attempted, key: "tpa-call-2", occurred_at: 2.days.ago, outcome: "no_answer", direction: "outbound")
+    CallLog.record!(two_unanswered_plus_attempted, key: "tpa-call-3", occurred_at: 1.day.ago, outcome: "attempted", direction: "outbound")
+
+    potential_three = Lead.create!(name: "Potential Three", email: "pot-three@example.com").tap(&:mark_potential!)
+    3.times do |i|
+      CallLog.record!(potential_three, key: "pot-call-#{i + 1}", occurred_at: (3 - i).days.ago, outcome: "no_answer", direction: "outbound")
+    end
+
+    ActiveRecord::Migration.suppress_messages { MoveUnansweredUnsureLeadsToNotInterested.new.migrate(:up) }
+
+    assert don.reload.not_interested?
+    assert_not don.unsure?
+    assert_not_nil don.unsure_marked_at
+    assert_equal "cancelled", open_call.reload.status
+    note = don.activity_events.where(kind: "not_interested").sole
+    assert_equal "Moved to Not interested automatically after three unanswered calls", note.summary
+    assert_equal "three_unanswered_calls", note.metadata["reason"]
+
+    assert two_unanswered_plus_attempted.reload.unsure?
+    assert_not two_unanswered_plus_attempted.not_interested?
+    assert potential_three.reload.potential?
+    assert_not potential_three.not_interested?
+
+    # Safe and idempotent on re-run, and respects manual Interested again
+    ActiveRecord::Migration.suppress_messages { MoveUnansweredUnsureLeadsToNotInterested.new.migrate(:up) }
+    assert_equal 1, don.activity_events.where(kind: "not_interested").count
+
+    don.unmark_not_interested!
+    assert don.reload.unsure?
+    ActiveRecord::Migration.suppress_messages { MoveUnansweredUnsureLeadsToNotInterested.new.migrate(:up) }
+    assert don.reload.unsure?
+    assert_equal 1, don.activity_events.where(kind: "not_interested").count
   end
 
   private
