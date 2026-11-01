@@ -9,10 +9,7 @@ module CallLog
   ONE_TAP = %w[connected voicemail no_answer].freeze
   NOT_INTERESTED_CONFIRM = "This lead is marked not interested. Log an outbound call anyway?"
   AUTO_NOT_INTERESTED_CALLS = 3
-  AUTO_NOT_INTERESTED_VOICEMAILS = AUTO_NOT_INTERESTED_CALLS
   AUTO_NOT_INTERESTED_SUMMARY = "Moved to Not interested automatically after three unanswered calls"
-  LEGACY_AUTO_NOT_INTERESTED_SUMMARY = "Moved to Not interested automatically after three voicemails"
-  AUTO_NOT_INTERESTED_SUMMARIES = [ AUTO_NOT_INTERESTED_SUMMARY, LEGACY_AUTO_NOT_INTERESTED_SUMMARY ].freeze
   REPLIED_AFTER_AUTO_MOVE_SUMMARY = "Moved back to Unsure: they replied after the automatic move."
   module_function
 
@@ -63,10 +60,6 @@ module CallLog
     !responded_since?(record, recent_calls.last)
   end
 
-  def three_unanswered_voicemails?(record)
-    three_unanswered_calls?(record)
-  end
-
   def responded_since?(record, first_call)
     reset_event = record.activity_events
       .where("kind = 'interested_again' OR (kind = 'call' AND (json_extract(metadata, '$.outcome') = 'connected' " \
@@ -101,10 +94,6 @@ module CallLog
     true
   end
 
-  def mark_not_interested_after_three_voicemails!(record, event: nil)
-    mark_not_interested_after_three_unanswered_calls!(record, event: event)
-  end
-
   def backfill_unanswered_not_interested!
     moved = 0
     Lead.unsure.find_each do |lead|
@@ -121,7 +110,7 @@ module CallLog
       .or(Lead.not_interested.where(id: Person.where(email: sender).select(:lead_id)))
       .find_each do |lead|
         lead.with_lock do
-          move = lead.activity_events.where(kind: "not_interested", summary: AUTO_NOT_INTERESTED_SUMMARIES).order(:id).last
+          move = lead.activity_events.where(kind: "not_interested").order(:id).last
           next unless lead.not_interested? && move && lead.not_interested_marked_at <= move.created_at
 
           lead.unmark_not_interested!(summary: REPLIED_AFTER_AUTO_MOVE_SUMMARY, actor: "automatic")

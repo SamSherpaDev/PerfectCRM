@@ -747,11 +747,9 @@ from Not interested`) and also restarts the count, so only unanswered calls afte
 latest response or restore count. When live mail sync stores a real reply (the
 reply-alert rule, `Mail::ReplyAlerts.eligible?`; history imports never do this)
 from the lead's or its people's email address while its current not-interested
-mark came from that automatic move (including leads moved under the earlier
-`Moved to Not interested automatically after three voicemails` note),
-`CallLog.restore_after_reply!` returns the lead to Unsure through
-`unmark_not_interested!`, and the `interested_again` note reads
-`Moved back to Unsure: they replied after the automatic move.` A lead
+mark came from that automatic move, `CallLog.restore_after_reply!` returns the
+lead to Unsure through `unmark_not_interested!`, and the `interested_again` note
+reads `Moved back to Unsure: they replied after the automatic move.` A lead
 marked Not interested by hand, including one re-marked by hand after an
 automatic move, is never restored by a reply.
 
