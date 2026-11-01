@@ -51,7 +51,7 @@ module CallLog
 
   def three_unanswered_calls?(record)
     recent_calls = record.activity_events.where(kind: "call")
-      .where("json_extract(metadata, '$.outcome') IN ('voicemail', 'no_answer') AND json_extract(metadata, '$.direction') = 'outbound'")
+      .where("json_extract(metadata, '$.outcome') IN (?) AND json_extract(metadata, '$.direction') = 'outbound'", UNANSWERED_OUTCOMES)
       .order(occurred_at: :desc, id: :desc)
       .limit(AUTO_NOT_INTERESTED_CALLS)
       .to_a
