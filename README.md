@@ -725,16 +725,17 @@ previous tab (`Potential`, `Unsure`, `Quoted`, `New`, or `Archived`). Marking
 Potential or Unsure on a not-interested lead also clears `not_interested_marked_at`.
 Not interested is not spam: it does not set `spam_marked_at` or the
 `suspected_spam` tag, and it does not alter spam reports or ad conversions
-already sent. Logging an outbound `Voicemail` call on a lead in Unsure that now
-has three outbound `Voicemail` outcomes with no response since the first of
-those three also marks the lead not interested automatically via
-`Lead#mark_not_interested!`, records a `not_interested` timeline note
-(`Moved to Not interested automatically after three voicemails`), and adds
-`Moved to Not interested after three voicemails.` to the `Call logged` notice,
+already sent. Logging an outbound `Voicemail` or `No answer` call on a lead in
+Unsure that now has three combined outbound `Voicemail` or `No answer` outcomes
+(`Attempted` does not count) with no response since the first of those three
+also marks the lead not interested automatically via `Lead#mark_not_interested!`,
+records a `not_interested` timeline note
+(`Moved to Not interested automatically after three unanswered calls`), and adds
+`Moved to Not interested after three unanswered calls.` to the `Call logged` notice,
 while keeping `unsure_marked_at` intact for **Interested again**. Mark Unsure
-runs the same check, so a lead that already has three unanswered voicemails
-moves straight to Not interested (`Marked as Unsure - moved to Not interested
-after three voicemails.`); leads already in Unsure are not backfilled. A
+runs the same check, so a lead that already has three unanswered calls moves
+straight to Not interested (`Marked as Unsure - moved to Not interested after
+three unanswered calls.`). A
 response is a `Talked` call, any inbound call, or an inbound message that is a
 real reply (`Mail::ReplyAlerts.reply?`, the same rule that decides reply alerts)
 on the lead or its existing client, or sent from the lead's or its people's
@@ -742,13 +743,15 @@ email addresses wherever it was filed: mail from the team's own
 `@sherpaholidays.com` addresses, auto-replies, out-of-office notes, and bounces
 are not responses. Clearing a not-interested mark (**Interested again**, or marking
 Potential or Unsure) records an `interested_again` timeline note (`Restored
-from Not interested`) and also restarts the count, so only voicemails after the
+from Not interested`) and also restarts the count, so only unanswered calls after the
 latest response or restore count. When live mail sync stores a real reply (the
 reply-alert rule, `Mail::ReplyAlerts.eligible?`; history imports never do this)
 from the lead's or its people's email address while its current not-interested
-mark came from that automatic move, `CallLog.restore_after_reply!` returns the
-lead to Unsure through `unmark_not_interested!`, and the `interested_again` note
-reads `Moved back to Unsure: they replied after the automatic move.` A lead
+mark came from that automatic move (including leads moved under the earlier
+`Moved to Not interested automatically after three voicemails` note),
+`CallLog.restore_after_reply!` returns the lead to Unsure through
+`unmark_not_interested!`, and the `interested_again` note reads
+`Moved back to Unsure: they replied after the automatic move.` A lead
 marked Not interested by hand, including one re-marked by hand after an
 automatic move, is never restored by a reply.
 

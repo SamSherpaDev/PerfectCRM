@@ -44,12 +44,12 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
     assert_select ".call-choices input[name=direction][value=outbound]"
   end
 
-  test "logging a third unanswered voicemail via the one-tap endpoint moves an Unsure lead to Not interested, completes due scheduled calls, cancels future scheduled calls, and supports undo" do
+  test "logging a third unanswered call via the one-tap endpoint moves an Unsure lead to Not interested, completes due scheduled calls, cancels future scheduled calls, and supports undo" do
     travel_to Time.zone.local(2026, 10, 20, 10, 0) do
       lead = Lead.create!(name: "Unsure Three Voicemails", email: "unsure-3vm@example.com")
       lead.mark_unsure!
       CallLog.record!(lead, key: "req-vm-1", occurred_at: 3.days.ago, outcome: "voicemail", direction: "outbound")
-      CallLog.record!(lead, key: "req-vm-2", occurred_at: 2.days.ago, outcome: "voicemail", direction: "outbound")
+      CallLog.record!(lead, key: "req-vm-2", occurred_at: 2.days.ago, outcome: "no_answer", direction: "outbound")
       due_call = lead.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 20, 9, 0))
       future_call = lead.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 25, 11, 0))
 
@@ -57,7 +57,7 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
         post lead_calls_path(lead), params: { save_key: "req-vm-3", outcome: "voicemail", direction: "outbound" }
       end
       assert_redirected_to lead_path(lead, anchor: "record-details")
-      assert_equal "Call logged: Voicemail. Moved to Not interested after three voicemails.", flash[:notice]
+      assert_equal "Call logged: Voicemail. Moved to Not interested after three unanswered calls.", flash[:notice]
 
       lead.reload
       assert lead.not_interested?
@@ -69,7 +69,7 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
       get lead_path(lead)
       assert_response :success
       assert_select "[role=alert][aria-label='Not interested warning']", text: /Not interested - do not contact/
-      assert_select ".timeline", text: /Moved to Not interested automatically after three voicemails/
+      assert_select ".timeline", text: /Moved to Not interested automatically after three unanswered calls/
       assert_select "button", text: "Interested again"
 
       patch unmark_not_interested_lead_path(lead), params: { return_to: leads_path(tab: "not_interested") }
@@ -80,8 +80,8 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "the Today call row says when a third voicemail moved the lead to Not interested" do
-    lead = Lead.create!(name: "Today Three Voicemails", email: "today-3vm@example.com", phone: "+14155550199")
+  test "the Today call row says when a third unanswered call (Voicemail or No answer) moved the lead to Not interested" do
+    lead = Lead.create!(name: "Today Three Calls", email: "today-3vm@example.com", phone: "+14155550199")
     lead.mark_unsure!
     CallLog.record!(lead, key: "today-vm-1", occurred_at: 2.days.ago, outcome: "voicemail", direction: "outbound")
 
@@ -89,9 +89,9 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
     assert_redirected_to root_path
     assert_equal "Call logged: Voicemail.", flash[:notice]
 
-    post lead_calls_path(lead), params: { save_key: "today-vm-3", outcome: "voicemail", direction: "outbound", return_to: root_path }
+    post lead_calls_path(lead), params: { save_key: "today-na-3", outcome: "no_answer", direction: "outbound", return_to: root_path }
     assert_redirected_to root_path
-    assert_equal "Call logged: Voicemail. Moved to Not interested after three voicemails.", flash[:notice]
+    assert_equal "Call logged: No answer. Moved to Not interested after three unanswered calls.", flash[:notice]
     assert lead.reload.not_interested?
   end
 end
