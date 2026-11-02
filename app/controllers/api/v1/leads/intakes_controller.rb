@@ -35,19 +35,19 @@ module Api
           rescue ArgumentError => error
             return render json: { error: "validation", fields: { error.message => "invalid" } }, status: :bad_request
           end
-          payload["_acquisition"] = acquisition
           # Only the itinerary designer placement carries a structured trip;
           # other placements ignore the key exactly as before.
+          itinerary = nil
           if payload["placement"].to_s.strip == "itinerary_designer"
             begin
-              payload["_itinerary"] = ::Leads::Itinerary.parse(payload)
+              itinerary = ::Leads::Itinerary.parse(payload)
             rescue ArgumentError => error
               return render json: { error: "validation", fields: { error.message => "invalid" } }, status: :bad_request
             end
           end
           submission_id = payload["submission_id"].to_s.strip
           external_ref = "website_form:#{submission_id}"
-          lead = build_lead(payload, fields, external_ref, caller_name)
+          lead = build_lead(payload, fields, external_ref, caller_name, acquisition: acquisition, itinerary: itinerary)
           existing = nil
           duplicate = nil
           begin
@@ -216,12 +216,10 @@ module Api
           submitted - started
         end
 
-        def build_lead(payload, fields, external_ref, caller_name)
+        def build_lead(payload, fields, external_ref, caller_name, acquisition:, itinerary:)
           contact = payload["contact"]
           trip = payload["trip"].is_a?(Hash) ? payload["trip"] : {}
-          itinerary = payload["_itinerary"]
           base_trip = itinerary&.dig("base_trip") || {}
-          acquisition = payload["_acquisition"]
           attribution = ::Leads::Acquisition.legacy_attribution(payload["attribution"].is_a?(Hash) ? payload["attribution"] : {}, acquisition: acquisition)
           raw_page = payload["page"].is_a?(Hash) ? payload["page"] : {}
           page = { "url" => ::Leads::Acquisition.safe_url(raw_page["url"]), "referrer" => ::Leads::Acquisition.host(raw_page["referrer"]),

@@ -22,10 +22,10 @@ class LeadsItineraryInsightsTest < ActiveSupport::TestCase
 
   test "a stop listed twice in one itinerary counts once and spellings merge" do
     designer_lead([ "Kathmandu", "Pokhara", "kathmandu" ], "season" => "fall", "pace" => "easy", "length_days" => 7)
-    designer_lead([ "KATHMANDU", "Chitwan" ], "length_days" => 10)
+    designer_lead([ "KATHMANDU", "Chitwan" ], "length_days" => 14)
     insights = Leads::ItineraryInsights.new(month: Date.new(2026, 11, 1))
     assert_equal [ "Kathmandu", 2 ], insights.stops.first
-    assert_equal [ [ "About 1 week", 1 ], [ "About 10 days", 1 ] ], insights.lengths
+    assert_equal [ [ "About a week", 1 ], [ "About two weeks", 1 ] ], insights.lengths
     assert_equal [ "Fall (October to December)", 1 ], insights.seasons.second
     assert_equal [ "Not given", 1 ], insights.seasons.last
     assert_equal [ [ "Not given", 2 ] ], insights.sources

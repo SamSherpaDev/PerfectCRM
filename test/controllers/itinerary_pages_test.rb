@@ -30,7 +30,7 @@ class ItineraryPagesTest < ActionDispatch::IntegrationTest
       assert_select "h2", "Itinerary"
       assert_select "a[href=?][target=_blank]", ItineraryEmail::SAMPLE_ITINERARY["share_url"], text: /Open theirs/
       assert_select "dd", text: "Pokhara Mountain Views Tour"
-      assert_select "dd", text: "About 1 week · 8 days planned"
+      assert_select "dd", text: "About a week · 8 days planned"
       assert_select "dd", text: "Easy days"
       assert_select "dd", text: "Fall (October to December)"
       assert_select ".chip", text: "Temples and old cities"
@@ -38,32 +38,12 @@ class ItineraryPagesTest < ActionDispatch::IntegrationTest
       assert_select ".itinerary-day", text: "Days 2-3"
       assert_select "dd", text: "No, box left unticked"
       assert_select "dd", text: "Instagram bio"
-      assert_select ".badge", text: "Off"
-      assert_select "a[href=?]", settings_itinerary_email_path(lead_id: lead.id)
+      assert_select "a[href*=?]", settings_itinerary_email_path, count: 0
       assert_select "a[href=?]", itinerary_insights_path
       assert_select ".mono", text: "itinerary-designer@1.0.0"
     end
     assert_select "#record-details dd", text: /Weekday mornings, their time \(America\/New York\)/
     assert_not_includes response.body, "— Itinerary"
-  end
-
-  test "the lead card follows the itinerary email" do
-    sign_in
-    Setting.current.update!(itinerary_email_enabled: true, sender_name: "Sam", email_signature: "Sam")
-    Setting.current.update_columns(itinerary_email_enabled_at: 1.hour.ago)
-    lead = designer_lead
-    ItineraryEmailJob.perform_now(lead.id)
-    get lead_path(lead)
-    assert_select "#record-itinerary .badge", text: "Sending"
-    lead.itinerary_email.message.mark_sent!
-    get lead_path(lead)
-    assert_select "#record-itinerary .badge", text: "Sent"
-
-    skipped = designer_lead(email: "visitor@example.org")
-    ItineraryEmailJob.perform_now(skipped.id)
-    get lead_path(skipped)
-    assert_select "#record-itinerary .badge", text: "Not sent"
-    assert_select "#record-itinerary p", text: "Test address"
   end
 
   test "leads without an itinerary keep their page as before" do
@@ -94,16 +74,6 @@ class ItineraryPagesTest < ActionDispatch::IntegrationTest
     assert_select "a.tab-on", text: "No call request yet"
   end
 
-  test "the preview can show a real designer inquiry" do
-    sign_in
-    lead = designer_lead
-    get settings_itinerary_email_path(lead_id: lead.id)
-    assert_response :success
-    assert_select ".email-paper", text: /Hi Anna,/
-    assert_select "dd", text: "anna@gmail.com"
-    assert_select "a[href=?]", lead_path(lead), text: /Anna Lindqvist/
-  end
-
   test "what people build counts one month of designer inquiries without spam or tests" do
     sign_in
     travel_to Time.zone.local(2026, 11, 20, 10) do
@@ -128,7 +98,7 @@ class ItineraryPagesTest < ActionDispatch::IntegrationTest
       assert_select "#combinations-heading ~ div tbody tr:first-child td:first-child", text: "Chitwan + Kathmandu"
       assert_select "#combinations-heading ~ div tbody td", text: "Chitwan + Pokhara"
       assert_select "#combinations-heading ~ div tbody td", text: /Bandipur/, count: 0
-      assert_select "#lengths-heading + div tbody td", text: "About 2 weeks"
+      assert_select "#lengths-heading + div tbody td", text: "About two weeks"
       assert_select "#seasons-heading + div tbody tr", 4
       assert_select "#sources-heading ~ div tbody td", text: "Not given"
       assert_select "#sources-heading ~ div tbody td", text: "Instagram bio"

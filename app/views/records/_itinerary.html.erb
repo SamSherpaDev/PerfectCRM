@@ -1,9 +1,8 @@
 <%# locals: (lead:) %>
 <%# Left column, under Details: the trip an itinerary designer visitor built
-    (Leads::Itinerary, README.md "Leads"). Titles come from published trips. %>
+    (Leads::Itinerary, README.md "Leads"). Titles are filtered visitor text. %>
 <% itinerary = lead.itinerary %>
 <% labels = ::Leads::Itinerary %>
-<% email_state = itinerary_email_state(lead) %>
 <section class="card card-pad" id="record-itinerary" aria-labelledby="itinerary-heading">
   <div class="card-header">
     <h2 class="card-title" id="itinerary-heading">Itinerary</h2>
@@ -73,30 +72,24 @@
     <% end %>
   </ol>
 
-  <dl class="facts facts-col mt-5">
-    <div>
-      <dt>Itinerary email</dt>
-      <dd>
-        <%= badge email_state[:word], email_state[:tone], dot: true %>
-        <% if email_state[:detail] %><p class="mt-1 text-xs muted"><%= email_state[:detail] %></p><% end %>
-      </dd>
-    </div>
-    <% unless itinerary["email_list"].nil? %>
-      <div>
-        <dt>Email list</dt>
-        <dd><%= itinerary["email_list"] ? "Yes, they ticked the box" : "No, box left unticked" %></dd>
-      </div>
-    <% end %>
-    <% if itinerary["source"].present? %>
-      <div>
-        <dt>Came from</dt>
-        <dd><%= labels.source_label(itinerary["source"]) %></dd>
-      </div>
-    <% end %>
-  </dl>
+  <% unless itinerary["email_list"].nil? && itinerary["source"].blank? %>
+    <dl class="facts facts-col mt-5">
+      <% unless itinerary["email_list"].nil? %>
+        <div>
+          <dt>Email list</dt>
+          <dd><%= itinerary["email_list"] ? "Yes, they ticked the box" : "No, box left unticked" %></dd>
+        </div>
+      <% end %>
+      <% if itinerary["source"].present? %>
+        <div>
+          <dt>Came from</dt>
+          <dd><%= labels.source_label(itinerary["source"]) %></dd>
+        </div>
+      <% end %>
+    </dl>
+  <% end %>
 
-  <p class="mt-4 flex flex-wrap gap-x-3 gap-y-1 text-xs">
-    <%= link_to "Read their itinerary email", settings_itinerary_email_path(lead_id: lead.id), class: "link-quiet" %>
+  <p class="mt-4 text-xs">
     <%= link_to "What people build", itinerary_insights_path, class: "link-quiet" %>
   </p>
   <% if itinerary["client_version"].present? %>

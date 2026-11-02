@@ -1,8 +1,8 @@
 <% content_for :title, "Itinerary email · PerfectCRM" %>
 <div class="page">
-  <% back = @lead ? [ @lead.name.presence || "Lead", lead_path(@lead) ] : [ "Settings", edit_settings_path ] %>
-  <% subtitle = @lead ? "The email for this inquiry, worded as it would send now." : "The automatic email for itinerary designer visitors, as they receive it. Read it here before switching it on." %>
-  <%= render layout: "shared/page_header", locals: { eyebrow: "Settings", title: "Itinerary email", subtitle: subtitle, back: back } do %><% end %>
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Settings", title: "Itinerary email",
+        subtitle: "The automatic email for itinerary designer visitors, as they receive it. Read it here before switching it on.",
+        back: [ "Settings", edit_settings_path ] } do %><% end %>
   <%= render "shared/flash" %>
 
   <section class="card card-pad" aria-labelledby="itinerary-email-status-heading">
@@ -24,21 +24,17 @@
   </section>
 
   <div>
-    <% if @lead %>
-      <p class="hint">The call paragraph reads <%= @call_requested ? "as for a visitor who asked for a call" : "as for a visitor who has not asked for a call yet" %>.</p>
-    <% else %>
-      <nav class="tabs" aria-label="Email version">
-        <%= tab_link "Asked for a call", settings_itinerary_email_path, icon: :phone, active: @call_requested %>
-        <%= tab_link "No call request yet", settings_itinerary_email_path(call: 0), icon: :mail, active: !@call_requested %>
-      </nav>
-      <p class="hint mt-3">The call paragraph depends on whether the visitor picked a call time before the email went out. The sample trip below is the designer's “Easy days” draft.</p>
-    <% end %>
+    <nav class="tabs" aria-label="Email version">
+      <%= tab_link "Asked for a call", settings_itinerary_email_path, icon: :phone, active: @call_requested %>
+      <%= tab_link "No call request yet", settings_itinerary_email_path(call: 0), icon: :mail, active: !@call_requested %>
+    </nav>
+    <p class="hint mt-3">The call paragraph depends on whether the visitor picked a call time before the email went out. The sample trip below is the designer's “Easy days” draft.</p>
 
     <section class="card card-pad mt-4" aria-labelledby="itinerary-email-preview-heading">
       <h2 class="sr-only" id="itinerary-email-preview-heading">Email preview</h2>
       <dl class="space-y-1 text-sm">
         <div class="flex gap-2"><dt class="muted">From</dt><dd class="min-w-0 break-words"><%= Outbound::Composer.from_display %></dd></div>
-        <div class="flex gap-2"><dt class="muted">To</dt><dd class="min-w-0 break-words"><%= @recipient %></dd></div>
+        <div class="flex gap-2"><dt class="muted">To</dt><dd class="min-w-0 break-words">traveler@example.com</dd></div>
         <div class="flex gap-2"><dt class="muted">Subject</dt><dd class="min-w-0 break-words"><%= @content[:subject] %></dd></div>
       </dl>
       <div class="report-paper email-paper mt-4">

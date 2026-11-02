@@ -95,6 +95,24 @@ class ApiV1LeadsItineraryIntakeTest < ActionDispatch::IntegrationTest
     assert_not lead.lead_notifications.exists?(event: "itinerary_email")
   end
 
+  test "a caller-supplied _itinerary is never stored, whatever the placement" do
+    forged = { "stops" => [ { "title" => "Claim your refund at evil . com", "day_from" => 1 } ],
+      "share_url" => "javascript:alert(document.cookie)", "group_size" => 9, "season" => "not_sure" }
+    @settings.update!(itinerary_email_enabled: true)
+    [ "landing", nil, "itinerary_designer" ].each_with_index do |placement, index|
+      body = intake_body("contact" => { "email" => "visitor#{index}@gmail.com" }).except("itinerary").merge("_itinerary" => forged)
+      body = placement ? body.merge("placement" => placement) : body.except("placement")
+      post_intake body
+      assert_response :accepted
+      lead = Lead.last
+      assert_nil lead.itinerary, placement.inspect
+      assert_not lead.metadata.key?("itinerary")
+      assert_nil lead.party_size
+      assert_not lead.timing_unknown
+      assert_not lead.lead_notifications.exists?(event: "itinerary_email")
+    end
+  end
+
   test "a designer post without an itinerary is still an inquiry" do
     post_intake intake_body.except("itinerary")
     assert_response :accepted

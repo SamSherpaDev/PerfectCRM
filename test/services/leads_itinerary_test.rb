@@ -56,6 +56,7 @@ class LeadsItineraryTest < ActiveSupport::TestCase
     "itinerary.pace" => { "pace" => "sprint" },
     "itinerary.season" => { "season" => "summer" },
     "itinerary.length_days" => { "length_days" => "7" },
+    "itinerary.interests" => { "interests" => [ "Cheap flights to Kathmandu" ] },
     "itinerary.group_size" => { "group_size" => 21 },
     "itinerary.email_list" => { "email_list" => "yes" },
     "itinerary.source" => { "source" => "Instagram Bio!" },
@@ -69,7 +70,20 @@ class LeadsItineraryTest < ActiveSupport::TestCase
 
   test "rejects text with links, addresses, markup or prices" do
     [ "Email me at a@b.co", "<b>Pokhara</b>", "Only $999", "Pokhara 1200 USD", "https://evil.example", "Book now at evil.io" ].each do |title|
-      assert_equal "itinerary.interests", error_for("interests" => [ title ]), title
+      assert_equal "itinerary.stops.title", error_for("stops" => [ { "title" => title, "day_from" => 1 } ]), title
+      assert_equal "itinerary.base_trip.title", error_for("base_trip" => { "handle" => "pokhara", "title" => title }), title
+    end
+  end
+
+  test "interests and length take only the designer's fixed choices" do
+    result = Leads::Itinerary.parse(payload("interests" => Leads::Itinerary::INTERESTS + [ "Everest up close" ], "length_days" => 21))
+    assert_equal Leads::Itinerary::INTERESTS, result["interests"]
+    assert_equal 21, result["length_days"]
+    [ [ "Everest up close " ], [ "everest up close" ], [ 7 ], "Everest up close" ].each do |interests|
+      assert_equal "itinerary.interests", error_for("interests" => interests), interests.inspect
+    end
+    [ 10, 7.0, 0, 28 ].each do |days|
+      assert_equal "itinerary.length_days", error_for("length_days" => days), days.inspect
     end
   end
 
@@ -108,9 +122,10 @@ class LeadsItineraryTest < ActiveSupport::TestCase
   test "labels read plainly" do
     assert_equal "Day 1", Leads::Itinerary.day_label({ "day_from" => 1, "day_to" => 1 })
     assert_equal "Days 2-3", Leads::Itinerary.day_label({ "day_from" => 2, "day_to" => 3 })
-    assert_equal "about 1 week", Leads::Itinerary.length_label(7)
-    assert_equal "about 2 weeks", Leads::Itinerary.length_label(14)
-    assert_equal "about 10 days", Leads::Itinerary.length_label(10)
+    assert_equal "about a week", Leads::Itinerary.length_label(7)
+    assert_equal "about two weeks", Leads::Itinerary.length_label(14)
+    assert_equal "about three weeks", Leads::Itinerary.length_label(21)
+    assert_nil Leads::Itinerary.length_label(nil)
     assert_equal "Instagram bio", Leads::Itinerary.source_label("instagram_bio")
     assert_equal 3, Leads::Itinerary.planned_days(Leads::Itinerary.parse(payload))
   end

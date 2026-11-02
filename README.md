@@ -889,9 +889,8 @@ The website's free itinerary designer sends inquiries with the
 rules: [website intake contract](docs/leads-intake.md#itinerary-designer)).
 The lead page shows it in an **Itinerary** card under Details: the published
 trip it started from, length, pace, season, travelers, interests, the day-by-day
-stops, whether the itinerary email went out, the email-list box, where the
-visitor came from, the designer version, and **Open theirs** for their own
-link. A free-call window picked on the designer's last screen shows as
+stops, the email-list box, where the visitor came from, the designer
+version, and **Open theirs** for their own link. A free-call window picked on the designer's last screen shows as
 **Free call** in Details with a "Free call requested" note; email the visitor
 two call times by hand. No passport, visa, insurance, date-of-birth or price
 data is stored.
@@ -904,8 +903,7 @@ seasons, paces and entry points.
 
 The **Itinerary email** is off until the owner approves its wording. Read it
 first at `/settings/itinerary_email` (Settings → Automations → Read the
-itinerary email; a lead's Itinerary card opens the same preview for that
-lead), then switch it on in Settings → Automations. While it is on, each new
+itinerary email), then switch it on in Settings → Automations. While it is on, each new
 designer inquiry with an itinerary gets "Your Nepal itinerary" from
 info@sherpaholidays.com about a minute after intake: the trip facts, the
 day-by-day list, the link back to their itinerary and the free-call offer (or,

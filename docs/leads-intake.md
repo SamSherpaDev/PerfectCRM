@@ -312,9 +312,9 @@ Fields (`Leads::Itinerary.parse`; every one is optional except `stops`):
 |---|---|
 | `base_trip` | `{ "handle", "title"? }`: the published trip the draft started from |
 | `stops` | 1-30 objects in visit order: `title` (required), `day_from` 1-60 (required), `day_to` from `day_from` to 60 (defaults to `day_from`), `code` slug, `from_trip` `{ "handle", "title"? }` |
-| `interests` | up to 6 labels, duplicates dropped |
+| `interests` | labels from `Everest up close`, `Temples and old cities`, `Mountain views, easy walking`, `Jungle safari in Chitwan`, `A real Himalayan trek`, `Birthplace of the Buddha`; duplicates dropped |
 | `pace` | `easy`, `some_hiking`, `real_trek` |
-| `length_days` | integer 1-60 |
+| `length_days` | `7`, `14` or `21` (about one, two or three weeks) |
 | `season` | `spring`, `fall`, `winter`, `not_sure` |
 | `group_size` | integer 1-20 |
 | `email_list` | `true` or `false`: the optional email-list box, unticked by default |
@@ -322,11 +322,12 @@ Fields (`Leads::Itinerary.parse`; every one is optional except `stops`):
 | `source` | slug up to 40 chars naming the designer entry point, such as `instagram_bio` |
 
 Handles, codes and `source` are lowercase slugs (`a-z`, `0-9`, `-`, `_`).
-Titles (up to 120 chars for stops, 160 for trips) and interests (up to 60)
-come from the site's published trips, so they must be plain words: letters,
-digits, spaces and plain punctuation, with no links, domain names, email
-addresses, markup, currency symbols or currency codes. En and em dashes are
-stored as a plain dash. `share_url` must be `https` on `www.sherpaholidays.com`
+Interests must match a label exactly. Titles (up to 120 chars for stops, 160
+for trips) are taken from the site's published trips by the designer, but the
+server does not check them against those trips; it only requires plain words:
+letters, digits, spaces and plain punctuation, with no links, domain names,
+email addresses, markup, currency symbols or currency codes. En and em dashes
+are stored as a plain dash. `share_url` must be `https` on `www.sherpaholidays.com`
 or `sherpaholidays.com`, with no credentials, port or query; the fragment
 carries the visitor's choices, and the host is stored lowercased. `client.version`
 (up to 64 chars) is stored with the itinerary along with a schema `version`.

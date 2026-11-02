@@ -5,16 +5,30 @@ require "uri"
 # "Itinerary designer". Only the whitelisted keys below are ever stored:
 # no passport, visa, insurance, date-of-birth or payment data, and no prices.
 #
-# Visitor-written text cannot reach this hash: every title and interest comes
-# from the site's published trips, so text holding links, email addresses,
-# markup or currency is refused outright. That keeps the automatic itinerary
-# email from carrying anything a stranger typed.
+# Interests, pace, length and season must be one of the designer's fixed
+# choices below. Stop and trip titles are visitor-submitted text: the designer
+# takes them from the site's published trips, but the server only filters them
+# (text holding links, email addresses, markup or currency is refused) and does
+# not check them against the published trips.
 module Leads::Itinerary
   VERSION = 1
+  INTERESTS = [
+    "Everest up close",
+    "Temples and old cities",
+    "Mountain views, easy walking",
+    "Jungle safari in Chitwan",
+    "A real Himalayan trek",
+    "Birthplace of the Buddha"
+  ].freeze
   PACES = {
     "easy" => "Easy days",
     "some_hiking" => "Some hiking",
     "real_trek" => "A real trek"
+  }.freeze
+  LENGTHS = {
+    7 => "about a week",
+    14 => "about two weeks",
+    21 => "about three weeks"
   }.freeze
   SEASONS = {
     "spring" => "Spring (March to May)",
@@ -29,8 +43,8 @@ module Leads::Itinerary
   }.freeze
   SHARE_HOSTS = %w[www.sherpaholidays.com sherpaholidays.com].freeze
   MAX_STOPS = 30
-  MAX_INTERESTS = 6
   MAX_DAYS = 60
+  MAX_GROUP_SIZE = 20
   SLUG = /\A[a-z0-9][a-z0-9_-]*\z/
   # Letters (any script), digits, spaces and plain punctuation only: no
   # markup, @, currency symbols, or URL syntax.
@@ -56,9 +70,9 @@ module Leads::Itinerary
     result["stops"] = stops(input["stops"])
     result["interests"] = interests(input["interests"]) unless input["interests"].nil?
     result["pace"] = choice(input["pace"], PACES, "itinerary.pace") unless input["pace"].nil?
-    result["length_days"] = integer(input["length_days"], 1..MAX_DAYS, "itinerary.length_days") unless input["length_days"].nil?
+    result["length_days"] = choice(input["length_days"], LENGTHS, "itinerary.length_days") unless input["length_days"].nil?
     result["season"] = choice(input["season"], SEASONS, "itinerary.season") unless input["season"].nil?
-    result["group_size"] = integer(input["group_size"], 1..20, "itinerary.group_size") unless input["group_size"].nil?
+    result["group_size"] = integer(input["group_size"], 1..MAX_GROUP_SIZE, "itinerary.group_size") unless input["group_size"].nil?
     unless input["email_list"].nil?
       raise ArgumentError, "itinerary.email_list" unless [ true, false ].include?(input["email_list"])
       result["email_list"] = input["email_list"]
@@ -112,13 +126,7 @@ module Leads::Itinerary
     Array(itinerary["stops"]).filter_map { |stop| stop["day_to"] || stop["day_from"] }.max
   end
 
-  def length_label(days)
-    return nil if days.blank?
-    return "about #{days / 7} #{days == 7 ? 'week' : 'weeks'}" if (days % 7).zero?
-
-    "about #{days} days"
-  end
-
+  def length_label(days) = LENGTHS[days]
   def pace_label(value) = PACES[value]
   def season_label(value) = SEASONS[value]
   def call_window_label(value) = CALL_WINDOWS[value]
@@ -152,9 +160,9 @@ module Leads::Itinerary
   private_class_method :stops
 
   def interests(value)
-    raise ArgumentError, "itinerary.interests" unless value.is_a?(Array) && value.size <= MAX_INTERESTS
+    raise ArgumentError, "itinerary.interests" unless value.is_a?(Array) && value.all? { |interest| INTERESTS.include?(interest) }
 
-    value.map { |interest| text(interest, 60, "itinerary.interests") }.uniq
+    value.uniq
   end
   private_class_method :interests
 
@@ -193,7 +201,7 @@ module Leads::Itinerary
   private_class_method :integer
 
   def choice(value, choices, field)
-    raise ArgumentError, field unless value.is_a?(String) && choices.key?(value)
+    raise ArgumentError, field unless choices.key?(value)
 
     value
   end

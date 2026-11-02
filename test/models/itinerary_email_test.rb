@@ -55,7 +55,7 @@ class ItineraryEmailTest < ActiveSupport::TestCase
     assert_equal "Your Nepal itinerary", content[:subject]
     assert body.start_with?("Hi Anna,\n\nThank you for designing your trip with SherpaHolidays.")
     assert_includes body, "Starting from: Pokhara Mountain Views Tour"
-    assert_includes body, "Length: About 1 week"
+    assert_includes body, "Length: About a week"
     assert_includes body, "Pace: Easy days"
     assert_includes body, "When: Fall (October to December)"
     assert_includes body, "Travelers: 2"
