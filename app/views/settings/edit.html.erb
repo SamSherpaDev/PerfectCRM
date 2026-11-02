@@ -103,7 +103,7 @@
 
   <section class="card card-pad mt-6" aria-labelledby="automations-heading">
     <h2 class="section-title" id="automations-heading">Automations</h2>
-    <%= card_caption "Website inquiries and automatic first replies. Conversion to client and all follow-up replies stay manual." %>
+    <%= card_caption "Website inquiries, automatic first replies, and the itinerary email. Conversion to client and all follow-up replies stay manual." %>
 
     <div class="mt-4 space-y-4">
       <div class="setting">
@@ -126,6 +126,16 @@
           </p>
         </div>
         <%= form.check_box :auto_first_reply_enabled, class: "checkbox" %>
+      </div>
+      <div class="setting">
+        <div class="k">
+          <%= form.label :itinerary_email_enabled, "Itinerary email", class: "font-medium text-sm" %>
+          <p class="hint">
+            Itinerary designer visitors only, about a minute after they send their trip. Sends “Your Nepal itinerary” from info@sherpaholidays.com with their day-by-day plan, the link back to it, and the free-call offer. While this is on, the automatic first reply skips those visitors, because they already have an email from us.
+            <%= link_to "Read the itinerary email", settings_itinerary_email_path, class: "link" %>
+          </p>
+        </div>
+        <%= form.check_box :itinerary_email_enabled, class: "checkbox" %>
       </div>
       <p class="hint">One copy of every website inquiry goes to info@sherpaholidays.com, with Reply-To the visitor.</p>
       <div>

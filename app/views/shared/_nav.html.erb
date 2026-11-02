@@ -1,5 +1,5 @@
 <%= nav_link "Today", root_path, icon: :dashboard, active: controller_name == "today" %>
 <%= nav_link "Inbox", inbox_path, icon: :inbox, active: controller_name == "inbox" %>
-<%= nav_link "Leads", leads_path, icon: :lead, active: controller_name == "leads" %>
+<%= nav_link "Leads", leads_path, icon: :lead, active: %w[leads itinerary_insights].include?(controller_name) %>
 <%= nav_link "Clients", clients_path, icon: :people, active: controller_name == "clients" %>
-<%= nav_link "Settings", edit_settings_path, icon: :settings, active: %w[settings weekly_reports].include?(controller_name) %>
+<%= nav_link "Settings", edit_settings_path, icon: :settings, active: %w[settings weekly_reports itinerary_emails].include?(controller_name) %>

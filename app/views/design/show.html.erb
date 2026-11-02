@@ -275,6 +275,26 @@
     </div>
   </section>
 
+  <section class="card card-pad" aria-labelledby="kit-itinerary" id="design-itinerary">
+    <div class="card-header"><h2 class="card-title" id="kit-itinerary">Itinerary days and email paper</h2></div>
+    <%= card_caption "Day ranges sit in their own quiet column so the stops line up. Email paper shows an outgoing email the way the traveler's mail app does, in both schemes." %>
+    <div class="mt-4 grid gap-6 lg:grid-cols-2">
+      <ol class="itinerary-days">
+        <li><span class="itinerary-day">Day 1</span><span class="min-w-0"><span class="text-ink">Kathmandu</span></span></li>
+        <li>
+          <span class="itinerary-day">Days 2-3</span>
+          <span class="min-w-0"><span class="text-ink">Pokhara and Sarangkot</span><span class="block text-xs muted">From Pokhara Mountain Views Tour</span></span>
+        </li>
+        <li><span class="itinerary-day">Days 7-8</span><span class="min-w-0"><span class="text-ink">Back to Kathmandu and home</span></span></li>
+      </ol>
+      <div class="report-paper email-paper">
+        <p>Hi Alex,</p>
+        <p>Thank you for designing your trip with SherpaHolidays. Here is the itinerary you built, so you have it to hand.</p>
+        <p>Day 1: Kathmandu<br>Days 2-3: Pokhara and Sarangkot</p>
+      </div>
+    </div>
+  </section>
+
   <section class="card card-pad" aria-labelledby="kit-settings" id="design-settings">
     <div class="card-header"><h2 class="card-title" id="kit-settings">Setting rows, toggles, departures, totals</h2></div>
     <%= card_caption "Name, hint, control right. Toggles carry their state; departure rows go pressed when chosen." %>

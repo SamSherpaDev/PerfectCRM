@@ -25,6 +25,7 @@ class Setting < ApplicationRecord
   validate :outbound_endpoints
 
   before_save :normalize_signature
+  before_save :stamp_itinerary_email_enabled_at
   before_save :remember_signature_logo_checksums
   before_validation { self.google_review_url = google_review_url.to_s.strip }
 
@@ -114,6 +115,12 @@ class Setting < ApplicationRecord
   end
 
   private
+
+  # Each switch-on starts a fresh window: inquiries that arrived while the
+  # itinerary email was off never receive it late.
+  def stamp_itinerary_email_enabled_at
+    self.itinerary_email_enabled_at = Time.current if itinerary_email_enabled? && will_save_change_to_itinerary_email_enabled?
+  end
 
   def outbound_endpoints
     { lead_webhook_url: "LEAD_WEBHOOK", ai_base_url: "AI" }.each do |attribute, service|

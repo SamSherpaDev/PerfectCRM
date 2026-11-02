@@ -35,10 +35,19 @@ module Api
           rescue ArgumentError => error
             return render json: { error: "validation", fields: { error.message => "invalid" } }, status: :bad_request
           end
-          payload["_acquisition"] = acquisition
+          # Only the itinerary designer placement carries a structured trip;
+          # other placements ignore the key exactly as before.
+          itinerary = nil
+          if payload["placement"].to_s.strip == "itinerary_designer"
+            begin
+              itinerary = ::Leads::Itinerary.parse(payload)
+            rescue ArgumentError => error
+              return render json: { error: "validation", fields: { error.message => "invalid" } }, status: :bad_request
+            end
+          end
           submission_id = payload["submission_id"].to_s.strip
           external_ref = "website_form:#{submission_id}"
-          lead = build_lead(payload, fields, external_ref, caller_name)
+          lead = build_lead(payload, fields, external_ref, caller_name, acquisition: acquisition, itinerary: itinerary)
           existing = nil
           duplicate = nil
           begin
@@ -53,7 +62,8 @@ module Api
                 trip_handle: lead.trip_handle,
                 trip_title: lead.trip_title,
                 auto_archived: auto_archived,
-                exclude_external_ref: external_ref
+                exclude_external_ref: external_ref,
+                itinerary: lead.itinerary
               )
               if duplicate
                 ::Leads.merge_duplicate!(
@@ -90,6 +100,12 @@ module Api
                 lead.lead_notifications.create!(event: "email_copy")
                 lead.lead_notifications.create!(event: "lead.created")
                 lead.lead_notifications.create!(event: "auto_first_reply", available_at: 2.minutes.from_now)
+                # One minute in: a call request from the ready screen usually
+                # lands first, and the email is queued before the first reply
+                # looks for earlier outbound mail.
+                if lead.itinerary && Setting.current.itinerary_email_enabled?
+                  lead.lead_notifications.create!(event: "itinerary_email", available_at: 1.minute.from_now)
+                end
               end
               true
             end
@@ -200,10 +216,10 @@ module Api
           submitted - started
         end
 
-        def build_lead(payload, fields, external_ref, caller_name)
+        def build_lead(payload, fields, external_ref, caller_name, acquisition:, itinerary:)
           contact = payload["contact"]
           trip = payload["trip"].is_a?(Hash) ? payload["trip"] : {}
-          acquisition = payload["_acquisition"]
+          base_trip = itinerary&.dig("base_trip") || {}
           attribution = ::Leads::Acquisition.legacy_attribution(payload["attribution"].is_a?(Hash) ? payload["attribution"] : {}, acquisition: acquisition)
           raw_page = payload["page"].is_a?(Hash) ? payload["page"] : {}
           page = { "url" => ::Leads::Acquisition.safe_url(raw_page["url"]), "referrer" => ::Leads::Acquisition.host(raw_page["referrer"]),
@@ -237,8 +253,10 @@ module Api
             phone: e164,
             country: country,
             referral_code: referral_code_from(attribution),
-            trip_handle: trip["handle"].to_s.strip.presence&.truncate(120),
-            trip_title: trip["title"].to_s.strip.presence&.truncate(160),
+            trip_handle: (trip["handle"].to_s.strip.presence || base_trip["handle"])&.truncate(120),
+            trip_title: (trip["title"].to_s.strip.presence || base_trip["title"])&.truncate(160),
+            party_size: itinerary&.dig("group_size"),
+            timing_unknown: (true if itinerary&.dig("season") == "not_sure"),
             message: payload["message"].to_s.strip.presence&.truncate(4000),
             consent_contact_at: (Time.zone.parse(consent["contact_at"].to_s) rescue nil),
             consent_text_version: consent["text_version"].to_s.strip.presence&.truncate(64),
@@ -261,7 +279,7 @@ module Api
               "suspicion_hits" => hits.map(&:to_s),
               "ip_hash" => Digest::SHA256.hexdigest(request.remote_ip.to_s),
               "user_agent" => request.user_agent.to_s.truncate(300)
-            }
+            }.merge(itinerary ? { "itinerary" => itinerary } : {})
           )
           lead.tag_list = ::Lead::SUSPECTED_SPAM_TAG if score.positive?
           lead

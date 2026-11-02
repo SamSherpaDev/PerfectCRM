@@ -58,7 +58,7 @@ out. On mobile, use Open menu to show the drawer. The rail holds **Today**
 **Channels** (`/channels`) are hidden from primary navigation and remain
 reachable by direct URL. See [Today and follow-ups](#today-and-follow-ups), [Mail](#mail),
 [Replying](#replying), [Templates](#templates), [Pipeline](#pipeline), and [Quotes](#quotes) for the live features. Settings provides appearance,
-connections, automation settings (including a direct link to edit the First reply template), ad conversions, email sender settings, and a footer export link; morning and pipeline digests, the [weekly ads report](#weekly-ads-report) (`/settings/weekly_report`), history import, and AI assistance cards are hidden from the Settings UI while their routes and background jobs remain active.
+connections, automation settings (including a direct link to edit the First reply template and the itinerary email switch with its preview), ad conversions, email sender settings, and a footer export link; morning and pipeline digests, the [weekly ads report](#weekly-ads-report) (`/settings/weekly_report`), history import, and AI assistance cards are hidden from the Settings UI while their routes and background jobs remain active.
 
 On phones (under 750px) a bottom tab bar holds **Today**, **Inbox**,
 **Leads**, **Clients**, and **Settings** directly while the rail hides. Signed-in builders can preview every
@@ -250,8 +250,13 @@ If any subject placeholder is unknown or empty, the whole subject defaults
 to "Planning your trip". Subjects with all placeholder values stay personalized.
 In email bodies, unknown or empty placeholder values render `[missing: name]`,
 never blanks or an email substituted for an unknown name. Apart from the
-matching-inquiry trip fallback above, the one optional placeholder is
-`google_review_link` (`TemplateRenderer::OPTIONAL_PLACEHOLDERS`): it comes
+matching-inquiry trip fallback above, the optional placeholders
+(`TemplateRenderer::OPTIONAL_PLACEHOLDERS`) are `google_review_link` and
+`itinerary_link`. `itinerary_link` is the visitor's link back to the trip they
+built in the free itinerary designer, taken from the composing inquiry or,
+for a client, the newest matching converted inquiry that has one (the same
+email match as the trip fallback); without one, its whole line is left out of
+the email body. `google_review_link` comes
 from Settings → Google reviews. Copy the write-review link from your Google
 Business Profile's "Ask for reviews", paste the full HTTPS URL, and press
 Save review link. Until that link is saved, its whole line is left out of
@@ -837,7 +842,7 @@ facts in Details and its inquiry as the oldest entry on the timeline,
 including a placeholder when a website submission has no message. Manual
 leads without inquiry evidence have no inquiry entry. Unknown timing takes
 precedence over previous dates.
-In Settings → Automations, manage the website site key and Automatic first reply (with a direct link to edit the First reply template),
+In Settings → Automations, manage the website site key, Automatic first reply (with a direct link to edit the First reply template), the Itinerary email,
 and review machine events and delivery results (the Relay secret and n8n webhook URL sub-sections are hidden from the Settings UI while their endpoints and background jobs remain active). The website form and external
 n8n/Panda AI workflows are configured separately; see the
 [website intake contract](docs/leads-intake.md) for setup, delivery behavior,
@@ -847,8 +852,9 @@ and the allowed automation actions.
 switch in Settings → Automations. About two minutes after a new website intake,
 CRM renders the current first active template in the **First reply** purpose
 using live recipient context and queues it as an ordinary outbound message on
-the lead's timeline. No other template or traveler flow sends automatically;
-lead status stays unchanged, and saved drafts/attachments are never consumed.
+the lead's timeline. Apart from the [itinerary email](#itinerary-designer),
+no other template or traveler flow sends automatically; lead status stays
+unchanged, and saved drafts/attachments are never consumed.
 Only inquiries created after the stored feature-enable time qualify. Existing
 inquiries, backfills and replays cannot acquire an automatic greeting.
 
@@ -875,6 +881,41 @@ conversation or loop. Provider-id reservations survive deletion/replay and
 claim before SMTP; uncertain alert deliveries are not retried. The recurring
 notification sweep recovers pending alerts whose enqueue was interrupted.
 Today already lists linked threads whose latest inbound needs an answer.
+
+### Itinerary designer
+
+The website's free itinerary designer sends inquiries with the
+`itinerary_designer` placement and the trip the visitor built (payload and
+rules: [website intake contract](docs/leads-intake.md#itinerary-designer)).
+The lead page shows it in an **Itinerary** card under Details: the published
+trip it started from, length, pace, season, travelers, interests, the day-by-day
+stops, the email-list box, where the visitor came from, the designer
+version, and **Open theirs** for their own link. A free-call window picked on the designer's last screen shows as
+**Free call** in Details with a "Free call requested" note; email the visitor
+two call times by hand. No passport, visa, insurance, date-of-birth or price
+data is stored.
+
+**What people build** (`/leads/itineraries`, from the Leads header) counts one
+month of designer inquiries at a time, Pacific time, without spam or test
+inquiries: itineraries built, free-call requests, email-list ticks, the most
+picked stops, common pairs of stops, starting trips, interests, lengths,
+seasons, paces and entry points.
+
+The **Itinerary email** is off until the owner approves its wording. Read it
+first at `/settings/itinerary_email` (Settings → Automations → Read the
+itinerary email), then switch it on in Settings → Automations. While it is on, each new
+designer inquiry with an itinerary gets "Your Nepal itinerary" from
+info@sherpaholidays.com about a minute after intake: the trip facts, the
+day-by-day list, the link back to their itinerary and the free-call offer (or,
+after a call request, "Sam or Gyalgin will email you two call times"). It
+carries the Settings signature, no prices and no other marketing. Only
+inquiries created after the switch was turned on qualify; our domain, test
+addresses, spam, inactive or not-interested inquiries, a changed address and
+more than three in a day to one address skip with a reason in the lead's
+timeline. Eligibility is checked again before delivery, and delivery gets one
+SMTP attempt, like the automatic first reply. Because the first reply skips
+anyone we have already emailed, designer visitors get the itinerary email
+instead of the automatic first reply while the itinerary email is on.
 
 ## Source history and calls
 

@@ -17,12 +17,13 @@ class TemplateRenderer
     first_name full_name trip departure_dates balance_due deposit_due
     invoice_number payment_reference missing_documents advisor_name
     payment_due_on balance_due_on terms_version
-    my_name signature google_review_link
+    my_name signature google_review_link itinerary_link
   ].freeze
 
-  # Settings-backed links a template may carry before the captain has set
-  # them up. Empty means "leave the line out", not "missing".
-  OPTIONAL_PLACEHOLDERS = %w[google_review_link].freeze
+  # Links a template may carry before they exist: a Settings link the captain
+  # has not set up yet, or an itinerary link for a recipient who never used
+  # the itinerary designer. Empty means "leave the line out", not "missing".
+  OPTIONAL_PLACEHOLDERS = %w[google_review_link itinerary_link].freeze
 
   PATTERN = /{{\s*([A-Za-z0-9_]+)\s*}}/.freeze
   DEFAULT_SUBJECT = "Planning your trip".freeze
@@ -43,7 +44,8 @@ class TemplateRenderer
     "missing_documents" => "passport copy, insurance certificate",
     "advisor_name" => "Adventure Co.",
     "my_name" => "Sam",
-    "signature" => "Sam"
+    "signature" => "Sam",
+    "itinerary_link" => "https://www.sherpaholidays.com/pages/design-your-trip#p=easy&s=ktm1,sara,dham,ghan,home&n=2&w=fall"
   }.freeze
 
   def self.placeholders_in(text)
