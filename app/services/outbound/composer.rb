@@ -38,7 +38,9 @@ module Outbound
 
     def build
       @owner.reload if @owner&.persisted?
-      @draft = Draft.for_owner(@owner, conversation: @conversation) if @owner && !@group_send && !@params[:automatic_first_reply]
+      # Automatic sends never consume the captain's saved draft or its files.
+      automatic = @params[:automatic_first_reply] || @params[:automatic_email]
+      @draft = Draft.for_owner(@owner, conversation: @conversation) if @owner && !@group_send && !automatic
       resolve_conversation
       message = @conversation ? @conversation.messages.build : Message.new
       message.submitted_draft_id = @draft.id if @draft&.persisted?

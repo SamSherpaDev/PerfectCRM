@@ -55,6 +55,8 @@ class DesignKitTest < ApplicationSystemTestCase
     assert_selector ".sheet.floating h3", text: "Templates"
     assert_selector ".sticky-send .t"
     assert_selector ".dep label.on"
+    assert_selector ".itinerary-days li .itinerary-day", text: "Days 2-3"
+    assert_selector ".report-paper.email-paper p", text: "Hi Alex,"
     # Thinking orbs: both states and sizes, labelled, canvas sized by JS.
     assert_selector "canvas.orb[role=img][aria-label='Composing…']", count: 2
     assert_selector "canvas.orb[role=img][aria-label='Shaping…']", count: 2

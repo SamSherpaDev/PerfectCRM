@@ -379,6 +379,17 @@
   .report-paper {
     @apply p-2.5 sm:p-4;
   }
+  /* A plain email body as a mail client shows it (itinerary email preview). */
+  .email-paper {
+    color: #1f1f1f;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 14px;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+  }
+  .email-paper p + p {
+    margin-top: 1em;
+  }
   .form-errors ul {
     @apply list-disc pl-5 space-y-1;
   }
@@ -2341,6 +2352,9 @@
 }
 .record-details {
   grid-area: details;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 }
 .record-thread {
   grid-area: thread;
@@ -2472,6 +2486,25 @@
   flex-direction: column;
   gap: 6px;
   font-size: 13.5px;
+}
+/* Itinerary card: day labels in a quiet column beside each stop. */
+.itinerary-days {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13.5px;
+}
+.itinerary-days li {
+  display: flex;
+  gap: 12px;
+}
+.itinerary-day {
+  flex: none;
+  width: 76px;
+  padding-top: 1px;
+  font-size: 12.5px;
+  color: var(--pb-ink-3);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Composer: Reply | Note segment, a well that grows on focus, quiet Save. */

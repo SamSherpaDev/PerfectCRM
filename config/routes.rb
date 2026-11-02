@@ -54,6 +54,7 @@ Rails.application.routes.draw do
     end
   end
   resources :source_answers, only: :create
+  get "leads/itineraries", to: "itinerary_insights#show", as: :itinerary_insights
   resources :leads, except: %i[destroy] do
     resources :calls, only: :create
     resources :scheduled_calls, only: %i[create update] do
@@ -163,6 +164,7 @@ Rails.application.routes.draw do
     resource :weekly_report, only: :show do
       post :deliver
     end
+    resource :itinerary_email, only: :show
     resources :ad_spends, only: %i[create destroy]
   end
   post "booking_inquiry_bindings", to: "booking_inquiry_bindings#create", as: :booking_inquiry_bindings

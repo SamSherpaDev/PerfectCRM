@@ -1,7 +1,8 @@
 <%# Phone navigation usage: README.md, Navigation; visual contract: docs/DESIGN.md 4.1.
     Future thread/quote views can add .tabbar-hidden to <body> when a docked
     box takes its place. %>
-<% settings_active = %w[settings weekly_reports].include?(controller_name) %>
+<% settings_active = %w[settings weekly_reports itinerary_emails].include?(controller_name) %>
+<% leads_active = %w[leads itinerary_insights].include?(controller_name) %>
 <nav class="tabbar" aria-label="Primary">
   <%= link_to root_path, class: ("on" if controller_name == "today"), aria: ({ current: "page" } if controller_name == "today") do %>
     <%= render "shared/icon", name: :dashboard, class: "" %><span>Today</span>
@@ -9,7 +10,7 @@
   <%= link_to inbox_path, class: ("on" if controller_name == "inbox"), aria: ({ current: "page" } if controller_name == "inbox") do %>
     <%= render "shared/icon", name: :inbox, class: "" %><span>Inbox</span>
   <% end %>
-  <%= link_to leads_path, class: ("on" if controller_name == "leads"), aria: ({ current: "page" } if controller_name == "leads") do %>
+  <%= link_to leads_path, class: ("on" if leads_active), aria: ({ current: "page" } if leads_active) do %>
     <%= render "shared/icon", name: :lead, class: "" %><span>Leads</span>
   <% end %>
   <%= link_to clients_path, class: ("on" if controller_name == "clients"), aria: ({ current: "page" } if controller_name == "clients") do %>

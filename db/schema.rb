@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_01_202153) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_02_222102) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -305,6 +305,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_01_202153) do
     t.datetime "updated_at", null: false
     t.index ["status"], name: "index_group_sends_on_status"
     t.index ["template_id"], name: "index_group_sends_on_template_id"
+  end
+
+  create_table "itinerary_emails", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "delivery_attempted_at"
+    t.string "email", null: false
+    t.integer "lead_id"
+    t.integer "message_id"
+    t.datetime "updated_at", null: false
+    t.index ["email", "created_at"], name: "index_itinerary_emails_on_email_and_created_at"
+    t.index ["lead_id"], name: "index_itinerary_emails_on_lead_id", unique: true
+    t.index ["message_id"], name: "index_itinerary_emails_on_message_id"
   end
 
   create_table "lead_notifications", force: :cascade do |t|
@@ -833,6 +845,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_01_202153) do
     t.string "google_review_url", default: "", null: false
     t.boolean "google_terms_accepted", default: false, null: false
     t.boolean "inquiry_safety_net_email", default: false, null: false
+    t.boolean "itinerary_email_enabled", default: false, null: false
+    t.datetime "itinerary_email_enabled_at"
     t.string "lead_webhook_url"
     t.text "mailbox_last_error"
     t.datetime "mailbox_last_error_at"
@@ -946,6 +960,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_01_202153) do
   add_foreign_key "drafts", "conversations"
   add_foreign_key "drafts", "templates"
   add_foreign_key "group_sends", "templates"
+  add_foreign_key "itinerary_emails", "leads", on_delete: :nullify
+  add_foreign_key "itinerary_emails", "messages", on_delete: :nullify
   add_foreign_key "lead_notifications", "leads"
   add_foreign_key "lead_webhook_deliveries", "leads"
   add_foreign_key "leads", "clients", column: "converted_client_id"

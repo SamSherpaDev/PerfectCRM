@@ -1,0 +1,105 @@
+<%# locals: (lead:) %>
+<%# Left column, under Details: the trip an itinerary designer visitor built
+    (Leads::Itinerary, README.md "Leads"). Titles come from published trips. %>
+<% itinerary = lead.itinerary %>
+<% labels = ::Leads::Itinerary %>
+<% email_state = itinerary_email_state(lead) %>
+<section class="card card-pad" id="record-itinerary" aria-labelledby="itinerary-heading">
+  <div class="card-header">
+    <h2 class="card-title" id="itinerary-heading">Itinerary</h2>
+    <% if itinerary["share_url"].present? %>
+      <%= link_to itinerary["share_url"], class: "link-quiet inline-flex items-center gap-1 text-xs", target: "_blank", rel: "noopener" do %>
+        <%= render "shared/icon", name: :external, class: "h-3.5 w-3.5" %>Open theirs
+      <% end %>
+    <% end %>
+  </div>
+  <%= card_caption "What they built in the free itinerary designer." %>
+
+  <dl class="facts facts-col mt-4">
+    <% if (base = itinerary["base_trip"]) %>
+      <div>
+        <dt>Starting from</dt>
+        <dd><%= base["title"].presence || base["handle"] %></dd>
+      </div>
+    <% end %>
+    <% picked = labels.length_label(itinerary["length_days"]) %>
+    <% planned = labels.planned_days(itinerary) %>
+    <div>
+      <dt>Length</dt>
+      <dd><%= [ picked&.upcase_first, (pluralize(planned, "day") + " planned" if planned) ].compact.join(" · ") %></dd>
+    </div>
+    <% if itinerary["pace"] %>
+      <div>
+        <dt>Pace</dt>
+        <dd><%= labels.pace_label(itinerary["pace"]) %></dd>
+      </div>
+    <% end %>
+    <% if itinerary["season"] %>
+      <div>
+        <dt>When</dt>
+        <dd><%= labels.season_label(itinerary["season"]) %></dd>
+      </div>
+    <% end %>
+    <% if itinerary["group_size"] %>
+      <div>
+        <dt>Travelers</dt>
+        <dd><%= itinerary["group_size"] %></dd>
+      </div>
+    <% end %>
+    <% if itinerary["interests"].present? %>
+      <div>
+        <dt>Interests</dt>
+        <dd>
+          <div class="chips mt-1" aria-label="Interests">
+            <% itinerary["interests"].each do |interest| %>
+              <span class="chip chip-tag"><%= interest %></span>
+            <% end %>
+          </div>
+        </dd>
+      </div>
+    <% end %>
+  </dl>
+
+  <h3 class="mt-5 text-[12.5px] font-medium text-ink-3">Day by day</h3>
+  <ol class="itinerary-days mt-1.5">
+    <% itinerary["stops"].each do |stop| %>
+      <li>
+        <span class="itinerary-day"><%= labels.day_label(stop) %></span>
+        <span class="min-w-0">
+          <span class="text-ink"><%= stop["title"] %></span>
+          <% if stop.dig("from_trip", "title").present? %><span class="block text-xs muted">From <%= stop.dig("from_trip", "title") %></span><% end %>
+        </span>
+      </li>
+    <% end %>
+  </ol>
+
+  <dl class="facts facts-col mt-5">
+    <div>
+      <dt>Itinerary email</dt>
+      <dd>
+        <%= badge email_state[:word], email_state[:tone], dot: true %>
+        <% if email_state[:detail] %><p class="mt-1 text-xs muted"><%= email_state[:detail] %></p><% end %>
+      </dd>
+    </div>
+    <% unless itinerary["email_list"].nil? %>
+      <div>
+        <dt>Email list</dt>
+        <dd><%= itinerary["email_list"] ? "Yes, they ticked the box" : "No, box left unticked" %></dd>
+      </div>
+    <% end %>
+    <% if itinerary["source"].present? %>
+      <div>
+        <dt>Came from</dt>
+        <dd><%= labels.source_label(itinerary["source"]) %></dd>
+      </div>
+    <% end %>
+  </dl>
+
+  <p class="mt-4 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+    <%= link_to "Read their itinerary email", settings_itinerary_email_path(lead_id: lead.id), class: "link-quiet" %>
+    <%= link_to "What people build", itinerary_insights_path, class: "link-quiet" %>
+  </p>
+  <% if itinerary["client_version"].present? %>
+    <p class="mt-1 text-xs muted">Designer version <span class="mono whitespace-nowrap"><%= itinerary["client_version"] %></span></p>
+  <% end %>
+</section>

@@ -92,6 +92,7 @@ class TemplateContext
     end
     if quote_owner.is_a?(Lead) || quote_owner.is_a?(Client)
       context["trip"] = context["trip"].presence || inquiry_trip_for(quote_owner, recipient_email)
+      context["itinerary_link"] = itinerary_link_for(quote_owner, recipient_email)
     end
     context.compact_blank
   end
@@ -99,24 +100,36 @@ class TemplateContext
   # An inquiry's trip belongs to its recipient, not every person on the owner.
   # Converted inquiries retain their website fields on Lead, not on Client.
   def self.inquiry_trip_for(owner, recipient_email)
-    email = recipient_email.to_s.strip.downcase
-    return if email.blank?
-
-    inquiries = if owner.is_a?(Lead)
-      [ owner ]
-    else
-      owner.converted_leads.order(Arel.sql("COALESCE(received_at, created_at) DESC"), id: :desc)
-    end
-    inquiry = inquiries.detect do |lead|
-      address = lead.email.to_s.strip.downcase
-      address.present? && owner.effective_recipient_email(address) == email
-    end
+    inquiry = matching_inquiries(owner, recipient_email).first
     return unless inquiry
 
     [ inquiry.trip_interest, inquiry.trip_title ].filter_map do |value|
       trip = value.to_s.strip
       trip if trip.present? && !trip.casecmp?("Not sure yet")
     end.first || "Nepal trip"
+  end
+
+  # The recipient's own itinerary designer link, from their latest matching
+  # inquiry that has one. Same recipient rule as the inquiry trip.
+  def self.itinerary_link_for(owner, recipient_email)
+    matching_inquiries(owner, recipient_email).lazy.filter_map { |lead| lead.itinerary&.dig("share_url").presence }.first
+  end
+
+  # The owner's inquiries whose nonblank email is the effective recipient,
+  # newest first: the lead itself, or a client's converted inquiries.
+  def self.matching_inquiries(owner, recipient_email)
+    email = recipient_email.to_s.strip.downcase
+    return [] if email.blank?
+
+    inquiries = if owner.is_a?(Lead)
+      [ owner ]
+    else
+      owner.converted_leads.order(Arel.sql("COALESCE(received_at, created_at) DESC"), id: :desc)
+    end
+    inquiries.select do |lead|
+      address = lead.email.to_s.strip.downcase
+      address.present? && owner.effective_recipient_email(address) == email
+    end
   end
 
   # Every mirrored booking this record could fill placeholders from, best
@@ -198,5 +211,6 @@ class TemplateContext
     currency.blank? || currency == "USD" ? "$#{amount}" : "#{currency} #{amount}"
   end
   private_class_method :first_name_for, :advisor_name_for, :booking_context,
-    :quote_context, :departure_dates_for, :money_for, :inquiry_trip_for
+    :quote_context, :departure_dates_for, :money_for, :inquiry_trip_for,
+    :itinerary_link_for, :matching_inquiries
 end

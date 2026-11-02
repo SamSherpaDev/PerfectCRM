@@ -10,7 +10,7 @@ class Lead < ApplicationRecord
   STALE_AFTER = 7.days
   FIT_BANDS = %w[strong possible weak].freeze
   BUDGET_BANDS = %w[discuss under_2000 2000_4000 4000_7000 7000_plus].freeze
-  PLACEMENTS = %w[contact landing trip_page].freeze
+  PLACEMENTS = %w[contact landing trip_page itinerary_designer].freeze
   SUSPECTED_SPAM_TAG = "suspected_spam"
 
   encrypts :phone, :phone_raw
@@ -29,6 +29,8 @@ class Lead < ApplicationRecord
   has_many :conversations, as: :linkable, dependent: :destroy
   has_many :ad_conversions, dependent: :destroy
   has_many :scheduled_calls, -> { order(:scheduled_at, :id) }, dependent: :destroy, inverse_of: :lead
+  # The automatic "Your Nepal itinerary" email; the row outlives a deleted lead.
+  has_one :itinerary_email, dependent: nil
 
   accepts_nested_attributes_for :people, allow_destroy: true,
     reject_if: proc { |attrs| attrs["name"].blank? && attrs["email"].blank? && attrs["phone"].blank? }
@@ -167,6 +169,18 @@ class Lead < ApplicationRecord
 
   def suspected_spam?
     spam_marked_at.present? || tags.any? { |tag| tag.name == SUSPECTED_SPAM_TAG }
+  end
+
+  # The trip built in the website's itinerary designer (Leads::Itinerary).
+  def itinerary
+    data = metadata.is_a?(Hash) ? metadata["itinerary"] : nil
+    data if data.is_a?(Hash) && data["stops"].is_a?(Array)
+  end
+
+  # The free-call time window a visitor asked for through intake details.
+  def call_request
+    data = metadata.is_a?(Hash) ? metadata["call_request"] : nil
+    data if data.is_a?(Hash) && ::Leads::Itinerary::CALL_WINDOWS.key?(data["window"])
   end
 
   def suspicion_hits

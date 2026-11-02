@@ -1,0 +1,56 @@
+<% content_for :title, "What people build · PerfectCRM" %>
+<div class="page">
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Leads", title: "What people build", subtitle: "What visitors built in the free itinerary designer, one month at a time. Spam and test inquiries are left out.", back: [ "Leads", leads_path ] } do %><% end %>
+  <%= render "shared/flash" %>
+
+  <% month = @insights.month %>
+  <nav class="flex items-center justify-between gap-2 sm:justify-start sm:gap-3" aria-label="Month">
+    <%= link_to "Previous", itinerary_insights_path(month: month.prev_month.strftime("%Y-%m")), class: "btn-ghost btn btn-sm" %>
+    <span class="text-center text-sm text-ink"><%= month.strftime("%B %Y") %><%= " (so far)" if month == @current_month %></span>
+    <% if month < @current_month %>
+      <%= link_to "Next", itinerary_insights_path(month: month.next_month.strftime("%Y-%m")), class: "btn-ghost btn btn-sm" %>
+    <% else %>
+      <span class="btn-ghost btn btn-sm invisible" aria-hidden="true">Next</span>
+    <% end %>
+  </nav>
+
+  <section class="mt-4" aria-label="Counts">
+    <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
+      <div class="stat">
+        <p class="stat-value"><%= @insights.built %></p>
+        <p class="text-sm text-ink-2">Itineraries built</p>
+        <p class="hint">Sent with a name and email.</p>
+      </div>
+      <div class="stat">
+        <p class="stat-value"><%= @insights.call_requests %></p>
+        <p class="text-sm text-ink-2">Asked for a free call</p>
+        <p class="hint">Picked a time window.</p>
+      </div>
+      <div class="stat col-span-2 sm:col-span-1">
+        <p class="stat-value"><%= @insights.email_list %></p>
+        <p class="text-sm text-ink-2">Ticked the email list</p>
+        <p class="hint">The box starts unticked.</p>
+      </div>
+    </div>
+  </section>
+
+  <% if @insights.built.zero? %>
+    <section class="card mt-6" aria-label="No itineraries">
+      <%= render "shared/empty_state", title: "No itineraries in #{month.strftime('%B')}", body: "Trips sent from the free itinerary designer on the website show up here, with the stops, lengths, seasons and sources people picked.", scene: :cairn %>
+    </section>
+  <% else %>
+    <% total = @insights.built %>
+    <div class="mt-6 grid items-start gap-6 lg:grid-cols-2">
+      <%= render "itinerary_insights/counts", id: "stops", title: "Most picked stops", label: "Stop", rows: @insights.stops, total: total %>
+      <%= render "itinerary_insights/counts", id: "combinations", title: "Common combinations", label: "Stops together", rows: @insights.combinations, total: total,
+        caption: "Pairs of stops in two or more itineraries. From #{Leads::ItineraryInsights::ANCHOR_MINIMUM} itineraries a month, stops in every one of them, like the Kathmandu start, are left out.", empty: "No pair of stops was picked together twice yet." %>
+      <%= render "itinerary_insights/counts", id: "base-trips", title: "Started from", label: "Published trip", rows: @insights.base_trips, total: total %>
+      <%= render "itinerary_insights/counts", id: "interests", title: "Interests", label: "Interest", rows: @insights.interests, total: total, empty: "No interests picked yet." %>
+      <%= render "itinerary_insights/counts", id: "lengths", title: "Lengths", label: "Length", rows: @insights.lengths, total: total %>
+      <%= render "itinerary_insights/counts", id: "seasons", title: "Seasons", label: "Season", rows: @insights.seasons, total: total %>
+      <%= render "itinerary_insights/counts", id: "paces", title: "Pace", label: "Pace", rows: @insights.paces, total: total %>
+      <%= render "itinerary_insights/counts", id: "sources", title: "Sources", label: "Came from", rows: @insights.sources, total: total,
+        caption: "The designer entry point the website reports, such as the Instagram bio link." %>
+    </div>
+  <% end %>
+</div>

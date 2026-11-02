@@ -8,7 +8,8 @@ class TemplateRendererTest < ActiveSupport::TestCase
       deposit_due: "$500.00", invoice_number: "SH-2027-0142",
       payment_reference: "SH-0142-MAYA", missing_documents: "passport copy",
       advisor_name: "Adventure Co.", my_name: "Sam", signature: "Sam",
-      google_review_link: "https://g.page/r/sample/review"
+      google_review_link: "https://g.page/r/sample/review",
+      itinerary_link: "https://www.sherpaholidays.com/pages/design-your-trip#p=easy"
     }
     text = TemplateRenderer::PLACEHOLDERS.map { |name| "{{#{name}}}" }.join("|")
     rendered = TemplateRenderer.render(text, context)

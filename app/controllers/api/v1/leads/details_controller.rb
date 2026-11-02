@@ -3,8 +3,8 @@
 module Api
   module V1
     module Leads
-      # POST /api/v1/leads/intake/details - optional trip, source and acquisition
-      # details posted after a successful send. Same auth
+      # POST /api/v1/leads/intake/details - optional trip, source, acquisition
+      # and free-call window details posted after a successful send. Same auth
       # and CORS as intake; separate IP limit, no email limit.
       # Contract: docs/leads-intake.md.
       class DetailsController < BaseController
@@ -47,6 +47,11 @@ module Api
           end
           begin
             acquisition = ::Leads::Acquisition.parse(payload)
+          rescue ArgumentError => error
+            errors[error.message] = "invalid"
+          end
+          begin
+            call_request = ::Leads::Itinerary.call_request(payload["call_request"]) if payload.key?("call_request")
           rescue ArgumentError => error
             errors[error.message] = "invalid"
           end
@@ -113,13 +118,19 @@ module Api
               lead.metadata = (lead.metadata || {}).merge("acquisition" => acquisition,
                 "attribution" => ::Leads::Acquisition.legacy_attribution((lead.metadata || {})["attribution"] || {}, acquisition: acquisition))
             end
+            call_note = nil
+            if call_request && (lead.metadata || {}).dig("call_request")&.except("requested_at") != call_request
+              lead.metadata = (lead.metadata || {}).merge("call_request" => call_request.merge("requested_at" => Time.current.iso8601))
+              zone = " (#{call_request['timezone']})" if call_request["timezone"]
+              call_note = " Free call requested: #{::Leads::Itinerary.call_window_label(call_request['window'])}#{zone}."
+            end
             if lead.changed?
               unless lead.save
                 fields = lead.errors.map { |error| [ error.attribute, "invalid" ] }.to_h
                 return render json: { error: "validation", fields: fields }, status: :unprocessable_entity
               end
               lead.notes.create!(
-                body: "Details added by the visitor at #{Time.current.strftime('%-b %-d, %Y, %-I:%M %p')}."
+                body: "Details added by the visitor at #{Time.current.strftime('%-b %-d, %Y, %-I:%M %p')}.#{call_note}"
               )
               lead.lead_notifications.create!(event: "lead.details_added")
             end

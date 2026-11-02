@@ -265,6 +265,114 @@ to clear them; `timing_unknown` accepts only `true` or `false`. Invalid field
 values return `400`; model validation failures return `422`. Setting unknown
 timing does not clear stored dates; see [Leads](../README.md#leads) for display behavior.
 
+## Itinerary designer
+
+The website's free itinerary designer posts to the same intake endpoint with
+`"placement": "itinerary_designer"` and a structured `itinerary` object. It
+goes through every browser-mode rule above unchanged: site key and `Origin`,
+rate limits, honeypot and timing scores, MX check, required contact fields,
+consent, replays, and the 24-hour duplicate merge. Other placements ignore an
+`itinerary` key exactly as before, so a `"landing"` post that carries the
+plain-text itinerary in `message` keeps working.
+
+```json
+{
+  "schema": "sherpa.inquiry.v2",
+  "submission_id": "0b8e6a52-1c4d-4f5e-9a7b-3d2c1e0f9a8b",
+  "placement": "itinerary_designer",
+  "contact": { "name": "Anna Lindqvist", "email": "anna@example.com" },
+  "message": "Itinerary: Kathmandu, Pokhara and Sarangkot, Dhampus, Ghandruk, back to Kathmandu.",
+  "consent": { "contact": true, "contact_at": "2026-11-02T18:06:40Z", "text_version": "2026-11-designer-v1" },
+  "page": { "url": "https://www.sherpaholidays.com/pages/design-your-trip" },
+  "timing": { "started_at": "2026-11-02T18:02:58Z", "submitted_at": "2026-11-02T18:06:41Z" },
+  "honeypot": "",
+  "client": { "version": "itinerary-designer@1.0.0" },
+  "itinerary": {
+    "base_trip": { "handle": "pokhara-mountain-views-tour", "title": "Pokhara Mountain Views Tour" },
+    "stops": [
+      { "title": "Kathmandu", "day_from": 1, "code": "ktm1" },
+      { "title": "Pokhara and Sarangkot", "day_from": 2, "day_to": 3, "code": "sara",
+        "from_trip": { "handle": "pokhara-mountain-views-tour", "title": "Pokhara Mountain Views Tour" } }
+    ],
+    "interests": ["Mountain views, easy walking", "Temples and old cities"],
+    "pace": "easy",
+    "length_days": 7,
+    "season": "fall",
+    "group_size": 2,
+    "email_list": false,
+    "share_url": "https://www.sherpaholidays.com/pages/design-your-trip#p=easy&s=ktm1,sara&n=2&w=fall",
+    "source": "instagram_bio"
+  }
+}
+```
+
+Fields (`Leads::Itinerary.parse`; every one is optional except `stops`):
+
+| Field | Accepts |
+|---|---|
+| `base_trip` | `{ "handle", "title"? }`: the published trip the draft started from |
+| `stops` | 1-30 objects in visit order: `title` (required), `day_from` 1-60 (required), `day_to` from `day_from` to 60 (defaults to `day_from`), `code` slug, `from_trip` `{ "handle", "title"? }` |
+| `interests` | up to 6 labels, duplicates dropped |
+| `pace` | `easy`, `some_hiking`, `real_trek` |
+| `length_days` | integer 1-60 |
+| `season` | `spring`, `fall`, `winter`, `not_sure` |
+| `group_size` | integer 1-20 |
+| `email_list` | `true` or `false`: the optional email-list box, unticked by default |
+| `share_url` | the visitor's link back to their itinerary |
+| `source` | slug up to 40 chars naming the designer entry point, such as `instagram_bio` |
+
+Handles, codes and `source` are lowercase slugs (`a-z`, `0-9`, `-`, `_`).
+Titles (up to 120 chars for stops, 160 for trips) and interests (up to 60)
+come from the site's published trips, so they must be plain words: letters,
+digits, spaces and plain punctuation, with no links, domain names, email
+addresses, markup, currency symbols or currency codes. En and em dashes are
+stored as a plain dash. `share_url` must be `https` on `www.sherpaholidays.com`
+or `sherpaholidays.com`, with no credentials, port or query; the fragment
+carries the visitor's choices, and the host is stored lowercased. `client.version`
+(up to 64 chars) is stored with the itinerary along with a schema `version`.
+Unknown keys are dropped, so passport, visa, insurance, date-of-birth or payment
+data and prices are never stored. A field that breaks a rule answers
+`400 { "error": "validation", "fields": { "itinerary.<field>": "invalid" } }`
+(for example `itinerary.pace` or `itinerary.stops.title`) and stores nothing.
+A designer post without `itinerary` is still saved as an ordinary inquiry.
+
+The itinerary is stored in the lead's metadata. When `trip` is absent,
+`base_trip` fills the lead's trip handle and title; `group_size` fills party
+size, and `season: "not_sure"` sets unknown timing. Keep sending the
+plain-text itinerary in `message` too: the instant call alert to info@ (and
+the daily inquiry safety net that reads those alerts) shows `message`, not
+the structured object.
+
+Duplicate merge: a designer post merges into an earlier inquiry only when the
+built trip is the same (base trip, stops and their days, interests, pace,
+length, season and group size) on top of the usual email, message and trip
+rules. A changed itinerary from the same email is its own inquiry.
+
+Free-call window: the ready screen's "Request my call" posts to the details
+endpoint with the same `submission_id` and the same 24-hour window, status and
+rate rules:
+
+```json
+{
+  "schema": "sherpa.inquiry.details.v1",
+  "submission_id": "0b8e6a52-1c4d-4f5e-9a7b-3d2c1e0f9a8b",
+  "call_request": { "window": "weekday_morning", "timezone": "America/New_York" }
+}
+```
+
+`window` is `weekday_morning`, `weekday_evening` or `weekend`; `timezone` is an
+optional IANA zone name. Bad values answer `400` with `call_request.window`,
+`call_request.timezone` or `call_request` in `fields`. A new or changed
+window is stored on the lead with the time it arrived and adds a "Free call
+requested" line to the "Details added by the visitor" note; repeating it
+changes nothing. Sam or Gyalgin email two call times by hand (no booking tool).
+
+Itinerary email: when Settings → Automations → Itinerary email is on, a new
+designer inquiry with an itinerary schedules a "Your Nepal itinerary" email to
+the visitor one minute after intake, so a call request sent from the ready
+screen usually lands first and the email confirms it. It is off by default;
+eligibility, wording and delivery are owned by [README, Leads](../README.md#leads).
+
 ## Source database contract (v1)
 
 Three independent facts are retained: what the person says first introduced
@@ -541,6 +649,9 @@ verdicts and repeated statuses leave stage timing unchanged.
 - **Traveler greeting.** New intakes schedule the automatic first reply;
   eligibility, controls and delivery guarantees are owned by
   [README, Leads](../README.md#leads).
+- **Itinerary email.** Itinerary designer inquiries also schedule the
+  "Your Nepal itinerary" email one minute in, only while its Settings switch
+  is on; see [Itinerary designer](#itinerary-designer).
 - **Email copy.** A background job mails the inquiry to
   `info@sherpaholidays.com`, Reply-To the visitor, From the app's `MAIL_FROM`
   (default `info@sherpaholidays.com`). Suspected spam starts

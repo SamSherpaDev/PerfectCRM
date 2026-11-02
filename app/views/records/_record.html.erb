@@ -1,5 +1,5 @@
 <%# locals: (record:, read_only:) %>
-<%# The three columns (docs/DESIGN.md 4.11): Details left, composer and
+<%# The three columns (docs/DESIGN.md 4.11): Details (and an itinerary designer lead's Itinerary) left, composer and
     timeline in the middle, Files and the PerfectBook trip on the right. Under 750px the same cards sit behind three tabs. Read-only
     records (converted or archived) drop the composer and the add line. %>
 <div data-controller="record-tabs">
@@ -7,6 +7,9 @@
   <div class="record">
     <div class="record-details tab-off" data-record-tabs-target="panel" data-tab="details">
       <%= render "records/details", record: record %>
+      <% if record.is_a?(Lead) && record.itinerary %>
+        <%= render "records/itinerary", lead: record %>
+      <% end %>
     </div>
     <div class="record-thread" data-record-tabs-target="panel" data-tab="thread">
       <% unless read_only %>

@@ -117,6 +117,27 @@ class TemplateContextTest < ActiveSupport::TestCase
       trip_name: "Everest", synced_at: Time.current)
     assert_equal "Everest", TemplateContext.for_reply(to: lead.email, owner: lead)[:context]["trip"]
   end
+  test "itinerary link comes from the recipient's own designer inquiry only" do
+    itinerary = ItineraryEmail::SAMPLE_ITINERARY
+    lead = Lead.create!(name: "Anna Lindqvist", email: "anna@gmail.com", source: "website_form",
+      placement: "itinerary_designer", metadata: { "itinerary" => itinerary })
+    other = Lead.create!(name: "Bea Lindqvist", email: "bea@gmail.com", source: "website_form")
+
+    assert_equal itinerary["share_url"], TemplateContext.for_reply(to: lead.email, owner: lead)[:context]["itinerary_link"]
+    assert_nil TemplateContext.for_reply(to: other.email, owner: other)[:context]["itinerary_link"]
+    person = lead.people.create!(name: "Traveler", email: "traveler@gmail.com")
+    assert_nil TemplateContext.for_reply(to: person.email, owner: lead)[:context]["itinerary_link"]
+
+    client = Client.create!(name: "Anna Lindqvist", email: "anna@gmail.com")
+    lead.update_columns(converted_client_id: client.id, converted_at: 1.day.ago)
+    Lead.create!(name: "Anna again", email: "anna@gmail.com", source: "manual", converted_client_id: client.id,
+      converted_at: Time.current, received_at: Time.current)
+    assert_equal itinerary["share_url"], TemplateContext.for_reply(to: client.email, owner: client)[:context]["itinerary_link"]
+
+    body = "Hi {{first_name}},\n\nYour trip: {{itinerary_link}}\n\nTalk soon"
+    assert_equal "Hi Bea,\n\nTalk soon", TemplateRenderer.render(body, TemplateContext.for(other))
+  end
+
   test "mirrored recipient retains matching lead trip interest without borrowing another lead trip" do
     lead = Lead.create!(name: "Annapurna lead", email: "annapurna@example.com",
       source: "manual", trip_interest: "Annapurna")

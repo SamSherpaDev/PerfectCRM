@@ -16,7 +16,7 @@ class SettingsAutomationsTest < ActionDispatch::IntegrationTest
     get edit_settings_path
     assert_response :success
     assert_select "h2", text: "Automations"
-    assert_select "p", text: /Website inquiries and automatic first replies/
+    assert_select "p", text: /Website inquiries, automatic first replies, and the itinerary email/
     assert_select "input[name='setting[lead_webhook_url]']", count: 0
     assert_select "form[action=?]", rotate_site_key_settings_path
     assert_select "form[action=?]", rotate_relay_secret_settings_path, count: 0
@@ -34,6 +34,31 @@ class SettingsAutomationsTest < ActionDispatch::IntegrationTest
     patch settings_path, params: { setting: { auto_first_reply_enabled: "1" } }
     assert Setting.current.reload.auto_first_reply_enabled?
     assert_equal enabled_at, Setting.current.auto_first_reply_enabled_at
+  end
+
+  test "the itinerary email ships off and its switch stamps each switch-on" do
+    get edit_settings_path
+    assert_select "input[type='checkbox'][name='setting[itinerary_email_enabled]']:not([checked])"
+    assert_select "a[href=?]", settings_itinerary_email_path, text: "Read the itinerary email"
+    assert_not Setting.current.itinerary_email_enabled?
+    assert_nil Setting.current.itinerary_email_enabled_at
+
+    freeze_time do
+      patch settings_path, params: { setting: { auto_first_reply_enabled: "1", itinerary_email_enabled: "1" } }
+      assert_redirected_to edit_settings_path
+      assert Setting.current.reload.itinerary_email_enabled?
+      assert_equal Time.current, Setting.current.itinerary_email_enabled_at
+    end
+    first_reply_at = Setting.current.auto_first_reply_enabled_at
+    travel 1.hour
+    patch settings_path, params: { setting: { auto_first_reply_enabled: "1", itinerary_email_enabled: "1" } }
+    assert_in_delta 1.hour.ago, Setting.current.reload.itinerary_email_enabled_at, 1.second
+    patch settings_path, params: { setting: { auto_first_reply_enabled: "1", itinerary_email_enabled: "0" } }
+    assert_not Setting.current.reload.itinerary_email_enabled?
+    patch settings_path, params: { setting: { auto_first_reply_enabled: "1", itinerary_email_enabled: "1" } }
+    assert_in_delta Time.current, Setting.current.reload.itinerary_email_enabled_at, 1.second
+    assert Setting.current.auto_first_reply_enabled?
+    assert_equal first_reply_at, Setting.current.auto_first_reply_enabled_at
   end
 
   test "saving one webhook URL persists it" do
