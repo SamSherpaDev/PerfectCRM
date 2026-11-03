@@ -49,25 +49,46 @@ class TripQuizEmailTest < ActiveSupport::TestCase
     assert_equal "daily limit for this address", reason
   end
 
-  test "the email names the match, why it fits, alternates and the call offer, without prices or em dashes" do
+  test "a full match names the match, every answer under why it fits, alternates and the call offer, without prices or em dashes" do
     content = TripQuizEmail.content(first_name: "Anna", quiz: TripQuizEmail::SAMPLE_QUIZ)
     body = content[:body]
     assert_equal "Your trip match", content[:subject]
     assert body.start_with?("Hi Anna,\n\nThank you for taking our trip quiz at SherpaHolidays.")
     assert_includes body, "Your match: 15-Day Nepal Cultural and Wildlife Tour\nhttps://www.sherpaholidays.com/products/nepal-cultural-wildlife-tour"
-    assert_includes body, "- Temples and old cities: Includes the Kathmandu Valley"
-    assert_includes body, "- Jungle safari in Chitwan: Includes Chitwan and a wildlife safari"
-    assert_includes body, "- Birthplace of the Buddha: Includes Lumbini"
-    assert_includes body, "- Easy days: Rated Easy"
-    assert_includes body, "- Under two weeks: 15 days"
-    assert_includes body, "- Spring: Best season Spring & Autumn"
-    assert_includes body, "- 4 travelers: Every journey is private"
+    assert_includes body, "Why it fits:\n" \
+      "- Temples and old cities: Includes the Kathmandu Valley\n" \
+      "- Jungle safari in Chitwan: Includes Chitwan and a wildlife safari\n" \
+      "- Birthplace of the Buddha: Includes Lumbini\n" \
+      "- Easy days: Rated Easy\n" \
+      "- Two to three weeks: 15 days\n" \
+      "- Spring: Best season Spring & Autumn\n" \
+      "- 4 travelers: Every journey is private\n\nAlso close:"
+    assert_not_includes body, "Where it differs"
+    assert_not_includes body, "The closest of our"
     assert_includes body, "Also close:\n- 13-Day Nepal Premium Tour: Kathmandu, Chitwan & Pokhara\n  https://www.sherpaholidays.com/products/nepal-luxury-tour-kathmandu-chitwan-pokhara\n- 9-Day Nepal Highlights Premium Tour\n  https://www.sherpaholidays.com/products/nepal-highlights-premium-tour"
     assert_includes body, "Would a free call help? Sam or Gyalgin can go over this trip, the season and the pace with you. No obligation. Reply to this email with your phone number and we will call you as soon as possible."
     assert_not_includes body, "—"
     assert_not_includes body, "two call times"
     assert_no_match(/[$€£]|\bUSD\b|price/i, body)
     assert_no_match(/Sherpa Holidays/, body)
+  end
+
+  test "a closest match keeps missed answers out of why it fits and lists them in their own section" do
+    body = TripQuizEmail.content(first_name: "Anna", quiz: TripQuizEmail::SAMPLE_CLOSEST_QUIZ)[:body]
+    assert_includes body, "The closest of our 35 trips to your answers: 15-Day Nepal Cultural and Wildlife Tour\n" \
+      "https://www.sherpaholidays.com/products/nepal-cultural-wildlife-tour"
+    assert_not_includes body, "Your match:"
+    assert_includes body, "- Spring: Best season Spring & Autumn\n- 4 travelers: Every journey is private\n\n" \
+      "Where it differs from your answers:\n- Under two weeks: 15 days\n\nAlso close:"
+    assert_equal 1, body.scan("Under two weeks").size
+
+    harder = TripQuizEmail.content(first_name: "Anna", quiz: TripQuizEmail::SAMPLE_QUIZ.merge(
+      "interests" => [ "temples" ], "match" => { "handle" => "everest-base-camp-premium-trek", "title" => "18-Day Everest Base Camp Premium Trek" }
+    ))[:body]
+    why, differs = harder.split("Where it differs from your answers:\n")
+    assert_includes differs, "- Temples and old cities: Not on this trip\n- Easy days: Rated Challenging, two steps harder"
+    assert_not_includes why, "Not on this trip"
+    assert_not_includes why, "harder"
   end
 
   test "a call request turns the offer into a call-as-soon-as-possible confirmation without mentioning a window or two call times" do

@@ -39,12 +39,11 @@ class LeadsTripQuizTest < ActiveSupport::TestCase
 
   test "keeps only the whitelisted quiz fields" do
     result = Leads::TripQuiz.parse(payload("passport_number" => "X123", "price" => 1200, "date_of_birth" => "1990-01-01"))
-    assert_equal %w[version match alternates interests pace length season group_size intent email_list share_url source client_version].sort,
+    assert_equal %w[match alternates interests pace length season group_size intent email_list share_url source].sort,
       result.keys.sort
-    assert_equal 1, result["version"]
     assert_equal({ "handle" => "nepal-cultural-wildlife-tour", "title" => "15-Day Nepal Cultural and Wildlife Tour" }, result["match"])
     assert_equal 2, result["alternates"].size
-    assert_equal "trip-quiz-1", result["client_version"]
+    assert_not_includes result.to_json, "trip-quiz-1"
     assert_not_includes result.to_json, "X123"
   end
 
@@ -141,16 +140,58 @@ class LeadsTripQuizTest < ActiveSupport::TestCase
     assert_not_equal Leads::TripQuiz.signature(first), Leads::TripQuiz.signature(changed_match)
   end
 
-  test "why_it_fits restates confirmed trip facts for the match" do
-    quiz = Leads::TripQuiz.parse(payload)
-    assert_equal [
-      "Temples and old cities: Includes the Kathmandu Valley",
-      "Jungle safari in Chitwan: Includes Chitwan and a wildlife safari",
-      "Birthplace of the Buddha: Includes Lumbini",
-      "Easy days: Rated Easy",
-      "Under two weeks: 15 days",
-      "Spring: Best season Spring & Autumn",
-      "4 travelers: Every journey is private"
-    ], Leads::TripQuiz.why_it_fits(quiz)
+  test "answer_fit lists every answer the match meets as a fit and nothing else" do
+    quiz = Leads::TripQuiz.parse(payload("length" => "14-20"))
+    assert_equal({
+      fits: [
+        "Temples and old cities: Includes the Kathmandu Valley",
+        "Jungle safari in Chitwan: Includes Chitwan and a wildlife safari",
+        "Birthplace of the Buddha: Includes Lumbini",
+        "Easy days: Rated Easy",
+        "Two to three weeks: 15 days",
+        "Spring: Best season Spring & Autumn",
+        "4 travelers: Every journey is private"
+      ],
+      misses: []
+    }, Leads::TripQuiz.answer_fit(quiz))
+  end
+
+  test "answer_fit keeps missed interests, pace, length and season out of the fits" do
+    quiz = Leads::TripQuiz.parse(payload(
+      "interests" => [ "everest", "temples" ],
+      "pace" => "easy",
+      "length" => "under-14",
+      "season" => "summer",
+      "group_size" => 1,
+      "match" => { "handle" => "everest-base-camp-premium-trek", "title" => "18-Day Everest Base Camp Premium Trek" }
+    ))
+    assert_equal({
+      fits: [
+        "Everest up close: Includes the Everest region",
+        "1 traveler: Every journey is private"
+      ],
+      misses: [
+        "Temples and old cities: Not on this trip",
+        "Easy days: Rated Challenging, two steps harder",
+        "Under two weeks: 18 days",
+        "Summer: Best season Spring & Autumn"
+      ]
+    }, Leads::TripQuiz.answer_fit(quiz))
+  end
+
+  test "answer_fit reads a season range and not-sure answers as fits" do
+    tibet = Leads::TripQuiz.parse(payload(
+      "interests" => [ "beyond" ], "pace" => "moderate", "length" => "not_sure", "season" => "summer",
+      "match" => { "handle" => "tibet-overland-tour-lhasa", "title" => "8-Day Tibet Overland Tour" }
+    ))
+    assert_equal [], Leads::TripQuiz.answer_fit(tibet)[:misses]
+    assert_includes Leads::TripQuiz.answer_fit(tibet)[:fits], "Length: 8 days"
+    assert_includes Leads::TripQuiz.answer_fit(tibet)[:fits], "Summer: Best season Spring to Autumn"
+
+    winter = Leads::TripQuiz.parse(payload("season" => "winter",
+      "match" => { "handle" => "india-nepal-premium-tour", "title" => "13-Day India and Nepal Premium Tour" }))
+    assert_includes Leads::TripQuiz.answer_fit(winter)[:fits], "Winter: Best season Autumn to Spring"
+    assert_includes Leads::TripQuiz.answer_fit(Leads::TripQuiz.parse(payload("season" => "not_sure")))[:fits],
+      "When: Best season Spring & Autumn"
   end
 end

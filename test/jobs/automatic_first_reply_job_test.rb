@@ -61,8 +61,7 @@ class AutomaticFirstReplyJobTest < ActiveSupport::TestCase
     "test address" => ->(lead) { lead.update!(email: "visitor@example.org") },
     "spam or junk" => ->(lead) { lead.update!(spam_score: 10) },
     "inactive inquiry" => ->(lead) { lead.update!(archived_at: Time.current) },
-    "existing client" => ->(lead) { Client.create!(name: "Existing", email: lead.email) },
-    "trip quiz inquiry" => ->(lead) { lead.update!(placement: "trip_quiz") }
+    "existing client" => ->(lead) { Client.create!(name: "Existing", email: lead.email) }
   }.each do |reason, prepare|
     test "skips and logs #{reason}" do
       prepare.call(@lead)

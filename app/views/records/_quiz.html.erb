@@ -6,11 +6,6 @@
 <section class="card card-pad" id="record-quiz" aria-labelledby="quiz-heading">
   <div class="card-header">
     <h2 class="card-title" id="quiz-heading">Quiz answers</h2>
-    <% if quiz["share_url"].present? %>
-      <%= link_to quiz["share_url"], class: "link-quiet inline-flex items-center gap-1 text-xs", target: "_blank", rel: "noopener" do %>
-        <%= render "shared/icon", name: :external, class: "h-3.5 w-3.5" %>Open theirs
-      <% end %>
-    <% end %>
   </div>
   <%= card_caption "What they answered in the trip quiz." %>
 
@@ -85,15 +80,5 @@
         <dd><%= quiz["email_list"] ? "Yes, they ticked the box" : "No, box left unticked" %></dd>
       </div>
     <% end %>
-    <% if (source = labels.source_label(quiz["source"])) %>
-      <div>
-        <dt>Came from</dt>
-        <dd><%= source %></dd>
-      </div>
-    <% end %>
   </dl>
-
-  <% if quiz["client_version"].present? %>
-    <p class="mt-4 text-xs muted">Quiz version <span class="mono whitespace-nowrap"><%= quiz["client_version"] %></span></p>
-  <% end %>
 </section>

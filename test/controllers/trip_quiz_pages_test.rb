@@ -26,7 +26,7 @@ class TripQuizPagesTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "#record-quiz" do
       assert_select "h2", "Quiz answers"
-      assert_select "a[href=?][target=_blank]", TripQuizEmail::SAMPLE_QUIZ["share_url"], text: /Open theirs/
+      assert_select "a[href=?]", TripQuizEmail::SAMPLE_QUIZ["share_url"], count: 0
       assert_select "a[href=?][target=_blank]", "https://www.sherpaholidays.com/products/nepal-cultural-wildlife-tour",
         text: "15-Day Nepal Cultural and Wildlife Tour"
       assert_select "a[href=?][target=_blank]", "https://www.sherpaholidays.com/products/nepal-luxury-tour-kathmandu-chitwan-pokhara",
@@ -37,14 +37,16 @@ class TripQuizPagesTest < ActionDispatch::IntegrationTest
       assert_select ".chip", text: "Jungle safari in Chitwan"
       assert_select ".chip", text: "Birthplace of the Buddha"
       assert_select "dd", text: "Easy days"
-      assert_select "dd", text: "Under two weeks"
+      assert_select "dd", text: "Two to three weeks"
       assert_select "dd", text: "Spring (March to May)"
       assert_select "dd", text: "4"
       assert_select "dd", text: "Email their match and a free call"
       assert_select "dd", text: "No, box left unticked"
-      assert_select "dd", text: "Website"
-      assert_select ".mono", text: "trip-quiz-1"
+      assert_select "dt", text: "Came from", count: 0
+      assert_select "dd", text: "Website", count: 0
     end
+    assert_not_includes response.body, "Open theirs"
+    assert_not_includes response.body, "Quiz version"
     assert_select "#record-details dd", text: /As soon as possible \(America\/New York\)/
     assert_select "#record-details dd", text: /Call them as soon as possible\./
     assert_not_includes response.body, "two call times"
@@ -78,20 +80,31 @@ class TripQuizPagesTest < ActionDispatch::IntegrationTest
     assert_select "h1", "Trip quiz email"
     assert_select ".badge", text: "Off"
     assert_select "dd", text: "Your trip match"
-    assert_select ".email-paper", text: /Hi Alex,/
-    assert_select ".email-paper", text: /Your match: 15-Day Nepal Cultural and Wildlife Tour/
-    assert_select ".email-paper", text: /Temples and old cities: Includes the Kathmandu Valley/
-    assert_select ".email-paper", text: /Also close:/
-    assert_select ".email-paper", text: /Sam or Gyalgin will call you as soon as possible\./
-    assert_select ".email-paper", text: /SherpaHolidays/
-    assert_select "p", text: /The automatic first reply always skips trip quiz visitors/
-    assert_not_includes response.body, "two call times"
-    assert_not_includes response.body, "—"
+    assert_select ".email-paper", count: 2
+    assert_select "p", text: /When this email is queued, the automatic first reply stands aside/
+    assert_full_and_closest_previews(/Sam or Gyalgin will call you as soon as possible\./)
 
     get settings_trip_quiz_email_path(call: 0)
-    assert_select ".email-paper", text: /Would a free call help\?/
-    assert_select ".email-paper", text: /Reply to this email with your phone number and we will call you as soon as possible\./
     assert_select "a.tab-on", text: "Email only"
+    assert_select ".email-paper", count: 2
+    assert_full_and_closest_previews(/Reply to this email with your phone number and we will call you as soon as possible\./)
+  end
+
+  def assert_full_and_closest_previews(closing)
+    assert_select "h2", text: "When the match meets every answer"
+    assert_select "h2", text: "When the match is the closest, not a full fit"
+    assert_select "#trip-quiz-email-preview-full", text: /Hi Alex,/
+    assert_select "#trip-quiz-email-preview-full", text: /Your match: 15-Day Nepal Cultural and Wildlife Tour/
+    assert_select "#trip-quiz-email-preview-full", text: /Two to three weeks: 15 days/
+    assert_select "#trip-quiz-email-preview-full", text: /Where it differs/, count: 0
+    assert_select "#trip-quiz-email-preview-closest", text: /The closest of our 35 trips to your answers: 15-Day Nepal Cultural and Wildlife Tour/
+    assert_select "#trip-quiz-email-preview-closest", text: /Where it differs from your answers:\s*- Under two weeks: 15 days/
+    [ "full", "closest" ].each do |kind|
+      assert_select "#trip-quiz-email-preview-#{kind}", text: /Temples and old cities: Includes the Kathmandu Valley/
+      assert_select "#trip-quiz-email-preview-#{kind}", text: /Also close:/
+      assert_select "#trip-quiz-email-preview-#{kind}", text: closing
+      assert_select "#trip-quiz-email-preview-#{kind}", text: /SherpaHolidays/
+    end
     assert_not_includes response.body, "two call times"
     assert_not_includes response.body, "—"
   end

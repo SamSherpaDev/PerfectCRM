@@ -4,15 +4,15 @@
 # Automations after reading the preview.
 #
 # Transactional, not marketing: the matched trip with its link, one short line
-# per answer on why it fits, the closest alternate trips with links, and the
-# free-call offer or confirmation. No prices.
+# per answer it meets under "Why it fits" and per answer it misses in its own
+# section, the closest alternate trips with links, and the free-call offer or
+# confirmation. No prices.
 class TripQuizEmail < ApplicationRecord
   SUBJECT = "Your trip match".freeze
   DAILY_LIMIT = 3
   RESERVED_DOMAINS = %w[example.com example.org example.net example invalid test localhost].freeze
 
   SAMPLE_QUIZ = {
-    "version" => 1,
     "match" => {
       "handle" => "nepal-cultural-wildlife-tour",
       "title" => "15-Day Nepal Cultural and Wildlife Tour"
@@ -29,15 +29,18 @@ class TripQuizEmail < ApplicationRecord
     ],
     "interests" => [ "temples", "jungle-safari", "lumbini" ],
     "pace" => "easy",
-    "length" => "under-14",
+    "length" => "14-20",
     "season" => "spring",
     "group_size" => 4,
     "intent" => "email",
     "email_list" => false,
-    "share_url" => "https://www.sherpaholidays.com/pages/find-your-perfect-trip#k=temples,jungle-safari,lumbini&p=easy&l=under-14&s=spring&n=4",
-    "source" => "website",
-    "client_version" => "trip-quiz-1"
+    "share_url" => "https://www.sherpaholidays.com/pages/find-your-perfect-trip#k=temples,jungle-safari,lumbini&p=easy&l=14-20&s=spring&n=4",
+    "source" => "website"
   }.freeze
+  SAMPLE_CLOSEST_QUIZ = SAMPLE_QUIZ.merge(
+    "length" => "under-14",
+    "share_url" => "https://www.sherpaholidays.com/pages/find-your-perfect-trip#k=temples,jungle-safari,lumbini&p=easy&l=under-14&s=spring&n=4"
+  ).freeze
   SAMPLE_CALL_REQUEST = { "timezone" => "America/New_York" }.freeze
 
   belongs_to :lead, optional: true
@@ -83,15 +86,15 @@ class TripQuizEmail < ApplicationRecord
     match = quiz["match"].is_a?(Hash) ? quiz["match"] : {}
     match_title = match["title"].presence || match["handle"]
     match_url = Leads::TripQuiz.trip_url(match["handle"])
+    fit = Leads::TripQuiz.answer_fit(quiz)
+    match_label = fit[:misses].any? ? "The closest of our #{Leads::TripQuiz::TRIPS.size} trips to your answers" : "Your match"
     match_block = [
-      ("Your match: #{match_title}" if match_title.present?),
+      ("#{match_label}: #{match_title}" if match_title.present?),
       match_url
     ].compact.join("\n").presence
 
-    why_lines = Leads::TripQuiz.why_it_fits(quiz)
-    why_block = if why_lines.any?
-      ([ "Why it fits:" ] + why_lines.map { |line| "- #{line}" }).join("\n")
-    end
+    why_block = list_block("Why it fits:", fit[:fits])
+    differs_block = list_block("Where it differs from your answers:", fit[:misses])
 
     alternates = Array(quiz["alternates"]).select { |alt| alt.is_a?(Hash) && (alt["title"].present? || alt["handle"].present?) }
     alternates_block = if alternates.any?
@@ -108,11 +111,17 @@ class TripQuizEmail < ApplicationRecord
       "Thank you for taking our trip quiz at SherpaHolidays. Here is your best match from our trips, so you have it to hand.",
       match_block,
       why_block,
+      differs_block,
       alternates_block,
       call_paragraph(call_request, intent: quiz["intent"])
     ].compact
     { subject: SUBJECT, body: paragraphs.join("\n\n") }
   end
+
+  def self.list_block(heading, lines)
+    ([ heading ] + lines.map { |line| "- #{line}" }).join("\n") if lines.any?
+  end
+  private_class_method :list_block
 
   def self.call_paragraph(call_request, intent: nil)
     if intent == "call" || call_request.present?

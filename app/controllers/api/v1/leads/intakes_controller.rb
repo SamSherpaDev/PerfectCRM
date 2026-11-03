@@ -101,15 +101,17 @@ module Api
               else
                 lead.lead_notifications.create!(event: "email_copy")
                 lead.lead_notifications.create!(event: "lead.created")
-                lead.lead_notifications.create!(event: "auto_first_reply", available_at: 2.minutes.from_now)
                 # One minute in: a call request from the ready screen usually
                 # lands first, and the email is queued before the first reply
                 # looks for earlier outbound mail.
                 if lead.itinerary && Setting.current.itinerary_email_enabled?
                   lead.lead_notifications.create!(event: "itinerary_email", available_at: 1.minute.from_now)
                 end
+                # The trip quiz email hands over to the first reply when it skips.
                 if lead.quiz && Setting.current.trip_quiz_email_enabled?
                   lead.lead_notifications.create!(event: "trip_quiz_email", available_at: 1.minute.from_now)
+                else
+                  lead.lead_notifications.create!(event: "auto_first_reply", available_at: 2.minutes.from_now)
                 end
               end
               true

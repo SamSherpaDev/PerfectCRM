@@ -32,7 +32,6 @@ class AutomaticFirstReply < ApplicationRecord
       end
     end
     return "already contacted" if contacted
-    return "trip quiz inquiry" if lead.placement == "trip_quiz"
 
     nil
   end

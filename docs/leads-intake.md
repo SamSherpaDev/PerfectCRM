@@ -470,9 +470,10 @@ keeping the questionnaire separate from ad conversion reporting.
 
 Trip quiz email: when Settings → Automations → Trip quiz email is on, a new
 `trip_quiz` inquiry with `quiz` schedules a "Your trip match" email one minute
-after intake. It ships off by default, and the general automatic first reply
-always skips `trip_quiz` leads so a quiz inquiry gets at most one automatic
-email; see [README, Leads](../README.md#leads).
+after intake in place of the general automatic first reply, which runs only
+when that email is skipped. It ships off by default; while it is off, the first
+reply is scheduled as for any website inquiry, so a quiz visitor gets exactly
+one automatic email; see [README, Leads](../README.md#leads).
 
 ## Source database contract (v1)
 
@@ -754,8 +755,9 @@ verdicts and repeated statuses leave stage timing unchanged.
   "Your Nepal itinerary" email one minute in, only while its Settings switch
   is on; see [Itinerary designer](#itinerary-designer).
 - **Trip quiz email.** Trip quiz inquiries schedule the "Your trip match"
-  email one minute in, only while its Settings switch is on, and are skipped
-  by the general automatic first reply; see [Trip quiz](#trip-quiz).
+  email one minute in, only while its Settings switch is on, in place of the
+  automatic first reply, which runs only when that email is skipped; see
+  [Trip quiz](#trip-quiz).
 - **Email copy.** A background job mails the inquiry to
   `info@sherpaholidays.com`, Reply-To the visitor, From the app's `MAIL_FROM`
   (default `info@sherpaholidays.com`). Suspected spam starts

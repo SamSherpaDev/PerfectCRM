@@ -86,7 +86,9 @@ class ApiV1LeadsTripQuizIntakeTest < ActionDispatch::IntegrationTest
     assert_equal 4, quiz["group_size"]
     assert_equal "email", quiz["intent"]
     assert_equal false, quiz["email_list"]
-    assert_equal "trip-quiz-1", quiz["client_version"]
+    assert_not quiz.key?("client_version")
+    assert_not quiz.key?("version")
+    assert_equal "trip-quiz-1", lead.metadata.dig("client", "version")
     assert_equal "website", quiz["source"]
     assert_equal QUIZ["share_url"], quiz["share_url"]
     assert AdConversions.excluded?(lead)
@@ -158,38 +160,72 @@ class ApiV1LeadsTripQuizIntakeTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "general automatic first reply never sends to a trip_quiz lead even when the quiz email is off" do
+  test "while the quiz email is off, the general first reply greets a quiz visitor as for a landing inquiry" do
     @settings.update!(trip_quiz_email_enabled: false, auto_first_reply_enabled: true, auto_first_reply_enabled_at: 1.hour.ago)
     Template.create!(name: "First reply", purpose: :first_reply, channel: "email", body: "Hi {{first_name}}, let's arrange a call.")
     travel 1.second
     post_intake intake_body
     lead = Lead.last
+    assert_not lead.lead_notifications.exists?(event: "trip_quiz_email")
     first_reply_notification = lead.lead_notifications.find_by!(event: "auto_first_reply")
 
     travel 2.minutes
-    assert_no_difference("Message.outbound.count") { LeadNotificationJob.perform_now(first_reply_notification.id) }
-    assert_includes lead.activity_events.where(kind: "automation").pluck(:summary), "Automatic first reply: skipped (trip quiz inquiry)"
+    assert_difference("Message.outbound.count", 1) { LeadNotificationJob.perform_now(first_reply_notification.id) }
+    assert_equal [ "anna@gmail.com" ], AutomaticFirstReply.find_by!(lead: lead).message.to_list
+    assert_nil lead.reload.trip_quiz_email
   end
 
-  test "switched on, the visitor gets one match email and the first reply stands aside" do
+  test "switched on, a trip_quiz post without quiz gets the general first reply" do
+    @settings.update!(trip_quiz_email_enabled: true, auto_first_reply_enabled: true, auto_first_reply_enabled_at: 1.hour.ago)
+    post_intake intake_body.except("quiz")
+    lead = Lead.last
+    assert_not lead.lead_notifications.exists?(event: "trip_quiz_email")
+    assert lead.lead_notifications.exists?(event: "auto_first_reply")
+  end
+
+  test "a skipped quiz email hands over to the general first reply, which sends once" do
+    @settings.update!(trip_quiz_email_enabled: true, auto_first_reply_enabled: true, auto_first_reply_enabled_at: 1.hour.ago)
+    Template.create!(name: "First reply", purpose: :first_reply, channel: "email", body: "Hi {{first_name}}, let's arrange a call.")
+    3.times { TripQuizEmail.create!(email: "anna@gmail.com") }
+    travel 1.second
+    post_intake intake_body
+    lead = Lead.last
+    assert_not lead.lead_notifications.exists?(event: "auto_first_reply")
+    quiz_notification = lead.lead_notifications.find_by!(event: "trip_quiz_email")
+
+    travel 1.minute
+    assert_no_difference("Message.outbound.count") do
+      assert_enqueued_with(job: AutomaticFirstReplyJob, args: [ lead.id ], at: lead.created_at + 2.minutes) do
+        LeadNotificationJob.perform_now(quiz_notification.id)
+      end
+    end
+    travel 1.minute
+    assert_difference("Message.outbound.count", 1) { perform_enqueued_jobs(only: AutomaticFirstReplyJob) }
+    assert_nil lead.reload.trip_quiz_email
+    assert_equal [ "anna@gmail.com" ], AutomaticFirstReply.find_by!(lead: lead).message.to_list
+    assert_includes lead.activity_events.where(kind: "automation").pluck(:summary),
+      "Trip quiz email: skipped (daily limit for this address)"
+    assert_no_difference("Message.outbound.count") { TripQuizEmailJob.perform_now(lead.id) }
+  end
+
+  test "switched on, the visitor gets one match email and no first reply" do
     @settings.update!(trip_quiz_email_enabled: true, auto_first_reply_enabled: true, auto_first_reply_enabled_at: 1.hour.ago)
     Template.create!(name: "First reply", purpose: :first_reply, channel: "email", body: "Hi {{first_name}}, let's arrange a call.")
     travel 1.second
     post_intake intake_body
     lead = Lead.last
     quiz_notification = lead.lead_notifications.find_by!(event: "trip_quiz_email")
-    first_reply_notification = lead.lead_notifications.find_by!(event: "auto_first_reply")
+    assert_not lead.lead_notifications.exists?(event: "auto_first_reply")
 
-    travel 1.minute
-    assert_difference("Message.outbound.count", 1) { LeadNotificationJob.perform_now(quiz_notification.id) }
+    travel 2.minutes
+    assert_no_enqueued_jobs(only: AutomaticFirstReplyJob) do
+      assert_difference("Message.outbound.count", 1) { LeadNotificationJob.perform_now(quiz_notification.id) }
+    end
     message = lead.trip_quiz_email.message
     assert_equal "Your trip match", message.subject
     assert_equal [ "anna@gmail.com" ], message.to_list
     assert_emails(1) { perform_enqueued_jobs(only: OutboundDeliveryJob) }
-
-    travel 1.minute
-    assert_no_difference("Message.outbound.count") { LeadNotificationJob.perform_now(first_reply_notification.id) }
-    assert_includes lead.activity_events.where(kind: "automation").pluck(:summary), "Automatic first reply: skipped (already contacted)"
+    assert_not AutomaticFirstReply.exists?(lead: lead)
   end
 
   test "details accept a windowless call request and a sheet phone number without overwriting an existing phone" do

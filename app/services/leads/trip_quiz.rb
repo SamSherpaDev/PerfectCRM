@@ -6,7 +6,6 @@ require "uri"
 # ever stored: no passport, visa, insurance, date-of-birth or payment data,
 # and no prices.
 module Leads::TripQuiz
-  VERSION = 1
   INTERESTS = {
     "everest" => "Everest up close",
     "temples" => "Temples and old cities",
@@ -50,12 +49,22 @@ module Leads::TripQuiz
     "winter" => "Winter (January to February)",
     "not_sure" => "Not sure yet"
   }.freeze
+  LENGTH_DAYS = {
+    "under-14" => 1..13,
+    "14-20" => 14..20,
+    "21-plus" => 21..
+  }.freeze
   SEASON_SHORT_LABELS = {
     "spring" => "Spring",
     "summer" => "Summer",
     "fall" => "Autumn",
     "winter" => "Winter",
     "not_sure" => "Not sure yet"
+  }.freeze
+  TRIP_SEASONS = {
+    "Spring & Autumn" => %w[spring fall],
+    "Autumn to Spring" => %w[fall winter spring],
+    "Spring to Autumn" => %w[spring summer fall]
   }.freeze
   INTENTS = {
     "email" => "Email their match",
@@ -119,7 +128,7 @@ module Leads::TripQuiz
     input = payload["quiz"]
     raise ArgumentError, "quiz" unless input.is_a?(Hash)
 
-    result = { "version" => VERSION }
+    result = {}
     result["match"] = trip_ref(input["match"], "quiz.match")
     result["alternates"] = alternates(input["alternates"]) unless input["alternates"].nil?
     result["interests"] = interests(input["interests"]) unless input["interests"].nil?
@@ -134,9 +143,6 @@ module Leads::TripQuiz
     end
     result["share_url"] = share_url(input["share_url"]) unless input["share_url"].nil?
     result["source"] = source(input["source"]) unless input["source"].nil?
-    client = payload["client"].is_a?(Hash) ? payload["client"] : {}
-    version = client["version"].to_s.strip.first(64).presence
-    result["client_version"] = version if version
     result
   end
 
@@ -167,7 +173,6 @@ module Leads::TripQuiz
   def pace_label(value) = PACES[value]
   def length_label(value) = LENGTHS[value]
   def season_label(value) = SEASONS[value]
-  def source_label(value) = Leads::Itinerary.source_label(value)
 
   def intent_label(value, call_request: nil)
     return "Email their match and a free call" if value == "email" && call_request.present?
@@ -176,69 +181,74 @@ module Leads::TripQuiz
     INTENTS[value]
   end
 
-  # One short line per answer on why the matched trip fits, restating only
-  # the trip's own tags, experience level, day count and best season, plus
-  # the private-journey fact shared by every SherpaHolidays trip.
-  def why_it_fits(quiz)
-    return [] unless quiz.is_a?(Hash)
+  # One short line per answer, split into the answers the matched trip meets
+  # (fits) and the ones it does not (misses), restating only the trip's own
+  # tags, experience level, day count and best season, plus the
+  # private-journey fact shared by every SherpaHolidays trip.
+  def answer_fit(quiz)
+    fits = []
+    misses = []
+    return { fits: fits, misses: misses } unless quiz.is_a?(Hash)
 
     handle = quiz.dig("match", "handle").to_s
     trip = TRIPS[handle]
-    lines = []
 
     if trip
       Array(quiz["interests"]).each do |code|
         label = INTERESTS[code]
         next unless label
 
-        lines << "#{label}: #{interest_reason(code, handle, trip)}"
+        reason = interest_reason(code, handle, trip)
+        if reason
+          fits << "#{label}: #{reason}"
+        else
+          misses << "#{label}: Not on this trip"
+        end
       end
 
       if (pace_label = PACES[quiz["pace"]]) && (trip_rank = LEVEL_RANKS[trip[:level]])
         diff = trip_rank - PACE_RANKS[quiz["pace"]]
-        lines << "#{pace_label}: #{pace_reason(trip[:level], diff)}"
+        (diff.zero? ? fits : misses) << "#{pace_label}: #{pace_reason(trip[:level], diff)}"
       end
 
-      if quiz["length"] && quiz["length"] != "not_sure" && (len_label = LENGTHS[quiz["length"]]) && trip[:days].to_i.positive?
-        lines << "#{len_label}: #{trip[:days]} days"
-      elsif quiz["length"] == "not_sure" && trip[:days].to_i.positive?
-        lines << "Length: #{trip[:days]} days"
+      days = trip[:days].to_i
+      if days.positive? && quiz["length"] == "not_sure"
+        fits << "Length: #{days} days"
+      elsif days.positive? && (len_label = LENGTHS[quiz["length"]])
+        (LENGTH_DAYS[quiz["length"]].cover?(days) ? fits : misses) << "#{len_label}: #{days} days"
       end
 
-      if quiz["season"] && quiz["season"] != "not_sure" && (short_season = SEASON_SHORT_LABELS[quiz["season"]]) && trip[:season].present?
-        lines << "#{short_season}: Best season #{trip[:season]}"
-      elsif quiz["season"] == "not_sure" && trip[:season].present?
-        lines << "When: Best season #{trip[:season]}"
+      if trip[:season].present? && quiz["season"] == "not_sure"
+        fits << "When: Best season #{trip[:season]}"
+      elsif trip[:season].present? && (short_season = SEASON_SHORT_LABELS[quiz["season"]])
+        in_season = TRIP_SEASONS.fetch(trip[:season], []).include?(quiz["season"])
+        (in_season ? fits : misses) << "#{short_season}: Best season #{trip[:season]}"
       end
     end
 
     if (group = quiz["group_size"]).is_a?(Integer) && group.positive?
-      lines << "#{group} #{group == 1 ? 'traveler' : 'travelers'}: Every journey is private"
+      fits << "#{group} #{group == 1 ? 'traveler' : 'travelers'}: Every journey is private"
     end
 
-    lines
+    { fits: fits, misses: misses }
   end
 
   def interest_reason(code, handle, trip)
     tags = Array(trip[:tags])
     case code
     when "everest"
-      tags.include?("Everest Region") ? "Includes the Everest region" : "Not on this trip"
+      "Includes the Everest region" if tags.include?("Everest Region")
     when "temples"
       if tags.include?("Kathmandu Valley")
         "Includes the Kathmandu Valley"
       elsif tags.include?("Cultural Tour")
         "A cultural tour"
-      else
-        "Not on this trip"
       end
     when "mountain-views"
       if handle.include?("mountain-views")
         "A mountain views tour"
       elsif tags.include?("Pokhara")
         "Includes Pokhara"
-      else
-        "Not on this trip"
       end
     when "jungle-safari"
       if tags.include?("Chitwan") && tags.include?("Wildlife Safari")
@@ -247,17 +257,15 @@ module Leads::TripQuiz
         "Includes a wildlife safari"
       elsif tags.include?("Chitwan")
         "Includes Chitwan"
-      else
-        "Not on this trip"
       end
     when "himalayan-trek"
-      tags.include?("Trekking") ? "A trekking trip" : "Not on this trip"
+      "A trekking trip" if tags.include?("Trekking")
     when "lumbini"
-      tags.include?("Lumbini") ? "Includes Lumbini" : "Not on this trip"
+      "Includes Lumbini" if tags.include?("Lumbini")
     when "peak"
-      tags.include?("Peak Climbing") ? "A Himalayan peak climb" : "Not on this trip"
+      "A Himalayan peak climb" if tags.include?("Peak Climbing")
     when "rafting"
-      tags.include?("Rafting") ? "A rafting trip" : "Not on this trip"
+      "A rafting trip" if tags.include?("Rafting")
     when "beyond"
       if tags.include?("Tibet")
         "Includes Tibet"
@@ -265,13 +273,9 @@ module Leads::TripQuiz
         "Includes Bhutan"
       elsif tags.include?("India")
         "Includes India"
-      else
-        "Not on this trip"
       end
     when "remote"
-      tags.include?("Restricted Region") ? "In a restricted region" : "Not on this trip"
-    else
-      "Not on this trip"
+      "In a restricted region" if tags.include?("Restricted Region")
     end
   end
   private_class_method :interest_reason

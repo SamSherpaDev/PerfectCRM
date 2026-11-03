@@ -19,7 +19,7 @@
     <% else %>
       <p class="mt-2 text-sm text-ink">Nothing is sent. Switch it on under Automations once the wording reads right.</p>
     <% end %>
-    <p class="hint mt-2">The automatic first reply always skips trip quiz visitors, so a quiz inquiry gets at most one automatic email. Sam or Gyalgin call as soon as possible when a call is requested.</p>
+    <p class="hint mt-2">When this email is queued, the automatic first reply stands aside; while it is off or skipped, the first reply runs as for any website inquiry, so a quiz visitor gets one automatic email. Sam or Gyalgin call as soon as possible when a call is requested.</p>
     <p class="mt-3"><%= link_to "Automations in Settings", edit_settings_path(anchor: "automations-heading"), class: "link text-sm" %></p>
   </section>
 
@@ -28,19 +28,22 @@
       <%= tab_link "Asked for a call", settings_trip_quiz_email_path, icon: :phone, active: @call_requested %>
       <%= tab_link "Email only", settings_trip_quiz_email_path(call: 0), icon: :mail, active: !@call_requested %>
     </nav>
-    <p class="hint mt-3">The closing paragraph depends on whether the visitor asked for a free call. The sample match below is the 15-Day Nepal Cultural and Wildlife Tour.</p>
+    <p class="hint mt-3">The closing paragraph depends on whether the visitor asked for a free call. Both samples match the 15-Day Nepal Cultural and Wildlife Tour: the first meets every answer, the second is the closest trip to answers it does not fully meet.</p>
 
-    <section class="card card-pad mt-4" aria-labelledby="trip-quiz-email-preview-heading">
-      <h2 class="sr-only" id="trip-quiz-email-preview-heading">Email preview</h2>
-      <dl class="space-y-1 text-sm">
-        <div class="flex gap-2"><dt class="muted">From</dt><dd class="min-w-0 break-words"><%= Outbound::Composer.from_display %></dd></div>
-        <div class="flex gap-2"><dt class="muted">To</dt><dd class="min-w-0 break-words">traveler@example.com</dd></div>
-        <div class="flex gap-2"><dt class="muted">Subject</dt><dd class="min-w-0 break-words"><%= @content[:subject] %></dd></div>
-      </dl>
-      <div class="report-paper email-paper mt-4">
-        <%= simple_format(h(@content[:body])) %>
-        <%== EmailSignature.html_for(@settings, logo_src: logo_settings_path) %>
-      </div>
-    </section>
+    <% { full: "When the match meets every answer", closest: "When the match is the closest, not a full fit" }.each do |kind, heading| %>
+      <% preview = @previews[kind] %>
+      <section class="card card-pad mt-4" aria-labelledby="trip-quiz-email-preview-<%= kind %>-heading">
+        <h2 class="section-title" id="trip-quiz-email-preview-<%= kind %>-heading"><%= heading %></h2>
+        <dl class="mt-3 space-y-1 text-sm">
+          <div class="flex gap-2"><dt class="muted">From</dt><dd class="min-w-0 break-words"><%= Outbound::Composer.from_display %></dd></div>
+          <div class="flex gap-2"><dt class="muted">To</dt><dd class="min-w-0 break-words">traveler@example.com</dd></div>
+          <div class="flex gap-2"><dt class="muted">Subject</dt><dd class="min-w-0 break-words"><%= preview[:subject] %></dd></div>
+        </dl>
+        <div class="report-paper email-paper mt-4" id="trip-quiz-email-preview-<%= kind %>">
+          <%= simple_format(h(preview[:body])) %>
+          <%== EmailSignature.html_for(@settings, logo_src: logo_settings_path) %>
+        </div>
+      </section>
+    <% end %>
   </div>
 </div>

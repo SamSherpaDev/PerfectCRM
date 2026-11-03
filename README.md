@@ -926,8 +926,7 @@ rules: [website intake contract](docs/leads-intake.md#trip-quiz)). The lead
 page shows them in a **Quiz answers** card under Details: the best match and
 the up to two closest alternate trips (linked to their real trip pages),
 interests, pace, length, season, travelers, what was asked for (email or free
-call), the trip-notes box, where the visitor came from, the quiz version, and
-**Open theirs** for their share link. A free call requested in the quiz
+call), and the trip-notes box. A free call requested in the quiz
 shows as **Free call** in Details (`As soon as possible`, with their time zone
 when present, and `Call them as soon as possible.`) with a "Free call requested"
 note. `trip_quiz`
@@ -939,16 +938,22 @@ variants (asked for a call, and email only) at `/settings/trip_quiz_email`
 (Settings → Automations → Read the trip quiz email), then switch it on in
 Settings → Automations. While it is on, each new `trip_quiz` inquiry with a
 `quiz` object gets "Your trip match" from info@sherpaholidays.com about a
-minute after intake: the best match with a link to its trip page, one short
-line per answer on why it fits (from the trip's own tags, level, days and best
-season), the up to two closest trips with links, and the free-call confirmation
-("Sam or Gyalgin will call you as soon as possible.") or offer, followed by the
-Settings signature. No prices and no marketing. Only
+minute after intake: the best match with a link to its trip page ("Your
+match", or "The closest of our 35 trips to your answers" when it misses any
+answer), one short line per answer it meets under "Why it fits" and per answer
+it misses under "Where it differs from your answers" (from the trip's own tags,
+level, days and best season in `Leads::TripQuiz.answer_fit`), the up to two
+closest trips with links, and the free-call confirmation ("Sam or Gyalgin will
+call you as soon as possible.") or offer, followed by the Settings signature.
+No prices and no marketing. The preview shows a full match and a closest match
+in both variants. Only
 inquiries created after the switch was turned on qualify, with the same address,
 domain, spam, daily-limit (three per address per day) and single-attempt
-delivery rules as the itinerary email. A quiz inquiry gets at most one automatic
-email: `AutomaticFirstReply.skip_reason` skips `trip_quiz` inquiries directly
-and also skips any inquiry that already has an outbound message on its timeline.
+delivery rules as the itinerary email. A quiz visitor gets exactly one
+automatic email: while the switch is on, intake schedules the trip quiz email
+instead of the first reply, and `TripQuizEmailJob` runs the general automatic
+first reply itself whenever it skips; while the switch is off, or without a
+`quiz` object, the first reply is scheduled as for any website inquiry.
 
 ## Source history and calls
 
