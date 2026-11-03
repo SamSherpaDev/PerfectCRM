@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_02_222102) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_03_033644) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -864,6 +864,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_02_222102) do
     t.integer "singleton_key", default: 1, null: false
     t.string "site_key"
     t.datetime "site_key_last_used_at"
+    t.boolean "trip_quiz_email_enabled", default: false, null: false
+    t.datetime "trip_quiz_email_enabled_at"
     t.datetime "updated_at", null: false
     t.string "weekly_report_recipient", default: "", null: false
     t.index ["singleton_key"], name: "index_settings_on_singleton_key", unique: true
@@ -937,6 +939,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_02_222102) do
     t.index ["purpose"], name: "index_templates_on_purpose"
   end
 
+  create_table "trip_quiz_emails", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "delivery_attempted_at"
+    t.string "email", null: false
+    t.integer "lead_id"
+    t.integer "message_id"
+    t.datetime "updated_at", null: false
+    t.index ["email", "created_at"], name: "index_trip_quiz_emails_on_email_and_created_at"
+    t.index ["lead_id"], name: "index_trip_quiz_emails_on_lead_id", unique: true
+    t.index ["message_id"], name: "index_trip_quiz_emails_on_message_id"
+  end
+
   create_table "users", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "email", null: false
@@ -992,6 +1006,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_02_222102) do
   add_foreign_key "scheduled_calls", "leads", on_delete: :cascade
   add_foreign_key "taggings", "tags"
   add_foreign_key "tasks", "templates"
+  add_foreign_key "trip_quiz_emails", "leads", on_delete: :nullify
+  add_foreign_key "trip_quiz_emails", "messages", on_delete: :nullify
 
   # Virtual tables defined in this database.
   # Note that virtual tables may not work with other database engines. Be careful if changing database.

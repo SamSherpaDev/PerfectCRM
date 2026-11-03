@@ -1,0 +1,84 @@
+<%# locals: (lead:) %>
+<%# Left column, under Details: the answers and matched trips from the website's
+    trip quiz (Leads::TripQuiz, README.md "Leads"). Titles are filtered visitor text. %>
+<% quiz = lead.quiz %>
+<% labels = ::Leads::TripQuiz %>
+<section class="card card-pad" id="record-quiz" aria-labelledby="quiz-heading">
+  <div class="card-header">
+    <h2 class="card-title" id="quiz-heading">Quiz answers</h2>
+  </div>
+  <%= card_caption "What they answered in the trip quiz." %>
+
+  <dl class="facts facts-col mt-4">
+    <% if (match = quiz["match"]).is_a?(Hash) && (match["title"].present? || match["handle"].present?) %>
+      <div>
+        <dt>Match</dt>
+        <dd>
+          <% if (match_url = labels.trip_url(match["handle"])) %>
+            <%= link_to (match["title"].presence || match["handle"]), match_url, class: "link", target: "_blank", rel: "noopener" %>
+          <% else %>
+            <%= match["title"].presence || match["handle"] %>
+          <% end %>
+        </dd>
+      </div>
+    <% end %>
+    <% alternates = Array(quiz["alternates"]).select { |alt| alt.is_a?(Hash) && (alt["title"].present? || alt["handle"].present?) } %>
+    <% if alternates.any? %>
+      <div>
+        <dt>Also close</dt>
+        <dd>
+          <% alternates.each_with_index do |alt, index| %><%= ", " if index.positive? %><% title = alt["title"].presence || alt["handle"] %><% if (alt_url = labels.trip_url(alt["handle"])) %><%= link_to title, alt_url, class: "link", target: "_blank", rel: "noopener" %><% else %><%= title %><% end %><% end %>
+        </dd>
+      </div>
+    <% end %>
+    <% interests = labels.interest_labels(quiz["interests"]) %>
+    <% if interests.any? %>
+      <div>
+        <dt>Interests</dt>
+        <dd>
+          <div class="chips mt-1" aria-label="Interests">
+            <% interests.each do |interest| %>
+              <span class="chip chip-tag"><%= interest %></span>
+            <% end %>
+          </div>
+        </dd>
+      </div>
+    <% end %>
+    <% if (pace = labels.pace_label(quiz["pace"])) %>
+      <div>
+        <dt>Pace</dt>
+        <dd><%= pace %></dd>
+      </div>
+    <% end %>
+    <% if (length = labels.length_label(quiz["length"])) %>
+      <div>
+        <dt>Length</dt>
+        <dd><%= length %></dd>
+      </div>
+    <% end %>
+    <% if (season = labels.season_label(quiz["season"])) %>
+      <div>
+        <dt>When</dt>
+        <dd><%= season %></dd>
+      </div>
+    <% end %>
+    <% if quiz["group_size"] %>
+      <div>
+        <dt>Travelers</dt>
+        <dd><%= quiz["group_size"] %></dd>
+      </div>
+    <% end %>
+    <% if (asked_for = labels.intent_label(quiz["intent"], call_request: lead.call_request)) %>
+      <div>
+        <dt>Asked for</dt>
+        <dd><%= asked_for %></dd>
+      </div>
+    <% end %>
+    <% unless quiz["email_list"].nil? %>
+      <div>
+        <dt>Trip notes</dt>
+        <dd><%= quiz["email_list"] ? "Yes, they ticked the box" : "No, box left unticked" %></dd>
+      </div>
+    <% end %>
+  </dl>
+</section>

@@ -10,6 +10,9 @@
       <% if record.is_a?(Lead) && record.itinerary %>
         <%= render "records/itinerary", lead: record %>
       <% end %>
+      <% if record.is_a?(Lead) && record.quiz %>
+        <%= render "records/quiz", lead: record %>
+      <% end %>
     </div>
     <div class="record-thread" data-record-tabs-target="panel" data-tab="thread">
       <% unless read_only %>

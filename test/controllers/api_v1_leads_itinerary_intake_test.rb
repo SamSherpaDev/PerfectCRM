@@ -181,6 +181,15 @@ class ApiV1LeadsItineraryIntakeTest < ActionDispatch::IntegrationTest
     assert_response :ok
   end
 
+  test "details still refuse a call request without a window" do
+    post_intake(intake_body)
+    submission_id = Lead.last.external_ref.delete_prefix("website_form:")
+    post_details("submission_id" => submission_id, "call_request" => { "timezone" => "Europe/Stockholm" })
+    assert_response :bad_request
+    assert_equal({ "call_request.window" => "invalid" }, response.parsed_body["fields"])
+    assert_nil Lead.last.call_request
+  end
+
   test "details refuse a bad call window" do
     post_intake intake_body
     submission_id = Lead.last.external_ref.delete_prefix("website_form:")

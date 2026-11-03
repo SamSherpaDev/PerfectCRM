@@ -165,6 +165,7 @@ Rails.application.routes.draw do
       post :deliver
     end
     resource :itinerary_email, only: :show
+    resource :trip_quiz_email, only: :show
     resources :ad_spends, only: %i[create destroy]
   end
   post "booking_inquiry_bindings", to: "booking_inquiry_bindings#create", as: :booking_inquiry_bindings

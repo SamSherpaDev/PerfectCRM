@@ -103,7 +103,7 @@
 
   <section class="card card-pad mt-6" aria-labelledby="automations-heading">
     <h2 class="section-title" id="automations-heading">Automations</h2>
-    <%= card_caption "Website inquiries, automatic first replies, and the itinerary email. Conversion to client and all follow-up replies stay manual." %>
+    <%= card_caption "Website inquiries, automatic first replies, the itinerary email, and the trip quiz email. Conversion to client and all follow-up replies stay manual." %>
 
     <div class="mt-4 space-y-4">
       <div class="setting">
@@ -136,6 +136,16 @@
           </p>
         </div>
         <%= form.check_box :itinerary_email_enabled, class: "checkbox" %>
+      </div>
+      <div class="setting">
+        <div class="k">
+          <%= form.label :trip_quiz_email_enabled, "Trip quiz email", class: "font-medium text-sm" %>
+          <p class="hint">
+            Trip quiz visitors only, about a minute after they send their match. Sends “Your trip match” from info@sherpaholidays.com with their best match, why it fits, the closest other trips, and the free-call offer or confirmation. The automatic first reply runs only when this email is off or skipped, so a quiz visitor gets one automatic email.
+            <%= link_to "Read the trip quiz email", settings_trip_quiz_email_path, class: "link" %>
+          </p>
+        </div>
+        <%= form.check_box :trip_quiz_email_enabled, class: "checkbox" %>
       </div>
       <p class="hint">One copy of every website inquiry goes to info@sherpaholidays.com, with Reply-To the visitor.</p>
       <div>

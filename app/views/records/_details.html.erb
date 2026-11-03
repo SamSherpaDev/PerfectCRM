@@ -66,7 +66,7 @@
       <% asked_at = call_requested_at(record.call_request) %>
       <div>
         <dt>Free call</dt>
-        <dd><%= call_request_label(record.call_request) %><p class="mt-1 text-xs muted"><% if asked_at %>Asked <%= itinerary_moment(asked_at) %>. <% end %>Email them two call times.</p></dd>
+        <dd><%= call_request_label(record.call_request) %><p class="mt-1 text-xs muted"><% if asked_at %>Asked <%= itinerary_moment(asked_at) %>. <% end %><%= record.call_request["window"].present? && record.placement != "trip_quiz" ? "Email them two call times." : "Call them as soon as possible." %></p></dd>
       </div>
     <% end %>
     <% if lead && record.budget_band.present? %>

@@ -58,7 +58,7 @@ out. On mobile, use Open menu to show the drawer. The rail holds **Today**
 **Channels** (`/channels`) are hidden from primary navigation and remain
 reachable by direct URL. See [Today and follow-ups](#today-and-follow-ups), [Mail](#mail),
 [Replying](#replying), [Templates](#templates), [Pipeline](#pipeline), and [Quotes](#quotes) for the live features. Settings provides appearance,
-connections, automation settings (including a direct link to edit the First reply template and the itinerary email switch with its preview), ad conversions, email sender settings, and a footer export link; morning and pipeline digests, the [weekly ads report](#weekly-ads-report) (`/settings/weekly_report`), history import, and AI assistance cards are hidden from the Settings UI while their routes and background jobs remain active.
+connections, automation settings (including a direct link to edit the First reply template and the itinerary and trip quiz email switches with their previews), ad conversions, email sender settings, and a footer export link; morning and pipeline digests, the [weekly ads report](#weekly-ads-report) (`/settings/weekly_report`), history import, and AI assistance cards are hidden from the Settings UI while their routes and background jobs remain active.
 
 On phones (under 750px) a bottom tab bar holds **Today**, **Inbox**,
 **Leads**, **Clients**, and **Settings** directly while the rail hides. Signed-in builders can preview every
@@ -842,7 +842,7 @@ facts in Details and its inquiry as the oldest entry on the timeline,
 including a placeholder when a website submission has no message. Manual
 leads without inquiry evidence have no inquiry entry. Unknown timing takes
 precedence over previous dates.
-In Settings → Automations, manage the website site key, Automatic first reply (with a direct link to edit the First reply template), the Itinerary email,
+In Settings → Automations, manage the website site key, Automatic first reply (with a direct link to edit the First reply template), the Itinerary email, the Trip quiz email,
 and review machine events and delivery results (the Relay secret and n8n webhook URL sub-sections are hidden from the Settings UI while their endpoints and background jobs remain active). The website form and external
 n8n/Panda AI workflows are configured separately; see the
 [website intake contract](docs/leads-intake.md) for setup, delivery behavior,
@@ -852,7 +852,8 @@ and the allowed automation actions.
 switch in Settings → Automations. About two minutes after a new website intake,
 CRM renders the current first active template in the **First reply** purpose
 using live recipient context and queues it as an ordinary outbound message on
-the lead's timeline. Apart from the [itinerary email](#itinerary-designer),
+the lead's timeline. Apart from the [itinerary email](#itinerary-designer) and
+the [trip quiz email](#trip-quiz),
 no other template or traveler flow sends automatically; lead status stays
 unchanged, and saved drafts/attachments are never consumed.
 Only inquiries created after the stored feature-enable time qualify. Existing
@@ -916,6 +917,43 @@ timeline. Eligibility is checked again before delivery, and delivery gets one
 SMTP attempt, like the automatic first reply. Because the first reply skips
 anyone we have already emailed, designer visitors get the itinerary email
 instead of the automatic first reply while the itinerary email is on.
+
+### Trip quiz
+
+The website's "Find your perfect trip" questionnaire sends inquiries with the
+`trip_quiz` placement and the visitor's answers and matched trips (payload and
+rules: [website intake contract](docs/leads-intake.md#trip-quiz)). The lead
+page shows them in a **Quiz answers** card under Details: the best match and
+the up to two closest alternate trips (linked to their real trip pages),
+interests, pace, length, season, travelers, what was asked for (email or free
+call), and the trip-notes box. A free call requested in the quiz
+shows as **Free call** in Details (`As soon as possible`, with their time zone
+when present, and `Call them as soon as possible.`) with a "Free call requested"
+note. `trip_quiz`
+leads are excluded from ad conversion reporting (`AdConversions.excluded?`), so
+the questionnaire stays separate from the ads.
+
+The **Trip quiz email** is off until the owner approves its wording. Read both
+variants (asked for a call, and email only) at `/settings/trip_quiz_email`
+(Settings → Automations → Read the trip quiz email), then switch it on in
+Settings → Automations. While it is on, each new `trip_quiz` inquiry with a
+`quiz` object gets "Your trip match" from info@sherpaholidays.com about a
+minute after intake: the best match with a link to its trip page ("Your
+match", or "The closest of our 35 trips to your answers" when it misses any
+answer), one short line per answer it meets under "Why it fits" and per answer
+it misses under "Where it differs from your answers" (from the trip's own tags,
+level, days and best season in `Leads::TripQuiz.answer_fit`), the up to two
+closest trips with links, and the free-call confirmation ("Sam or Gyalgin will
+call you as soon as possible.") or offer, followed by the Settings signature.
+No prices and no marketing. The preview shows a full match and a closest match
+in both variants. Only
+inquiries created after the switch was turned on qualify, with the same address,
+domain, spam, daily-limit (three per address per day) and single-attempt
+delivery rules as the itinerary email. A quiz visitor gets exactly one
+automatic email: while the switch is on, intake schedules the trip quiz email
+instead of the first reply, and `TripQuizEmailJob` schedules the general
+automatic first reply notification (two minutes after intake) whenever it skips; while the switch is off, or without a
+`quiz` object, the first reply is scheduled as for any website inquiry.
 
 ## Source history and calls
 
@@ -1036,7 +1074,7 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
   click IDs when marketing consent is off. Explicit allowed measurement/sharing
   permission and no opt-out are required at recording and delivery; missing
   legacy permission is withheld. Archived, suspected-spam, explicit `is_test`,
-  and lost "not a fit" leads are never reported. Tests using the business mailbox
+  `trip_quiz`, and lost "not a fit" leads are never reported. Tests using the business mailbox
   or an owner address in `ALLOWED_GOOGLE_EMAILS` are also excluded.
 - Purchase time is PerfectBook's `first_received_at` with `timestamp` precision,
   never sync time. Date-only manual receipts remain valid business facts but do

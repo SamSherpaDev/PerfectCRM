@@ -1,0 +1,49 @@
+<% content_for :title, "Trip quiz email · PerfectCRM" %>
+<div class="page">
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Settings", title: "Trip quiz email",
+        subtitle: "The automatic email for trip quiz visitors, as they receive it. Read it here before switching it on.",
+        back: [ "Settings", edit_settings_path ] } do %><% end %>
+  <%= render "shared/flash" %>
+
+  <section class="card card-pad" aria-labelledby="trip-quiz-email-status-heading">
+    <div class="flex flex-wrap items-center gap-3">
+      <h2 class="section-title" id="trip-quiz-email-status-heading">Status</h2>
+      <% if @settings.trip_quiz_email_enabled? %>
+        <%= badge "On", :success, dot: true %>
+      <% else %>
+        <%= badge "Off", :neutral, dot: true %>
+      <% end %>
+    </div>
+    <% if @settings.trip_quiz_email_enabled? %>
+      <p class="mt-2 text-sm text-ink">On since <%= itinerary_moment(@settings.trip_quiz_email_enabled_at) %>. Trip quiz inquiries that arrive from then on get this email about a minute after they send their match.</p>
+    <% else %>
+      <p class="mt-2 text-sm text-ink">Nothing is sent. Switch it on under Automations once the wording reads right.</p>
+    <% end %>
+    <p class="hint mt-2">When this email is queued, the automatic first reply stands aside; while it is off or skipped, the first reply runs as for any website inquiry, so a quiz visitor gets one automatic email. Sam or Gyalgin call as soon as possible when a call is requested.</p>
+    <p class="mt-3"><%= link_to "Automations in Settings", edit_settings_path(anchor: "automations-heading"), class: "link text-sm" %></p>
+  </section>
+
+  <div>
+    <nav class="tabs" aria-label="Email version">
+      <%= tab_link "Asked for a call", settings_trip_quiz_email_path, icon: :phone, active: @call_requested %>
+      <%= tab_link "Email only", settings_trip_quiz_email_path(call: 0), icon: :mail, active: !@call_requested %>
+    </nav>
+    <p class="hint mt-3">The closing paragraph depends on whether the visitor asked for a free call. Both samples match the 15-Day Nepal Cultural and Wildlife Tour: the first meets every answer, the second is the closest trip to answers it does not fully meet.</p>
+
+    <% { full: "When the match meets every answer", closest: "When the match is the closest, not a full fit" }.each do |kind, heading| %>
+      <% preview = @previews[kind] %>
+      <section class="card card-pad mt-4" aria-labelledby="trip-quiz-email-preview-<%= kind %>-heading">
+        <h2 class="section-title" id="trip-quiz-email-preview-<%= kind %>-heading"><%= heading %></h2>
+        <dl class="mt-3 space-y-1 text-sm">
+          <div class="flex gap-2"><dt class="muted">From</dt><dd class="min-w-0 break-words"><%= Outbound::Composer.from_display %></dd></div>
+          <div class="flex gap-2"><dt class="muted">To</dt><dd class="min-w-0 break-words">traveler@example.com</dd></div>
+          <div class="flex gap-2"><dt class="muted">Subject</dt><dd class="min-w-0 break-words"><%= preview[:subject] %></dd></div>
+        </dl>
+        <div class="report-paper email-paper mt-4" id="trip-quiz-email-preview-<%= kind %>">
+          <%= simple_format(h(preview[:body])) %>
+          <%== EmailSignature.html_for(@settings, logo_src: logo_settings_path) %>
+        </div>
+      </section>
+    <% end %>
+  </div>
+</div>

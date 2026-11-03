@@ -20,9 +20,15 @@ class OutboundDeliveryJob < ApplicationJob
     message = Message.find(message_id)
     return unless message.status == "queued"
 
-    # Automatic mail (first reply, itinerary email) gets one SMTP attempt.
-    automatic = AutomaticFirstReply.find_by(message_id: message.id) || ItineraryEmail.find_by(message_id: message.id)
-    label = automatic.is_a?(ItineraryEmail) ? "Itinerary email" : "Automatic first reply"
+    # Automatic mail (first reply, itinerary email, trip quiz email) gets one SMTP attempt.
+    automatic = AutomaticFirstReply.find_by(message_id: message.id) ||
+      ItineraryEmail.find_by(message_id: message.id) ||
+      TripQuizEmail.find_by(message_id: message.id)
+    label = case automatic
+    when ItineraryEmail then "Itinerary email"
+    when TripQuizEmail then "Trip quiz email"
+    else "Automatic first reply"
+    end
     return if automatic && !automatic.delivery_allowed?
 
     claimed = Message.transaction do

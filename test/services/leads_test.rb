@@ -32,6 +32,14 @@ class LeadsTest < ActiveSupport::TestCase
     assert Leads.auto_archive?(hits.map(&:to_s))
     assert_equal "Hidden field filled", Leads.spam_reason(hits)
   end
+
+  test "suspicion_hits counts each link once, flagging only more than two" do
+    two = "See https://www.sherpaholidays.com/a and www.sherpaholidays.com/b"
+    assert_equal [ 0, [] ], Leads.suspicion_hits(name: "Anna Lindqvist", email: "anna@example.com", message: two, seconds_to_submit: 12.4)
+
+    three = "#{two} and http://example.com/c"
+    assert_equal [ 25, [ :many_links ] ], Leads.suspicion_hits(name: "Anna Lindqvist", email: "anna@example.com", message: three, seconds_to_submit: 12.4)
+  end
 end
 
 class LeadsRateLimitTest < ActiveSupport::TestCase
