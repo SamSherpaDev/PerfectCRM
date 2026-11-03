@@ -72,4 +72,37 @@ class ConversationModelTest < ActiveSupport::TestCase
     conversation.mark_read!
     assert_equal 0, conversation.reload.unread_count
   end
+
+  test "triage and needs_triage require an inbound message unless documents are held or sensitive" do
+    cold = Conversation.create!(subject: "Cold outreach", last_message_at: Time.current)
+    cold.messages.create!(direction: "out", status: "sent", from_address: "info@sherpaholidays.com",
+      to_addrs: "organizer@example.com", subject: "Cold outreach", sent_at: Time.current, text_body: "Hello")
+
+    assert cold.triage?
+    assert_not_includes Conversation.triage, cold
+    assert_not_includes Conversation.needs_triage, cold
+    assert_not_includes Conversation.waiting_on_them, cold
+
+    cold.messages.create!(direction: "in", status: "received", from_address: "organizer@example.com",
+      to_addresses: [ "info@sherpaholidays.com" ], subject: "Re: Cold outreach", sent_at: Time.current, text_body: "Interested")
+
+    assert_includes Conversation.triage, cold
+    assert_includes Conversation.needs_triage, cold
+
+    held = Conversation.create!(subject: "Held doc", last_message_at: Time.current)
+    held.messages.create!(direction: "out", status: "sent", from_address: "info@sherpaholidays.com",
+      to_addrs: "organizer2@example.com", subject: "Held doc", sent_at: Time.current, text_body: "Attached",
+      held_attachments: [ { "filename" => "passport.pdf", "status" => "held: send to PerfectBook" } ])
+    assert_not_includes Conversation.triage, held
+    assert_includes Conversation.needs_triage, held
+
+    sensitive = Conversation.create!(subject: "Sensitive doc", last_message_at: Time.current)
+    outbound = sensitive.messages.create!(direction: "out", status: "sent", from_address: "info@sherpaholidays.com",
+      to_addrs: "organizer3@example.com", subject: "Sensitive doc", sent_at: Time.current, text_body: "Attached")
+    blob = ActiveStorage::Blob.create_and_upload!(io: StringIO.new("scan"), filename: "scan.png",
+      content_type: "image/png", metadata: { sensitive: 1 })
+    outbound.files.attach(blob)
+    assert_not_includes Conversation.triage, sensitive
+    assert_includes Conversation.needs_triage, sensitive
+  end
 end

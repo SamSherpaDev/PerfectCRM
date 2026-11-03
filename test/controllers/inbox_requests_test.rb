@@ -71,6 +71,60 @@ class InboxRequestsTest < ActionDispatch::IntegrationTest
     assert_select "a", text: /New ask/
   end
 
+  test "triage tab excludes outbound-only cold emails until the organizer replies" do
+    Setting.current.update!(auto_first_reply_enabled: true, auto_first_reply_enabled_at: 1.day.ago)
+    cold_raw = "From: info@sherpaholidays.com\r\nTo: organizer@alpineclub.org\r\nSubject: Spring trek partnership\r\nMessage-ID: <cold-1@sherpaholidays.com>\r\n\r\nWould your club like a private trek?"
+    cold_result = Mail::Ingester.ingest(parsed: Mail::Ingester.parse_raw(cold_raw), provider: { thread_id: "cold-thread-1", message_id: "cold-msg-1" })
+    conversation = cold_result[:conversation]
+
+    get inbox_path(tab: "triage")
+    assert_response :success
+    assert_select "nav.tabs a[href=?]", inbox_path(tab: "triage"), text: /Triage.*0/m
+    assert_select "a[href=?]", inbox_thread_path(conversation), count: 0
+
+    lead = Lead.create!(name: "Club Organizer", email: "organizer@alpineclub.org",
+      capture_channel: "website_form", external_ref: "website_form:cold-check")
+    assert_equal "already contacted", AutomaticFirstReply.skip_reason(lead, email: lead.email)
+    lead.destroy!
+
+    reply_raw = "From: organizer@alpineclub.org\r\nTo: info@sherpaholidays.com\r\nSubject: Re: Spring trek partnership\r\nMessage-ID: <reply-1@alpineclub.org>\r\nIn-Reply-To: <cold-1@sherpaholidays.com>\r\n\r\nYes, tell us more!"
+    reply_result = Mail::Ingester.ingest(parsed: Mail::Ingester.parse_raw(reply_raw), provider: { thread_id: "cold-thread-1", message_id: "reply-msg-1" })
+    assert_equal conversation.id, reply_result[:conversation].id
+
+    get inbox_path(tab: "triage")
+    assert_response :success
+    assert_select "nav.tabs a[href=?]", inbox_path(tab: "triage"), text: /Triage.*1/m
+    assert_select "a[href=?]", inbox_thread_path(conversation), count: 1
+
+    get inbox_thread_path(conversation)
+    assert_response :success
+    assert_select "article.stone-out", count: 1
+    assert_select "article.stone-in", count: 1
+    assert_select "button", text: "Create lead"
+    assert_select "button", text: "Create organization"
+    assert_select "button", text: "Ignore sender"
+  end
+
+  test "sensitive and held document conversations appear in triage without inbound mail" do
+    held_raw = "From: info@sherpaholidays.com\r\nTo: traveler-out@example.com\r\nSubject: Outbound held passport\r\n\r\nAttached"
+    held_parsed = Mail::Ingester.parse_raw(held_raw)
+    held_parsed.attachments << { filename: "passport.pdf", content_type: "application/pdf", data: "file" }
+    held = Mail::Ingester.ingest(parsed: held_parsed, provider: {})[:conversation]
+
+    sensitive = Conversation.create!(subject: "Outbound sensitive blob", last_message_at: Time.current)
+    outbound = sensitive.messages.create!(direction: "out", status: "sent", from_address: "info@sherpaholidays.com",
+      to_addrs: "traveler-sensitive@example.com", subject: "Outbound sensitive blob", sent_at: Time.current, text_body: "Attached")
+    blob = ActiveStorage::Blob.create_and_upload!(io: StringIO.new("scan"), filename: "scan.png",
+      content_type: "image/png", metadata: { sensitive: 1 })
+    outbound.files.attach(blob)
+
+    get inbox_path(tab: "triage")
+    assert_response :success
+    assert_select "nav.tabs a[href=?]", inbox_path(tab: "triage"), text: /Triage.*2/m
+    assert_select "a[href=?]", inbox_thread_path(held), count: 1
+    assert_select "a[href=?]", inbox_thread_path(sensitive), count: 1
+  end
+
   test "thread view clears the unread mark" do
     client = Client.create!(name: "Maya", email: "maya@example.com")
     conversation = Conversation.create!(subject: "Dates", linkable: client, last_message_at: Time.current)

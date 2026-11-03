@@ -33,7 +33,7 @@ class Conversation < ApplicationRecord
     where(linkable_type: "Lead").or(where(linkable_type: "Client",
       linkable_id: Lead.where.not(converted_client_id: nil).select(:converted_client_id)))
   }
-  scope :triage, -> { where(linkable_type: nil, ignored: false) }
+  scope :triage, -> { where(linkable_type: nil, ignored: false, id: ::Message.inbound.select(:conversation_id)) }
   scope :sensitive_documents, -> {
     where(id: joins(messages: { files_attachments: :blob })
       .where("json_extract(active_storage_blobs.metadata, '$.sensitive') = 1").select(:id))
@@ -53,7 +53,7 @@ class Conversation < ApplicationRecord
       .distinct
   }
   scope :waiting_on_them, -> {
-    excluding_archived_leads.excluding_not_interested_leads.where.not(id: waiting_on_you.select(:id)).where.not(id: triage.select(:id))
+    excluding_archived_leads.excluding_not_interested_leads.where.not(id: waiting_on_you.select(:id)).where.not(linkable_type: nil, ignored: false)
   }
 
   def linked?
