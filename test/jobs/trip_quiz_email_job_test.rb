@@ -39,17 +39,21 @@ class TripQuizEmailJobTest < ActiveSupport::TestCase
 
   test "skips and logs when the switch is off, then hands over to the automatic first reply" do
     Setting.current.update!(trip_quiz_email_enabled: false, auto_first_reply_enabled: true, auto_first_reply_enabled_at: 1.hour.ago)
-    assert_no_difference([ "Message.count", "TripQuizEmail.count" ]) do
-      assert_enqueued_with(job: AutomaticFirstReplyJob, args: [ @lead.id ], at: @lead.created_at + 2.minutes) do
-        TripQuizEmailJob.perform_now(@lead.id)
-      end
-    end
+    assert_no_difference([ "Message.count", "TripQuizEmail.count" ]) { TripQuizEmailJob.perform_now(@lead.id) }
+    handover = @lead.lead_notifications.find_by!(event: "auto_first_reply")
+    assert_equal @lead.created_at + 2.minutes, handover.available_at
+    assert_nil handover.delivered_at
+    assert_enqueued_with(job: LeadNotificationJob, args: [ handover.id ], at: handover.available_at)
+    assert_no_enqueued_jobs(only: AutomaticFirstReplyJob)
     assert_equal [ "Trip quiz email: skipped (setting is off)" ], @lead.activity_events.where(kind: "automation").pluck(:summary)
+
+    assert_no_difference("LeadNotification.count") { TripQuizEmailJob.perform_now(@lead.id) }
   end
 
-  test "a queued quiz email never runs the automatic first reply" do
+  test "a queued quiz email never schedules the automatic first reply" do
     Setting.current.update!(auto_first_reply_enabled: true, auto_first_reply_enabled_at: 1.hour.ago)
     assert_no_enqueued_jobs(only: AutomaticFirstReplyJob) { TripQuizEmailJob.perform_now(@lead.id) }
+    assert_not @lead.lead_notifications.exists?(event: "auto_first_reply")
     assert_not @lead.activity_events.where("summary LIKE ?", "Automatic first reply%").exists?
   end
 

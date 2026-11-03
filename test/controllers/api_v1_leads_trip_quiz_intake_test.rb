@@ -194,13 +194,15 @@ class ApiV1LeadsTripQuizIntakeTest < ActionDispatch::IntegrationTest
     quiz_notification = lead.lead_notifications.find_by!(event: "trip_quiz_email")
 
     travel 1.minute
-    assert_no_difference("Message.outbound.count") do
-      assert_enqueued_with(job: AutomaticFirstReplyJob, args: [ lead.id ], at: lead.created_at + 2.minutes) do
-        LeadNotificationJob.perform_now(quiz_notification.id)
-      end
-    end
+    assert_no_difference("Message.outbound.count") { LeadNotificationJob.perform_now(quiz_notification.id) }
+    assert quiz_notification.reload.delivered_at
+    first_reply_notification = lead.lead_notifications.find_by!(event: "auto_first_reply")
+    assert_equal lead.created_at + 2.minutes, first_reply_notification.available_at
+    assert_no_enqueued_jobs(only: AutomaticFirstReplyJob)
+
     travel 1.minute
-    assert_difference("Message.outbound.count", 1) { perform_enqueued_jobs(only: AutomaticFirstReplyJob) }
+    assert_difference("Message.outbound.count", 1) { LeadNotificationJob.perform_now(first_reply_notification.id) }
+    assert first_reply_notification.reload.delivered_at
     assert_nil lead.reload.trip_quiz_email
     assert_equal [ "anna@gmail.com" ], AutomaticFirstReply.find_by!(lead: lead).message.to_list
     assert_includes lead.activity_events.where(kind: "automation").pluck(:summary),

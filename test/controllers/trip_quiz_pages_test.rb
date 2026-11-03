@@ -78,6 +78,8 @@ class TripQuizPagesTest < ActionDispatch::IntegrationTest
     get settings_trip_quiz_email_path
     assert_response :success
     assert_select "h1", "Trip quiz email"
+    assert_select "nav.tabbar a.on", text: "Settings"
+    assert_select "a.nav-link-active[title=?]", "Settings"
     assert_select ".badge", text: "Off"
     assert_select "dd", text: "Your trip match"
     assert_select ".email-paper", count: 2

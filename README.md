@@ -951,8 +951,8 @@ inquiries created after the switch was turned on qualify, with the same address,
 domain, spam, daily-limit (three per address per day) and single-attempt
 delivery rules as the itinerary email. A quiz visitor gets exactly one
 automatic email: while the switch is on, intake schedules the trip quiz email
-instead of the first reply, and `TripQuizEmailJob` runs the general automatic
-first reply itself whenever it skips; while the switch is off, or without a
+instead of the first reply, and `TripQuizEmailJob` schedules the general
+automatic first reply notification (two minutes after intake) whenever it skips; while the switch is off, or without a
 `quiz` object, the first reply is scheduled as for any website inquiry.
 
 ## Source history and calls

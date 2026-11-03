@@ -1,7 +1,8 @@
 # Queues the automatic "Your trip match" email for a trip quiz inquiry
 # (TripQuizEmail). Runs from the lead's trip_quiz_email notification, about a
-# minute after intake. When the email is skipped, the general automatic first
-# reply decides instead, so a quiz visitor gets exactly one automatic email.
+# minute after intake. When the email is skipped, it schedules the lead's
+# general automatic first reply notification two minutes after intake, so a
+# quiz visitor gets exactly one automatic email.
 class TripQuizEmailJob < ApplicationJob
   queue_as :default
   discard_on ActiveRecord::RecordNotFound
@@ -13,7 +14,8 @@ class TripQuizEmailJob < ApplicationJob
       message = reservation.message
       OutboundDeliveryJob.perform_later(message.id) if message&.status == "queued"
     else
-      AutomaticFirstReplyJob.new.perform(lead.id)
+      lead.lead_notifications.find_or_create_by!(event: "auto_first_reply") { |row| row.available_at = lead.created_at + 2.minutes }
+      LeadNotification.enqueue_pending(lead.id)
     end
   end
 
