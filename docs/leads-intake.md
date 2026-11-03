@@ -361,8 +361,10 @@ rate rules:
 }
 ```
 
-`window` is `weekday_morning`, `weekday_evening` or `weekend` (optional when a
-form asks for a call as soon as possible without a window); `timezone` is an
+`window` is `weekday_morning`, `weekday_evening` or `weekend`. It is required,
+except on `trip_quiz` leads, where it is optional (a call as soon as possible);
+any other placement without a window answers `400` with `call_request.window`.
+`timezone` is an
 optional IANA zone name. The details payload may also carry
 `"contact": { "phone_raw": "+1 (415) 555-0134" }` (7-15 digits with an optional
 leading `+`, up to 40 characters) when a visitor adds their phone on a

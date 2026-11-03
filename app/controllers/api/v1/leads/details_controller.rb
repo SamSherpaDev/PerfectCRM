@@ -51,7 +51,9 @@ module Api
             errors[error.message] = "invalid"
           end
           begin
-            call_request = ::Leads::Itinerary.call_request(payload["call_request"]) if payload.key?("call_request")
+            if payload.key?("call_request")
+              call_request = ::Leads::Itinerary.call_request(payload["call_request"], window_optional: lead.placement == "trip_quiz")
+            end
           rescue ArgumentError => error
             errors[error.message] = "invalid"
           end
