@@ -230,6 +230,29 @@ class ApiV1LeadsTripQuizIntakeTest < ActionDispatch::IntegrationTest
     assert_not AutomaticFirstReply.exists?(lead: lead)
   end
 
+  test "a quiz message carrying the product URL and share link still gets the match email" do
+    @settings.update!(trip_quiz_email_enabled: true)
+    message = <<~TEXT
+      Find your perfect trip (quiz)
+      Asked for: their match by email
+      Best match: 15-Day Nepal Cultural and Wildlife Tour - https://www.sherpaholidays.com/products/nepal-cultural-wildlife-tour
+      Also close: 13-Day Nepal Premium Tour: Kathmandu, Chitwan & Pokhara; 9-Day Nepal Highlights Premium Tour
+      Their answers: Interests: Temples and old cities, Jungle safari, Lumbini; Pace: Easy; Length: Under two weeks; When: Not sure yet; Travelers: 4
+      Link: #{QUIZ["share_url"]}
+      Trip notes by email: no
+    TEXT
+    travel 1.second
+    post_intake intake_body("message" => message)
+    assert_response :accepted
+    lead = Lead.last
+    assert_equal 0, lead.spam_score
+    notification = lead.lead_notifications.find_by!(event: "trip_quiz_email")
+
+    travel 2.minutes
+    assert_difference("Message.outbound.count", 1) { LeadNotificationJob.perform_now(notification.id) }
+    assert_equal "Your trip match", lead.trip_quiz_email.message.subject
+  end
+
   test "details accept a windowless call request and a sheet phone number without overwriting an existing phone" do
     post_intake intake_body
     lead = Lead.last

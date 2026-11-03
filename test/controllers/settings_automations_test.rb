@@ -16,7 +16,7 @@ class SettingsAutomationsTest < ActionDispatch::IntegrationTest
     get edit_settings_path
     assert_response :success
     assert_select "h2", text: "Automations"
-    assert_select "p", text: /Website inquiries, automatic first replies, and the itinerary email/
+    assert_select "p", text: /Website inquiries, automatic first replies, the itinerary email, and the trip quiz email/
     assert_select "input[name='setting[lead_webhook_url]']", count: 0
     assert_select "form[action=?]", rotate_site_key_settings_path
     assert_select "form[action=?]", rotate_relay_secret_settings_path, count: 0

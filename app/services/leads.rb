@@ -10,7 +10,7 @@ module Leads
     mailinator.com guerrillamail.com 10minutemail.com tempmail.com
     yopmail.com trashmail.com getnada.com mohmal.com
   ].freeze
-  URL_PATTERN = %r{https?://|www\.}i.freeze
+  URL_PATTERN = %r{(?:https?://)?www\.|https?://}i.freeze
   FAST_SUBMIT_SECONDS = 3
   AUTO_ARCHIVE_HITS = %i[honeypot too_fast].freeze
   DUPLICATE_WINDOW = 24.hours
