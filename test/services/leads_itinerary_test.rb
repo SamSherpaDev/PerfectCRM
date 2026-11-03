@@ -101,7 +101,9 @@ class LeadsItineraryTest < ActiveSupport::TestCase
     end
   end
 
-  test "call requests take a known window and a real time zone" do
+  test "call requests take an optional known window and a real time zone" do
+    assert_equal({}, Leads::Itinerary.call_request({}))
+    assert_equal({ "timezone" => "America/New_York" }, Leads::Itinerary.call_request({ "timezone" => "America/New_York" }))
     assert_equal({ "window" => "weekend" }, Leads::Itinerary.call_request({ "window" => "weekend" }))
     assert_equal({ "window" => "weekday_morning", "timezone" => "America/New_York" },
       Leads::Itinerary.call_request({ "window" => "weekday_morning", "timezone" => "America/New_York" }))

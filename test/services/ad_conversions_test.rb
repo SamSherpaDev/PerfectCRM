@@ -93,7 +93,8 @@ class AdConversionsTest < ActiveSupport::TestCase
     spam = ad_lead
     spam.update!(tag_list: Lead::SUSPECTED_SPAM_TAG)
     unfit = ad_lead(status: "lost", lost_reason: "not_a_fit")
-    [ archived, spam, unfit ].each { |lead| assert_empty AdConversions.record!(lead.reload, now: @now) }
+    quiz = ad_lead(placement: "trip_quiz")
+    [ archived, spam, unfit, quiz ].each { |lead| assert_empty AdConversions.record!(lead.reload, now: @now) }
   end
 
   test "owner spam verdict excludes ad conversions even without the tag" do

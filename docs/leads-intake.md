@@ -361,18 +361,118 @@ rate rules:
 }
 ```
 
-`window` is `weekday_morning`, `weekday_evening` or `weekend`; `timezone` is an
-optional IANA zone name. Bad values answer `400` with `call_request.window`,
-`call_request.timezone` or `call_request` in `fields`. A new or changed
-window is stored on the lead with the time it arrived and adds a "Free call
-requested" line to the "Details added by the visitor" note; repeating it
-changes nothing. Sam or Gyalgin email two call times by hand (no booking tool).
+`window` is `weekday_morning`, `weekday_evening` or `weekend` (optional when a
+form asks for a call as soon as possible without a window); `timezone` is an
+optional IANA zone name. The details payload may also carry
+`"contact": { "phone_raw": "+1 (415) 555-0134" }` (7-15 digits with an optional
+leading `+`, up to 40 characters) when a visitor adds their phone on a
+post-intake call sheet; it sets `phone_raw` and normalized `phone` only when the
+lead has no phone yet. Bad values answer `400` with `call_request.window`,
+`call_request.timezone`, `call_request` or `contact.phone_raw` in `fields`. A
+new or changed call request is stored on the lead with the time it arrived and
+adds a "Free call requested" line to the "Details added by the visitor" note;
+repeating it changes nothing. Sam or Gyalgin email two call times by hand (no
+booking tool) when a window is given, or call as soon as possible.
 
 Itinerary email: when Settings → Automations → Itinerary email is on, a new
 designer inquiry with an itinerary schedules a "Your Nepal itinerary" email to
 the visitor one minute after intake, so a call request sent from the ready
 screen usually lands first and the email confirms it. It is off by default;
 eligibility, wording and delivery are owned by [README, Leads](../README.md#leads).
+
+## Trip quiz
+
+The website's "Find your perfect trip" questionnaire posts to the same intake
+endpoint with `"placement": "trip_quiz"` and a structured `quiz` object. It goes
+through every browser-mode rule above unchanged: site key and `Origin`, rate
+limits, honeypot and timing scores, MX check, required contact fields, consent,
+replays, and the 24-hour duplicate merge. Other placements ignore a `quiz` key
+as before, so a `"landing"` post that carries the plain-text quiz summary in
+`message` keeps working.
+
+```json
+{
+  "schema": "sherpa.inquiry.v2",
+  "submission_id": "2c7b1e44-9a10-4c6f-8d2e-7b5f3a1c0e9d",
+  "placement": "trip_quiz",
+  "contact": { "name": "Anna Lindqvist", "email": "anna@example.com" },
+  "trip": { "handle": "nepal-cultural-wildlife-tour", "title": "15-Day Nepal Cultural and Wildlife Tour" },
+  "message": "Find your perfect trip: email match requested\nMatch: 15-Day Nepal Cultural and Wildlife Tour (nepal-cultural-wildlife-tour)",
+  "consent": { "contact": true, "contact_at": "2026-11-02T18:06:40Z", "text_version": "2026-09-consent-v2" },
+  "page": { "url": "https://www.sherpaholidays.com/pages/find-your-perfect-trip" },
+  "timing": { "started_at": "2026-11-02T18:02:58Z", "submitted_at": "2026-11-02T18:06:41Z" },
+  "honeypot": "",
+  "client": { "version": "trip-quiz-1" },
+  "quiz": {
+    "interests": ["temples", "jungle-safari", "lumbini"],
+    "pace": "easy",
+    "length": "under-14",
+    "season": "spring",
+    "group_size": 4,
+    "match": {
+      "handle": "nepal-cultural-wildlife-tour",
+      "title": "15-Day Nepal Cultural and Wildlife Tour"
+    },
+    "alternates": [
+      {
+        "handle": "nepal-luxury-tour-kathmandu-chitwan-pokhara",
+        "title": "13-Day Nepal Premium Tour: Kathmandu, Chitwan & Pokhara"
+      },
+      {
+        "handle": "nepal-highlights-premium-tour",
+        "title": "9-Day Nepal Highlights Premium Tour"
+      }
+    ],
+    "intent": "email",
+    "share_url": "https://www.sherpaholidays.com/pages/find-your-perfect-trip#k=temples,jungle-safari,lumbini&p=easy&l=under-14&s=spring&n=4",
+    "email_list": false,
+    "source": "website"
+  }
+}
+```
+
+Fields (`Leads::TripQuiz.parse`; every one is optional except `match`):
+
+| Field | Accepts |
+|---|---|
+| `match` | `{ "handle", "title" }`: the best-matching published trip |
+| `alternates` | 0-2 objects of `{ "handle", "title" }`: the closest other published trips |
+| `interests` | 1-3 codes with no repeats from `everest`, `temples`, `mountain-views`, `jungle-safari`, `himalayan-trek`, `lumbini`, `peak`, `rafting`, `beyond`, `remote` |
+| `pace` | `easy`, `moderate`, `challenging`, `strenuous` |
+| `length` | `under-14`, `14-20`, `21-plus`, `not_sure` |
+| `season` | `spring`, `summer`, `fall`, `winter`, `not_sure` |
+| `group_size` | integer 1-20 |
+| `intent` | `email` or `call` |
+| `share_url` | an `https` URL on `www.sherpaholidays.com` or `sherpaholidays.com` only |
+| `email_list` | `true` or `false`: the optional trip-notes box, unticked by default |
+| `source` | slug matching `\A[a-z0-9][a-z0-9_-]{0,39}\z` |
+
+A handle matches `\A[a-z0-9][a-z0-9-]{0,99}\z`. A title is at most 200
+characters, with the same filters as itinerary titles: no links, domain names,
+email addresses, markup or currency, and en/em dashes normalized to `-`.
+Unknown keys are dropped. A field that breaks a rule answers
+`400 { "error": "validation", "fields": { "quiz.<field>": "invalid" } }` and
+stores nothing. A `trip_quiz` post without `quiz` is still accepted as an
+ordinary inquiry.
+
+The parsed object is stored under `metadata["quiz"]`. When `trip` is absent,
+`match` fills the lead's trip handle and title; `group_size` fills `party_size`,
+and `season: "not_sure"` sets `timing_unknown`. Call requests from the quiz post
+`call_request` (with `timezone` and no `window`, plus `contact.phone_raw` when
+requested from the thank-you call sheet) to the details endpoint above.
+
+Duplicate merge: a quiz post merges into an earlier inquiry only when
+`Leads::TripQuiz.signature` (the match handle plus answers) matches, so changed
+answers make a new inquiry.
+
+Ad reporting: `trip_quiz` leads are excluded in `AdConversions.excluded?`,
+keeping the questionnaire separate from ad conversion reporting.
+
+Trip quiz email: when Settings → Automations → Trip quiz email is on, a new
+`trip_quiz` inquiry with `quiz` schedules a "Your trip match" email one minute
+after intake. It ships off by default, and the general automatic first reply
+always skips `trip_quiz` leads so a quiz inquiry gets at most one automatic
+email; see [README, Leads](../README.md#leads).
 
 ## Source database contract (v1)
 
@@ -653,6 +753,9 @@ verdicts and repeated statuses leave stage timing unchanged.
 - **Itinerary email.** Itinerary designer inquiries also schedule the
   "Your Nepal itinerary" email one minute in, only while its Settings switch
   is on; see [Itinerary designer](#itinerary-designer).
+- **Trip quiz email.** Trip quiz inquiries schedule the "Your trip match"
+  email one minute in, only while its Settings switch is on, and are skipped
+  by the general automatic first reply; see [Trip quiz](#trip-quiz).
 - **Email copy.** A background job mails the inquiry to
   `info@sherpaholidays.com`, Reply-To the visitor, From the app's `MAIL_FROM`
   (default `info@sherpaholidays.com`). Suspected spam starts

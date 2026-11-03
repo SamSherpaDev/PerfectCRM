@@ -14,7 +14,9 @@ class ClientMailer < ApplicationMailer
     signature_html = EmailSignature.html_for(setting)
     @body_html = signature_aware_html(@message, signature_html)
 
-    if AutomaticFirstReply.exists?(message_id: @message.id) || ItineraryEmail.exists?(message_id: @message.id)
+    if AutomaticFirstReply.exists?(message_id: @message.id) ||
+        ItineraryEmail.exists?(message_id: @message.id) ||
+        TripQuizEmail.exists?(message_id: @message.id)
       headers["Auto-Submitted"] = "auto-generated"
       headers["X-Auto-Response-Suppress"] = "All"
     end

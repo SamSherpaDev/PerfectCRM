@@ -1,6 +1,6 @@
 class LeadNotification < ApplicationRecord
   belongs_to :lead
-  validates :event, inclusion: { in: %w[email_copy lead.created lead.details_added auto_first_reply itinerary_email] }
+  validates :event, inclusion: { in: %w[email_copy lead.created lead.details_added auto_first_reply itinerary_email trip_quiz_email] }
 
   scope :pending, -> { where(delivered_at: nil).where("available_at <= ?", Time.current) }
 
@@ -21,6 +21,8 @@ class LeadNotification < ApplicationRecord
         AutomaticFirstReplyJob.new.perform(lead_id)
       elsif event == "itinerary_email"
         ItineraryEmailJob.new.perform(lead_id)
+      elsif event == "trip_quiz_email"
+        TripQuizEmailJob.new.perform(lead_id)
       elsif event == "email_copy"
         LeadIntakeEmailJob.new.perform(lead_id)
       else

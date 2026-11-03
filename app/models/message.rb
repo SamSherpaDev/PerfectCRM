@@ -37,10 +37,11 @@ class Message < ApplicationRecord
 
   scope :inbound, -> { where(direction: "in") }
   scope :outbound, -> { where(direction: "out") }
-  # Machine-sent mail: the automatic first reply and the itinerary email.
+  # Machine-sent mail: the automatic first reply, itinerary email, and trip quiz email.
   scope :automatic_replies, -> {
     outbound.where(id: AutomaticFirstReply.where.not(message_id: nil).select(:message_id))
       .or(outbound.where(id: ItineraryEmail.where.not(message_id: nil).select(:message_id)))
+      .or(outbound.where(id: TripQuizEmail.where.not(message_id: nil).select(:message_id)))
   }
   # Inquiry replies include threads moved to a converted client. The permanent
   # automatic greeting reservation, rather than template or body, identifies automation.

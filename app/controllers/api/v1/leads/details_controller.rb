@@ -67,7 +67,12 @@ module Api
               return render json: { error: "archived" }, status: :unprocessable_entity
             end
 
+            phone_raw = updates.delete("phone_raw")
             lead.assign_attributes(updates)
+            if phone_raw.present? && lead.phone.blank? && lead.phone_raw.blank?
+              lead.phone_raw = phone_raw
+              lead.phone = ::Leads::Phone.normalize(phone_raw, country: lead.country)
+            end
             if answer
               detail = answer["detail"].to_s.strip.presence
               if lead.source_confirmed_at.present?
@@ -122,7 +127,8 @@ module Api
             if call_request && (lead.metadata || {}).dig("call_request")&.except("requested_at") != call_request
               lead.metadata = (lead.metadata || {}).merge("call_request" => call_request.merge("requested_at" => Time.current.iso8601))
               zone = " (#{call_request['timezone']})" if call_request["timezone"]
-              call_note = " Free call requested: #{::Leads::Itinerary.call_window_label(call_request['window'])}#{zone}."
+              when_label = ::Leads::Itinerary.call_window_label(call_request["window"]) || "as soon as possible"
+              call_note = " Free call requested: #{when_label}#{zone}."
             end
             if lead.changed?
               unless lead.save
@@ -148,6 +154,16 @@ module Api
           errors = {}
           trip = payload["trip"].is_a?(Hash) ? payload["trip"] : {}
           party = payload["party"].is_a?(Hash) ? payload["party"] : {}
+          contact = payload["contact"].is_a?(Hash) ? payload["contact"] : {}
+
+          if contact.key?("phone_raw")
+            raw = contact["phone_raw"]
+            if raw.is_a?(String) && raw.strip.length <= 40 && raw.gsub(/[\s\-().]/, "").match?(/\A\+?\d{7,15}\z/)
+              updates["phone_raw"] = raw.strip
+            else
+              errors["contact.phone_raw"] = "invalid"
+            end
+          end
 
           if trip.key?("month")
             month = trip["month"]

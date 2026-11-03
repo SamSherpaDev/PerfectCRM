@@ -55,6 +55,40 @@
         79
       ],
       "note": "The itinerary email preview renders the same signature as the Settings preview through EmailSignature.html_for: escaped plain lines or legacy HTML sanitized on render with EmailSignature.sanitize (explicit tag, attribute, style and href-scheme allowlists), with legacy image nodes removed and only the uploaded logo rendered with an escaped source. Covered by test/services/email_signature_test.rb."
+    },
+    {
+      "warning_type": "Cross-Site Scripting",
+      "warning_code": 2,
+      "fingerprint": "01697766e80700ce1e64dd1c8a9de5397aac297ee346d22d0dd21cc146f12763",
+      "check_name": "CrossSiteScripting",
+      "message": "Unescaped model attribute",
+      "file": "app/views/trip_quiz_emails/show.html.erb",
+      "line": 42,
+      "link": "https://brakemanscanner.org/docs/warning_types/cross_site_scripting",
+      "code": "EmailSignature.html_for(Setting.current, :logo_src => logo_settings_path)",
+      "render_path": [
+        {
+          "type": "controller",
+          "class": "TripQuizEmailsController",
+          "method": "show",
+          "line": 10,
+          "file": "app/controllers/trip_quiz_emails_controller.rb",
+          "rendered": {
+            "name": "trip_quiz_emails/show",
+            "file": "app/views/trip_quiz_emails/show.html.erb"
+          }
+        }
+      ],
+      "location": {
+        "type": "template",
+        "template": "trip_quiz_emails/show"
+      },
+      "user_input": "Setting.current",
+      "confidence": "Weak",
+      "cwe_id": [
+        79
+      ],
+      "note": "The trip quiz email preview renders the same signature as the Settings preview through EmailSignature.html_for: escaped plain lines or legacy HTML sanitized on render with EmailSignature.sanitize (explicit tag, attribute, style and href-scheme allowlists), with legacy image nodes removed and only the uploaded logo rendered with an escaped source. Covered by test/services/email_signature_test.rb."
     }
   ],
   "updated": "2026-11-02 14:50:00 -0800",

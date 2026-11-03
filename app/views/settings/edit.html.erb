@@ -137,6 +137,16 @@
         </div>
         <%= form.check_box :itinerary_email_enabled, class: "checkbox" %>
       </div>
+      <div class="setting">
+        <div class="k">
+          <%= form.label :trip_quiz_email_enabled, "Trip quiz email", class: "font-medium text-sm" %>
+          <p class="hint">
+            Trip quiz visitors only, about a minute after they send their match. Sends “Your trip match” from info@sherpaholidays.com with their best match, why it fits, the closest other trips, and the free-call offer or confirmation. The automatic first reply always skips trip quiz inquiries, so a quiz visitor never receives two automatic emails.
+            <%= link_to "Read the trip quiz email", settings_trip_quiz_email_path, class: "link" %>
+          </p>
+        </div>
+        <%= form.check_box :trip_quiz_email_enabled, class: "checkbox" %>
+      </div>
       <p class="hint">One copy of every website inquiry goes to info@sherpaholidays.com, with Reply-To the visitor.</p>
       <div>
         <%= form.submit "Save automations", class: "btn-primary btn btn-sm" %>

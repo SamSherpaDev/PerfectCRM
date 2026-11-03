@@ -85,12 +85,15 @@ module Leads::Itinerary
     result
   end
 
-  # A visitor's time window for the free call, from the details endpoint.
+  # A visitor's free-call request from the details endpoint: their time zone,
+  # plus an optional time window when sent by older forms.
   def call_request(input)
     raise ArgumentError, "call_request" unless input.is_a?(Hash)
 
-    window = choice(input["window"], CALL_WINDOWS, "call_request.window")
-    result = { "window" => window }
+    result = {}
+    unless input["window"].nil?
+      result["window"] = choice(input["window"], CALL_WINDOWS, "call_request.window")
+    end
     unless input["timezone"].nil?
       zone = input["timezone"]
       valid = zone.is_a?(String) && zone.length <= 64 && zone.match?(%r{\A[A-Za-z]+(?:/[A-Za-z0-9_+-]+){1,2}\z}) &&

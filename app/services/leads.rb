@@ -107,9 +107,10 @@ module Leads
     ).first
   end
 
-  # An itinerary designer submission merges only into one with the same
-  # built trip; a changed itinerary is a new inquiry with its own email.
-  def find_recent_duplicate(email:, message:, trip_handle: nil, trip_title: nil, auto_archived: false, exclude_external_ref: nil, itinerary: nil, now: Time.current)
+  # An itinerary designer or trip quiz submission merges only into one with
+  # the same built trip or quiz answers; a changed trip or answer set is a
+  # new inquiry with its own email.
+  def find_recent_duplicate(email:, message:, trip_handle: nil, trip_title: nil, auto_archived: false, exclude_external_ref: nil, itinerary: nil, quiz: nil, now: Time.current)
     normalized_email = email.to_s.strip.downcase
     return nil if normalized_email.blank?
 
@@ -123,6 +124,7 @@ module Leads
       next false if lead.converted?
       next false if (lead.archived? || lead.spam_marked_at.present?) && !auto_archived
       next false if itinerary && Leads::Itinerary.signature(lead.itinerary) != Leads::Itinerary.signature(itinerary)
+      next false if (quiz || lead.quiz) && Leads::TripQuiz.signature(lead.quiz) != Leads::TripQuiz.signature(quiz)
       next false unless same_or_compatible_trip?(lead, trip_handle: trip_handle, trip_title: trip_title, message: message)
 
       normalize_message_for_duplicate(lead.message) == normalize_message_for_duplicate(message)

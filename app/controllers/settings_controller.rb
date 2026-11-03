@@ -11,7 +11,7 @@ class SettingsController < ApplicationController
     @settings = Setting.current
     load_automation_log
     if params.dig(:setting, :lead_webhook_url) || params[:setting]&.key?(:auto_first_reply_enabled) ||
-        params[:setting]&.key?(:itinerary_email_enabled)
+        params[:setting]&.key?(:itinerary_email_enabled) || params[:setting]&.key?(:trip_quiz_email_enabled)
       return update_automations
     end
     setting_params = params[:setting] || {}
@@ -229,6 +229,9 @@ class SettingsController < ApplicationController
     end
     if params[:setting].key?(:itinerary_email_enabled)
       @settings.itinerary_email_enabled = ActiveModel::Type::Boolean.new.cast(params.dig(:setting, :itinerary_email_enabled))
+    end
+    if params[:setting].key?(:trip_quiz_email_enabled)
+      @settings.trip_quiz_email_enabled = ActiveModel::Type::Boolean.new.cast(params.dig(:setting, :trip_quiz_email_enabled))
     end
     if @settings.save
       redirect_to edit_settings_path, notice: "Automations saved.", status: :see_other
