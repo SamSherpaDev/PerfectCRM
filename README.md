@@ -1240,7 +1240,11 @@ the thread opens. Remembered `EmailIdentity` choices take precedence,
 followed by exact email matches. Unknown senders sit in triage as suggested clients -
 Link to existing, Create client, Create lead, Create organization, or
 Ignore sender - and the choice is remembered. Nothing is ever created
-silently. Inbox tabs are Waiting on you, Waiting on them, All, and Triage,
+silently. An unlinked thread holding only sent mail (such as a cold email
+synced from Sent Items) stays out of Triage and Waiting on them, visible under
+All, until the first inbound reply moves the whole thread into Triage (held
+or sensitive documents still bring it to Triage at once).
+Inbox tabs are Waiting on you, Waiting on them, All, and Triage,
 with icons and counts. Inbox and record timelines offer Load older so complete
 history is reachable, and expanded messages show their full body.
 
