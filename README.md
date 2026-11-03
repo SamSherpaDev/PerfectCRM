@@ -58,7 +58,7 @@ out. On mobile, use Open menu to show the drawer. The rail holds **Today**
 **Channels** (`/channels`) are hidden from primary navigation and remain
 reachable by direct URL. See [Today and follow-ups](#today-and-follow-ups), [Mail](#mail),
 [Replying](#replying), [Templates](#templates), [Pipeline](#pipeline), and [Quotes](#quotes) for the live features. Settings provides appearance,
-connections, automation settings (including a direct link to edit the First reply template and the itinerary email switch with its preview), ad conversions, email sender settings, and a footer export link; morning and pipeline digests, the [weekly ads report](#weekly-ads-report) (`/settings/weekly_report`), history import, and AI assistance cards are hidden from the Settings UI while their routes and background jobs remain active.
+connections, automation settings (including a direct link to edit the First reply template and the itinerary and trip quiz email switches with their previews), ad conversions, email sender settings, and a footer export link; morning and pipeline digests, the [weekly ads report](#weekly-ads-report) (`/settings/weekly_report`), history import, and AI assistance cards are hidden from the Settings UI while their routes and background jobs remain active.
 
 On phones (under 750px) a bottom tab bar holds **Today**, **Inbox**,
 **Leads**, **Clients**, and **Settings** directly while the rail hides. Signed-in builders can preview every
@@ -1074,7 +1074,7 @@ Code: `AdConversions` (rules), `AdConversions::MetaClient`,
   click IDs when marketing consent is off. Explicit allowed measurement/sharing
   permission and no opt-out are required at recording and delivery; missing
   legacy permission is withheld. Archived, suspected-spam, explicit `is_test`,
-  and lost "not a fit" leads are never reported. Tests using the business mailbox
+  `trip_quiz`, and lost "not a fit" leads are never reported. Tests using the business mailbox
   or an owner address in `ALLOWED_GOOGLE_EMAILS` are also excluded.
 - Purchase time is PerfectBook's `first_received_at` with `timestamp` precision,
   never sync time. Date-only manual receipts remain valid business facts but do
