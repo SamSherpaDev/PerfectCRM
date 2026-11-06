@@ -66,6 +66,9 @@ A record rejects the address. Every `200`/`202` intake body returns
 `{ "id", "reference", "received_at", "conversion" }`: `conversion` is `false`
 when this submission was auto-archived as a bot catch or merged as a duplicate
 from a new `submission_id` into an existing lead, and `true` otherwise.
+Structured `trip_quiz` posts replace the name/email requirement and DNS
+fail-open with the [contact gate](#contact-gate-and-acceptance-receipt) rules,
+and add `accepted` to that receipt.
 
 Replays and duplicates pass authentication, rate limits, and required-field
 validation first. Replaying the same `submission_id`, including one that was

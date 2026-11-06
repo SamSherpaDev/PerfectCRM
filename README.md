@@ -929,13 +929,12 @@ instead of the automatic first reply while the itinerary email is on.
 
 The website's "Find your perfect trip" questionnaire sends inquiries with the
 `trip_quiz` placement and the visitor's answers and matched trips (payload and
-rules: [website intake contract](docs/leads-intake.md#trip-quiz)). Structured
-quiz intake requires all five answers and a valid email or parsed phone; name
-is optional. Every supplied contact must validate. Email DNS failures are
-retryable, never assumed valid. The ordinary leads list shows the email or
-phone when no name was supplied. Contact permission is not marketing consent
-or a requested call. The [contact gate receipt](docs/leads-intake.md#contact-gate-and-acceptance-receipt)
-proves persistence, not delivery. The lead page shows them in a **Quiz answers** card under Details: the best match and
+rules: [website intake contract](docs/leads-intake.md#trip-quiz)). Before
+showing a match, the quiz requires all five answers and a valid email or phone;
+name is optional (rules: [contact gate](docs/leads-intake.md#contact-gate-and-acceptance-receipt)).
+A nameless quiz lead shows its email or phone wherever the CRM labels it.
+Contact permission is not marketing consent or a requested call. The lead page
+shows the answers in a **Quiz answers** card under Details: the best match and
 the up to two closest alternate trips (linked to their real trip pages),
 interests, pace, length, season, travelers, what was asked for (email or free
 call), and the trip-notes box. A free call requested in the quiz
