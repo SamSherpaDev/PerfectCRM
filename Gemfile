@@ -92,6 +92,7 @@ gem "rubyzip", require: "zip"
 
 gem "pdf-reader", "~> 2.16"
 
-# Quiz contact gate: maintained libphonenumber metadata and explicit DNS failures.
+# Quiz contact gate: maintained libphonenumber metadata, and DNS errors that
+# stdlib Resolv collapses into "no records" (NXDOMAIN vs SERVFAIL/timeout).
 gem "phonelib", "~> 0.10"
 gem "dnsruby", "~> 1.73"

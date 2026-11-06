@@ -493,6 +493,9 @@ but only when that is the sole blocker: any definite field error (for example
 an invalid `contact.phone_raw` or missing `consent.contact`) returns the 400
 field map instead. It never fails open, sends a verification message, probes SMTP or uses an
 external verification service. Ordinary intake's older DNS behavior is unchanged.
+The quiz check uses dnsruby (`Leads::MailDomain`) because stdlib `Resolv`
+returns the same empty answer for NXDOMAIN, SERVFAIL and refusal, so it cannot
+separate a domain that cannot receive mail from an unavailable check.
 
 Quiz phones use Phonelib's maintained libphonenumber metadata, not the ordinary
 intake's formatting-only helper. US national input defaults to US; an explicit

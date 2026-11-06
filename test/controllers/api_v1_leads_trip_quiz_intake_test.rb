@@ -306,6 +306,21 @@ class ApiV1LeadsTripQuizIntakeTest < ActionDispatch::IntegrationTest
     assert_select "#call_list_lead_#{lead.id} a[href=?]", lead_path(lead), text: "415-555-0134"
   end
 
+  test "a nameless email quiz lead's reply is labeled by its address in Today and the lead timeline" do
+    post_intake intake_body.merge("contact" => { "email" => "quiz-reply@gmail.com" })
+    lead = Lead.last
+    thread = Conversation.create!(linkable: lead, subject: "Re: Your trip match")
+    reply = thread.messages.create!(direction: "in", status: "received", from_address: "quiz-reply@gmail.com",
+      subject: "Re: Your trip match", text_body: "Can we plan this?", sent_at: 1.hour.ago)
+    sign_in
+    get root_path
+    assert_response :ok
+    assert_select "section[aria-labelledby='replies-heading'] a[href=?]", inbox_thread_path(thread), text: "quiz-reply@gmail.com"
+    get lead_path(lead)
+    assert_response :ok
+    assert_select "#message-#{reply.id} .meta b", text: "quiz-reply@gmail.com"
+  end
+
   test "phone-only quiz retries replay by submission id and a fresh id creates its own lead" do
     body = intake_body.merge("contact" => { "phone_raw" => "+44 20 7946 0958" })
     post_intake body

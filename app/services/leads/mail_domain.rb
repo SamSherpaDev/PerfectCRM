@@ -1,4 +1,7 @@
 # Quiz-only receivable-domain check. No mailbox probing and no fail-open.
+# dnsruby, not stdlib Resolv: Resolv#getresources returns [] for NXDOMAIN,
+# SERVFAIL, refusal and (on some versions) timeouts alike, so it cannot tell a
+# domain that cannot receive mail from a check that is temporarily unavailable.
 module Leads::MailDomain
   module_function
 

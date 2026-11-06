@@ -59,7 +59,7 @@ module RecordsHelper
   def timeline_sender(message, record)
     address = message.from_address.to_s
     own = [ record.try(:email), record.try(:display_email) ].compact_blank.map(&:downcase)
-    own.include?(address.downcase) ? record.name : address
+    own.include?(address.downcase) ? (record.respond_to?(:display_name) ? record.display_name : record.name) : address
   end
 
   # A stone that landed in the last few seconds settles onto the stream.
