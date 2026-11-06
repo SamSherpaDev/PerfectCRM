@@ -4,7 +4,7 @@ Rails.application.routes.draw do
   get "up" => "rails/health#show", as: :rails_health_check
 
   # Stateless APIs with per-request auth, no sign-in.
-  # Contracts: docs/leads-intake.md and docs/channel-checks.md.
+  # Contracts: docs/leads-intake.md, docs/channel-checks.md and docs/guide-requests.md.
   namespace :api do
     namespace :v1 do
       match "guide_requests", to: "guide_requests#preflight", via: :options
