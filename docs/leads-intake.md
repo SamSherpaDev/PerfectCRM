@@ -17,7 +17,9 @@ Base URL: `https://perfectcrm.sherpaholidays.com`.
 Bodies are `application/json`, max 32 KB. Error bodies are
 `{ "error": "bad_request" | "forbidden" | "unauthorized" | "validation" |
 "rate_limited" | "not_found" | "expired" | "converted" | "archived" | "server" }`;
-validation errors add a `fields` map from payload key (or model attribute
+structured quiz intake additionally uses `contact_validation_unavailable` (503)
+and `submission_conflict` (409).
+Validation errors add a `fields` map from payload key (or model attribute
 for save failures) to `invalid` / `taken` / `required`. A verdict for a converted or
 archived lead instead returns `{ "error": "validation", "fields": { "base": "converted" } }`
 or `{ "base": "archived" }`.
@@ -386,9 +388,10 @@ eligibility, wording and delivery are owned by [README, Leads](../README.md#lead
 
 The website's "Find your perfect trip" questionnaire posts to the same intake
 endpoint with `"placement": "trip_quiz"` and a structured `quiz` object. It goes
-through every browser-mode rule above unchanged: site key and `Origin`, rate
-limits, honeypot and timing scores, MX check, required contact fields, consent,
-replays, and the 24-hour duplicate merge. Other placements ignore a `quiz` key
+through the existing browser-mode site key and `Origin`, rate limits, honeypot
+and timing scores, consent, replays, and 24-hour duplicate merge. Structured
+quiz contact validation differs as described below; ordinary nonquiz inquiries
+and legacy `trip_quiz` posts without a `quiz` object keep their existing rules. Other placements ignore a `quiz` key
 as before, so a `"landing"` post that carries the plain-text quiz summary in
 `message` keeps working.
 
@@ -433,7 +436,9 @@ as before, so a `"landing"` post that carries the plain-text quiz summary in
 }
 ```
 
-Fields (`Leads::TripQuiz.parse`; every one is optional except `match`):
+Fields (`Leads::TripQuiz.parse`; structured quiz intake requires `match` and
+all five answers: `interests`, `pace`, `length`, `season`, `group_size`; other
+fields remain optional):
 
 | Field | Accepts |
 |---|---|
@@ -463,19 +468,92 @@ and `season: "not_sure"` sets `timing_unknown`. Call requests from the quiz post
 `call_request` (with `timezone` and no `window`, plus `contact.phone_raw` when
 requested from the thank-you call sheet) to the details endpoint above.
 
+### Contact gate and acceptance receipt
+
+Before revealing a match, the storefront submits all five answers and at least
+one contact: `contact.email` or `contact.phone_raw` (both are allowed).
+`contact.name` is optional; no name is invented. Nameless quiz records display
+the email or formatted phone on the ordinary leads list and record header.
+Every supplied nonblank contact must validate, even if the other is valid:
+remove or correct an invalid optional field. Missing both returns
+`400 {"error":"validation","fields":{"contact":"required"}}`; invalid
+fields return the same shape with `contact.email` or `contact.phone_raw` mapped
+to `invalid`.
+
+Email trims/lowercases and requires format plus a receivable domain, not proof
+that a mailbox exists. Quiz-only DNS checks use MX, reject explicit null MX
+(including mixed null/non-null records), and support A or AAAA fallback only
+when MX is absent. NXDOMAIN/no mail records reject. Up to three DNS queries each
+have a one-second overall timeout, with no application retries. Timeout,
+SERVFAIL, refusal or network unavailability returns HTTP 503 with
+`Retry-After: 30` and
+`{"error":"contact_validation_unavailable","fields":{"contact.email":"temporary"}}`.
+It never fails open, sends a verification message, probes SMTP or uses an
+external verification service. Ordinary intake's older DNS behavior is unchanged.
+
+Quiz phones use Phonelib's maintained libphonenumber metadata, not the ordinary
+intake's formatting-only helper. US national input defaults to US; an explicit
+`+` supports international input, and optional ISO `contact.country` supports
+other national formats. Spaces, parentheses, periods and hyphens are allowed;
+letters/extensions are not. Valid numbers store canonical E.164 in encrypted
+`phone`, retaining the original input in encrypted `phone_raw`. Parsing is not
+proof of reachability. Examples: `(415) 555-0134` becomes `+14155550134`;
+`+44 20 7946 0958` becomes `+442079460958`.
+
+`consent.contact: true` and the actual usage-line time/version remain required.
+This is permission to send the match and follow up about the trip, never
+marketing/five-note permission or a requested call. The gate leaves
+`quiz.email_list` false/absent and omits `quiz.intent` for phone-only reveal;
+`intent: "call"` must not be used as a substitute. Only the separate explicit
+call action uses the existing details `call_request`. This app does not
+subscribe anyone from the quiz metadata.
+
+A structured quiz's 200/202 receipt adds to the existing id/reference/time/
+conversion fields:
+
+```json
+{"accepted":true,"placement":"trip_quiz","contact":{"email":null,"phone":"+14155550134"},"quiz":{"interests":["temples"],"pace":"easy","length":"under-14","season":"fall","group_size":2,"match":{"handle":"nepal-highlights-premium-tour","title":"9-Day Nepal Highlights Premium Tour"}}}
+```
+
+The receipt proves persistence, not delivery. Unlock only on 200/202 with
+`accepted:true`, id/reference/received_at, normalized contact and the accepted
+quiz answers. A bot-archived lead returns `accepted:false`; generic 2xx/empty
+responses and validation/storage errors never mean completion. The browser
+should use a 15-second timeout, no automatic retries, and no optimistic reveal.
+After timeout/network failure the outcome is unknown: an explicit retry sends
+the identical body and submission_id. A replay with changed quiz/contact/name/
+message returns HTTP 409 `{"error":"submission_conflict"}`; edits need a new
+submission_id. Existing nonquiz replay behavior is unchanged.
+
 Duplicate merge: a quiz post merges into an earlier inquiry only when
-`Leads::TripQuiz.signature` (the match handle plus answers) matches, so changed
-answers make a new inquiry.
+`Leads::TripQuiz.signature` (the match handle plus answers) and message match,
+so changed answers make a new inquiry under existing conventions. Email remains
+the usual identity; conflicting nonblank quiz phones do not merge. Phone-only
+repeats may merge only with an unambiguous phone-only quiz record having the
+same canonical phone, answers and message within 24 hours. They never merge
+into an unrelated email identity. A merged submission records its quiz,
+acquisition/attribution and page snapshot in the duplicate timeline event;
+lead contact fields remain on the lead. Existing attribution sanitization and
+permission handling are unchanged. Replays and duplicates create no new
+visitor notification.
+
+The details endpoint does not accept email updates. A later 'Email me my match'
+from a phone-only lead uses the existing email intake with a new submission_id
+and may create its own inquiry; do not claim this links identities or adds an
+email to the original phone-only record.
 
 Ad reporting: `trip_quiz` leads are excluded in `AdConversions.excluded?`,
 keeping the questionnaire separate from ad conversion reporting.
 
 Trip quiz email: when Settings → Automations → Trip quiz email is on, a new
-`trip_quiz` inquiry with `quiz` schedules a "Your trip match" email one minute
+`trip_quiz` inquiry with `quiz` and valid email schedules a "Your trip match" email one minute
 after intake in place of the general automatic first reply, which runs only
 when that email is skipped. It ships off by default; while it is off, the first
-reply is scheduled as for any website inquiry, so a quiz visitor gets exactly
-one automatic email; see [README, Leads](../README.md#leads).
+reply is scheduled as for any website inquiry with email, so an email quiz
+visitor gets exactly one automatic email; see [README, Leads](../README.md#leads).
+Phone-only quiz intake queues neither email copy nor visitor first-reply/match
+email, and sends no email/SMS/call. Its existing `lead.created` event remains;
+merely supplying a phone does not create a requested-call record.
 
 ## Source database contract (v1)
 

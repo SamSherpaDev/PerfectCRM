@@ -1,4 +1,5 @@
 require "test_helper"
+require_relative "../support/google_sign_in_test_helper"
 
 # Trip quiz contract (docs/leads-intake.md, "Trip quiz"): the trip_quiz
 # placement, its stored quiz answers and matched trips, the details call
@@ -6,6 +7,7 @@ require "test_helper"
 # Settings switch.
 class ApiV1LeadsTripQuizIntakeTest < ActionDispatch::IntegrationTest
   include ActionMailer::TestHelper
+  include GoogleSignInTestHelper
 
   ORIGIN = "https://www.sherpaholidays.com"
   QUIZ = {
@@ -57,9 +59,11 @@ class ApiV1LeadsTripQuizIntakeTest < ActionDispatch::IntegrationTest
     }.deep_merge(overrides)
   end
 
-  def post_intake(body)
-    post "/api/v1/leads/intake", params: JSON.generate(body),
-      headers: { "CONTENT_TYPE" => "application/json", "Origin" => ORIGIN, "X-Sherpa-Site-Key" => @site_key }
+  def post_intake(body, email_status: :valid)
+    Leads::MailDomain.stub(:status, email_status) do
+      post "/api/v1/leads/intake", params: JSON.generate(body),
+        headers: { "CONTENT_TYPE" => "application/json", "Origin" => ORIGIN, "X-Sherpa-Site-Key" => @site_key }
+    end
   end
 
   def post_details(body)
@@ -251,6 +255,159 @@ class ApiV1LeadsTripQuizIntakeTest < ActionDispatch::IntegrationTest
     travel 2.minutes
     assert_difference("Message.outbound.count", 1) { LeadNotificationJob.perform_now(notification.id) }
     assert_equal "Your trip match", lead.trip_quiz_email.message.subject
+  end
+
+  test "contact-only quiz leads persist and appear on the real leads list without invented names or consent" do
+    @settings.update!(trip_quiz_email_enabled: true)
+    [ { "email" => "quiz-preview@gmail.com" }, { "phone_raw" => "(415) 555-0134" } ].each do |contact|
+      body = intake_body.merge("contact" => contact)
+      body["quiz"].delete("intent")
+      assert_difference("Lead.count", 1) { post_intake body }
+      assert_response :accepted
+      lead = Lead.last
+      receipt = response.parsed_body
+      assert receipt["accepted"]
+      assert_equal "trip_quiz", receipt["placement"]
+      assert_equal lead.quiz, receipt["quiz"]
+      if contact["email"]
+        assert_equal contact["email"], receipt.dig("contact", "email")
+        assert_nil receipt.dig("contact", "phone")
+      else
+        assert_nil receipt.dig("contact", "email")
+        assert_equal "+14155550134", receipt.dig("contact", "phone")
+      end
+      assert_equal "", lead.name
+      assert_equal false, lead.quiz["email_list"]
+      assert_nil lead.call_request
+      assert_equal QUIZ.slice("interests", "pace", "length", "season", "group_size"), lead.quiz.slice("interests", "pace", "length", "season", "group_size")
+      assert_equal contact["email"].present?, lead.lead_notifications.exists?(event: "trip_quiz_email")
+      assert_not lead.lead_notifications.exists?(event: "auto_first_reply")
+
+      sign_in
+      get leads_path
+      assert_response :ok
+      assert_select "a[href^=?]", lead_path(lead), text: lead.display_name
+      get lead_path(lead)
+      assert_response :ok
+      assert_includes response.body, "Under two weeks"
+    end
+  end
+
+  test "phone-only quiz repeats merge and replay honestly while contact or answer edits need a fresh id" do
+    body = intake_body.merge("contact" => { "phone_raw" => "+44 20 7946 0958" })
+    post_intake body
+    assert_response :accepted
+    lead = Lead.last
+    assert_equal "+442079460958", lead.phone
+    assert_no_difference("Lead.count") { post_intake body }
+    assert_response :ok
+    assert response.parsed_body["accepted"]
+    assert_no_difference("Lead.count") { post_intake body.merge("submission_id" => SecureRandom.uuid) }
+    assert_response :ok
+    assert_equal lead.id, response.parsed_body["id"]
+    assert lead.reload.activity_events.last.metadata.dig("quiz_submission", "quiz", "interests")
+    post_intake body.deep_merge("quiz" => { "season" => "spring" })
+    assert_response :conflict
+    assert_equal "submission_conflict", response.parsed_body["error"]
+    assert_not response.parsed_body["accepted"]
+  end
+
+  test "quiz rejects missing and invalid supplied contact even when the other field is valid" do
+    [ [ {}, "contact" ], [ { "phone_raw" => "1234567" }, "contact.phone_raw" ],
+      [ { "email" => "bad", "phone_raw" => "4155550134" }, "contact.email" ],
+      [ { "email" => "quiz@gmail.com", "phone_raw" => "+999 123456789" }, "contact.phone_raw" ] ].each do |contact, key|
+      assert_no_difference("Lead.count") do
+        post_intake intake_body.merge("contact" => contact), email_status: (contact["email"] == "bad" ? :invalid : :valid)
+      end
+      assert_response :bad_request
+      assert response.parsed_body["fields"].key?(key)
+    end
+  end
+
+  test "DNS temporary failure is retryable and never an accepted lead even alongside a valid phone" do
+    assert_no_difference("Lead.count") do
+      post_intake intake_body("contact" => { "phone_raw" => "4155550134" }), email_status: :temporary
+    end
+    assert_response :service_unavailable
+    assert_equal "30", response.headers["Retry-After"]
+    assert_equal "contact_validation_unavailable", response.parsed_body["error"]
+    assert_not response.parsed_body["accepted"]
+  end
+
+  test "nameless email keeps the protected match dispatch while phone-only dispatches nothing" do
+    @settings.update!(trip_quiz_email_enabled: true, auto_first_reply_enabled: true, auto_first_reply_enabled_at: 1.hour.ago)
+    travel 1.second
+    post_intake intake_body.merge("contact" => { "email" => "  QUIZ-MATCH@GMAIL.COM  " })
+    assert_response :accepted
+    email_lead = Lead.last
+    assert_equal "quiz-match@gmail.com", email_lead.email
+    assert_equal "quiz-match@gmail.com", response.parsed_body.dig("contact", "email")
+    email_notification = email_lead.lead_notifications.find_by!(event: "trip_quiz_email")
+    travel 2.minutes
+    assert_difference("Message.outbound.count", 1) { LeadNotificationJob.perform_now(email_notification.id) }
+    assert_equal "Your trip match", email_lead.trip_quiz_email.message.subject
+    assert_equal [ "quiz-match@gmail.com" ], email_lead.trip_quiz_email.message.to_list
+    assert_emails(1) { perform_enqueued_jobs(only: OutboundDeliveryJob) }
+
+    phone_body = intake_body.merge("contact" => { "phone_raw" => "4155550134" })
+    phone_body["quiz"].delete("intent")
+    post_intake phone_body
+    phone_lead = Lead.last
+    assert_equal [ "lead.created" ], phone_lead.lead_notifications.pluck(:event)
+    assert_no_difference("Message.outbound.count") do
+      phone_lead.lead_notifications.each { |notification| LeadNotificationJob.perform_now(notification.id) }
+    end
+    assert_nil phone_lead.call_request
+    assert_nil phone_lead.trip_quiz_email
+  end
+
+  test "phone-only duplicate matching does not link unrelated email identities" do
+    post_intake intake_body("contact" => { "phone_raw" => "4155550134" })
+    email_lead = Lead.last
+    assert_difference("Lead.count", 1) do
+      post_intake intake_body.merge("contact" => { "phone_raw" => "4155550134" })
+    end
+    assert_response :accepted
+    assert_nil Lead.last.email
+    assert_not_equal email_lead.id, Lead.last.id
+  end
+
+  test "duplicate receipt echoes only supplied contact and merged retries compare their own submission" do
+    post_intake intake_body("contact" => { "phone_raw" => "4155550134" })
+    lead = Lead.last
+    body = intake_body.merge("contact" => { "email" => "anna@gmail.com" })
+    assert_no_difference("Lead.count") { post_intake body }
+    assert_response :ok
+    assert_nil response.parsed_body.dig("contact", "phone")
+    assert_equal lead.id, response.parsed_body["id"]
+    assert_no_difference("Lead.count") { post_intake body }
+    assert_response :ok
+    assert response.parsed_body["accepted"]
+  end
+
+  test "quiz save failure is never accepted and nonquiz still needs name and email" do
+    unsaved = Lead.new
+    unsaved.define_singleton_method(:save) { false }
+    Lead.stub(:new, unsaved) { post_intake intake_body }
+    assert_response :internal_server_error
+    assert_not response.parsed_body["accepted"]
+    assert_no_difference("Lead.count") do
+      post_intake intake_body("placement" => "landing").merge("contact" => { "phone_raw" => "4155550134" })
+    end
+    assert_response :bad_request
+    assert_equal "invalid", response.parsed_body.dig("fields", "contact.name")
+    assert_equal "invalid", response.parsed_body.dig("fields", "contact.email")
+  end
+
+  test "quiz requires all five answers and a bot receipt cannot unlock" do
+    body = intake_body
+    body["quiz"].delete("season")
+    assert_no_difference("Lead.count") { post_intake body }
+    assert_response :bad_request
+    assert_equal "invalid", response.parsed_body.dig("fields", "quiz.season")
+    post_intake intake_body("honeypot" => "bot")
+    assert_response :accepted
+    assert_equal false, response.parsed_body["accepted"]
   end
 
   test "details accept a windowless call request and a sheet phone number without overwriting an existing phone" do

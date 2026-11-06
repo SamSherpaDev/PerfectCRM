@@ -1,7 +1,7 @@
-<% content_for :title, "#{@lead.name} · PerfectCRM" %>
+<% content_for :title, "#{@lead.display_name} · PerfectCRM" %>
 <% read_only = @lead.converted? || @lead.archived? %>
 <div class="page-wide">
-  <%= render layout: "shared/page_header", locals: { eyebrow: record_eyebrow(@lead), title: @lead.name, subtitle: record_subtitle(@lead), back: [ "Leads", @lead_action_return_to ] } do %>
+  <%= render layout: "shared/page_header", locals: { eyebrow: record_eyebrow(@lead), title: @lead.display_name, subtitle: record_subtitle(@lead), back: [ "Leads", @lead_action_return_to ] } do %>
     <%= render "records/header_actions", record: @lead %>
   <% end %>
   <%= render "shared/flash" %>

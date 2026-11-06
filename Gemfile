@@ -91,3 +91,7 @@ gem "prawn-table"
 gem "rubyzip", require: "zip"
 
 gem "pdf-reader", "~> 2.16"
+
+# Quiz contact gate: maintained libphonenumber metadata and explicit DNS failures.
+gem "phonelib", "~> 0.10"
+gem "dnsruby", "~> 1.73"
