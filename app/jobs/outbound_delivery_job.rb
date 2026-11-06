@@ -20,13 +20,15 @@ class OutboundDeliveryJob < ApplicationJob
     message = Message.find(message_id)
     return unless message.status == "queued"
 
-    # Automatic mail (first reply, itinerary email, trip quiz email) gets one SMTP attempt.
-    automatic = AutomaticFirstReply.find_by(message_id: message.id) ||
+    # Automatic mail, including requested-guide fulfillment, gets one SMTP attempt.
+    guide = GuideRequest.find_by(message_id: message.id)
+    automatic = guide || AutomaticFirstReply.find_by(message_id: message.id) ||
       ItineraryEmail.find_by(message_id: message.id) ||
       TripQuizEmail.find_by(message_id: message.id)
     label = case automatic
     when ItineraryEmail then "Itinerary email"
     when TripQuizEmail then "Trip quiz email"
+    when GuideRequest then "Requested guide"
     else "Automatic first reply"
     end
     return if automatic && !automatic.delivery_allowed?
@@ -42,14 +44,14 @@ class OutboundDeliveryJob < ApplicationJob
     return unless claimed
     ClientMailer.outbound(message).deliver_now
     message.mark_sent!
-    automatic.class.log(automatic.lead, "sent", message: message) if automatic&.lead
+    automatic.class.log(automatic.lead, "sent", message: message) if !guide && automatic&.lead
     message.group_send&.refresh_status!
   rescue *TRANSIENT_ERRORS => e
     raise unless claimed
 
     if automatic
       message.mark_failed!(e.message)
-      automatic.class.log(automatic.lead, "failed (delivery uncertain; not retried)", message: message) if automatic.lead
+      automatic.class.log(automatic.lead, "failed (delivery uncertain; not retried)", message: message) if !guide && automatic.lead
     elsif executions < MAX_ATTEMPTS
       message.update!(status: "queued", send_error: e.message.truncate(500))
       retry_job(wait: backoff)
@@ -61,7 +63,7 @@ class OutboundDeliveryJob < ApplicationJob
     raise unless claimed
 
     message.mark_failed!(e.message) unless message.sent?
-    automatic.class.log(automatic.lead, "failed (#{e.class})", message: message) if automatic&.lead
+    automatic.class.log(automatic.lead, "failed (#{e.class})", message: message) if !guide && automatic&.lead
     message.group_send&.refresh_status!
   end
 

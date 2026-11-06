@@ -163,6 +163,12 @@ message as queued, sending, sent, or failed. A failure retains the queued
 message and any saved draft. Retry on the timeline resends that message;
 it does not pick up later draft edits.
 
+Private Nepal guide-only intake is a separate, default-off fulfillment path, not
+an inquiry or marketing signup. It reuses this info@ outbox with one SMTP attempt
+per address/guide edition and exact approved D0 copy. Its browser contract, receipt
+semantics, reply-opt-out operating requirements and activation hold are documented
+in [Guide requests](docs/guide-requests.md). Source merge does not authorize sending.
+
 The lead and client pages put the composer first in the middle column,
 above the one timeline: a Reply | Note segment, a summary of the current
 recipient, subject, and sending mailbox that updates as you edit, a compact
@@ -183,8 +189,9 @@ recipients, subject, booking choice, and attachments. New message starts a
 separate conversation regardless of subject. Saved attachments accompany
 newly uploaded files; a successful delivery clears the submitted draft
 only if it has not been edited since submission. Except for the one automatic
-website-inquiry greeting described under [Leads](#leads), correspondence sends
-only when the captain presses Send.
+website-inquiry replies described under [Leads](#leads) and the default-off
+requested-guide fulfillment above, correspondence sends only when the captain
+presses Send.
 
 In Settings → Signature, edit Signature lines with your name first and save.
 The preview and outgoing HTML mail use the same layout, with the uploaded logo

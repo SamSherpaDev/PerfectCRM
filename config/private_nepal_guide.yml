@@ -1,0 +1,10 @@
+# Source-only hold. Changing this file is not deployment/activation authorization.
+# Enable only after every activation prerequisite in docs/guide-requests.md,
+# plus the exact approved PDF's final URL.
+shared:
+  enabled: false
+  pdf_url:
+
+development: {}
+test: {}
+production: {}

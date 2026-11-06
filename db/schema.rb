@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_03_033644) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_06_154111) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -305,6 +305,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_03_033644) do
     t.datetime "updated_at", null: false
     t.index ["status"], name: "index_group_sends_on_status"
     t.index ["template_id"], name: "index_group_sends_on_template_id"
+  end
+
+  create_table "guide_requests", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "delivery_attempted_at"
+    t.string "edition", null: false
+    t.string "email", null: false
+    t.integer "message_id"
+    t.string "source", null: false
+    t.datetime "updated_at", null: false
+    t.index ["email", "edition"], name: "index_guide_requests_on_email_and_edition", unique: true
+    t.index ["message_id"], name: "index_guide_requests_on_message_id", unique: true
   end
 
   create_table "itinerary_emails", force: :cascade do |t|
@@ -974,6 +986,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_03_033644) do
   add_foreign_key "drafts", "conversations"
   add_foreign_key "drafts", "templates"
   add_foreign_key "group_sends", "templates"
+  add_foreign_key "guide_requests", "messages"
   add_foreign_key "itinerary_emails", "leads", on_delete: :nullify
   add_foreign_key "itinerary_emails", "messages", on_delete: :nullify
   add_foreign_key "lead_notifications", "leads"
