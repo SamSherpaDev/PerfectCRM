@@ -99,7 +99,7 @@
                   <% owner = call.owner %>
                   <li class="cal-event<%= ' cal-event-missed' if call.missed?(summary.now) %>">
                     <time datetime="<%= call.scheduled_at.iso8601 %>" class="cal-event-time"><%= scheduled_call_time_label(call) %></time>
-                    <%= link_to owner.name, polymorphic_path(owner), class: "cal-event-lead link" %>
+                    <%= link_to owner.display_name, polymorphic_path(owner), class: "cal-event-lead link" %>
                   </li>
                 <% end %>
               </ul>
@@ -122,7 +122,7 @@
                   <% owner = call.owner %>
                   <li class="cal-event<%= ' cal-event-missed' if call.missed?(summary.now) %>">
                     <time datetime="<%= call.scheduled_at.iso8601 %>" class="cal-event-time"><%= scheduled_call_time_label(call) %></time>
-                    <%= link_to owner.name, polymorphic_path(owner), class: "cal-event-lead link" %>
+                    <%= link_to owner.display_name, polymorphic_path(owner), class: "cal-event-lead link" %>
                     <% if call.notes.present? %>
                       <span class="cal-event-note"><%= call.notes %></span>
                     <% end %>

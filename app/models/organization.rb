@@ -3,6 +3,10 @@ class Organization < ApplicationRecord
 
   encrypts :phone
 
+  def display_name
+    name
+  end
+
   def display_phone
     Leads::Phone.format(phone, country: country)
   end

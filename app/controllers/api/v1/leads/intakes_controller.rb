@@ -25,13 +25,13 @@ module Api
           return unless check_rate_limits!(email: email)
 
           fields = validate_required(payload)
-          if @contact_validation_temporary
-            response.set_header("Retry-After", "30")
-            return render json: { error: "contact_validation_unavailable", fields: { "contact.email" => "temporary" } }, status: :service_unavailable
-          end
           unless fields
             return render json: { error: "validation", fields: @validation_fields },
               status: :bad_request
+          end
+          if @contact_validation_temporary
+            response.set_header("Retry-After", "30")
+            return render json: { error: "contact_validation_unavailable", fields: { "contact.email" => "temporary" } }, status: :service_unavailable
           end
 
           begin
@@ -82,13 +82,13 @@ module Api
                   duplicate,
                   submission_id: submission_id,
                   fields: {
+                    name: lead.name,
                     phone: lead.phone,
                     phone_raw: lead.phone_raw,
                     message: lead.message,
                     trip_handle: lead.trip_handle,
                     trip_title: lead.trip_title,
-                    placement: lead.placement,
-                    quiz_submission: (lead.metadata.slice("quiz", "acquisition", "attribution", "page").merge("fingerprint" => quiz_fingerprint(lead)) if lead.quiz)
+                    placement: lead.placement
                   },
                   caller_name: caller_name
                 )
@@ -110,7 +110,7 @@ module Api
                   }
                 )
               else
-                lead.lead_notifications.create!(event: "email_copy") unless lead.quiz && lead.email.blank?
+                lead.lead_notifications.create!(event: "email_copy")
                 lead.lead_notifications.create!(event: "lead.created")
                 # One minute in: a call request from the ready screen usually
                 # lands first, and the email is queued before the first reply
@@ -132,20 +132,17 @@ module Api
             raise unless existing
           end
           if duplicate
-            return render json: lead_response(duplicate.reload, conversion: false, submitted: lead), status: :ok
+            return render json: lead_response(duplicate.reload, conversion: false), status: :ok
           end
           existing ||= find_replay(external_ref, submission_id) unless saved
           if existing
-            if quiz && !quiz_replay_matches?(existing, lead)
-              return render json: { error: "submission_conflict" }, status: :conflict
-            end
             Rails.logger.warn(
               "[intake] replay for #{external_ref} lead=#{existing.id} " \
               "body_matches=#{replay_body_matches?(existing, payload, fields)}"
             )
             LeadNotification.enqueue_pending(existing.id)
             conversion = existing.external_ref == external_ref && !::Leads.auto_archive?(existing.suspicion_hits)
-            return render json: lead_response(existing, conversion: conversion, submitted: lead), status: :ok
+            return render json: lead_response(existing, conversion: conversion), status: :ok
           end
 
           if saved
@@ -351,34 +348,14 @@ module Api
             lead.message.to_s == payload["message"].to_s.strip
         end
 
-        def quiz_fingerprint(lead)
-          Digest::SHA256.hexdigest(JSON.generate([ lead.name.to_s, lead.email.to_s, lead.phone.to_s, lead.message.to_s, lead.quiz ]))
-        end
-
-        def quiz_replay_matches?(existing, incoming)
-          if existing.external_ref != incoming.external_ref
-            submission_id = incoming.external_ref.delete_prefix("website_form:")
-            return existing.activity_events.where(kind: "duplicate_inquiry").any? do |event|
-              event.metadata["submission_id"] == submission_id &&
-                event.metadata.dig("quiz_submission", "fingerprint") == quiz_fingerprint(incoming)
-            end
-          end
-          existing.placement == "trip_quiz" && existing.quiz == incoming.quiz &&
-            existing.email.to_s == incoming.email.to_s && existing.phone.to_s == incoming.phone.to_s &&
-            existing.name.to_s == incoming.name.to_s && existing.message.to_s == incoming.message.to_s
-        end
-
-        def lead_response(lead, conversion: !::Leads.auto_archive?(lead.suspicion_hits), submitted: lead)
+        def lead_response(lead, conversion: !::Leads.auto_archive?(lead.suspicion_hits))
           receipt = {
             id: lead.id,
             reference: lead.reference,
             received_at: (lead.received_at || lead.created_at)&.iso8601,
             conversion: conversion
           }
-          if lead.quiz
-            receipt.merge!(accepted: !lead.archived? && !lead.converted? && !::Leads.auto_archive?(lead.suspicion_hits),
-              placement: submitted.placement, contact: { email: submitted.email.presence, phone: submitted.phone.presence }, quiz: submitted.quiz)
-          end
+          receipt[:accepted] = !lead.archived? && !lead.converted? && !::Leads.auto_archive?(lead.suspicion_hits) if lead.quiz
           receipt
         end
       end

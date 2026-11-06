@@ -4,7 +4,7 @@
 <li class="scheduled-call-row<%= ' scheduled-call-row-missed' if scheduled_call.missed? %>" id="scheduled_call_<%= scheduled_call.id %>">
   <div class="scheduled-call-row-main">
     <div class="flex flex-wrap items-center gap-2">
-      <%= link_to owner.name, polymorphic_path(owner), class: "link font-medium" %>
+      <%= link_to owner.display_name, polymorphic_path(owner), class: "link font-medium" %>
       <% if owner.respond_to?(:potential?) && owner.potential? %><%= badge "Potential", :brand %><% end %>
       <% if scheduled_call.missed? %>
         <%= badge "Missed", :danger, dot: true %>

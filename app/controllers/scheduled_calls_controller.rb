@@ -9,7 +9,7 @@ class ScheduledCallsController < ApplicationController
     @scheduled_call = @owner.scheduled_calls.build(scheduled_call_params)
     if @scheduled_call.save
       redirect_to return_destination,
-        notice: "Call scheduled with #{@owner.name} for #{format_call_stamp(@scheduled_call)}."
+        notice: "Call scheduled with #{@owner.display_name} for #{format_call_stamp(@scheduled_call)}."
     else
       redirect_to return_destination,
         alert: @scheduled_call.errors.full_messages.to_sentence.presence || "Enter a valid Pacific date and time."
@@ -19,7 +19,7 @@ class ScheduledCallsController < ApplicationController
   def update
     @scheduled_call.reschedule!(scheduled_call_params)
     redirect_to return_destination,
-      notice: "Call with #{@owner.name} rescheduled for #{format_call_stamp(@scheduled_call)}."
+      notice: "Call with #{@owner.display_name} rescheduled for #{format_call_stamp(@scheduled_call)}."
   rescue ActiveRecord::RecordInvalid => e
     redirect_to return_destination,
       alert: e.record.errors.full_messages.to_sentence.presence || "Could not reschedule call."
@@ -37,7 +37,7 @@ class ScheduledCallsController < ApplicationController
 
   def cancel
     @scheduled_call.cancel!
-    redirect_to return_destination, notice: "Scheduled call with #{@owner.name} cancelled."
+    redirect_to return_destination, notice: "Scheduled call with #{@owner.display_name} cancelled."
   rescue ActiveRecord::RecordInvalid => e
     redirect_to return_destination,
       alert: e.record.errors.full_messages.to_sentence.presence || "Could not cancel call."

@@ -36,7 +36,7 @@
           <% if owner.is_a?(Client) %>
             <%= link_to owner.name, client_path(owner), class: "link" %>
           <% elsif owner.is_a?(Lead) %>
-            <%= link_to owner.name, lead_path(owner), class: "link" %>
+            <%= link_to owner.display_name, lead_path(owner), class: "link" %>
           <% else %>
             —
           <% end %>

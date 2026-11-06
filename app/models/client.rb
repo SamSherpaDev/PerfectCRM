@@ -6,6 +6,10 @@ class Client < ApplicationRecord
 
   encrypts :phone, :phone_raw
 
+  def display_name
+    name
+  end
+
   def display_phone
     Leads::Phone.format(phone.presence || phone_raw.presence, country: country)
   end

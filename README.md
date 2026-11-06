@@ -961,14 +961,17 @@ No prices and no marketing. The preview shows a full match and a closest match
 in both variants. Only
 inquiries created after the switch was turned on qualify, with the same address,
 domain, spam, daily-limit (three per address per day) and single-attempt
-delivery rules as the itinerary email. An email quiz visitor gets exactly one
-automatic email: while the switch is on, intake schedules the trip quiz email
+delivery rules as the itinerary email. An email quiz visitor gets at most one
+automatic email, never a guaranteed one: while the switch is on, intake schedules the trip quiz email
 instead of the first reply, and `TripQuizEmailJob` schedules the general
 automatic first reply notification (two minutes after intake) whenever it skips; while the switch is off, or without a
-`quiz` object, the first reply is scheduled as for any website inquiry.
-Phone-only structured quiz leads queue no email copy, match email or first
-reply, and dispatch no email, SMS or call. The existing lead-created event is
-preserved; a phone alone never records a free-call request.
+`quiz` object, the first reply is scheduled as for any website inquiry. The
+first reply greets by first name, so it skips a nameless quiz visitor while
+the switch is off; turning the switch on (with the sender ready) is what
+delivers "Your trip match" to a nameless email visitor. Phone-only structured
+quiz leads still send the captain the internal inquiry copy to info@ ("Call
+now" with the number), but queue no match email or first reply and send the
+visitor no email, SMS or call. A phone alone never records a free-call request.
 
 ## Source history and calls
 

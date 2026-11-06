@@ -112,21 +112,15 @@ module Leads
   # new inquiry with its own email.
   def find_recent_duplicate(email:, message:, trip_handle: nil, trip_title: nil, auto_archived: false, exclude_external_ref: nil, itinerary: nil, quiz: nil, phone: nil, now: Time.current)
     normalized_email = email.to_s.strip.downcase
-    phone_only = normalized_email.blank? && quiz.present? && phone.present?
-    return nil if normalized_email.blank? && !phone_only
+    return nil if normalized_email.blank?
 
     cutoff = now - DUPLICATE_WINDOW
-    candidates = if phone_only
-      ::Lead.where(placement: "trip_quiz", email: [ nil, "" ])
-    else
-      ::Lead.where("lower(email) = ?", normalized_email)
-    end
-    candidates = candidates.where("COALESCE(received_at, created_at) >= ?", cutoff)
+    candidates = ::Lead.where("lower(email) = ?", normalized_email)
+      .where("COALESCE(received_at, created_at) >= ?", cutoff)
     candidates = candidates.where.not(external_ref: exclude_external_ref) if exclude_external_ref.present?
     candidates = candidates.order(Arel.sql("COALESCE(received_at, created_at) DESC, id DESC"))
 
-    matches = candidates.select do |lead|
-      next false if phone_only && lead.phone != phone
+    candidates.find do |lead|
       next false if quiz && phone.present? && lead.phone.present? && lead.phone != phone
       next false if lead.converted?
       next false if (lead.archived? || lead.spam_marked_at.present?) && !auto_archived
@@ -136,9 +130,6 @@ module Leads
 
       normalize_message_for_duplicate(lead.message) == normalize_message_for_duplicate(message)
     end
-    return nil if phone_only && matches.many?
-
-    matches.first
   end
 
   def same_or_compatible_trip?(lead, trip_handle:, trip_title:, message:)
@@ -171,6 +162,7 @@ module Leads
         merged_ids << submission_id
         meta["merged_submission_ids"] = merged_ids
         lead.metadata = meta
+        lead.name = fields[:name] if lead.name.blank? && fields[:name].present?
         lead.phone = fields[:phone] if lead.phone.blank? && fields[:phone].present?
         lead.phone_raw = fields[:phone_raw] if lead.phone_raw.blank? && fields[:phone_raw].present?
         lead.save! if lead.changed?
@@ -190,8 +182,7 @@ module Leads
             "trip_handle" => fields[:trip_handle],
             "trip_title" => fields[:trip_title],
             "placement" => fields[:placement],
-            "caller" => caller_name,
-            "quiz_submission" => fields[:quiz_submission]
+            "caller" => caller_name
           }.compact
         )
       end

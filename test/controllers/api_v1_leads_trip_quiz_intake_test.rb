@@ -266,34 +266,47 @@ class ApiV1LeadsTripQuizIntakeTest < ActionDispatch::IntegrationTest
       assert_response :accepted
       lead = Lead.last
       receipt = response.parsed_body
-      assert receipt["accepted"]
-      assert_equal "trip_quiz", receipt["placement"]
-      assert_equal lead.quiz, receipt["quiz"]
-      if contact["email"]
-        assert_equal contact["email"], receipt.dig("contact", "email")
-        assert_nil receipt.dig("contact", "phone")
-      else
-        assert_nil receipt.dig("contact", "email")
-        assert_equal "+14155550134", receipt.dig("contact", "phone")
-      end
+      assert_equal true, receipt["accepted"]
+      assert_equal lead.id, receipt["id"]
+      assert_equal lead.reference, receipt["reference"]
+      assert receipt["received_at"].present?
+      assert_not receipt.key?("contact")
+      assert_not receipt.key?("quiz")
       assert_equal "", lead.name
+      if contact["email"]
+        assert_equal contact["email"], lead.email
+        assert_nil lead.phone
+      else
+        assert_nil lead.email
+        assert_equal "+14155550134", lead.phone
+      end
       assert_equal false, lead.quiz["email_list"]
       assert_nil lead.call_request
       assert_equal QUIZ.slice("interests", "pace", "length", "season", "group_size"), lead.quiz.slice("interests", "pace", "length", "season", "group_size")
+      assert lead.lead_notifications.exists?(event: "email_copy")
       assert_equal contact["email"].present?, lead.lead_notifications.exists?(event: "trip_quiz_email")
       assert_not lead.lead_notifications.exists?(event: "auto_first_reply")
 
       sign_in
       get leads_path
       assert_response :ok
-      assert_select "a[href^=?]", lead_path(lead), text: lead.display_name
+      assert_select "a[href^=?]", lead_path(lead), text: (contact["email"] || "415-555-0134")
       get lead_path(lead)
       assert_response :ok
       assert_includes response.body, "Under two weeks"
     end
   end
 
-  test "phone-only quiz repeats merge and replay honestly while contact or answer edits need a fresh id" do
+  test "a nameless phone-only quiz lead is labeled by its phone in the Today call queue" do
+    post_intake intake_body.merge("contact" => { "phone_raw" => "(415) 555-0134" })
+    lead = Lead.last
+    sign_in
+    get root_path
+    assert_response :ok
+    assert_select "#call_list_lead_#{lead.id} a[href=?]", lead_path(lead), text: "415-555-0134"
+  end
+
+  test "phone-only quiz retries replay by submission id and a fresh id creates its own lead" do
     body = intake_body.merge("contact" => { "phone_raw" => "+44 20 7946 0958" })
     post_intake body
     assert_response :accepted
@@ -301,15 +314,41 @@ class ApiV1LeadsTripQuizIntakeTest < ActionDispatch::IntegrationTest
     assert_equal "+442079460958", lead.phone
     assert_no_difference("Lead.count") { post_intake body }
     assert_response :ok
-    assert response.parsed_body["accepted"]
-    assert_no_difference("Lead.count") { post_intake body.merge("submission_id" => SecureRandom.uuid) }
-    assert_response :ok
     assert_equal lead.id, response.parsed_body["id"]
-    assert lead.reload.activity_events.last.metadata.dig("quiz_submission", "quiz", "interests")
-    post_intake body.deep_merge("quiz" => { "season" => "spring" })
-    assert_response :conflict
-    assert_equal "submission_conflict", response.parsed_body["error"]
-    assert_not response.parsed_body["accepted"]
+    assert_equal true, response.parsed_body["accepted"]
+
+    assert_difference("Lead.count", 1) { post_intake body.merge("submission_id" => SecureRandom.uuid) }
+    assert_response :accepted
+    assert_not_equal lead.id, response.parsed_body["id"]
+    assert_equal "+442079460958", Lead.last.phone
+  end
+
+  test "email duplicates keep every accepted contact and answer" do
+    post_intake intake_body("contact" => { "phone_raw" => "4155550134" })
+    with_phone = Lead.last
+    assert_difference("Lead.count", 1) do
+      post_intake intake_body("contact" => { "phone_raw" => "+44 20 7946 0958" })
+    end
+    assert_response :accepted
+    assert_equal "+442079460958", Lead.last.phone
+
+    assert_difference("Lead.count", 1) do
+      post_intake intake_body("quiz" => { "season" => "spring" })
+    end
+    assert_equal "spring", Lead.last.quiz["season"]
+
+    nameless = intake_body.merge("contact" => { "email" => "quiz-repeat@gmail.com" })
+    post_intake nameless
+    original = Lead.last
+    assert_no_difference("Lead.count") do
+      post_intake nameless.merge("submission_id" => SecureRandom.uuid, "contact" => { "name" => "Quinn Repeat", "email" => "quiz-repeat@gmail.com", "phone_raw" => "4155550199" })
+    end
+    assert_response :ok
+    assert_equal original.id, response.parsed_body["id"]
+    original.reload
+    assert_equal "Quinn Repeat", original.name
+    assert_equal "+14155550199", original.phone
+    assert_equal "+14155550134", with_phone.reload.phone
   end
 
   test "quiz rejects missing and invalid supplied contact even when the other field is valid" do
@@ -324,24 +363,35 @@ class ApiV1LeadsTripQuizIntakeTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "DNS temporary failure is retryable and never an accepted lead even alongside a valid phone" do
+  test "DNS temporary failure alone is retryable and never an accepted lead even alongside a valid phone" do
     assert_no_difference("Lead.count") do
       post_intake intake_body("contact" => { "phone_raw" => "4155550134" }), email_status: :temporary
     end
     assert_response :service_unavailable
     assert_equal "30", response.headers["Retry-After"]
     assert_equal "contact_validation_unavailable", response.parsed_body["error"]
-    assert_not response.parsed_body["accepted"]
+    assert_not response.parsed_body.key?("accepted")
   end
 
-  test "nameless email keeps the protected match dispatch while phone-only dispatches nothing" do
+  test "definite field errors win over a temporary DNS result" do
+    [ [ intake_body("contact" => { "phone_raw" => "1234567" }), "contact.phone_raw" ],
+      [ intake_body("consent" => { "contact" => false }), "consent.contact" ] ].each do |body, key|
+      assert_no_difference("Lead.count") { post_intake body, email_status: :temporary }
+      assert_response :bad_request
+      assert_nil response.headers["Retry-After"]
+      assert_equal "validation", response.parsed_body["error"]
+      assert_equal "invalid", response.parsed_body.dig("fields", key)
+      assert_not response.parsed_body["fields"].key?("contact.email")
+    end
+  end
+
+  test "nameless email gets the existing match email and phone-only gets only the internal inquiry copy" do
     @settings.update!(trip_quiz_email_enabled: true, auto_first_reply_enabled: true, auto_first_reply_enabled_at: 1.hour.ago)
     travel 1.second
     post_intake intake_body.merge("contact" => { "email" => "  QUIZ-MATCH@GMAIL.COM  " })
     assert_response :accepted
     email_lead = Lead.last
     assert_equal "quiz-match@gmail.com", email_lead.email
-    assert_equal "quiz-match@gmail.com", response.parsed_body.dig("contact", "email")
     email_notification = email_lead.lead_notifications.find_by!(event: "trip_quiz_email")
     travel 2.minutes
     assert_difference("Message.outbound.count", 1) { LeadNotificationJob.perform_now(email_notification.id) }
@@ -353,36 +403,31 @@ class ApiV1LeadsTripQuizIntakeTest < ActionDispatch::IntegrationTest
     phone_body["quiz"].delete("intent")
     post_intake phone_body
     phone_lead = Lead.last
-    assert_equal [ "lead.created" ], phone_lead.lead_notifications.pluck(:event)
+    assert_equal [ "email_copy", "lead.created" ], phone_lead.lead_notifications.order(:id).pluck(:event)
+    ActionMailer::Base.deliveries.clear
     assert_no_difference("Message.outbound.count") do
       phone_lead.lead_notifications.each { |notification| LeadNotificationJob.perform_now(notification.id) }
     end
+    assert_equal [ [ "info@sherpaholidays.com" ] ], ActionMailer::Base.deliveries.map(&:to)
+    assert_includes ActionMailer::Base.deliveries.last.subject, "Call now"
+    assert_includes ActionMailer::Base.deliveries.last.body.to_s, "tel:+14155550134"
     assert_nil phone_lead.call_request
     assert_nil phone_lead.trip_quiz_email
   end
 
-  test "phone-only duplicate matching does not link unrelated email identities" do
-    post_intake intake_body("contact" => { "phone_raw" => "4155550134" })
-    email_lead = Lead.last
-    assert_difference("Lead.count", 1) do
-      post_intake intake_body.merge("contact" => { "phone_raw" => "4155550134" })
-    end
+  test "while the quiz email is off a nameless email visitor is not promised the first reply" do
+    @settings.update!(trip_quiz_email_enabled: false, auto_first_reply_enabled: true, auto_first_reply_enabled_at: 1.hour.ago)
+    Template.create!(name: "First reply", purpose: :first_reply, channel: "email", body: "Hi {{first_name}}, let's arrange a call.")
+    travel 1.second
+    post_intake intake_body.merge("contact" => { "email" => "quiz-nameless@gmail.com" })
     assert_response :accepted
-    assert_nil Lead.last.email
-    assert_not_equal email_lead.id, Lead.last.id
-  end
-
-  test "duplicate receipt echoes only supplied contact and merged retries compare their own submission" do
-    post_intake intake_body("contact" => { "phone_raw" => "4155550134" })
     lead = Lead.last
-    body = intake_body.merge("contact" => { "email" => "anna@gmail.com" })
-    assert_no_difference("Lead.count") { post_intake body }
-    assert_response :ok
-    assert_nil response.parsed_body.dig("contact", "phone")
-    assert_equal lead.id, response.parsed_body["id"]
-    assert_no_difference("Lead.count") { post_intake body }
-    assert_response :ok
-    assert response.parsed_body["accepted"]
+    assert_not lead.lead_notifications.exists?(event: "trip_quiz_email")
+    notification = lead.lead_notifications.find_by!(event: "auto_first_reply")
+    travel 2.minutes
+    assert_no_difference("Message.outbound.count") { LeadNotificationJob.perform_now(notification.id) }
+    assert_nil AutomaticFirstReply.find_by(lead: lead)
+    assert_nil lead.reload.trip_quiz_email
   end
 
   test "quiz save failure is never accepted and nonquiz still needs name and email" do

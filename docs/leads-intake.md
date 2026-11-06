@@ -17,8 +17,7 @@ Base URL: `https://perfectcrm.sherpaholidays.com`.
 Bodies are `application/json`, max 32 KB. Error bodies are
 `{ "error": "bad_request" | "forbidden" | "unauthorized" | "validation" |
 "rate_limited" | "not_found" | "expired" | "converted" | "archived" | "server" }`;
-structured quiz intake additionally uses `contact_validation_unavailable` (503)
-and `submission_conflict` (409).
+structured quiz intake additionally uses `contact_validation_unavailable` (503).
 Validation errors add a `fields` map from payload key (or model attribute
 for save failures) to `invalid` / `taken` / `required`. A verdict for a converted or
 archived lead instead returns `{ "error": "validation", "fields": { "base": "converted" } }`
@@ -473,7 +472,9 @@ requested from the thank-you call sheet) to the details endpoint above.
 Before revealing a match, the storefront submits all five answers and at least
 one contact: `contact.email` or `contact.phone_raw` (both are allowed).
 `contact.name` is optional; no name is invented. Nameless quiz records display
-the email or formatted phone on the ordinary leads list and record header.
+the email or formatted phone wherever the CRM labels the lead (leads list,
+record header, Today call queue, pipeline, calls, tasks); converting one to a
+client still needs a real name entered first.
 Every supplied nonblank contact must validate, even if the other is valid:
 remove or correct an invalid optional field. Missing both returns
 `400 {"error":"validation","fields":{"contact":"required"}}`; invalid
@@ -487,8 +488,10 @@ when MX is absent. NXDOMAIN/no mail records reject. Up to three DNS queries each
 have a one-second overall timeout, with no application retries. Timeout,
 SERVFAIL, refusal or network unavailability returns HTTP 503 with
 `Retry-After: 30` and
-`{"error":"contact_validation_unavailable","fields":{"contact.email":"temporary"}}`.
-It never fails open, sends a verification message, probes SMTP or uses an
+`{"error":"contact_validation_unavailable","fields":{"contact.email":"temporary"}}`,
+but only when that is the sole blocker: any definite field error (for example
+an invalid `contact.phone_raw` or missing `consent.contact`) returns the 400
+field map instead. It never fails open, sends a verification message, probes SMTP or uses an
 external verification service. Ordinary intake's older DNS behavior is unchanged.
 
 Quiz phones use Phonelib's maintained libphonenumber metadata, not the ordinary
@@ -508,33 +511,33 @@ marketing/five-note permission or a requested call. The gate leaves
 call action uses the existing details `call_request`. This app does not
 subscribe anyone from the quiz metadata.
 
-A structured quiz's 200/202 receipt adds to the existing id/reference/time/
-conversion fields:
+A structured quiz's 200/202 receipt is the existing id/reference/time/
+conversion receipt plus one `accepted` flag. It does not echo the contact or
+quiz answers:
 
 ```json
-{"accepted":true,"placement":"trip_quiz","contact":{"email":null,"phone":"+14155550134"},"quiz":{"interests":["temples"],"pace":"easy","length":"under-14","season":"fall","group_size":2,"match":{"handle":"nepal-highlights-premium-tour","title":"9-Day Nepal Highlights Premium Tour"}}}
+{"id":123,"reference":"SH-4K7Q","received_at":"2026-11-06T18:06:41Z","conversion":true,"accepted":true}
 ```
 
 The receipt proves persistence, not delivery. Unlock only on 200/202 with
-`accepted:true`, id/reference/received_at, normalized contact and the accepted
-quiz answers. A bot-archived lead returns `accepted:false`; generic 2xx/empty
-responses and validation/storage errors never mean completion. The browser
-should use a 15-second timeout, no automatic retries, and no optimistic reveal.
-After timeout/network failure the outcome is unknown: an explicit retry sends
-the identical body and submission_id. A replay with changed quiz/contact/name/
-message returns HTTP 409 `{"error":"submission_conflict"}`; edits need a new
-submission_id. Existing nonquiz replay behavior is unchanged.
+`accepted:true` and id/reference/received_at. A bot-archived lead returns
+`accepted:false`; generic 2xx/empty responses and validation/storage errors
+never mean completion. The browser should use a 15-second timeout, no
+automatic retries, and no optimistic reveal. After timeout/network failure the
+outcome is unknown: an explicit retry resends the identical body with the same
+submission_id and gets the original lead's receipt. Changed contact, name,
+message or answers need a new submission_id; the server does not detect or
+reject a same-id replay whose body changed, it returns the receipt of the lead
+already stored for that id. Existing nonquiz replay behavior is unchanged.
 
 Duplicate merge: a quiz post merges into an earlier inquiry only when
 `Leads::TripQuiz.signature` (the match handle plus answers) and message match,
 so changed answers make a new inquiry under existing conventions. Email remains
-the usual identity; conflicting nonblank quiz phones do not merge. Phone-only
-repeats may merge only with an unambiguous phone-only quiz record having the
-same canonical phone, answers and message within 24 hours. They never merge
-into an unrelated email identity. A merged submission records its quiz,
-acquisition/attribution and page snapshot in the duplicate timeline event;
-lead contact fields remain on the lead. Existing attribution sanitization and
-permission handling are unchanged. Replays and duplicates create no new
+the only duplicate identity: a quiz with a phone that conflicts with the
+earlier lead's nonblank phone does not merge and becomes its own inquiry. A
+merge fills the earlier lead's blank name or phone from the new submission,
+so no accepted contact is dropped. Phone-only quiz posts never merge: each new
+submission_id creates its own lead. Replays and duplicates create no new
 visitor notification.
 
 The details endpoint does not accept email updates. A later 'Email me my match'
@@ -549,11 +552,18 @@ Trip quiz email: when Settings → Automations → Trip quiz email is on, a new
 `trip_quiz` inquiry with `quiz` and valid email schedules a "Your trip match" email one minute
 after intake in place of the general automatic first reply, which runs only
 when that email is skipped. It ships off by default; while it is off, the first
-reply is scheduled as for any website inquiry with email, so an email quiz
-visitor gets exactly one automatic email; see [README, Leads](../README.md#leads).
-Phone-only quiz intake queues neither email copy nor visitor first-reply/match
-email, and sends no email/SMS/call. Its existing `lead.created` event remains;
-merely supplying a phone does not create a requested-call record.
+reply is scheduled as for any website inquiry with email. An email quiz
+visitor gets at most one automatic email, never a guaranteed one: the match
+email and the first reply each keep their own guards, and the first reply's
+template greets by first name, so it skips a nameless visitor ("missing
+placeholder") while the trip quiz email is off; see
+[README, Leads](../README.md#leads). Live "Your trip match" delivery needs the
+switch above turned on with the sender ready; merging this intake support does
+not turn it on. Phone-only quiz intake queues the usual internal `email_copy`
+alert to info@sherpaholidays.com ("Call now" with a `tel:` link) and the
+`lead.created` event, but no visitor match email or first reply, and sends the
+visitor no email, SMS or call. Merely supplying a phone does not create a
+requested-call record.
 
 ## Source database contract (v1)
 
