@@ -73,7 +73,7 @@
           <li class="ev in" id="inquiry">
             <span class="stone" aria-hidden="true"><i></i></span>
             <div class="body">
-              <p class="meta"><b><%= lead.name %></b><span><%= timeline_stamp(entry.at) %></span><span class="src"><%= render "shared/icon", name: lead_source_icon(lead.source) %><%= lead_source_label(lead) %></span></p>
+              <p class="meta"><b><%= lead.display_name %></b><span><%= timeline_stamp(entry.at) %></span><span class="src"><%= render "shared/icon", name: lead_source_icon(lead.source) %><%= lead_source_label(lead) %></span></p>
               <div class="msg">
                 <% if lead.message.present? %>
                   <p class="italic whitespace-pre-line"><%= lead.message %></p>

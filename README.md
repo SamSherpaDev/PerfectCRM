@@ -929,8 +929,12 @@ instead of the automatic first reply while the itinerary email is on.
 
 The website's "Find your perfect trip" questionnaire sends inquiries with the
 `trip_quiz` placement and the visitor's answers and matched trips (payload and
-rules: [website intake contract](docs/leads-intake.md#trip-quiz)). The lead
-page shows them in a **Quiz answers** card under Details: the best match and
+rules: [website intake contract](docs/leads-intake.md#trip-quiz)). Before
+showing a match, the quiz requires all five answers and a valid email or phone;
+name is optional (rules: [contact gate](docs/leads-intake.md#contact-gate-and-acceptance-receipt)).
+A nameless quiz lead shows its email or phone wherever the CRM labels it.
+Contact permission is not marketing consent or a requested call. The lead page
+shows the answers in a **Quiz answers** card under Details: the best match and
 the up to two closest alternate trips (linked to their real trip pages),
 interests, pace, length, season, travelers, what was asked for (email or free
 call), and the trip-notes box. A free call requested in the quiz
@@ -944,7 +948,7 @@ The **Trip quiz email** is off until the owner approves its wording. Read both
 variants (asked for a call, and email only) at `/settings/trip_quiz_email`
 (Settings → Automations → Read the trip quiz email), then switch it on in
 Settings → Automations. While it is on, each new `trip_quiz` inquiry with a
-`quiz` object gets "Your trip match" from info@sherpaholidays.com about a
+`quiz` object and valid email gets "Your trip match" from info@sherpaholidays.com about a
 minute after intake: the best match with a link to its trip page ("Your
 match", or "The closest of our 35 trips to your answers" when it misses any
 answer), one short line per answer it meets under "Why it fits" and per answer
@@ -956,11 +960,17 @@ No prices and no marketing. The preview shows a full match and a closest match
 in both variants. Only
 inquiries created after the switch was turned on qualify, with the same address,
 domain, spam, daily-limit (three per address per day) and single-attempt
-delivery rules as the itinerary email. A quiz visitor gets exactly one
-automatic email: while the switch is on, intake schedules the trip quiz email
+delivery rules as the itinerary email. An email quiz visitor gets at most one
+automatic email, never a guaranteed one: while the switch is on, intake schedules the trip quiz email
 instead of the first reply, and `TripQuizEmailJob` schedules the general
 automatic first reply notification (two minutes after intake) whenever it skips; while the switch is off, or without a
-`quiz` object, the first reply is scheduled as for any website inquiry.
+`quiz` object, the first reply is scheduled as for any website inquiry. The
+first reply greets by first name, so it skips a nameless quiz visitor while
+the switch is off; turning the switch on (with the sender ready) is what
+delivers "Your trip match" to a nameless email visitor. Phone-only structured
+quiz leads still send the captain the internal inquiry copy to info@ ("Call
+now" with the number), but queue no match email or first reply and send the
+visitor no email, SMS or call. A phone alone never records a free-call request.
 
 ## Source history and calls
 

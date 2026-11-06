@@ -59,7 +59,7 @@ class Lead < ApplicationRecord
   validate :no_changes_when_converted, on: :update
   validate :no_unconvert, on: :update
 
-  validates :name, presence: true
+  validates :name, presence: true, unless: -> { placement == "trip_quiz" && quiz.present? && (email.present? || phone.present?) }
   validates :kind, inclusion: { in: KINDS }
   validates :source, inclusion: { in: SOURCES }
   validate :existing_client_link_valid
@@ -448,6 +448,11 @@ class Lead < ApplicationRecord
       client.sync_fts!
       client
     end
+  end
+
+  # Contact-only quiz leads keep the actual name blank, not a fabricated person.
+  def display_name
+    name.presence || email.presence || display_phone.presence || "Quiz inquiry"
   end
 
   def display_phone

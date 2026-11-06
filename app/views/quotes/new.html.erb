@@ -1,6 +1,6 @@
 <% content_for :title, "New quote · PerfectCRM" %>
 <div class="page" data-controller="quote-builder">
-  <%= render layout: "shared/page_header", locals: { eyebrow: "Quote", title: "New quote", subtitle: "For #{@owner.name} · built from current trip details.", back: ["Quotes", quotes_path] } do %><% end %>
+  <%= render layout: "shared/page_header", locals: { eyebrow: "Quote", title: "New quote", subtitle: "For #{@owner.display_name} · built from current trip details.", back: ["Quotes", quotes_path] } do %><% end %>
   <%= render "shared/flash" %>
   <% if @quote.errors.any? %>
     <div class="callout-danger callout" role="alert">

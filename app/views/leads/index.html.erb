@@ -38,7 +38,7 @@
         <% @leads.each do |lead| %>
           <li class="flex flex-col gap-2 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-7">
             <div class="min-w-0 sm:flex-1">
-              <%= link_to lead.name, lead_path(lead, return_to: @lead_action_return_to), class: "link font-medium" %>
+              <%= link_to lead.display_name, lead_path(lead, return_to: @lead_action_return_to), class: "link font-medium" %>
               <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs muted">
                 <span class="src inline-flex items-center gap-1.5">
                   <%= render "shared/icon", name: lead_source_icon(lead.source), class: "h-3.5 w-3.5" %>

@@ -69,7 +69,7 @@
           <li class="scheduled-call-row" id="call_list_lead_<%= lead.id %>">
             <div class="scheduled-call-row-main">
               <div class="flex flex-wrap items-center gap-2">
-                <%= link_to lead.name, lead_path(lead), class: "link font-medium" %>
+                <%= link_to lead.display_name, lead_path(lead), class: "link font-medium" %>
                 <%= badge entry.attempt_label, entry.attempt > 1 ? :warning : :neutral %>
                 <% if lead.potential? %><%= badge "Potential", :brand %><% end %>
                 <% if lead.suspected_spam? %><%= badge "Check", :danger %><% end %>

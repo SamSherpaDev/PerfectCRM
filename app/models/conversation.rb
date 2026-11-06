@@ -99,7 +99,7 @@ class Conversation < ApplicationRecord
   end
 
   def linkable_name
-    linkable.respond_to?(:name) ? linkable.name : nil
+    linkable.respond_to?(:display_name) ? linkable.display_name : linkable.try(:name)
   end
 
   # New mail invalidates AI results so the next explicit request uses the

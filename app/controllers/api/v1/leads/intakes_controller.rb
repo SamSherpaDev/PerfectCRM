@@ -43,8 +43,17 @@ module Api
           begin
             itinerary = ::Leads::Itinerary.parse(payload) if placement_name == "itinerary_designer"
             quiz = ::Leads::TripQuiz.parse(payload) if placement_name == "trip_quiz"
+            if quiz
+              %w[interests pace length season group_size].each do |key|
+                raise ArgumentError, "quiz.#{key}" unless quiz.key?(key)
+              end
+            end
           rescue ArgumentError => error
             return render json: { error: "validation", fields: { error.message => "invalid" } }, status: :bad_request
+          end
+          if @contact_validation_temporary
+            response.set_header("Retry-After", "30")
+            return render json: { error: "contact_validation_unavailable", fields: { "contact.email" => "temporary" } }, status: :service_unavailable
           end
           submission_id = payload["submission_id"].to_s.strip
           external_ref = "website_form:#{submission_id}"
@@ -65,13 +74,15 @@ module Api
                 auto_archived: auto_archived,
                 exclude_external_ref: external_ref,
                 itinerary: lead.itinerary,
-                quiz: lead.quiz
+                quiz: lead.quiz,
+                phone: (lead.phone if lead.quiz)
               )
               if duplicate
                 ::Leads.merge_duplicate!(
                   duplicate,
                   submission_id: submission_id,
                   fields: {
+                    name: lead.name,
                     phone: lead.phone,
                     phone_raw: lead.phone_raw,
                     message: lead.message,
@@ -108,9 +119,9 @@ module Api
                   lead.lead_notifications.create!(event: "itinerary_email", available_at: 1.minute.from_now)
                 end
                 # The trip quiz email hands over to the first reply when it skips.
-                if lead.quiz && Setting.current.trip_quiz_email_enabled?
+                if lead.quiz && lead.email.present? && Setting.current.trip_quiz_email_enabled?
                   lead.lead_notifications.create!(event: "trip_quiz_email", available_at: 1.minute.from_now)
-                else
+                elsif !lead.quiz || lead.email.present?
                   lead.lead_notifications.create!(event: "auto_first_reply", available_at: 2.minutes.from_now)
                 end
               end
@@ -160,17 +171,35 @@ module Api
           ::Lead.find_by(external_ref: external_ref) || ::Leads.find_by_merged_submission_id(submission_id)
         end
 
-        # Required: contact.name (2..120), contact.email (shaped + MX/A),
-        # consent.contact true, submission_id present. Returns the cleaned
+        # Ordinary inquiries require name + email. Structured quiz intake may
+        # omit name and needs valid email or phone; every supplied field validates.
+        # Consent.contact true and submission_id remain required. Returns cleaned
         # fields or nil (setting @validation_fields for the 400 body).
         def validate_required(payload)
           errors = {}
           contact = payload["contact"].is_a?(Hash) ? payload["contact"] : {}
           name = contact["name"].to_s.strip
-          errors["contact.name"] = "invalid" if name.length < 2 || name.length > 120
+          quiz_contact = payload["placement"].to_s.strip == "trip_quiz" && payload.key?("quiz")
+          errors["contact.name"] = "invalid" if (!quiz_contact || name.present?) && (name.length < 2 || name.length > 120)
 
           email = contact["email"].to_s.strip.downcase
-          errors["contact.email"] = "invalid" unless valid_email?(email)
+          phone = nil
+          if quiz_contact
+            raw = contact["phone_raw"].to_s.strip
+            errors["contact"] = "required" if email.blank? && raw.blank?
+            if raw.present?
+              phone = ::Leads::Phone.parse_quiz(raw, country: contact["country"])
+              errors["contact.phone_raw"] = "invalid" unless phone
+            end
+            if email.present?
+              case ::Leads::MailDomain.status(email)
+              when :invalid then errors["contact.email"] = "invalid"
+              when :temporary then @contact_validation_temporary = true
+              end
+            end
+          else
+            errors["contact.email"] = "invalid" unless valid_email?(email)
+          end
 
           errors["submission_id"] = "invalid" if payload["submission_id"].to_s.strip.blank? ||
             payload["submission_id"].to_s.length > 64
@@ -183,7 +212,7 @@ module Api
             return nil
           end
 
-          { name: name, email: email }
+          { name: name, email: email.presence, phone: phone }
         end
 
         def valid_email?(email)
@@ -248,7 +277,7 @@ module Api
 
           phone_raw = contact["phone_raw"].to_s.presence
           country = contact["country"].to_s.strip.presence&.truncate(100)
-          e164 = ::Leads::Phone.normalize(phone_raw, country: country)
+          e164 = quiz ? fields[:phone] : ::Leads::Phone.normalize(phone_raw, country: country)
 
           placement = payload["placement"].to_s.strip.presence
           placement = nil unless ::Lead::PLACEMENTS.include?(placement)
@@ -320,12 +349,14 @@ module Api
         end
 
         def lead_response(lead, conversion: !::Leads.auto_archive?(lead.suspicion_hits))
-          {
+          receipt = {
             id: lead.id,
             reference: lead.reference,
             received_at: (lead.received_at || lead.created_at)&.iso8601,
             conversion: conversion
           }
+          receipt[:accepted] = !lead.archived? && !lead.converted? && !::Leads.auto_archive?(lead.suspicion_hits) if lead.quiz
+          receipt
         end
       end
     end

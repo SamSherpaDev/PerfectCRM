@@ -110,7 +110,7 @@ module Leads
   # An itinerary designer or trip quiz submission merges only into one with
   # the same built trip or quiz answers; a changed trip or answer set is a
   # new inquiry with its own email.
-  def find_recent_duplicate(email:, message:, trip_handle: nil, trip_title: nil, auto_archived: false, exclude_external_ref: nil, itinerary: nil, quiz: nil, now: Time.current)
+  def find_recent_duplicate(email:, message:, trip_handle: nil, trip_title: nil, auto_archived: false, exclude_external_ref: nil, itinerary: nil, quiz: nil, phone: nil, now: Time.current)
     normalized_email = email.to_s.strip.downcase
     return nil if normalized_email.blank?
 
@@ -121,6 +121,7 @@ module Leads
     candidates = candidates.order(Arel.sql("COALESCE(received_at, created_at) DESC, id DESC"))
 
     candidates.find do |lead|
+      next false if quiz && phone.present? && lead.phone.present? && lead.phone != phone
       next false if lead.converted?
       next false if (lead.archived? || lead.spam_marked_at.present?) && !auto_archived
       next false if itinerary && Leads::Itinerary.signature(lead.itinerary) != Leads::Itinerary.signature(itinerary)
@@ -161,6 +162,7 @@ module Leads
         merged_ids << submission_id
         meta["merged_submission_ids"] = merged_ids
         lead.metadata = meta
+        lead.name = fields[:name] if lead.name.blank? && fields[:name].present?
         lead.phone = fields[:phone] if lead.phone.blank? && fields[:phone].present?
         lead.phone_raw = fields[:phone_raw] if lead.phone_raw.blank? && fields[:phone_raw].present?
         lead.save! if lead.changed?

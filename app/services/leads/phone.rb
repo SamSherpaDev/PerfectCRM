@@ -15,6 +15,19 @@ module Leads
       end
     end
 
+    # Strict quiz gate validation only; leave ordinary inquiry formatting alone.
+    def self.parse_quiz(raw, country: nil)
+      return nil unless raw.is_a?(String) && raw.length <= 100
+      return nil unless raw.match?(/\A\+?[0-9\s().-]+\z/)
+
+      region = country.to_s.strip.upcase.presence || "US"
+      region = "US" if region.in?([ "USA", "UNITED STATES", "UNITED STATES OF AMERICA" ])
+      return nil unless raw.strip.start_with?("+") || Phonelib.phone_data.key?(region)
+
+      parsed = Phonelib.parse(raw, region)
+      parsed.full_e164 if parsed.valid? && parsed.extension.blank?
+    end
+
     def self.format(raw, country: nil)
       value = raw.presence
       return nil unless value
