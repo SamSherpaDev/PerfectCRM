@@ -29,10 +29,6 @@ module Api
             return render json: { error: "validation", fields: @validation_fields },
               status: :bad_request
           end
-          if @contact_validation_temporary
-            response.set_header("Retry-After", "30")
-            return render json: { error: "contact_validation_unavailable", fields: { "contact.email" => "temporary" } }, status: :service_unavailable
-          end
 
           begin
             acquisition = ::Leads::Acquisition.parse(payload)
@@ -54,6 +50,10 @@ module Api
             end
           rescue ArgumentError => error
             return render json: { error: "validation", fields: { error.message => "invalid" } }, status: :bad_request
+          end
+          if @contact_validation_temporary
+            response.set_header("Retry-After", "30")
+            return render json: { error: "contact_validation_unavailable", fields: { "contact.email" => "temporary" } }, status: :service_unavailable
           end
           submission_id = payload["submission_id"].to_s.strip
           external_ref = "website_form:#{submission_id}"

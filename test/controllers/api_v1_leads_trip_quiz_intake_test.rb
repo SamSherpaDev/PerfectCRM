@@ -390,7 +390,9 @@ class ApiV1LeadsTripQuizIntakeTest < ActionDispatch::IntegrationTest
 
   test "definite field errors win over a temporary DNS result" do
     [ [ intake_body("contact" => { "phone_raw" => "1234567" }), "contact.phone_raw" ],
-      [ intake_body("consent" => { "contact" => false }), "consent.contact" ] ].each do |body, key|
+      [ intake_body("consent" => { "contact" => false }), "consent.contact" ],
+      [ intake_body("contact" => { "email" => "quiz-season@gmail.com" }).tap { |body| body["quiz"].delete("season") }, "quiz.season" ],
+      [ intake_body("contact" => { "email" => "quiz-pace@gmail.com" }, "quiz" => { "pace" => "sprint" }), "quiz.pace" ] ].each do |body, key|
       assert_no_difference("Lead.count") { post_intake body, email_status: :temporary }
       assert_response :bad_request
       assert_nil response.headers["Retry-After"]

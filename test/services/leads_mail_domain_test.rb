@@ -46,9 +46,22 @@ class LeadsMailDomainTest < ActiveSupport::TestCase
   end
 
   test "resolver timeout SERVFAIL refusal and unavailable network are temporary never valid" do
-    [ Dnsruby::ResolvTimeout.new, Dnsruby::ServFail.new, Dnsruby::Refused.new, Errno::ENETUNREACH.new ].each do |error|
+    [ Dnsruby::ResolvTimeout.new, Dnsruby::ServFail.new, Dnsruby::Refused.new, Dnsruby::DecodeError.new,
+      Dnsruby::VerifyError.new, Errno::ENETUNREACH.new ].each do |error|
       assert_equal :temporary, check(error: error).first
     end
+  end
+
+  test "the real resolver is bounded to one second per query with no retries or DNSSEC validation" do
+    resolver = Leads::MailDomain.resolver
+    assert_instance_of Dnsruby::Resolver, resolver
+    assert_equal 1, resolver.query_timeout
+    assert_equal 1, resolver.packet_timeout
+    assert_equal 1, resolver.retry_times
+    assert_equal false, resolver.dnssec
+    assert_equal false, resolver.do_validation
+  ensure
+    resolver&.close
   end
 
   test "invalid format and reserved names never query DNS" do

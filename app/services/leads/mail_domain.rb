@@ -16,7 +16,7 @@ module Leads::MailDomain
 
     # At most three queries, each with a one-second overall deadline and one
     # attempt per configured resolver. No unbounded retry or external service.
-    resolver = Dnsruby::Resolver.new(query_timeout: 1, packet_timeout: 1, retry_times: 1)
+    resolver = self.resolver
     mx = records(resolver, domain, "MX")
     unless mx.empty?
       return :invalid if mx.any? { |record| record.exchange.to_s.sub(/\.$/, "").empty? }
@@ -32,6 +32,10 @@ module Leads::MailDomain
     :temporary
   ensure
     resolver&.close
+  end
+
+  def resolver
+    Dnsruby::Resolver.new(query_timeout: 1, packet_timeout: 1, retry_times: 1)
   end
 
   def records(resolver, domain, type)
