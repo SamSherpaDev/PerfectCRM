@@ -11,8 +11,7 @@ class ApiV1GuideRequestsTest < ActionDispatch::IntegrationTest
   setup do
     Setting.current.update!(site_key: "synthetic-public-guide-key", sender_name: "Different ordinary sender",
       email_signature: "Ordinary signature must not enter D0")
-    @config = { enabled: true, owner_preview_approved: true, reply_opt_out_ready: true,
-      info_mailbox_verified: true, pdf_url: PDF }
+    @config = { enabled: true, pdf_url: PDF }
     @payload = { schema: "sherpa.guide-request.v1", email: "guide@example.com", source: "trip_quiz_result" }
     ActionMailer::Base.deliveries.clear
     assert_equal :test, ActionMailer::Base.delivery_method
@@ -39,10 +38,9 @@ class ApiV1GuideRequestsTest < ActionDispatch::IntegrationTest
     assert_empty ActionMailer::Base.deliveries
   end
 
-  test "each missing prerequisite and invalid final PDF fails closed" do
-    %i[enabled owner_preview_approved reply_opt_out_ready info_mailbox_verified].each do |key|
-      config = @config.merge(key => false)
-      PrivateNepalGuide.stub(:configuration, config) do
+  test "disabled switch, invalid final PDF and wrong sender identity fail closed" do
+    [ false, nil, "true" ].each do |value|
+      PrivateNepalGuide.stub(:configuration, @config.merge(enabled: value)) do
         post_guide
         assert_response :service_unavailable
       end
@@ -77,7 +75,7 @@ class ApiV1GuideRequestsTest < ActionDispatch::IntegrationTest
       assert_equal({ "schema" => "sherpa.guide-receipt.v1", "status" => "accepted" }, response.parsed_body)
       assert_equal "no-store", response.headers["Cache-Control"]
       receipt = GuideRequest.last
-      assert_equal "queued", receipt.fulfillment_status
+      assert_equal "queued", receipt.message.status
       assert_nil receipt.message.owner
       assert_empty ActionMailer::Base.deliveries
     end
@@ -139,7 +137,7 @@ class ApiV1GuideRequestsTest < ActionDispatch::IntegrationTest
       assert_not_includes mail.html_part.decoded, "Ordinary signature"
       assert_empty mail.attachments
       OutboundDeliveryJob.perform_now(receipt.message_id)
-      assert_equal "smtp_accepted", receipt.reload.fulfillment_status
+      assert_equal "sent", receipt.reload.message.status
       assert_not_nil receipt.delivery_attempted_at
       assert_equal 1, ActionMailer::Base.deliveries.size
     end
@@ -182,12 +180,12 @@ class ApiV1GuideRequestsTest < ActionDispatch::IntegrationTest
         assert_no_enqueued_jobs only: OutboundDeliveryJob do
           OutboundDeliveryJob.perform_now(receipt.message_id)
         end
-        assert_equal "failed", receipt.reload.fulfillment_status
+        assert_equal "failed", receipt.reload.message.status
         receipt.message.update!(status: "queued")
         OutboundDeliveryJob.perform_now(receipt.message_id)
       end
       assert_equal 1, attempts
-      assert_equal "failed", receipt.reload.fulfillment_status
+      assert_equal "failed", receipt.reload.message.status
       post_guide
       assert_response :accepted
       assert_equal 1, GuideRequest.count
@@ -200,7 +198,7 @@ class ApiV1GuideRequestsTest < ActionDispatch::IntegrationTest
     ClientMailer.stub(:outbound, ->(*) { flunk "inactive guide must not reach sender" }) do
       OutboundDeliveryJob.perform_now(receipt.message_id)
     end
-    assert_equal "failed", receipt.reload.fulfillment_status
+    assert_equal "failed", receipt.reload.message.status
     assert_nil receipt.delivery_attempted_at
     enabled { GuideRequest.enqueue_pending }
     assert_empty ActionMailer::Base.deliveries
@@ -213,7 +211,7 @@ class ApiV1GuideRequestsTest < ActionDispatch::IntegrationTest
         assert_response :service_unavailable
       end
       assert_equal 1, GuideRequest.count
-      assert_equal "queued", GuideRequest.last.fulfillment_status
+      assert_equal "queued", GuideRequest.last.message.status
       assert_enqueued_jobs 1, only: OutboundDeliveryJob do
         GuideRequest.enqueue_pending
       end

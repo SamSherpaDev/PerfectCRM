@@ -13,8 +13,7 @@ module PrivateNepalGuide
 
   def self.available?
     config = configuration
-    %i[enabled owner_preview_approved reply_opt_out_ready info_mailbox_verified].all? { |key| config[key] == true } &&
-      valid_pdf_url?(config[:pdf_url]) && Outbound::Composer.from_address == FROM
+    config[:enabled] == true && valid_pdf_url?(config[:pdf_url]) && Outbound::Composer.from_address == FROM
   end
 
   def self.valid_pdf_url?(value)

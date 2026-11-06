@@ -49,9 +49,4 @@ class GuideRequest < ApplicationRecord
     message.mark_failed!("Guide fulfillment unavailable; no automatic retry.")
     false
   end
-
-  # Operational receipt only. SMTP acceptance does not prove inbox delivery.
-  def fulfillment_status
-    { "queued" => "queued", "sending" => "uncertain", "sent" => "smtp_accepted", "failed" => "failed" }.fetch(message&.status, "unavailable")
-  end
 end

@@ -67,10 +67,9 @@ The receipt's durable claim permits **one SMTP attempt**, including overlapping
 jobs. A transport error or uncertain acknowledgement is not retried. Repeated
 requests never create a second guide message or replay a sequence, even later in
 the same edition. Failed/uncertain cases need operator review in the existing mail
-workflow; never reset the claim to force a resend. Queued, sending, sent and failed
-Message states map to queued, uncertain, smtp_accepted and failed receipt states.
-`sent` proves only the SMTP call returned successfully, not delivery/opening. A
-process crash after claiming is uncertain and must not cause an automatic replay.
+workflow; never reset the claim to force a resend. A `sending` Message is
+uncertain; `sent` proves only the SMTP call returned successfully, not
+delivery/opening. A process crash after claiming is uncertain and must not cause an automatic replay.
 Turning the feature off before a queued job runs fails that message without sending.
 
 ## Approved content and activation hold
@@ -80,7 +79,7 @@ copy. Its review/timing/header block is excluded from outgoing mail; the body is
 preserved, replacing only the approved final-PDF placeholder. The PDF is linked,
 not attached or rebuilt. The approved original PDF/content package stays read-only.
 
-`config/private_nepal_guide.yml` ships with every switch false and no PDF URL.
+`config/private_nepal_guide.yml` ships with `enabled: false` and no PDF URL.
 No activation or deployment follows from source merge. All of these remain owner
 prerequisites, not facts established by local tests:
 
@@ -107,9 +106,10 @@ prerequisites, not facts established by local tests:
    authorized for the owner-preview workflow. This backend lane sends no real or
    test email and must not create a second test. Combined preview approval must be
    followed by separate explicit activation authorization. Only then may an
-   authorized operator set the approval switches, final URL and enabled flag.
+   authorized operator set the final URL and the single `enabled` switch, after
+   confirming items 1-5. The switch does not verify those prerequisites itself.
 
-Missing URL, owner preview, reply handling, verified mailbox or correct existing
-MAIL_FROM keeps intake unavailable and prevents queued delivery. Test SMTP rendering
+A disabled switch, missing or invalid final URL, or incorrect existing MAIL_FROM
+keeps intake unavailable and prevents queued delivery. Test SMTP rendering
 uses the Rails test adapter/stubbed sender and synthetic records only. It establishes
 source behavior, never deployment, actual delivery or Shopify consent/suppression.
