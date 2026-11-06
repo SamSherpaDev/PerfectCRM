@@ -107,7 +107,7 @@ class ApiV1GuideRequestsTest < ActionDispatch::IntegrationTest
       post_guide
       receipt = GuideRequest.last
       mail = ClientMailer.outbound(receipt.message).message
-      # Independent literal oracle transcribed from immutable approved emails/D0.txt.
+      # Independent literal oracle transcribed from immutable approved emails/D0.txt, minus operator-only lines.
       expected = <<~TEXT
         Hello,
 
@@ -123,7 +123,7 @@ class ApiV1GuideRequestsTest < ActionDispatch::IntegrationTest
         775 N 14th Street, San Jose, CA 95112
 
         Requested SherpaHolidays guide; includes information about our travel services.
-        To stop marketing, reply 'unsubscribe'. If a marketing send tool is used, include its working unsubscribe link as well.
+        To stop marketing, reply 'unsubscribe'.
       TEXT
       assert_equal "Your private Nepal journey guide", mail.subject
       assert_equal expected, mail.text_part.decoded
@@ -135,6 +135,11 @@ class ApiV1GuideRequestsTest < ActionDispatch::IntegrationTest
       assert_includes mail.html_part.decoded, PDF
       assert_includes mail.html_part.decoded, "reply &#39;unsubscribe&#39;"
       assert_not_includes mail.html_part.decoded, "Ordinary signature"
+      [ mail.text_part.decoded, mail.html_part.decoded ].each do |part|
+        [ "REVIEW DRAFT", "NOT FOR SENDING", "Timing:", "marketing send tool", "unsubscribe link" ].each do |note|
+          assert_not_includes part, note
+        end
+      end
       assert_empty mail.attachments
       OutboundDeliveryJob.perform_now(receipt.message_id)
       assert_equal "sent", receipt.reload.message.status

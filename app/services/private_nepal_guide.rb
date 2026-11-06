@@ -4,6 +4,7 @@ module PrivateNepalGuide
   FROM = "info@sherpaholidays.com".freeze
   SUBJECT = "Your private Nepal journey guide".freeze
   PDF_PLACEHOLDER = "[Private Nepal journey guide - final approved PDF link]".freeze
+  SEND_TOOL_NOTE = " If a marketing send tool is used, include its working unsubscribe link as well.".freeze
 
   class Unavailable < StandardError; end
 
@@ -29,8 +30,10 @@ module PrivateNepalGuide
     raise Unavailable unless available?
 
     # Preserve Marketmate's approved body, including signature/commercial footer.
-    # The review/timing/header block is metadata, not outgoing content.
+    # The review/timing/header block and the send-tool instruction are operator
+    # guidance, not outgoing content; this info@ SMTP path is not a send tool.
     approved = Rails.root.join("config/private_nepal_guide/D0.txt").read
-    { subject: SUBJECT, body: approved.split("\n\n", 2).last.sub(PDF_PLACEHOLDER, configuration[:pdf_url]) }
+    body = approved.split("\n\n", 2).last.sub(PDF_PLACEHOLDER, configuration[:pdf_url]).sub(SEND_TOOL_NOTE, "")
+    { subject: SUBJECT, body: body }
   end
 end

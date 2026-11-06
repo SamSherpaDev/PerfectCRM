@@ -69,14 +69,19 @@ requests never create a second guide message or replay a sequence, even later in
 the same edition. Failed/uncertain cases need operator review in the existing mail
 workflow; never reset the claim to force a resend. A `sending` Message is
 uncertain; `sent` proves only the SMTP call returned successfully, not
-delivery/opening. A process crash after claiming is uncertain and must not cause an automatic replay.
+delivery/opening. A process crash after claiming is uncertain and must not cause
+an automatic replay.
 Turning the feature off before a queued job runs fails that message without sending.
 
 ## Approved content and activation hold
 
 `config/private_nepal_guide/D0.txt` is the unmodified approved November 5 package
 copy. Its review/timing/header block is excluded from outgoing mail; the body is
-preserved, replacing only the approved final-PDF placeholder. The PDF is linked,
+preserved, replacing only the approved final-PDF placeholder and omitting the
+footer's operator instruction "If a marketing send tool is used, include its
+working unsubscribe link as well." That condition is false on this info@ SMTP
+path, so recipients see the footer ending at "To stop marketing, reply
+'unsubscribe'." The PDF is linked,
 not attached or rebuilt. The approved original PDF/content package stays read-only.
 
 `config/private_nepal_guide.yml` ships with `enabled: false` and no PDF URL.
@@ -99,9 +104,9 @@ prerequisites, not facts established by local tests:
    or reactivate marketing because a guide was requested. Existing mail ingestion
    retains unread reply opt-outs; this code does not automate Shopify suppression.
 5. The approved D0 contains the business postal address, commercial identification
-   and reply `unsubscribe` footer. The footer's provider-link condition applies if
-   a marketing send tool is used; this info@ SMTP path is not that tool. No invented
-   unsubscribe URL is added. Keep Marketmate's wording; any copy question goes there.
+   and reply `unsubscribe` footer. The footer's provider-link instruction applies if
+   a marketing send tool is used; this info@ SMTP path is not that tool, so the
+   instruction stays in the source file only. No invented unsubscribe URL is added. Keep Marketmate's wording; any copy question goes there.
 6. Only the separately coordinated **one Shopify merchant test to info@** is
    authorized for the owner-preview workflow. This backend lane sends no real or
    test email and must not create a second test. Combined preview approval must be
