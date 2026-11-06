@@ -11,10 +11,11 @@ class ClientMailer < ApplicationMailer
   def outbound(message)
     @message = message
     setting = Setting.current
-    signature_html = EmailSignature.html_for(setting)
-    @body_html = signature_aware_html(@message, signature_html)
+    guide = GuideRequest.exists?(message_id: @message.id)
+    signature_html = guide ? nil : EmailSignature.html_for(setting)
+    @body_html = guide ? simple_html(@message.text_body.to_s) : signature_aware_html(@message, signature_html)
 
-    if AutomaticFirstReply.exists?(message_id: @message.id) ||
+    if guide || AutomaticFirstReply.exists?(message_id: @message.id) ||
         ItineraryEmail.exists?(message_id: @message.id) ||
         TripQuizEmail.exists?(message_id: @message.id)
       headers["Auto-Submitted"] = "auto-generated"
@@ -30,11 +31,11 @@ class ClientMailer < ApplicationMailer
         content: file.download
       }
     end
-    attach_signature_logo(setting, @body_html)
+    attach_signature_logo(setting, @body_html) unless guide
 
     mail(
-      from: Outbound::Composer.from_display,
-      reply_to: Outbound::Composer.from_address,
+      from: guide ? "SherpaHolidays <#{PrivateNepalGuide::FROM}>" : Outbound::Composer.from_display,
+      reply_to: guide ? PrivateNepalGuide::FROM : Outbound::Composer.from_address,
       to: @message.recipients,
       cc: split_addrs(@message.cc_addrs),
       bcc: split_addrs(@message.bcc_addrs),

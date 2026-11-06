@@ -7,6 +7,8 @@ Rails.application.routes.draw do
   # Contracts: docs/leads-intake.md and docs/channel-checks.md.
   namespace :api do
     namespace :v1 do
+      match "guide_requests", to: "guide_requests#preflight", via: :options
+      post "guide_requests", to: "guide_requests#create"
       get "inquiries/:reference", to: "inquiries#show"
       post "channels/snapshots", to: "channel_snapshots#create"
       post "channels/spend", to: "channel_spends#create"
