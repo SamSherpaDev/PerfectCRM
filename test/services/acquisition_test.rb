@@ -181,4 +181,76 @@ class AcquisitionTest < ActiveSupport::TestCase
     # Second run is a no-op
     assert_equal({ leads_updated: 0, conversions_queued: 0 }, Leads::Acquisition.backfill_unavailable_touches!)
   end
+
+  test "ad IDs stay exact digit strings and anything else is blank, never coerced into a match" do
+    stamp = Time.current.iso8601
+    kept = Leads::Acquisition.touch({ "observed_at" => stamp, "campaign_id" => "052666579688338", "adset_id" => " 52666579688138 ",
+      "ad_id" => "52670563689538" }, allowed: true)
+    assert_equal %w[052666579688338 52666579688138 52670563689538], kept.values_at("campaign_id", "adset_id", "ad_id")
+
+    %w[campaign_id adset_id ad_id].each do |key|
+      [ "{{campaign.id}}", "{{ad.id}}", "52670563689538.0", "5.267e13", "-52670563689538", "ad-123", "", " ",
+        52670563689538, 0, 10**250, 1.5, true, [ "52670563689538" ], { "id" => "52670563689538" } ].each do |value|
+        touch = Leads::Acquisition.touch({ "observed_at" => stamp, key => value, "utm_source" => "ig", "utm_medium" => "social" }, allowed: true)
+        assert_not touch.key?(key), "#{key}=#{value.inspect}"
+        assert_not_equal "meta_ads", touch["source"], "#{key}=#{value.inspect} must not tag an ad"
+      end
+    end
+
+    assert_raises(ArgumentError) { Leads::Acquisition.touch({ "observed_at" => stamp, "ad_id" => "1" * 201 }, allowed: true) }
+  end
+
+  test "UTM text keeps ordinary resolved values and drops any value with an unresolved brace macro" do
+    ordinary = { "utm_source" => "ig", "utm_medium" => "paid", "utm_campaign" => "sh_us_cold_cbo",
+      "utm_content" => "Ad B At your pace - Round 2 Hook A", "utm_term" => "private-nepal" }
+    touch = Leads::Acquisition.touch({ "observed_at" => Time.current.iso8601 }.merge(ordinary), allowed: true)
+    assert_equal ordinary, touch.slice(*ordinary.keys)
+
+    %w[utm_source utm_medium utm_campaign utm_content utm_term].each do |key|
+      [ "{{campaign.name}}", "{{ campaign.name }}", "sh_{{adset.name}}", "hook}}", "{{", "}}" ].each do |value|
+        touch = Leads::Acquisition.touch({ "observed_at" => Time.current.iso8601, key => value }, allowed: true)
+        assert_not touch.key?(key), "#{key}=#{value}"
+      end
+      [ 2027, 1.5, true, [ "ig" ], { "name" => "ig" } ].each do |value|
+        assert_raises(ArgumentError, "#{key}=#{value.inspect}") do
+          Leads::Acquisition.touch({ "observed_at" => Time.current.iso8601, key => value }, allowed: true)
+        end
+      end
+    end
+  end
+
+  test "URL-encoded macros in the landing and submission URLs never come back as stored values" do
+    landing = "https://www.sherpaholidays.com/pages/private-nepal-tours?utm_source=ig&utm_medium=paid" \
+      "&utm_campaign=%7B%7Bcampaign.name%7D%7D&campaign_id=%7B%7Bcampaign.id%7D%7D&adset_id=%7B%7Badset.id%7D%7D" \
+      "&ad_id=%7B%7Bad.id%7D%7D&utm_content=%7B%7Bad.name%7D%7D&utm_term=%7D%7Dx"
+    clean = "https://www.sherpaholidays.com/pages/private-nepal-tours?utm_source=ig&utm_medium=paid"
+
+    touch = { "observed_at" => 1.minute.ago.iso8601, "landing_url" => landing }
+    acquisition = Leads::Acquisition.parse({ "acquisition" => { "permission" => { "state" => "allowed" }, "last_touch" => touch,
+      "submission_page" => { "url" => landing } } })
+    assert_equal clean, acquisition["last_touch"]["landing_url"]
+    assert_equal clean, acquisition["submission_page"]["landing_url"]
+    assert_equal({ "utm_source" => "ig", "utm_medium" => "paid" }, acquisition["last_touch"].slice(*Leads::Acquisition::CAMPAIGN_KEYS))
+
+    fallback = Leads::Acquisition.submission_page_fallback({ "permission" => { "state" => "allowed", "observed_at" => 1.minute.ago.iso8601 },
+      "submission_page" => { "url" => landing } })
+    assert_equal({ "utm_source" => "ig", "utm_medium" => "paid" }, fallback.slice(*Leads::Acquisition::CAMPAIGN_KEYS))
+    assert_equal clean, fallback["landing_url"]
+    assert_no_match(/%7B|%7D|\{\{|\}\}/i, fallback.to_json)
+  end
+
+  test "legacy attribution drops unresolved macros, keeps valid IDs, and keeps its 200-character truncation" do
+    legacy = Leads::Acquisition.legacy_attribution({ "utm_source" => "ig", "utm_medium" => "paid", "utm_campaign" => "{{campaign.name}}",
+      "campaign_id" => "52666579688338", "adset_id" => "{{adset.id}}", "ad_id" => "52670563689538", "utm_term" => "private-nepal",
+      "landing_url" => "https://www.sherpaholidays.com/pages/x?utm_content=%7B%7Bad.name%7D%7D&utm_campaign=sh_us_cold_cbo" })
+    assert_equal({ "utm_source" => "ig", "utm_medium" => "paid", "campaign_id" => "52666579688338", "ad_id" => "52670563689538",
+      "utm_term" => "private-nepal", "landing_url" => "https://www.sherpaholidays.com/pages/x?utm_campaign=sh_us_cold_cbo" }, legacy)
+    assert_equal 200, Leads::Acquisition.legacy_attribution({ "utm_campaign" => "a" * 201 })["utm_campaign"].length
+  end
+
+  test "legacy attribution blanks non-string ad IDs and keeps its existing text treatment of other values" do
+    legacy = Leads::Acquisition.legacy_attribution({ "campaign_id" => 52666579688338, "adset_id" => [ "52670563689400" ], "ad_id" => 10**250,
+      "utm_term" => 2027 })
+    assert_equal({ "utm_term" => "2027" }, legacy)
+  end
 end

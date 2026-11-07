@@ -693,12 +693,12 @@ retain their existing permission and validation rules.
     },
     "last_touch": {
       "observed_at": "2026-10-04T20:00:00Z", "utm_source": "google",
-      "utm_medium": "cpc", "utm_campaign": "nepal", "campaign_id": "campaign-42",
+      "utm_medium": "cpc", "utm_campaign": "nepal", "campaign_id": "52666579688338",
       "gclid": "example-click", "landing_url": "https://www.sherpaholidays.com/pages/contact"
     },
     "last_non_direct_touch": {
       "observed_at": "2026-10-04T20:00:00Z", "utm_source": "google",
-      "utm_medium": "cpc", "campaign_id": "campaign-42", "gclid": "example-click"
+      "utm_medium": "cpc", "campaign_id": "52666579688338", "gclid": "example-click"
     },
     "submission_page": { "url": "https://www.sherpaholidays.com/pages/contact" }
   },
@@ -712,8 +712,13 @@ retain their existing permission and validation rules.
 Each touch is a complete snapshot, never merged click-by-click. Allowed keys:
 `observed_at`, `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`,
 `utm_term`, `campaign_id`, `ad_id`, `adset_id`, `gclid`, `gbraid`, `wbraid`,
-`fbclid`, `landing_url`, `referrer`, `unknown_reason`. IDs/campaign strings max 200 chars;
-URLs store host/path (path max 512), only allowlisted campaign queries,
+`fbclid`, `landing_url`, `referrer`, `unknown_reason`. IDs/campaign strings max 200 chars.
+`campaign_id`, `adset_id`, and `ad_id` must be digit-only strings; a JSON number
+or any other non-string ID is stored blank, never coerced. UTM values may not
+contain an unresolved `{{` or `}}` macro. Both rules also cover `landing_url`
+queries (URL-encoded too) and the legacy `attribution` object. Those IDs and
+macros are stored blank and never reject the inquiry; other non-string touch
+values still return `400`. URLs store host/path (path max 512), only allowlisted campaign queries,
 no fragments, credentials, arbitrary queries or referrer paths. Click IDs are
 separate columns of the snapshot, never retained inside URLs. Timestamps must
 be ISO 8601, no older than ten years and no more than five minutes in the future. The CRM records
