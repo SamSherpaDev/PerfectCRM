@@ -70,8 +70,8 @@ module Today
     #     instead (outbound Voicemail or No answer, one per day, since the
     #     latest response or restore), retries daily, and gets varied
     #     time-of-day guidance;
-    # (c) Re-contact leads whose date has arrived and that have no call or
-    #     open scheduled call since, earliest date first;
+    # (c) Re-contact leads whose date has arrived, with no call logged since
+    #     that date and no open scheduled call, earliest date first;
     # (d) older uncalled inquiries up to 14 days old, oldest first.
     # Calls logged before CALL_CADENCE_STARTS_ON belong to the separate
     # backlog call sheet: such a lead stays off the list until a new call
