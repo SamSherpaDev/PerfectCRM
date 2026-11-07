@@ -3,7 +3,7 @@ class LeadsController < ApplicationController
   include RecordPage
   include ListReturnPath
 
-  before_action :set_lead, only: %i[show edit update convert refresh_bookings archive unarchive mark_as_spam not_spam mark_potential unmark_potential mark_unsure unmark_unsure mark_recontact unmark_recontact mark_not_interested unmark_not_interested]
+  before_action :set_lead, only: %i[show edit update convert refresh_bookings archive unarchive mark_as_spam not_spam mark_potential unmark_potential mark_unsure unmark_unsure reschedule_recontact unmark_recontact mark_not_interested unmark_not_interested]
   before_action :block_converted_edit, only: %i[edit update]
   before_action :block_archived_edit, only: %i[edit update]
 
@@ -24,7 +24,7 @@ class LeadsController < ApplicationController
     @lead_action_return_to = leads_path(tab: @tab, q: @query, sort: @sort)
     new_leads = Lead.in_new_tab
     quoted_leads = Lead.by_status("quoted").where(not_interested_marked_at: nil, recontact_marked_at: nil)
-    set_aside = Lead.archived.or(Lead.lost.where(not_interested_marked_at: nil, recontact_marked_at: nil))
+    set_aside = Lead.archived.or(Lead.lost.where(not_interested_marked_at: nil))
 
     @counts = {
       "new" => new_leads.count,
@@ -185,9 +185,9 @@ class LeadsController < ApplicationController
     redirect_to record_path_keeping_list(@lead), alert: e.record.errors.full_messages.to_sentence
   end
 
-  def mark_recontact
-    @lead.mark_recontact!(due_on: params[:recontact_on], months: params[:months])
-    redirect_to lead_action_return_to, notice: "Moved to Re-contact for #{helpers.date_short(@lead.recontact_on)}."
+  def reschedule_recontact
+    @lead.reschedule_recontact!(months: params[:months])
+    redirect_to lead_action_return_to, notice: "Re-contact date set to #{helpers.date_short(@lead.recontact_on)}."
   rescue ActiveRecord::RecordInvalid => e
     redirect_to record_path_keeping_list(@lead), alert: e.record.errors.full_messages.to_sentence
   end

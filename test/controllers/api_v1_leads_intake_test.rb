@@ -1066,7 +1066,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
       source_tag(lead)
   end
 
-  test "a contact page inquiry reached through a decorated link keeps the ad IDs on its destination touch" do
+  test "a contact page inquiry reached through a decorated link keeps the ad IDs on its destination touch and leaves campaign_name to utm_campaign" do
     destination = "https://www.sherpaholidays.com/pages/contact?utm_source=facebook&utm_medium=paid_social" \
       "&campaign_id=52666579688338&adset_id=52666579688138&ad_id=52670563689999&utm_content=opener-v5-03"
     organic = { "observed_at" => 3.days.ago.iso8601, "landing_url" => "https://www.sherpaholidays.com/", "referrer" => "https://www.google.com/" }
@@ -1079,10 +1079,15 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     assert_response :accepted
     lead = Lead.find(response.parsed_body["id"])
     assert_equal "meta_ads", lead.source
-    assert_equal "52666579688338", lead.campaign_name
+    assert_nil lead.campaign_name
     assert_equal %w[52666579688338 52666579688138 52670563689999 opener-v5-03],
       lead.metadata["attribution"].values_at("campaign_id", "adset_id", "ad_id", "utm_content")
-    assert_equal "Meta ads · 52666579688338 · ad 52670563689999 · utm_content=opener-v5-03", source_tag(lead)
+    assert_equal "Meta ads · campaign 52666579688338 · ad 52670563689999 · utm_content=opener-v5-03", source_tag(lead)
+    assert_emails 1 do
+      perform_enqueued_jobs only: LeadNotificationJob
+    end
+    source_line = ActionMailer::Base.deliveries.last.body.to_s.lines.map(&:strip).find { |line| line.start_with?("Source:") }
+    assert_equal "Source: meta_ads", source_line
   end
 
   test "attribution comes from one touch and never borrows an ad ID from an older visit" do

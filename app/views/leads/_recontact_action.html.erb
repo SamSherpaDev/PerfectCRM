@@ -1,8 +1,4 @@
 <%# locals: (lead:) %>
-<% if !lead.archived? && !lead.converted? && lead.spam_marked_at.nil? && !lead.not_interested? %>
-  <% if lead.recontact? %>
-    <%= button_to "Restore from Re-contact", unmark_recontact_lead_path(lead), method: :patch, params: { return_to: @lead_action_return_to }, class: "btn-secondary btn btn-sm", aria: { label: "Restore from Re-contact", pressed: true } %>
-  <% else %>
-    <%= button_to "Re-contact later", mark_recontact_lead_path(lead), method: :patch, params: { months: Lead::DEFAULT_RECONTACT_MONTHS, return_to: @lead_action_return_to }, class: "btn-secondary btn btn-sm", aria: { label: "Re-contact later", pressed: false } %>
-  <% end %>
+<% if lead.recontact? %>
+  <%= button_to "Restore from Re-contact", unmark_recontact_lead_path(lead), method: :patch, params: { return_to: @lead_action_return_to }, class: "btn-secondary btn btn-sm", aria: { label: "Restore from Re-contact", pressed: true } %>
 <% end %>

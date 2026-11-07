@@ -80,7 +80,7 @@ class TodaySummaryTest < ActiveSupport::TestCase
     assert_includes summary.overdue, overdue
   end
 
-  test "not yet called prioritizes uncalled phone inquiries oldest first, then Day 1 (2nd try) and Day 2 (3rd try) retries, and drops connected, scheduled, recontact, not-interested, spam, archived, and 3-attempt leads" do
+  test "not yet called prioritizes uncalled phone inquiries oldest first, then Day 1 (2nd try) and Day 3 (3rd try) retries, and drops connected, scheduled, recontact, not-interested, spam, archived, and 3-attempt leads" do
     travel_to Time.zone.local(2026, 11, 3, 12) do
       oldest_uncalled = inquiry("Oldest uncalled", 2.days.ago)
       newest_uncalled = inquiry("Newest uncalled", 30.minutes.ago)
@@ -92,18 +92,18 @@ class TodaySummaryTest < ActiveSupport::TestCase
       retry_second_newer = inquiry("Due 2nd try (no answer yesterday evening)", 2.days.ago)
       CallLog.record!(retry_second_newer, key: "call-na-01", occurred_at: Time.zone.local(2026, 11, 2, 18), outcome: "no_answer", direction: "outbound")
 
-      retry_third_due = inquiry("Due 3rd try (1 day after 2nd try)", 4.days.ago)
-      CallLog.record!(retry_third_due, key: "call-try3-1", occurred_at: 2.days.ago, outcome: "voicemail", direction: "outbound")
-      CallLog.record!(retry_third_due, key: "call-try3-2", occurred_at: 1.day.ago, outcome: "no_answer", direction: "outbound")
+      retry_third_due = inquiry("Due 3rd try (2 days after 2nd try)", 5.days.ago)
+      CallLog.record!(retry_third_due, key: "call-try3-1", occurred_at: 4.days.ago, outcome: "voicemail", direction: "outbound")
+      CallLog.record!(retry_third_due, key: "call-try3-2", occurred_at: 2.days.ago, outcome: "no_answer", direction: "outbound")
 
       # Not yet due for 2nd try (called earlier today)
       called_today = inquiry("Called today (wait until Day 1)", 1.day.ago)
       CallLog.record!(called_today, key: "call-today-1", occurred_at: 2.hours.ago, outcome: "voicemail", direction: "outbound")
 
-      # Not yet due for 3rd try (attempt 2 was earlier today)
-      third_not_due = inquiry("Attempt 2 earlier today (wait until Day 2 for 3rd try)", 3.days.ago)
-      CallLog.record!(third_not_due, key: "call-nd3-1", occurred_at: 2.days.ago, outcome: "voicemail", direction: "outbound")
-      CallLog.record!(third_not_due, key: "call-nd3-2", occurred_at: 2.hours.ago, outcome: "voicemail", direction: "outbound")
+      # Not yet due for 3rd try (attempt 2 was only 1 day ago)
+      third_not_due = inquiry("Attempt 2 yesterday (wait 2 days for 3rd try)", 4.days.ago)
+      CallLog.record!(third_not_due, key: "call-nd3-1", occurred_at: 3.days.ago, outcome: "voicemail", direction: "outbound")
+      CallLog.record!(third_not_due, key: "call-nd3-2", occurred_at: 1.day.ago, outcome: "voicemail", direction: "outbound")
 
       # Drops off after 3 attempts
       three_tries = inquiry("Used 3 attempts", 6.days.ago)
@@ -121,7 +121,7 @@ class TodaySummaryTest < ActiveSupport::TestCase
       scheduled.scheduled_calls.create!(scheduled_at: 1.day.from_now)
 
       # Drops off when Re-contact, Not interested, spam, archived, converted, or lost
-      inquiry("Re-contact", 3.days.ago).mark_recontact!
+      inquiry("Re-contact", 3.days.ago, source: "meta_ads").mark_recontact!
       inquiry("Not interested", 3.days.ago).mark_not_interested!
       inquiry("Spam", 3.days.ago).mark_as_spam!
       inquiry("Archived", 3.days.ago).archive!
@@ -182,33 +182,35 @@ class TodaySummaryTest < ActiveSupport::TestCase
     end
   end
 
-  test "Day 0 -> Day 1 -> Day 2 retry lifecycle progresses through 1st, 2nd, and 3rd try across 3 consecutive days at varied times and then drops off" do
+  test "Day 0 -> Day 1 -> Day 3 retry lifecycle progresses through 1st, 2nd, and 3rd try and then drops off" do
     travel_to Time.zone.local(2026, 10, 20, 10) do
       lead = inquiry("Cadence traveler", 15.minutes.ago)
 
       # Day 0: appears immediately as 1st try
       entry = Today::Summary.new.call_entries.sole
-      assert_equal [ lead, 1, "1st try", nil ], [ entry.lead, entry.attempt, entry.attempt_label, entry.suggested_window ]
+      assert_equal [ lead, 1, "1st try" ], [ entry.lead, entry.attempt, entry.attempt_label ]
 
-      # Day 0 attempt 1 (morning) -> voicemail: drops off for the rest of Day 0
+      # Day 0 attempt 1 -> voicemail: drops off for the rest of Day 0
       CallLog.record!(lead, key: "cadence-1", occurred_at: Time.current, outcome: "voicemail", direction: "outbound")
       assert_empty Today::Summary.new.call_entries
 
-      # Day 1: due for 2nd try, suggesting afternoon
-      travel_to Time.zone.local(2026, 10, 21, 14)
+      # Day 1: due for 2nd try
+      travel 1.day
       entry = Today::Summary.new.call_entries.sole
-      assert_equal [ lead, 2, "2nd try", "afternoon" ], [ entry.lead, entry.attempt, entry.attempt_label, entry.suggested_window ]
+      assert_equal [ lead, 2, "2nd try" ], [ entry.lead, entry.attempt, entry.attempt_label ]
 
-      # Day 1 attempt 2 (afternoon) -> no_answer: drops off for the rest of Day 1
+      # Day 1 attempt 2 -> no_answer: drops off on Day 1 and stays off on Day 2
       CallLog.record!(lead, key: "cadence-2", occurred_at: Time.current, outcome: "no_answer", direction: "outbound")
       assert_empty Today::Summary.new.call_entries
+      travel 1.day
+      assert_empty Today::Summary.new.call_entries
 
-      # Day 2 (1 day after attempt 2): due for 3rd try, suggesting evening
-      travel_to Time.zone.local(2026, 10, 22, 18)
+      # Day 3 (2 days after attempt 2): due for 3rd try
+      travel 1.day
       entry = Today::Summary.new.call_entries.sole
-      assert_equal [ lead, 3, "3rd try", "evening" ], [ entry.lead, entry.attempt, entry.attempt_label, entry.suggested_window ]
+      assert_equal [ lead, 3, "3rd try" ], [ entry.lead, entry.attempt, entry.attempt_label ]
 
-      # Day 2 attempt 3 -> voicemail: used 3 attempts, drops off permanently
+      # Day 3 attempt 3 -> voicemail: used 3 attempts, drops off permanently
       CallLog.record!(lead, key: "cadence-3", occurred_at: Time.current, outcome: "voicemail", direction: "outbound")
       assert_empty Today::Summary.new.call_entries
       travel 5.days
@@ -216,7 +218,33 @@ class TodaySummaryTest < ActiveSupport::TestCase
     end
   end
 
-  test "an Attempted call is an unanswered try that continues the Day 0, Day 1, Day 2 cadence" do
+  test "ad leads retry Day 0 -> Day 1 -> Day 2 at varied times of day while other leads keep Day 0 -> Day 1 -> Day 3" do
+    travel_to Time.zone.local(2026, 10, 20, 10) do
+      ad = inquiry("Ad cadence traveler", 15.minutes.ago, source: "meta_ads")
+      web = inquiry("Web cadence traveler", 15.minutes.ago, source: "website_form")
+      entries = -> { Today::Summary.new.call_entries.to_h { |e| [ e.lead, [ e.attempt, e.suggested_window ] ] } }
+
+      assert_equal({ ad => [ 1, nil ], web => [ 1, nil ] }, entries.call)
+      [ ad, web ].each { |lead| CallLog.record!(lead, key: "mix-#{lead.id}-1", occurred_at: Time.current, outcome: "voicemail", direction: "outbound") }
+      assert_empty entries.call
+
+      travel 1.day + 4.hours
+      assert_equal({ ad => [ 2, "afternoon" ], web => [ 2, nil ] }, entries.call)
+      [ ad, web ].each { |lead| CallLog.record!(lead, key: "mix-#{lead.id}-2", occurred_at: Time.current, outcome: "no_answer", direction: "outbound") }
+      assert_empty entries.call
+
+      travel 1.day + 4.hours
+      assert_equal({ ad => [ 3, "evening" ] }, entries.call)
+      CallLog.record!(ad, key: "mix-#{ad.id}-3", occurred_at: Time.current, outcome: "voicemail", direction: "outbound")
+      assert ad.reload.recontact?
+      assert_empty entries.call
+
+      travel 15.hours
+      assert_equal({ web => [ 3, nil ] }, entries.call)
+    end
+  end
+
+  test "an Attempted call is an unanswered try that continues the Day 0, Day 1, Day 3 cadence" do
     travel_to Time.zone.local(2026, 10, 20, 10) do
       lead = inquiry("Attempted traveler", 15.minutes.ago)
 
@@ -229,7 +257,7 @@ class TodaySummaryTest < ActiveSupport::TestCase
         [ entry.lead, entry.attempt, entry.attempt_label, entry.last_call.metadata["outcome"] ]
 
       CallLog.record!(lead, key: "attempted-2", occurred_at: Time.current, outcome: "attempted", direction: "outbound")
-      travel 1.day
+      travel 2.days
       entry = Today::Summary.new.call_entries.sole
       assert_equal [ lead, 3, "3rd try" ], [ entry.lead, entry.attempt, entry.attempt_label ]
 
@@ -269,7 +297,7 @@ class TodaySummaryTest < ActiveSupport::TestCase
       assert_equal [ backlog, 2, "2nd try" ], [ entry.lead, entry.attempt, entry.attempt_label ]
 
       CallLog.record!(backlog, key: "backlog-call-3", occurred_at: Time.current, outcome: "no_answer", direction: "outbound")
-      travel 1.day
+      travel 2.days
       entry = Today::Summary.new.call_entries.sole
       assert_equal [ backlog, 3, "3rd try" ], [ entry.lead, entry.attempt, entry.attempt_label ]
     end
@@ -299,13 +327,15 @@ class TodaySummaryTest < ActiveSupport::TestCase
   test "a re-contact whose date has arrived returns to the call list after retries and leaves once called" do
     due, later, booked = nil
     travel_to Time.zone.local(2026, 8, 3, 10) do
-      due = inquiry("Re-contact due today", 1.day.ago)
+      due = inquiry("Re-contact due today", 1.day.ago, source: "meta_ads")
       CallLog.record!(due, key: "rc-due-call", occurred_at: 1.hour.ago, outcome: "no_answer", direction: "outbound")
       due.mark_recontact!
-      later = inquiry("Re-contact due next week", 1.day.ago)
-      later.mark_recontact!(due_on: Date.new(2026, 11, 10))
-      booked = inquiry("Re-contact with a booked call", 1.day.ago)
+      booked = inquiry("Re-contact with a booked call", 1.day.ago, source: "meta_ads")
       booked.mark_recontact!
+    end
+    travel_to Time.zone.local(2026, 8, 10, 10) do
+      later = inquiry("Re-contact due next week", 1.day.ago, source: "meta_ads")
+      later.mark_recontact!
     end
 
     travel_to Time.zone.local(2026, 11, 2, 12) do
@@ -321,6 +351,7 @@ class TodaySummaryTest < ActiveSupport::TestCase
 
       summary = Today::Summary.new
       assert_equal [ fresh, retry_lead, due, older ], summary.not_yet_called.to_a
+      assert_equal Date.new(2026, 11, 10), later.reload.recontact_on
       entry = summary.call_entries.find { |e| e.lead == due }
       assert_equal [ 1, "Re-contact due" ], [ entry.attempt, entry.attempt_label ]
       assert_equal "rc-due-call", entry.last_call.idempotency_key
@@ -332,7 +363,7 @@ class TodaySummaryTest < ActiveSupport::TestCase
   end
 
   test "follow-ups on a Re-contact lead stay on Today" do
-    lead = inquiry("Re-contact with a follow-up", 2.days.ago)
+    lead = inquiry("Re-contact with a follow-up", 2.days.ago, source: "meta_ads")
     task = lead.tasks.create!(title: "Send the Annapurna notes", due_on: Date.current)
     overdue = lead.tasks.create!(title: "Check flight dates", due_on: Date.yesterday)
     lead.mark_recontact!
@@ -343,8 +374,8 @@ class TodaySummaryTest < ActiveSupport::TestCase
 
   private
 
-  def inquiry(name, received_at, phone: "+1 415 555 0134")
-    Lead.create!(name: name, email: "demo@example.test", phone_raw: phone, received_at: received_at)
+  def inquiry(name, received_at, phone: "+1 415 555 0134", source: "manual")
+    Lead.create!(name: name, email: "demo@example.test", phone_raw: phone, received_at: received_at, source: source)
   end
 
   def reply(lead, status:, sent_at: 1.hour.ago)

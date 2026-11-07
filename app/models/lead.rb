@@ -13,7 +13,7 @@ class Lead < ApplicationRecord
   PLACEMENTS = %w[contact landing trip_page itinerary_designer trip_quiz].freeze
   SUSPECTED_SPAM_TAG = "suspected_spam"
   DEFAULT_RECONTACT_MONTHS = 3
-  RECONTACT_MONTH_OPTIONS = [ 3, 4, 5, 6 ].freeze
+  RECONTACT_MONTH_OPTIONS = [ 3, 6 ].freeze
 
   encrypts :phone, :phone_raw
 
@@ -106,9 +106,9 @@ class Lead < ApplicationRecord
   # Unsure holds leads the captain cannot call yet (voicemail, no reply):
   # not clearly Potential, not clearly spam. Suspected spam may wait here.
   scope :unsure, -> { active.where(converted_client_id: nil, spam_marked_at: nil, not_interested_marked_at: nil, recontact_marked_at: nil).where.not(unsure_marked_at: nil) }
-  # Re-contact holds leads with no contact after three call attempts for a
-  # 3-to-6-month follow-up window without treating no-answer as rejection.
-  scope :recontact, -> { active.where(converted_client_id: nil, spam_marked_at: nil, not_interested_marked_at: nil).where.not(recontact_marked_at: nil) }
+  # Re-contact holds open ad leads with no contact after three call attempts
+  # for a 3-to-6-month follow-up window without treating no-answer as rejection.
+  scope :recontact, -> { open.where(spam_marked_at: nil, not_interested_marked_at: nil).where.not(recontact_marked_at: nil) }
   # Not interested sets a lead aside from every call/email list and automation
   # while keeping its stage and Potential/Unsure marks intact for undo.
   scope :not_interested, -> { active.where(converted_client_id: nil, spam_marked_at: nil).where.not(not_interested_marked_at: nil) }
@@ -252,7 +252,7 @@ class Lead < ApplicationRecord
   end
 
   def potential?
-    potential_marked_at.present? && !not_interested? && !recontact? && !archived? && !converted? && !suspected_spam?
+    potential_marked_at.present? && !not_interested? && recontact_marked_at.nil? && !archived? && !converted? && !suspected_spam?
   end
 
   def mark_potential!
@@ -285,7 +285,7 @@ class Lead < ApplicationRecord
   end
 
   def unsure?
-    unsure_marked_at.present? && !not_interested? && !recontact? && spam_marked_at.nil? && !archived? && !converted?
+    unsure_marked_at.present? && !not_interested? && recontact_marked_at.nil? && spam_marked_at.nil? && !archived? && !converted?
   end
 
   def mark_unsure!
@@ -318,22 +318,41 @@ class Lead < ApplicationRecord
   end
 
   def recontact?
-    recontact_marked_at.present? && !not_interested? && spam_marked_at.nil? && !archived? && !converted?
+    recontact_marked_at.present? && status != "lost" && !not_interested? && spam_marked_at.nil? && !archived? && !converted?
   end
 
   def recontact_due?(today = Date.current)
     recontact? && recontact_on.present? && recontact_on <= today
   end
 
-  def mark_recontact!(due_on: nil, months: DEFAULT_RECONTACT_MONTHS)
+  # Ad leads still in New (stage new) or Unsure; existing clients keep their place.
+  def recontact_eligible?
+    ad_lead? && existing_client_id.nil? && status != "lost" &&
+      (unsure? || Lead.in_new_tab.where(status: "new").exists?(id))
+  end
+
+  def mark_recontact!
     with_lock do
-      if archived? || converted? || spam_marked_at.present? || not_interested?
-        errors.add(:base, "Only active leads not marked as spam or not interested can be moved to Re-contact")
+      unless recontact_eligible?
+        errors.add(:base, "Only ad leads in New or Unsure can be moved to Re-contact")
         raise ActiveRecord::RecordInvalid, self
       end
-      now = Time.current
-      target_date = resolve_recontact_due_on(due_on: due_on, months: months, now: now)
-      update!(recontact_marked_at: recontact_marked_at || now, recontact_on: target_date)
+      update!(recontact_marked_at: Time.current, recontact_on: Date.current + DEFAULT_RECONTACT_MONTHS.months)
+    end
+  end
+
+  def reschedule_recontact!(months:)
+    with_lock do
+      unless recontact?
+        errors.add(:base, "Only leads on the Re-contact list can get a new re-contact date")
+        raise ActiveRecord::RecordInvalid, self
+      end
+      count = Integer(months, exception: false)
+      unless RECONTACT_MONTH_OPTIONS.include?(count)
+        errors.add(:recontact_on, "must be 3 or 6 months out")
+        raise ActiveRecord::RecordInvalid, self
+      end
+      update!(recontact_on: Date.current + count.months)
     end
   end
 
@@ -652,28 +671,6 @@ class Lead < ApplicationRecord
   def record_recontact_restored!(summary: "Restored from Re-contact", actor: nil)
     activity_events.create!(kind: "recontact_restored", summary: summary, occurred_at: Time.current,
       metadata: { "actor" => actor || Current.user_email.presence || "manual" })
-  end
-
-  def resolve_recontact_due_on(due_on:, months:, now: Time.current)
-    today = now.in_time_zone.to_date
-    if due_on.present?
-      parsed = due_on.is_a?(Date) ? due_on : Date.iso8601(due_on.to_s.strip)
-      if parsed <= today
-        errors.add(:recontact_on, "must be a future date")
-        raise ActiveRecord::RecordInvalid, self
-      end
-      parsed
-    else
-      count = months.present? ? Integer(months) : DEFAULT_RECONTACT_MONTHS
-      unless RECONTACT_MONTH_OPTIONS.include?(count)
-        errors.add(:recontact_on, "must be 3 to 6 months out")
-        raise ActiveRecord::RecordInvalid, self
-      end
-      today + count.months
-    end
-  rescue ArgumentError, TypeError
-    errors.add(:recontact_on, "is not a valid date")
-    raise ActiveRecord::RecordInvalid, self
   end
 
   def cancel_open_scheduled_calls!(at: Time.current)

@@ -524,13 +524,16 @@ class ScheduledCallsRequestsTest < ActionDispatch::IntegrationTest
       lead = Lead.create!(name: "Booked Before Recontact", email: "booked-recontact@example.com", phone: "+14155550166", source: "meta_ads")
       call = lead.scheduled_calls.create!(scheduled_on: "2026-10-20", scheduled_time: "15:00")
 
-      patch mark_recontact_lead_path(lead), params: { months: 3, return_to: lead_path(lead) }
-      assert_redirected_to lead_path(lead)
+      3.times do |i|
+        CallLog.record!(lead, key: "booked-recontact-#{i}", occurred_at: (3 - i).days.ago, outcome: "no_answer", direction: "outbound")
+      end
       assert lead.reload.recontact?
+      assert_equal Date.new(2027, 1, 20), lead.recontact_on
       assert_equal "scheduled", call.reload.status
 
-      patch mark_recontact_lead_path(lead), params: { recontact_on: "2027-03-15", return_to: lead_path(lead) }
-      assert_equal Date.new(2027, 3, 15), lead.reload.recontact_on
+      patch reschedule_recontact_lead_path(lead), params: { months: 6, return_to: lead_path(lead) }
+      assert_redirected_to lead_path(lead)
+      assert_equal Date.new(2027, 4, 20), lead.reload.recontact_on
       assert_equal "scheduled", call.reload.status
 
       get root_path

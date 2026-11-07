@@ -107,7 +107,7 @@
       <% elsif @tab == "unsure" %>
         <%= render "shared/empty_state", title: "No unsure leads", body: "Mark Unsure on a lead that has not answered yet. They wait here until you know.", scene: :cairn %>
       <% elsif @tab == "recontact" %>
-        <%= render "shared/empty_state", title: "No leads on the re-contact list", body: "Leads with three unanswered call attempts move here for a 3-to-6-month follow-up instead of Not interested.", scene: :cairn %>
+        <%= render "shared/empty_state", title: "No leads on the re-contact list", body: "Ad leads with three unanswered call attempts move here for a 3-to-6-month follow-up instead of Not interested.", scene: :cairn %>
       <% elsif @tab == "not_interested" %>
         <%= render "shared/empty_state", title: "No leads marked not interested", body: "Mark not interested on a lead who does not want to be contacted. They stay out of every call and email list until you choose Interested again.", scene: :cairn %>
       <% elsif @tab == "archived" %>

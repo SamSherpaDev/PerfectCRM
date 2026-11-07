@@ -19,17 +19,12 @@
         <%= render "shared/icon", name: :calendar, class: "mt-0.5 h-5 w-5 shrink-0" %>
         <div>
           <p class="font-medium text-ink">Re-contact list<% if @lead.recontact_on.present? %> · due <%= date_short(@lead.recontact_on) %><% end %></p>
-          <p class="mt-0.5 text-sm">Held for a 3-to-6-month follow-up after no phone contact. Never contacted automatically; adjust the re-contact date or choose Restore from Re-contact.</p>
+          <p class="mt-0.5 text-sm">Held for a 3-to-6-month follow-up after no phone contact. Never contacted automatically; move the re-contact date to 3 or 6 months out or choose Restore from Re-contact.</p>
         </div>
       </div>
       <div class="flex flex-wrap items-center gap-2">
-        <% [3, 6].each do |months| %>
-          <%= button_to "#{months} months", mark_recontact_lead_path(@lead), method: :patch, params: { months: months, return_to: lead_path(@lead, { return_to: params[:return_to].presence }.compact) }, class: "btn-secondary btn btn-xs" %>
-        <% end %>
-        <%= form_with url: mark_recontact_lead_path(@lead), method: :patch, class: "inline-flex items-center gap-1.5" do |form| %>
-          <%= hidden_field_tag :return_to, lead_path(@lead, { return_to: params[:return_to].presence }.compact), id: nil %>
-          <%= date_field_tag :recontact_on, @lead.recontact_on&.iso8601, min: Date.tomorrow.iso8601, aria: { label: "Re-contact date" }, class: "input text-xs py-1 px-2 w-36" %>
-          <%= form.submit "Save date", class: "btn-secondary btn btn-xs" %>
+        <% Lead::RECONTACT_MONTH_OPTIONS.each do |months| %>
+          <%= button_to "#{months} months", reschedule_recontact_lead_path(@lead), method: :patch, params: { months: months, return_to: lead_path(@lead, { return_to: params[:return_to].presence }.compact) }, class: "btn-secondary btn btn-xs" %>
         <% end %>
         <%= button_to "Restore from Re-contact", unmark_recontact_lead_path(@lead), method: :patch, params: { return_to: @lead_action_return_to }, class: "btn-secondary btn btn-xs" %>
       </div>

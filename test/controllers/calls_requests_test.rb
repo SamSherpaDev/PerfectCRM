@@ -108,7 +108,8 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
         post lead_calls_path(lead), params: { save_key: "ad-vm-3", outcome: "voicemail", direction: "outbound" }
       end
       assert_redirected_to lead_path(lead, anchor: "record-details")
-      assert_equal "Call logged: Voicemail. Moved to Re-contact after three unanswered calls.", flash[:notice]
+      assert_equal "Call logged: Voicemail. Moved to Re-contact after three unanswered calls. Send a short text by hand. " \
+        "3 unanswered attempts logged · on the Re-contact list for Jan 20, 2027.", flash[:notice]
 
       lead.reload
       assert lead.recontact?
@@ -210,6 +211,8 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
       assert_no_difference -> { Message.count } do
         post lead_calls_path(lead), params: { save_key: "missed-1", outcome: "voicemail", direction: "outbound" }
       end
+      assert_equal "Call logged: Voicemail. Send a short text by hand. Attempt 1 of 3 logged · try attempt 2 next day in the afternoon.",
+        flash[:notice]
       get lead_path(lead)
       assert_response :success
       assert_select "[data-missed-call-reminder]", count: 1
@@ -224,9 +227,41 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "each missed ad-lead call logged from Today flashes the text reminder with reset-aware progress" do
+    travel_to Time.zone.local(2026, 11, 2, 10, 0) do
+      lead = Lead.create!(name: "Today Ad Lead", email: "today-ad@example.com", phone: "+14155550186", source: "meta_ads")
+      post lead_calls_path(lead), params: { save_key: "today-ad-1", outcome: "no_answer", direction: "outbound", return_to: root_path }
+      assert_redirected_to root_path
+      assert_equal "Call logged: No answer. Send a short text by hand. Attempt 1 of 3 logged · try attempt 2 next day in the afternoon.",
+        flash[:notice]
+      follow_redirect!
+      assert_includes response.body, "Send a short text by hand. Attempt 1 of 3 logged"
+
+      travel 1.day + 4.hours
+      post lead_calls_path(lead), params: { save_key: "today-ad-2", outcome: "connected", direction: "outbound", return_to: root_path }
+      assert_equal "Call logged: Talked.", flash[:notice]
+      post lead_calls_path(lead), params: { save_key: "today-ad-3", outcome: "voicemail", direction: "outbound", return_to: root_path }
+      assert_equal "Call logged: Voicemail. Send a short text by hand. Attempt 1 of 3 logged · try attempt 2 next day in the morning.",
+        flash[:notice]
+
+      travel 1.day + 4.hours
+      post lead_calls_path(lead), params: { save_key: "today-ad-4", outcome: "no_answer", direction: "outbound", return_to: root_path }
+      assert_equal "Call logged: No answer. Send a short text by hand. Attempt 2 of 3 logged · try attempt 3 next day in the morning.",
+        flash[:notice]
+
+      travel 15.hours
+      post lead_calls_path(lead), params: { save_key: "today-ad-5", outcome: "voicemail", direction: "outbound", return_to: root_path }
+      assert_redirected_to root_path
+      assert_equal "Call logged: Voicemail. Moved to Re-contact after three unanswered calls. Send a short text by hand. " \
+        "3 unanswered attempts logged · on the Re-contact list for Feb 5, 2027.", flash[:notice]
+      assert lead.reload.recontact?
+    end
+  end
+
   test "a missed call on a non-ad lead shows no text reminder" do
     lead = Lead.create!(name: "Web Visitor", email: "web-visitor@example.com", phone: "+14155550187", source: "website_form")
-    post lead_calls_path(lead), params: { save_key: "web-missed-1", outcome: "no_answer", direction: "outbound" }
+    post lead_calls_path(lead), params: { save_key: "web-missed-1", outcome: "no_answer", direction: "outbound", return_to: root_path }
+    assert_equal "Call logged: No answer.", flash[:notice]
     get lead_path(lead)
     assert_response :success
     assert_select ".calls-recent li", text: /No answer/
@@ -273,37 +308,89 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
     assert_equal stored, lead.reload.video_source
   end
 
-  test "re-contact list supports 3 to 6 month due dates and explicit dates while never overwriting explicit Not interested" do
+  test "only the automatic ad-lead move enters Re-contact, and a listed lead can move its date to 3 or 6 months" do
     travel_to Time.zone.local(2026, 11, 7, 10, 0) do
-      lead = Lead.create!(name: "Recontact Window Traveler", email: "recontact@example.com")
+      lead = Lead.create!(name: "Recontact Window Traveler", email: "recontact@example.com", source: "meta_ads")
       lead.mark_unsure!
+      web = Lead.create!(name: "Website Unsure Traveler", email: "web-unsure@example.com", source: "website_form")
+      web.mark_unsure!
 
-      patch mark_recontact_lead_path(lead), params: { months: 6, return_to: leads_path(tab: "unsure") }
-      assert_redirected_to leads_path(tab: "unsure")
+      get leads_path(tab: "unsure")
+      assert_select "a", text: lead.name
+      assert_select "button", text: "Re-contact later", count: 0
+      get lead_path(web)
+      assert_select "button", text: /Re-contact/, count: 0
+      patch "/leads/#{web.id}/mark_recontact", params: { months: 3 }
+      assert_response :not_found
+      assert_not web.reload.recontact?
+
+      patch reschedule_recontact_lead_path(web), params: { months: 6 }
+      assert_redirected_to lead_path(web)
+      assert_equal "Only leads on the Re-contact list can get a new re-contact date", flash[:alert]
+      assert_not web.reload.recontact?
+      assert_nil web.recontact_on
+
+      3.times do |i|
+        CallLog.record!(lead, key: "window-call-#{i}", occurred_at: (3 - i).days.ago, outcome: "voicemail", direction: "outbound")
+      end
       assert lead.reload.recontact?
-      assert_equal Date.new(2027, 5, 7), lead.recontact_on
+      assert_equal Date.new(2027, 2, 7), lead.recontact_on
 
-      custom_date = Date.new(2027, 3, 15)
-      patch mark_recontact_lead_path(lead), params: { recontact_on: custom_date.iso8601, return_to: leads_path(tab: "recontact") }
+      get lead_path(lead)
+      assert_equal [ "3 months", "6 months" ],
+        css_select("[aria-label='Re-contact list'] button").map(&:text).grep(/months/)
+      assert_select "[aria-label='Re-contact list'] input[type=date]", count: 0
+
+      patch reschedule_recontact_lead_path(lead), params: { months: 6, return_to: leads_path(tab: "recontact") }
       assert_redirected_to leads_path(tab: "recontact")
-      assert_equal custom_date, lead.reload.recontact_on
+      assert_equal "Re-contact date set to May 7, 2027.", flash[:notice]
+      assert_equal Date.new(2027, 5, 7), lead.reload.recontact_on
 
-      patch mark_recontact_lead_path(lead), params: { recontact_on: Date.yesterday.iso8601 }
-      assert_redirected_to lead_path(lead)
-      assert_equal custom_date, lead.reload.recontact_on
+      [ { months: 4 }, { months: 24 }, { recontact_on: "2027-03-15" } ].each do |params|
+        patch reschedule_recontact_lead_path(lead), params: params
+        assert_redirected_to lead_path(lead)
+        assert_equal "Recontact on must be 3 or 6 months out", flash[:alert]
+        assert_equal Date.new(2027, 5, 7), lead.reload.recontact_on, params.inspect
+      end
 
       rejected = Lead.create!(name: "Explicit Reject", email: "rejected@example.com", source: "meta_ads")
       rejected.mark_not_interested!
-      patch mark_recontact_lead_path(rejected)
-      assert_redirected_to lead_path(rejected)
-      assert rejected.reload.not_interested?
-      assert_not rejected.recontact?
-
       3.times do |i|
         CallLog.record!(rejected, key: "rej-call-#{i}", occurred_at: (3 - i).days.ago, outcome: "voicemail", direction: "outbound")
       end
       assert rejected.reload.not_interested?
       assert_not rejected.recontact?
+    end
+  end
+
+  test "lost ad leads never enter Re-contact, and a listed lead moved to lost leaves the list and its due call" do
+    travel_to Time.zone.local(2026, 8, 3, 10, 0) do
+      lost = Lead.create!(name: "Lost Ad Lead", email: "lost-ad@example.com", phone: "+14155550175", source: "meta_ads",
+        status: "lost", lost_reason: "no_reply")
+      lost.mark_unsure!
+      3.times do |i|
+        CallLog.record!(lost, key: "lost-call-#{i}", occurred_at: (3 - i).days.ago, outcome: "no_answer", direction: "outbound")
+      end
+      assert_not lost.reload.recontact?
+      assert_nil lost.recontact_marked_at
+
+      listed = Lead.create!(name: "Listed Then Lost", email: "listed-lost@example.com", phone: "+14155550176", source: "meta_ads")
+      3.times do |i|
+        CallLog.record!(listed, key: "listed-call-#{i}", occurred_at: (3 - i).days.ago, outcome: "voicemail", direction: "outbound")
+      end
+      assert listed.reload.recontact?
+      Leads::Transition.call(listed, to: "lost", lost_reason: "no_reply")
+      assert_not listed.reload.recontact?
+      assert_not_includes Lead.recontact, listed
+    end
+
+    travel_to Time.zone.local(2026, 11, 3, 12, 0) do
+      lost_leads = [ Lead.find_by!(name: "Lost Ad Lead"), Lead.find_by!(name: "Listed Then Lost") ]
+      assert_empty Today::Summary.new.call_entries.map(&:lead) & lost_leads
+      get leads_path(tab: "recontact")
+      lost_leads.each { |lead| assert_select "a", text: lead.name, count: 0 }
+      get leads_path(tab: "archived")
+      lost_leads.each { |lead| assert_select "a", text: lead.name }
     end
   end
 end

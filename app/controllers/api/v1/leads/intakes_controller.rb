@@ -304,7 +304,7 @@ module Api
             placement: placement,
             capture_channel: "website_form",
             source: ::Leads.derive_source(attribution),
-            campaign_name: (attribution["utm_campaign"].to_s.strip.presence || attribution["campaign_id"].to_s.strip.presence)&.truncate(160),
+            campaign_name: attribution["utm_campaign"].to_s.strip.presence&.truncate(160),
             external_ref: external_ref,
             spam_score: score,
             archived_at: (now if auto_archived),

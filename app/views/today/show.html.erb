@@ -60,7 +60,7 @@
       <h2 class="card-title" id="not-yet-called-heading">Calls to make today</h2>
       <%= badge @summary.not_yet_called.count, :neutral %>
     </div>
-    <%= card_caption "Last 24 hours of new inquiries with a phone (newest first), then unanswered calls due a retry on Day 1 (2nd try) and Day 2 (3rd try) at varied times of day, then re-contacts whose date has arrived, then older first tries up to 14 days old." %>
+    <%= card_caption "Last 24 hours of new inquiries with a phone (newest first), then unanswered calls due a retry on Day 1 (2nd try) and Day 3 (3rd try; Day 2 at varied times of day for ad leads), then re-contacts whose date has arrived, then older first tries up to 14 days old." %>
     <% entries = @summary.call_entries %>
     <% if entries.any? %>
       <ul class="divide-y divide-rule-2">

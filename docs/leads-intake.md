@@ -126,11 +126,13 @@ Source derivation: `google_ads` on `gclid`/`gbraid`/`wbraid`, or
 `paid_social`, `paidsocial`) or `ad_id`/`campaign_id`/`adset_id` (or `fbclid`
 with paid medium or `ad_id`/`campaign_id`/`adset_id`);
 `trade_show` on `utm_medium=event` (travel show booth links and QR codes); else
-`website_form`. `campaign_name` copies `utm_campaign`, falling back to
-`campaign_id` when `utm_campaign` is absent. The initial intake owns
+`website_form`. `campaign_name` copies `utm_campaign` only (it stays empty
+when `utm_campaign` is absent, so the inquiry email, reports, and webhook keep
+their meaning). The initial intake owns
 attribution: the lead's source tag (`LeadsHelper#lead_source_label`) reads
-only the stored `metadata["attribution"]` projection and shows its campaign,
-`campaign_id`, `ad_id`, `utm_campaign`, `utm_content`, and `utm_term`. A
+only the stored `metadata["attribution"]` projection and shows its campaign
+name, `campaign <campaign_id>`, `ad <ad_id>`, `utm_campaign`, `utm_content`,
+and `utm_term`. A
 missing `ad_id` stays missing; nothing is inferred from another visit. The
 top-level `page.url` never contributes campaign or click parameters.
 With `acquisition`, this compatibility projection uses the eligible

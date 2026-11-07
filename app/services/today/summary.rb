@@ -64,9 +64,10 @@ module Today
     # (a) inquiries from the last 24 hours with a phone and no call yet,
     #     newest first, so a fresh inquiry is always on top;
     # (b) leads with a phone whose calls never connected (Attempted,
-    #     Voicemail, or No answer) and that are due another try across
-    #     3 consecutive days at varied times (attempt 2 due 1 day after
-    #     attempt 1; attempt 3 due 1 day after attempt 2; at most 3 attempts);
+    #     Voicemail, or No answer) and that are due another try (attempt 2
+    #     due 1 day after attempt 1; attempt 3 due 2 days after attempt 2, or
+    #     1 day for ad leads, which also get varied time-of-day guidance across
+    #     3 consecutive days; at most 3 attempts);
     # (c) Re-contact leads whose date has arrived and that have no call or
     #     open scheduled call since, earliest date first;
     # (d) older uncalled inquiries up to 14 days old, oldest first.
@@ -96,7 +97,7 @@ module Today
           .merge(unbooked)
           .includes(:tags)
           .to_a
-        due_recontacts = Lead.recontact.where.not(status: "lost").where("leads.recontact_on <= ?", @today)
+        due_recontacts = Lead.recontact.where("leads.recontact_on <= ?", @today)
           .merge(unbooked)
           .includes(:tags)
           .to_a
@@ -135,7 +136,7 @@ module Today
           next if cadence.any? { |call| call_connected?(call) }
 
           attempt = cadence.size + 1
-          days_wait = 1
+          days_wait = attempt == 2 || lead.ad_lead? ? 1 : 2
           due = last_call.occurred_at <= @now - days_wait.days ||
             last_call.occurred_at.in_time_zone.to_date <= @today - days_wait.days
           next unless due
@@ -146,7 +147,7 @@ module Today
             attempt_label: ATTEMPT_LABELS.fetch(attempt),
             last_call: last_call,
             waited_since: waited_since,
-            suggested_window: CallLog.suggested_time_window(cadence)
+            suggested_window: (CallLog.suggested_time_window(cadence) if lead.ad_lead?)
           )
         end
 

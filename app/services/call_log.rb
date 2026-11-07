@@ -89,7 +89,24 @@ module CallLog
     elsif lead.not_interested? && lead.activity_events.exists?(kind: "not_interested", idempotency_key: event.idempotency_key)
       " Moved to Not interested after three unanswered calls."
     end
-    "Call logged: #{LABELS.fetch(event.metadata['outcome'])}.#{moved}"
+    reminder = missed_call_reminder(lead, event)
+    "Call logged: #{LABELS.fetch(event.metadata['outcome'])}.#{moved}#{" Send a short text by hand. #{reminder}" if reminder}"
+  end
+
+  def missed_call_reminder(lead, call)
+    return unless call && lead.ad_lead? && !lead.not_interested?
+
+    attempts = unanswered_attempts(lead)
+    return unless attempts.last == call
+
+    if lead.recontact?
+      date = " for #{lead.recontact_on.strftime('%b %-d, %Y')}" if lead.recontact_on
+      "#{attempts.size} unanswered #{'attempt'.pluralize(attempts.size)} logged · on the Re-contact list#{date}."
+    elsif attempts.size < AUTO_RECONTACT_CALLS
+      "Attempt #{attempts.size} of #{AUTO_RECONTACT_CALLS} logged · try attempt #{attempts.size + 1} next day in the #{suggested_time_window(attempts)}."
+    else
+      "#{attempts.size} unanswered attempts logged."
+    end
   end
 
   # Outbound unanswered calls since the latest response or restore, oldest
@@ -132,11 +149,8 @@ module CallLog
     end
   end
 
-  # Ad leads still in New (stage new) or Unsure; existing clients keep their place.
   def mark_recontact_after_three_unanswered_calls!(record, event: nil)
-    return false unless record.ad_lead? && record.existing_client_id.nil?
-    return false unless record.unsure? || Lead.in_new_tab.where(status: "new").exists?(record.id)
-    return false unless three_unanswered_calls?(record)
+    return false unless record.recontact_eligible? && three_unanswered_calls?(record)
 
     record.mark_recontact!
     record.activity_events.create!(
@@ -191,7 +205,11 @@ module CallLog
           move = lead.activity_events.where(kind: "recontact").order(:id).last
           next unless lead.recontact? && move && lead.recontact_marked_at <= move.created_at
 
-          lead.unmark_recontact!(summary: REPLIED_AFTER_AUTO_MOVE_SUMMARY, actor: "automatic")
+          place = if lead.unsure_marked_at.present? then "Unsure"
+          elsif lead.status == "quoted" then "Quoted"
+          else "New"
+          end
+          lead.unmark_recontact!(summary: "Moved back to #{place}: they replied after the automatic move.", actor: "automatic")
         end
       end
     Lead.not_interested.where(email: sender)

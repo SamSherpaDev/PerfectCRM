@@ -44,16 +44,10 @@
               </li>
             <% end %>
           </ul>
-          <% attempts = inquiry.ad_lead? && !inquiry.not_interested? ? CallLog.unanswered_attempts(inquiry) : [] %>
-          <% if attempts.last == recent.first %>
-            <% latest_call = recent.first %>
+          <% if (reminder = CallLog.missed_call_reminder(inquiry, recent.first)) %>
             <div class="missed-call-reminder mt-3 rounded border border-rule-2 p-3 text-xs" data-missed-call-reminder>
-              <p class="font-medium text-ink">Missed call (<%= CallLog::LABELS.fetch(latest_call.metadata["outcome"]) %>) - send a short text by hand</p>
-              <% if inquiry.recontact? %>
-                <p class="mt-1 muted"><%= attempts.size %> unanswered <%= "attempt".pluralize(attempts.size) %> logged · on the Re-contact list<% if inquiry.recontact_on %> for <%= date_short(inquiry.recontact_on) %><% end %>.</p>
-              <% elsif attempts.size < CallLog::AUTO_RECONTACT_CALLS %>
-                <p class="mt-1 muted">Attempt <%= attempts.size %> of <%= CallLog::AUTO_RECONTACT_CALLS %> logged · try attempt <%= attempts.size + 1 %> next day in the <%= CallLog.suggested_time_window(attempts) %>.</p>
-              <% end %>
+              <p class="font-medium text-ink">Missed call (<%= CallLog::LABELS.fetch(recent.first.metadata["outcome"]) %>) - send a short text by hand</p>
+              <p class="mt-1 muted"><%= reminder %></p>
             </div>
           <% end %>
         <% else %>
