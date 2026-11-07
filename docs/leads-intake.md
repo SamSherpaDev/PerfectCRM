@@ -713,10 +713,11 @@ Each touch is a complete snapshot, never merged click-by-click. Allowed keys:
 `observed_at`, `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`,
 `utm_term`, `campaign_id`, `ad_id`, `adset_id`, `gclid`, `gbraid`, `wbraid`,
 `fbclid`, `landing_url`, `referrer`, `unknown_reason`. IDs/campaign strings max 200 chars. `campaign_id`, `adset_id`,
-and `ad_id` must be purely digits (a JSON integer counts; it is stored as its exact
-string); UTM values may not contain an unresolved `{{` or `}}` macro, here or in
-`landing_url` (URL-encoded too). Any other value is stored blank, never coerced,
-and never rejects the inquiry. URLs store host/path (path max 512), only allowlisted campaign queries,
+and `ad_id` must be digit-only strings; a JSON number or any other non-string ID
+is stored blank, never coerced. UTM values may not contain an unresolved `{{` or
+`}}` macro, here or in `landing_url` (URL-encoded too). Those IDs and macros are
+stored blank and never reject the inquiry; other non-string touch values still
+return `400`. URLs store host/path (path max 512), only allowlisted campaign queries,
 no fragments, credentials, arbitrary queries or referrer paths. Click IDs are
 separate columns of the snapshot, never retained inside URLs. Timestamps must
 be ISO 8601, no older than ten years and no more than five minutes in the future. The CRM records

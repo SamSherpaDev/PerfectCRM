@@ -185,12 +185,12 @@ class AcquisitionTest < ActiveSupport::TestCase
   test "ad IDs stay exact digit strings and anything else is blank, never coerced into a match" do
     stamp = Time.current.iso8601
     kept = Leads::Acquisition.touch({ "observed_at" => stamp, "campaign_id" => "052666579688338", "adset_id" => " 52666579688138 ",
-      "ad_id" => 52670563689538 }, allowed: true)
+      "ad_id" => "52670563689538" }, allowed: true)
     assert_equal %w[052666579688338 52666579688138 52670563689538], kept.values_at("campaign_id", "adset_id", "ad_id")
 
     %w[campaign_id adset_id ad_id].each do |key|
-      [ "{{campaign.id}}", "{{ad.id}}", "52670563689538.0", "5.267e13", "-52670563689538", "ad-123", "", " ", 1.5, true,
-        [ "52670563689538" ], { "id" => "52670563689538" } ].each do |value|
+      [ "{{campaign.id}}", "{{ad.id}}", "52670563689538.0", "5.267e13", "-52670563689538", "ad-123", "", " ",
+        52670563689538, 0, 10**250, 1.5, true, [ "52670563689538" ], { "id" => "52670563689538" } ].each do |value|
         touch = Leads::Acquisition.touch({ "observed_at" => stamp, key => value, "utm_source" => "ig", "utm_medium" => "social" }, allowed: true)
         assert_not touch.key?(key), "#{key}=#{value.inspect}"
         assert_not_equal "meta_ads", touch["source"], "#{key}=#{value.inspect} must not tag an ad"
@@ -210,6 +210,11 @@ class AcquisitionTest < ActiveSupport::TestCase
       [ "{{campaign.name}}", "{{ campaign.name }}", "sh_{{adset.name}}", "hook}}", "{{", "}}" ].each do |value|
         touch = Leads::Acquisition.touch({ "observed_at" => Time.current.iso8601, key => value }, allowed: true)
         assert_not touch.key?(key), "#{key}=#{value}"
+      end
+      [ 2027, 1.5, true, [ "ig" ], { "name" => "ig" } ].each do |value|
+        assert_raises(ArgumentError, "#{key}=#{value.inspect}") do
+          Leads::Acquisition.touch({ "observed_at" => Time.current.iso8601, key => value }, allowed: true)
+        end
       end
     end
   end
@@ -236,10 +241,16 @@ class AcquisitionTest < ActiveSupport::TestCase
 
   test "legacy attribution drops unresolved macros, keeps valid IDs, and keeps its 200-character truncation" do
     legacy = Leads::Acquisition.legacy_attribution({ "utm_source" => "ig", "utm_medium" => "paid", "utm_campaign" => "{{campaign.name}}",
-      "campaign_id" => "52666579688338", "adset_id" => "{{adset.id}}", "ad_id" => 52670563689538, "utm_term" => "private-nepal",
+      "campaign_id" => "52666579688338", "adset_id" => "{{adset.id}}", "ad_id" => "52670563689538", "utm_term" => "private-nepal",
       "landing_url" => "https://www.sherpaholidays.com/pages/x?utm_content=%7B%7Bad.name%7D%7D&utm_campaign=sh_us_cold_cbo" })
     assert_equal({ "utm_source" => "ig", "utm_medium" => "paid", "campaign_id" => "52666579688338", "ad_id" => "52670563689538",
       "utm_term" => "private-nepal", "landing_url" => "https://www.sherpaholidays.com/pages/x?utm_campaign=sh_us_cold_cbo" }, legacy)
     assert_equal 200, Leads::Acquisition.legacy_attribution({ "utm_campaign" => "a" * 201 })["utm_campaign"].length
+  end
+
+  test "legacy attribution blanks non-string ad IDs and keeps its existing text treatment of other values" do
+    legacy = Leads::Acquisition.legacy_attribution({ "campaign_id" => 52666579688338, "adset_id" => [ "52670563689400" ], "ad_id" => 10**250,
+      "utm_term" => 2027 })
+    assert_equal({ "utm_term" => "2027" }, legacy)
   end
 end

@@ -47,15 +47,10 @@ module Leads::Acquisition
     result = {}
     result["observed_at"] = timestamp(input["observed_at"]) if input["observed_at"].present?
     (CAMPAIGN_KEYS + CLICK_KEYS).each do |key|
-      next if input[key].blank?
-      if CAMPAIGN_KEYS.include?(key)
-        raise ArgumentError, "acquisition.#{key}" if input[key].is_a?(String) && input[key].length > 200
-        value = tracking_value(key, input[key])
-        result[key] = value if value
-      else
-        raise ArgumentError, "acquisition.#{key}" unless input[key].is_a?(String) && input[key].length <= 200
-        result[key] = input[key].strip
-      end
+      next if input[key].blank? || (ID_KEYS.include?(key) && !input[key].is_a?(String))
+      raise ArgumentError, "acquisition.#{key}" unless input[key].is_a?(String) && input[key].length <= 200
+      value = CAMPAIGN_KEYS.include?(key) ? tracking_value(key, input[key]) : input[key].strip
+      result[key] = value if value
     end
     if input["landing_url"].present?
       query_params(input["landing_url"]).slice(*CAMPAIGN_KEYS).each do |key, val|
@@ -125,7 +120,8 @@ module Leads::Acquisition
 
   def legacy_attribution(input, acquisition: nil)
     result = input.slice(*(CAMPAIGN_KEYS + CLICK_KEYS + %w[first_seen_at referral_code]))
-      .to_h { |key, value| [ key, CAMPAIGN_KEYS.include?(key) ? tracking_value(key, value.is_a?(String) ? value.first(200) : value) : value.to_s.first(200) ] }
+      .to_h { |key, value| [ key, ID_KEYS.include?(key) && !value.is_a?(String) ? nil : value.to_s.first(200) ] }
+      .to_h { |key, value| [ key, CAMPAIGN_KEYS.include?(key) ? tracking_value(key, value) : value ] }
       .compact
     if input["landing_url"].present?
       begin
@@ -186,13 +182,12 @@ module Leads::Acquisition
 
   # The one rule for ad and UTM text on every ingestion path (snapshot touches,
   # legacy attribution, landing and submission URL fallbacks). Ad, adset and
-  # campaign IDs must be purely digits and stay exact strings, never coerced.
-  # UTM text may not carry an unresolved {{ or }} macro. Anything else is nil:
-  # the field stays blank and the lead is kept.
+  # campaign IDs must be digit-only strings, kept exact; a JSON number is never
+  # coerced. UTM text may not carry an unresolved {{ or }} macro. Anything else
+  # is nil: the field stays blank and the lead is kept.
   def tracking_value(key, value)
-    text = value.is_a?(Integer) && !value.negative? ? value.to_s : value
-    return nil unless text.is_a?(String)
-    text = text.strip
+    return nil unless value.is_a?(String)
+    text = value.strip
     return nil if text.empty?
     if ID_KEYS.include?(key)
       text if text.match?(/\A\d+\z/)

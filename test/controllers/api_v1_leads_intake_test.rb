@@ -1229,18 +1229,33 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     assert_equal "Meta ads", source_tag(lead)
   end
 
-  test "a numeric ad ID sent as a JSON number is kept as an exact string instead of rejecting the inquiry" do
+  test "ad IDs sent as JSON numbers on the snapshot path are stored blank while the inquiry is accepted" do
     touch = { "observed_at" => 2.minutes.ago.iso8601, "utm_source" => "ig", "utm_medium" => "paid", "utm_campaign" => "sh_us_cold_cbo",
-      "campaign_id" => "52666579688338", "ad_id" => 52670563689538, "landing_url" => "https://www.sherpaholidays.com/pages/private-nepal-tours" }
+      "campaign_id" => 52666579688338, "adset_id" => 52670563689400, "ad_id" => 10**250,
+      "landing_url" => "https://www.sherpaholidays.com/pages/private-nepal-tours" }
     body = intake_body("acquisition" => { "permission" => ad_permission, "first_touch" => touch, "last_touch" => touch,
       "last_non_direct_touch" => touch })
     body["attribution"] = {}
     post_intake body
     assert_response :accepted
     lead = Lead.find(response.parsed_body["id"])
-    assert_equal "52670563689538", lead.metadata.dig("attribution", "ad_id")
+    %w[first_touch last_touch last_non_direct_touch].each do |key|
+      assert_equal [ nil, nil, nil ], lead.metadata.dig("acquisition", key).values_at("campaign_id", "adset_id", "ad_id"), key
+    end
+    assert_equal [ nil, nil, nil ], lead.metadata["attribution"].values_at("campaign_id", "adset_id", "ad_id")
+    assert_equal "meta_ads", lead.source
     assert_equal "sh_us_cold_cbo", lead.campaign_name
-    assert_equal "Meta ads · sh_us_cold_cbo · campaign 52666579688338 · ad 52670563689538", source_tag(lead)
+    assert_equal "Meta ads · sh_us_cold_cbo", source_tag(lead)
+  end
+
+  test "ad IDs sent as JSON numbers on the legacy attribution path are stored blank while the inquiry is accepted" do
+    post_intake intake_body("attribution" => { "utm_source" => "ig", "utm_medium" => "social", "utm_campaign" => "sh_us_cold_cbo",
+      "campaign_id" => 52666579688338, "adset_id" => 52670563689400, "ad_id" => 10**250 })
+    assert_response :accepted
+    lead = Lead.find(response.parsed_body["id"])
+    assert_equal({ "utm_source" => "ig", "utm_medium" => "social", "utm_campaign" => "sh_us_cold_cbo" }, lead.metadata["attribution"])
+    assert_equal "website_form", lead.source
+    assert_equal "Website form · sh_us_cold_cbo", source_tag(lead)
   end
 
   test "a non-digit ad ID alongside a valid campaign ID keeps the campaign and blanks only the ad" do
