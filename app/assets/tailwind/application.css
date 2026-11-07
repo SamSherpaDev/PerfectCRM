@@ -3200,10 +3200,12 @@
   color: var(--pb-ink-2);
   overflow-wrap: anywhere;
 }
+/* Outcome rows top-align (or baseline-align beside text) so neighbors stay
+   level with the one-tap buttons while the video field sits under them. */
 .scheduled-call-banner-actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
 }
 .scheduled-call-outcomes {
@@ -3214,7 +3216,7 @@
 .scheduled-call-inquiry {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: 8px 12px;
   margin-top: 12px;
@@ -3255,7 +3257,7 @@
 .scheduled-call-row-actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
 }
 
