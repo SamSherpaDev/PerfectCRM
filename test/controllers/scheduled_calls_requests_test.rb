@@ -505,7 +505,7 @@ class ScheduledCallsRequestsTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "the scheduled call bar says when a third unanswered call moved an Unsure lead to Re-contact" do
+  test "the scheduled call bar says when a third unanswered call moved an Unsure lead to Not interested" do
     lead = Lead.create!(name: "Bar Three Voicemails", email: "bar-3vm@example.com", phone: "+14155550177")
     lead.mark_unsure!
     CallLog.record!(lead, key: "bar-vm-1", occurred_at: 3.days.ago, outcome: "voicemail", direction: "outbound")
@@ -514,9 +514,30 @@ class ScheduledCallsRequestsTest < ActionDispatch::IntegrationTest
 
     post complete_lead_scheduled_call_path(lead, call), params: { outcome: "voicemail", save_key: "bar-vm-0003", return_to: lead_path(lead) }
     assert_redirected_to lead_path(lead)
-    assert_equal "Call logged: Voicemail. Moved to Re-contact after three unanswered calls.", flash[:notice]
+    assert_equal "Call logged: Voicemail. Moved to Not interested after three unanswered calls.", flash[:notice]
     assert_equal [ "completed", "voicemail" ], [ call.reload.status, call.outcome ]
-    assert lead.reload.recontact?
-    assert_not lead.not_interested?
+    assert lead.reload.not_interested?
+  end
+
+  test "a booked call stays scheduled and listed when its lead moves to Re-contact or the re-contact date changes" do
+    travel_to Time.zone.local(2026, 10, 20, 10, 0) do
+      lead = Lead.create!(name: "Booked Before Recontact", email: "booked-recontact@example.com", phone: "+14155550166", source: "meta_ads")
+      call = lead.scheduled_calls.create!(scheduled_on: "2026-10-20", scheduled_time: "15:00")
+
+      patch mark_recontact_lead_path(lead), params: { months: 3, return_to: lead_path(lead) }
+      assert_redirected_to lead_path(lead)
+      assert lead.reload.recontact?
+      assert_equal "scheduled", call.reload.status
+
+      patch mark_recontact_lead_path(lead), params: { recontact_on: "2027-03-15", return_to: lead_path(lead) }
+      assert_equal Date.new(2027, 3, 15), lead.reload.recontact_on
+      assert_equal "scheduled", call.reload.status
+
+      get root_path
+      assert_response :success
+      assert_select "#scheduled_call_#{call.id}"
+      get lead_path(lead)
+      assert_select "#scheduled-call"
+    end
   end
 end

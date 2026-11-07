@@ -33,8 +33,7 @@ module Leads::Acquisition
     if allowed && input.key?("submission_page")
       page = input["submission_page"]
       raise ArgumentError, "acquisition.submission_page" unless page.is_a?(Hash)
-      raw_page_url = page["url"].presence || page["landing_url"].presence
-      result["submission_page"] = { "landing_url" => safe_url(raw_page_url, campaign: allowed), "referrer_host" => host(page["referrer"]) }
+      result["submission_page"] = { "landing_url" => safe_url(page["url"], campaign: allowed), "referrer_host" => host(page["referrer"]) }
     end
     result
   end
@@ -117,31 +116,21 @@ module Leads::Acquisition
   end
 
   def legacy_attribution(input, acquisition: nil)
-    input = input.is_a?(Hash) ? input : {}
     result = input.slice(*(CAMPAIGN_KEYS + CLICK_KEYS + %w[first_seen_at referral_code]))
-      .transform_values { |value| value.to_s.strip.first(200).presence }
-      .compact
+      .transform_values { |value| value.to_s.first(200) }
     if input["landing_url"].present?
-      query_params(input["landing_url"]).slice(*(CAMPAIGN_KEYS + %w[fbclid])).each do |key, val|
-        result[key] ||= val
+      begin
+        query = URI.decode_www_form(URI.parse(input["landing_url"].to_s).query.to_s).to_h
+        result["fbclid"] ||= query["fbclid"].to_s.first(200).presence
+      rescue URI::InvalidURIError, ArgumentError
+        nil
       end
       result["landing_url"] = safe_url(input["landing_url"], campaign: true)
     end
     if acquisition
-      input_campaign = result.slice(*(CAMPAIGN_KEYS + CLICK_KEYS + %w[landing_url]))
-      touches = %w[last_non_direct_touch last_touch].map { |key| acquisition[key] }
-      attributed_touch = touches.find { |snapshot| eligible?(snapshot) && snapshot.slice(*(CAMPAIGN_KEYS + CLICK_KEYS)).any? }
-      fallback_touch = submission_page_fallback(acquisition, fallback_url: input["landing_url"]) unless attributed_touch
-      touch = attributed_touch || fallback_touch || touches.find { |snapshot| eligible?(snapshot) } || {}
-      projected = touch.slice(*(CAMPAIGN_KEYS + CLICK_KEYS + %w[landing_url]))
-      if permitted?(acquisition) && input_campaign.any?
-        if projected.slice(*(CAMPAIGN_KEYS + CLICK_KEYS)).empty?
-          projected = projected.merge(input_campaign)
-        else
-          projected = input_campaign.slice("campaign_id", "ad_id", "adset_id").merge(projected)
-        end
-      end
-      result = projected.merge("first_seen_at" => touch["observed_at"], "referral_code" => result["referral_code"])
+      touch = %w[last_non_direct_touch last_touch].map { |key| acquisition[key] }.find { |snapshot| eligible?(snapshot) } ||
+        submission_page_fallback(acquisition) || {}
+      result = touch.slice(*(CAMPAIGN_KEYS + CLICK_KEYS + %w[landing_url])).merge("first_seen_at" => touch["observed_at"], "referral_code" => result["referral_code"])
       unless permitted?(acquisition)
         result.except!(*(CAMPAIGN_KEYS + CLICK_KEYS + %w[landing_url]))
       end
@@ -149,11 +138,9 @@ module Leads::Acquisition
     result.compact
   end
 
-  def submission_page_fallback(acquisition, fallback_url: nil)
+  def submission_page_fallback(acquisition)
     return nil unless acquisition.is_a?(Hash) && permitted?(acquisition)
-    return nil if %w[last_non_direct_touch last_touch].any? { |key|
-      eligible?(acquisition[key]) && acquisition[key].slice(*(CAMPAIGN_KEYS + CLICK_KEYS)).any?
-    }
+    return nil if %w[last_non_direct_touch last_touch].any? { |key| eligible?(acquisition[key]) }
 
     last_touch = acquisition["last_touch"]
     return nil if last_touch.is_a?(Hash) &&
@@ -162,17 +149,15 @@ module Leads::Acquisition
 
     page = acquisition["submission_page"]
     landing_url = page.is_a?(Hash) ? (page["landing_url"].presence || page["url"].presence) : nil
-    landing_url ||= fallback_url
     return nil if landing_url.blank?
 
     params = query_params(landing_url)
     return nil if params.empty?
 
-    observed_at = acquisition.dig("permission", "observed_at").presence ||
-      (last_touch.is_a?(Hash) ? last_touch["observed_at"].presence : nil)
+    observed_at = acquisition.dig("permission", "observed_at").presence
     fallback = params.merge(
       "landing_url" => safe_url(landing_url, campaign: true),
-      "referrer_host" => (page.is_a?(Hash) ? (page["referrer_host"].presence || host(page["referrer"])) : nil),
+      "referrer_host" => page["referrer_host"].presence || host(page["referrer"]),
       "observed_at" => observed_at
     ).compact
     fallback["source"] = classify(fallback)

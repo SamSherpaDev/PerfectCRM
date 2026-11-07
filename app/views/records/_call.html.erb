@@ -30,7 +30,7 @@
                     data: (confirm_call ? { action: "click->contact-confirm#confirm" } : {}) %>
             <% end %>
             <div class="w-full mt-2">
-              <%= form.text_field :video_source, value: inquiry.video_source, id: nil, placeholder: "What video got you here? (optional)", aria: { label: "What video got you here?" }, class: "input text-xs py-1.5" %>
+              <%= form.text_field :video_source, id: nil, maxlength: 240, placeholder: "What video got you here? (optional)", aria: { label: "What video got you here?" }, class: "input text-xs py-1.5" %>
             </div>
           <% end %>
         <% end %>
@@ -44,23 +44,16 @@
               </li>
             <% end %>
           </ul>
-          <% latest_call = recent.first %>
-          <% if latest_call.metadata["direction"] == "outbound" && CallLog::UNANSWERED_OUTCOMES.include?(latest_call.metadata["outcome"]) && !inquiry.not_interested? %>
-            <% outbound_unanswered = recent.select { |c| c.metadata["direction"] == "outbound" && CallLog::UNANSWERED_OUTCOMES.include?(c.metadata["outcome"]) }.reverse %>
-            <% attempt_count = outbound_unanswered.size %>
-            <% next_window = CallLog.suggested_time_window(outbound_unanswered) %>
+          <% attempts = inquiry.ad_lead? && !inquiry.not_interested? ? CallLog.unanswered_attempts(inquiry) : [] %>
+          <% if attempts.last == recent.first %>
+            <% latest_call = recent.first %>
             <div class="missed-call-reminder mt-3 rounded border border-rule-2 p-3 text-xs" data-missed-call-reminder>
-              <div class="flex flex-wrap items-center justify-between gap-1.5">
-                <p class="font-medium text-ink">Missed call (<%= CallLog::LABELS.fetch(latest_call.metadata["outcome"]) %>) - send a short text by hand</p>
-                <%= badge "Awaiting approval - inactive", :warning %>
-              </div>
-              <% if attempt_count < CallLog::AUTO_RECONTACT_CALLS && !inquiry.recontact? %>
-                <p class="mt-1 muted">Attempt <%= attempt_count %> of <%= CallLog::AUTO_RECONTACT_CALLS %> logged · try attempt <%= attempt_count + 1 %> next day in the <%= next_window %>.</p>
-              <% elsif inquiry.recontact? %>
-                <p class="mt-1 muted">3 unanswered attempts logged · moved to Re-contact<% if inquiry.recontact_on %> for <%= date_short(inquiry.recontact_on) %><% end %>.</p>
+              <p class="font-medium text-ink">Missed call (<%= CallLog::LABELS.fetch(latest_call.metadata["outcome"]) %>) - send a short text by hand</p>
+              <% if inquiry.recontact? %>
+                <p class="mt-1 muted"><%= attempts.size %> unanswered <%= "attempt".pluralize(attempts.size) %> logged · on the Re-contact list<% if inquiry.recontact_on %> for <%= date_short(inquiry.recontact_on) %><% end %>.</p>
+              <% elsif attempts.size < CallLog::AUTO_RECONTACT_CALLS %>
+                <p class="mt-1 muted">Attempt <%= attempts.size %> of <%= CallLog::AUTO_RECONTACT_CALLS %> logged · try attempt <%= attempts.size + 1 %> next day in the <%= CallLog.suggested_time_window(attempts) %>.</p>
               <% end %>
-              <label class="label mt-2" for="missed_call_text_draft_<%= inquiry.id %>">Editable text draft (caller sends manually after owner approval; never auto-sent)</label>
-              <%= text_area_tag :missed_call_text_draft, CallLog.missed_call_text_draft(inquiry), id: "missed_call_text_draft_#{inquiry.id}", rows: 3, class: "textarea text-xs mt-1" %>
             </div>
           <% end %>
         <% else %>
@@ -105,7 +98,7 @@
         </div>
         <div>
           <%= form.label :video_source, "What video got you here? (optional)", class: "label" %>
-          <%= form.text_field :video_source, value: (lead ? record.video_source : nil), placeholder: "e.g., Everest vs Annapurna opener", class: "input" %>
+          <%= form.text_field :video_source, maxlength: 240, placeholder: "e.g., Everest vs Annapurna opener", class: "input" %>
         </div>
         <%= form.submit "Save call", class: "btn-secondary" %>
       <% end %>

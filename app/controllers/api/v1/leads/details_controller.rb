@@ -37,9 +37,6 @@ module Api
             return render json: { error: "expired" }, status: :gone
           end
           updates, trip_meta, party_meta, errors = extract_updates(payload)
-          if payload.key?("attribution") && !payload["attribution"].is_a?(Hash) && !payload["attribution"].nil?
-            errors["attribution"] = "invalid"
-          end
           answer = payload["source_answer"]
           if payload.key?("source_answer")
             if !answer.is_a?(Hash) || !::SourceHistory::ANSWERS.key?(answer["code"]) ||
@@ -100,10 +97,6 @@ module Api
                 lead.reported_source_detail = detail
               end
             end
-            raw_incoming_attr = payload["attribution"].is_a?(Hash) ? payload["attribution"] : {}
-            if payload["page"].is_a?(Hash) && raw_incoming_attr["landing_url"].blank? && payload.dig("page", "url").present?
-              raw_incoming_attr = raw_incoming_attr.merge("landing_url" => payload.dig("page", "url"))
-            end
             if acquisition
               previous = (lead.metadata || {})["acquisition"] || {}
               incoming_permission = acquisition["permission"]
@@ -139,33 +132,8 @@ module Api
                 lead.campaign_name = nil
                 lead.source = "website_form" if %w[google_ads meta_ads].include?(lead.source)
               end
-              existing_attr = (lead.metadata || {})["attribution"] || {}
-              input_for_legacy = raw_incoming_attr.any? ? existing_attr.merge(raw_incoming_attr) : existing_attr.slice("referral_code")
-              new_attribution = ::Leads::Acquisition.legacy_attribution(input_for_legacy, acquisition: acquisition)
-              if ::Leads::Acquisition.permitted?(acquisition) && raw_incoming_attr.any?
-                extra = ::Leads::Acquisition.legacy_attribution(raw_incoming_attr)
-                new_attribution = extra.merge(new_attribution)
-              end
-              lead.metadata = (lead.metadata || {}).merge("acquisition" => acquisition, "attribution" => new_attribution)
-              if ::Leads::Acquisition.permitted?(acquisition)
-                derived_source = ::Leads.derive_source(new_attribution)
-                lead.source = derived_source if lead.source == "website_form" && derived_source != "website_form"
-                if lead.campaign_name.blank?
-                  lead.campaign_name = (new_attribution["utm_campaign"].to_s.strip.presence || new_attribution["campaign_id"].to_s.strip.presence)&.truncate(160)
-                end
-              end
-            elsif raw_incoming_attr.any?
-              existing_acquisition = (lead.metadata || {})["acquisition"]
-              if existing_acquisition.nil? || ::Leads::Acquisition.permitted?(existing_acquisition)
-                existing_attr = (lead.metadata || {})["attribution"] || {}
-                merged_attr = existing_attr.merge(::Leads::Acquisition.legacy_attribution(raw_incoming_attr))
-                lead.metadata = (lead.metadata || {}).merge("attribution" => merged_attr)
-                derived_source = ::Leads.derive_source(merged_attr)
-                lead.source = derived_source if lead.source == "website_form" && derived_source != "website_form"
-                if lead.campaign_name.blank?
-                  lead.campaign_name = (merged_attr["utm_campaign"].to_s.strip.presence || merged_attr["campaign_id"].to_s.strip.presence)&.truncate(160)
-                end
-              end
+              lead.metadata = (lead.metadata || {}).merge("acquisition" => acquisition,
+                "attribution" => ::Leads::Acquisition.legacy_attribution((lead.metadata || {})["attribution"] || {}, acquisition: acquisition))
             end
             call_note = nil
             if call_request && (lead.metadata || {}).dig("call_request")&.except("requested_at") != call_request

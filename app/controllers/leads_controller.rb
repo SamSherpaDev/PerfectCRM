@@ -166,7 +166,14 @@ class LeadsController < ApplicationController
 
   def mark_unsure
     @lead.mark_unsure!
-    redirect_to lead_action_return_to, notice: @lead.recontact? ? "Marked as Unsure - moved to Re-contact after three unanswered calls." : "Marked as Unsure - moved to Unsure."
+    notice = if @lead.recontact?
+      "Marked as Unsure - moved to Re-contact after three unanswered calls."
+    elsif @lead.not_interested?
+      "Marked as Unsure - moved to Not interested after three unanswered calls."
+    else
+      "Marked as Unsure - moved to Unsure."
+    end
+    redirect_to lead_action_return_to, notice: notice
   rescue ActiveRecord::RecordInvalid => e
     redirect_to record_path_keeping_list(@lead), alert: e.record.errors.full_messages.to_sentence
   end

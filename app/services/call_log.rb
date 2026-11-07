@@ -14,7 +14,6 @@ module CallLog
   AUTO_NOT_INTERESTED_SUMMARY = "Moved to Not interested automatically after three unanswered calls"
   REPLIED_AFTER_AUTO_MOVE_SUMMARY = "Moved back to Unsure: they replied after the automatic move."
   TIME_WINDOWS = %w[morning afternoon evening].freeze
-  MISSED_CALL_TEXT_TEMPLATE = "Hi {{first_name}}, this is Sam from Sherpa Holidays. Sorry I missed you just now - I wanted to follow up on {{trip_context}}. When is a good time for a quick call, or feel free to text me back here?"
   module_function
 
   def record!(record, key:, occurred_at:, outcome:, direction:, duration: nil, video_source: nil)
@@ -23,8 +22,7 @@ module CallLog
       OUTCOMES.include?(outcome) && DIRECTIONS.include?(direction) && occurred_at && occurred_at <= Time.current + 5.minutes
     seconds = duration.present? ? Integer(duration) : nil
     raise ArgumentError, "Invalid duration" if seconds && !seconds.between?(0, 86_400)
-    video = video_source.to_s.strip.presence
-    raise ArgumentError, "Invalid video source" if video && video.length > 240
+    video = video_source.to_s.strip.first(240).presence
 
     record.with_lock do
       existing = record.activity_events.find_by(kind: "call", idempotency_key: key)
@@ -52,7 +50,7 @@ module CallLog
       end
       yield event if block_given?
       if existing.nil? && event.metadata["direction"] == "outbound" && UNANSWERED_OUTCOMES.include?(event.metadata["outcome"])
-        mark_recontact_after_three_unanswered_calls!(record, event: event)
+        move_after_three_unanswered_calls!(record, event: event)
       end
       event
     end
@@ -84,31 +82,30 @@ module CallLog
     TIME_WINDOWS[(TIME_WINDOWS.index(tried.last).to_i + 1) % TIME_WINDOWS.size]
   end
 
-  def missed_call_text_draft(lead)
-    first_name = lead&.name.to_s.strip.split(/\s+/).first.presence || "there"
-    trip = lead&.trip_interest.to_s.strip.presence || lead&.trip_title.to_s.strip.presence
-    trip_context = trip ? "your #{trip} inquiry" : "your trip inquiry"
-    MISSED_CALL_TEXT_TEMPLATE
-      .sub("{{first_name}}", first_name)
-      .sub("{{trip_context}}", trip_context)
-  end
-
   def notice(event)
     lead = event.subject
-    moved = lead.recontact? &&
-      lead.activity_events.exists?(kind: "recontact", idempotency_key: event.idempotency_key)
-    "Call logged: #{LABELS.fetch(event.metadata['outcome'])}.#{' Moved to Re-contact after three unanswered calls.' if moved}"
+    moved = if lead.recontact? && lead.activity_events.exists?(kind: "recontact", idempotency_key: event.idempotency_key)
+      " Moved to Re-contact after three unanswered calls."
+    elsif lead.not_interested? && lead.activity_events.exists?(kind: "not_interested", idempotency_key: event.idempotency_key)
+      " Moved to Not interested after three unanswered calls."
+    end
+    "Call logged: #{LABELS.fetch(event.metadata['outcome'])}.#{moved}"
   end
 
-  def three_unanswered_calls?(record)
-    recent_calls = record.activity_events.where(kind: "call")
+  # Outbound unanswered calls since the latest response or restore, oldest
+  # first, at most AUTO_RECONTACT_CALLS.
+  def unanswered_attempts(record)
+    record.activity_events.where(kind: "call")
       .where("json_extract(metadata, '$.outcome') IN (?) AND json_extract(metadata, '$.direction') = 'outbound'", UNANSWERED_OUTCOMES)
       .order(occurred_at: :desc, id: :desc)
       .limit(AUTO_RECONTACT_CALLS)
       .to_a
-    return false unless recent_calls.size == AUTO_RECONTACT_CALLS
+      .take_while { |call| !responded_since?(record, call) }
+      .reverse
+  end
 
-    !responded_since?(record, recent_calls.last)
+  def three_unanswered_calls?(record)
+    unanswered_attempts(record).size == AUTO_RECONTACT_CALLS
   end
 
   def responded_since?(record, first_call)
@@ -127,8 +124,19 @@ module CallLog
       .any? { |message| Mail::ReplyAlerts.reply?(message.from_address, message.subject, message.inquiry_headers) }
   end
 
+  def move_after_three_unanswered_calls!(record, event: nil)
+    if record.ad_lead?
+      mark_recontact_after_three_unanswered_calls!(record, event: event)
+    else
+      mark_not_interested_after_three_unanswered_calls!(record, event: event)
+    end
+  end
+
+  # Ad leads still in New (stage new) or Unsure; existing clients keep their place.
   def mark_recontact_after_three_unanswered_calls!(record, event: nil)
-    return false unless record.unsure? && three_unanswered_calls?(record)
+    return false unless record.ad_lead? && record.existing_client_id.nil?
+    return false unless record.unsure? || Lead.in_new_tab.where(status: "new").exists?(record.id)
+    return false unless three_unanswered_calls?(record)
 
     record.mark_recontact!
     record.activity_events.create!(
@@ -146,7 +154,6 @@ module CallLog
     true
   end
 
-  # Retained for historical migration 20261101202153_move_unanswered_unsure_leads_to_not_interested.
   def mark_not_interested_after_three_unanswered_calls!(record, event: nil)
     return false unless record.unsure? && three_unanswered_calls?(record)
 

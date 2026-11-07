@@ -9,14 +9,9 @@ module Leads
   META_SOURCES = %w[facebook instagram meta fb ig meta_ads].freeze
   TIMING_WINDOWS = {
     "within_3_months" => "Within the next 3 months",
-    "next_3_months" => "Within the next 3 months",
     "3_to_6_months" => "In 3 to 6 months",
     "6_to_12_months" => "In 6 to 12 months",
     "12_plus_months" => "More than a year out",
-    "spring" => "Spring",
-    "summer" => "Summer",
-    "autumn" => "Autumn",
-    "winter" => "Winter",
     "not_sure" => "Not sure yet"
   }.freeze
   PARTY_SIZE_BANDS = {
@@ -34,15 +29,6 @@ module Leads
     "helicopter_lodge" => "Everest by air or helicopter-supported lodge trip",
     "expedition_climb" => "High-altitude expedition or peak climb",
     "multi_country" => "Nepal combined with Bhutan, Tibet or India",
-    "ready_to_plan" => "Ready to plan dates and get a written proposal",
-    "comparing_options" => "Comparing routes and seasons for an upcoming trip",
-    "need_guidance" => "Looking for guidance on what fits our group",
-    "early_research" => "Early research for a future trip",
-    "everest_trek" => "Everest Base Camp or Khumbu trek",
-    "annapurna_trek" => "Annapurna or Pokhara trek",
-    "cultural_wildlife" => "Cultural, Kathmandu, Pokhara, and Chitwan tour",
-    "custom_private" => "Custom private itinerary",
-    "comfort_walking" => "Easy walking and mountain views",
     "not_sure" => "Not sure yet, help me choose"
   }.freeze
   DISPOSABLE_DOMAINS = %w[
@@ -246,132 +232,38 @@ module Leads
   end
 
   def extract_inquiry_dropdowns(payload)
-    updates = {}
-    trip_meta = {}
-    party_meta = {}
-    errors = {}
-
     trip = payload["trip"].is_a?(Hash) ? payload["trip"] : {}
     party = payload["party"].is_a?(Hash) ? payload["party"] : {}
-    qual = payload["qualification"].is_a?(Hash) ? payload["qualification"] : {}
-    if payload.key?("qualification") && !payload["qualification"].is_a?(Hash) && !payload["qualification"].nil?
-      errors["qualification"] = "invalid"
+    updates = {}
+    errors = {}
+    trip_meta = dropdown_answer(trip, "trip", "timing_window", "timing_label", TIMING_WINDOWS, errors)
+      .merge(dropdown_answer(trip, "trip", "intent", "intent_label", TRIP_INTENTS, errors))
+    party_meta = dropdown_answer(party, "party", "size_band", "size_label", PARTY_SIZE_BANDS, errors)
+    if (window = trip_meta["timing_window"]) && !trip.key?("month") && !trip.key?("year")
+      updates["timing_unknown"] = window == "not_sure"
     end
-
-    timing_key = if trip.key?("timing_window")
-      "trip.timing_window"
-    elsif trip.key?("travel_timing")
-      "trip.travel_timing"
-    elsif qual.key?("timing_window")
-      "qualification.timing_window"
-    elsif qual.key?("travel_timing")
-      "qualification.travel_timing"
+    if (band = party_meta["size_band"])
+      updates["party_size"] = (band.to_i if %w[1 2].include?(band))
     end
-    if timing_key
-      raw_timing = if trip.key?("timing_window")
-        trip["timing_window"]
-      elsif trip.key?("travel_timing")
-        trip["travel_timing"]
-      elsif qual.key?("timing_window")
-        qual["timing_window"]
-      else
-        qual["travel_timing"]
-      end
-      if raw_timing.nil? || raw_timing == ""
-        trip_meta["timing_window"] = nil
-        trip_meta["timing_label"] = nil
-      elsif raw_timing.is_a?(String) && TIMING_WINDOWS.key?(raw_timing.strip)
-        window = raw_timing.strip
-        raw_label = trip["timing_label"].presence || qual["timing_label"].presence || qual["travel_timing_label"].presence
-        if raw_label && (!raw_label.is_a?(String) || raw_label.strip.length > 120)
-          errors["trip.timing_label"] = "invalid"
-        else
-          trip_meta["timing_window"] = window
-          trip_meta["timing_label"] = raw_label ? raw_label.strip : TIMING_WINDOWS[window]
-          if !trip.key?("timing_unknown") && !trip.key?("month") && !trip.key?("year")
-            updates["timing_unknown"] = (window == "not_sure")
-          end
-        end
-      else
-        errors[timing_key] = "invalid"
-      end
-    end
-
-    intent_key = if trip.key?("intent")
-      "trip.intent"
-    elsif trip.key?("trip_intent")
-      "trip.trip_intent"
-    elsif qual.key?("intent")
-      "qualification.intent"
-    elsif qual.key?("trip_intent")
-      "qualification.trip_intent"
-    end
-    if intent_key
-      raw_intent = if trip.key?("intent")
-        trip["intent"]
-      elsif trip.key?("trip_intent")
-        trip["trip_intent"]
-      elsif qual.key?("intent")
-        qual["intent"]
-      else
-        qual["trip_intent"]
-      end
-      if raw_intent.nil? || raw_intent == ""
-        trip_meta["intent"] = nil
-        trip_meta["intent_label"] = nil
-      elsif raw_intent.is_a?(String) && TRIP_INTENTS.key?(raw_intent.strip)
-        intent = raw_intent.strip
-        raw_label = trip["intent_label"].presence || qual["intent_label"].presence || qual["trip_intent_label"].presence
-        if raw_label && (!raw_label.is_a?(String) || raw_label.strip.length > 120)
-          errors["trip.intent_label"] = "invalid"
-        else
-          trip_meta["intent"] = intent
-          trip_meta["intent_label"] = raw_label ? raw_label.strip : TRIP_INTENTS[intent]
-        end
-      else
-        errors[intent_key] = "invalid"
-      end
-    end
-
-    band_key = if party.key?("size_band")
-      "party.size_band"
-    elsif qual.key?("party_size_band")
-      "qualification.party_size_band"
-    elsif qual.key?("size_band")
-      "qualification.size_band"
-    elsif qual.key?("party_size")
-      "qualification.party_size"
-    end
-    if band_key
-      raw_band = if party.key?("size_band")
-        party["size_band"]
-      elsif qual.key?("party_size_band")
-        qual["party_size_band"]
-      elsif qual.key?("size_band")
-        qual["size_band"]
-      else
-        qual["party_size"]
-      end
-      if raw_band.nil? || raw_band == ""
-        party_meta["size_band"] = nil
-        party_meta["size_label"] = nil
-      elsif raw_band.is_a?(String) && PARTY_SIZE_BANDS.key?(raw_band.strip)
-        band = raw_band.strip
-        raw_label = party["size_label"].presence || qual["party_size_label"].presence
-        if raw_label && (!raw_label.is_a?(String) || raw_label.strip.length > 120)
-          errors["party.size_label"] = "invalid"
-        else
-          party_meta["size_band"] = band
-          party_meta["size_label"] = raw_label ? raw_label.strip : PARTY_SIZE_BANDS[band]
-          unless party.key?("size")
-            updates["party_size"] = band.in?(%w[1 2]) ? band.to_i : nil
-          end
-        end
-      else
-        errors[band_key] = "invalid"
-      end
-    end
-
     [ updates, trip_meta, party_meta, errors ]
+  end
+
+  def dropdown_answer(group, prefix, key, label_key, options, errors)
+    return {} unless group.key?(key)
+
+    value = group[key]
+    return { key => nil, label_key => nil } if value.nil? || value == ""
+
+    code = value.strip if value.is_a?(String)
+    unless options.key?(code)
+      errors["#{prefix}.#{key}"] = "invalid"
+      return {}
+    end
+    label = group[label_key]
+    if label.present? && (!label.is_a?(String) || label.strip.length > 120)
+      errors["#{prefix}.#{label_key}"] = "invalid"
+      label = nil
+    end
+    { key => code, label_key => label.presence&.strip || options[code] }
   end
 end

@@ -30,7 +30,7 @@ class ScheduledCall < ApplicationRecord
     left_joins(:lead, :client).where(
       "(scheduled_calls.client_id IS NOT NULL AND clients.archived_at IS NULL) OR " \
       "(scheduled_calls.client_id IS NULL AND scheduled_calls.lead_id IS NOT NULL AND " \
-      "leads.archived_at IS NULL AND leads.converted_client_id IS NULL AND leads.not_interested_marked_at IS NULL AND leads.recontact_marked_at IS NULL)"
+      "leads.archived_at IS NULL AND leads.converted_client_id IS NULL AND leads.not_interested_marked_at IS NULL)"
     )
   }
   scope :missed, ->(now = Time.current) { scheduled.where("scheduled_calls.scheduled_at < ?", now).order(scheduled_at: :asc, id: :asc) }

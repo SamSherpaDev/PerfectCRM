@@ -12,9 +12,9 @@ module LeadsHelper
   LEAD_TAB_CAPTIONS = {
     "new" => "Leads you have not sorted yet. Mark Potential, Unsure, Not interested, or spam.",
     "potential" => "Leads you want to follow up with, across all stages. Remove Potential when you no longer need the reminder.",
-    "unsure" => "Leads you cannot call yet: voicemail, no reply, maybe spam. Move them on once you know. Three unanswered calls move a lead to Re-contact.",
-    "recontact" => "Leads who did not answer three call attempts. Held for a 3-to-6-month re-contact date instead of Not interested; never contacted automatically.",
-    "not_interested" => "Leads who said they are not interested. Kept out of call lists, follow-ups, and automatic emails. Choose Interested again to restore.",
+    "unsure" => "Leads you cannot call yet: voicemail, no reply, maybe spam. Move them on once you know. Three unanswered calls move an ad lead to Re-contact and any other lead to Not interested.",
+    "recontact" => "Ad leads who did not answer three call attempts, and leads you set aside for later. Held for a 3-to-6-month re-contact date; due ones show on Today. Never contacted automatically.",
+    "not_interested" => "Leads who said they are not interested or did not answer three calls. Kept out of call lists, follow-ups, and automatic emails. Choose Interested again to restore.",
     "missing_source" => "All inquiries without a discovery answer, including converted records. Tests and spam stay out.",
     "archived" => "Archived, spam, and lost leads. Restore an archived lead any time."
   }.freeze
@@ -33,8 +33,8 @@ module LeadsHelper
 
   def lead_source_label(lead)
     parts = [ lead.source.to_s.humanize ]
-    ev = lead.respond_to?(:attribution_evidence) ? lead.attribution_evidence : {}
-    campaign = lead.campaign_name.presence || ev["campaign_name"].presence || ev["utm_campaign"].presence || ev["campaign_id"].presence
+    ev = lead.metadata.is_a?(Hash) && lead.metadata["attribution"].is_a?(Hash) ? lead.metadata["attribution"] : {}
+    campaign = lead.campaign_name.presence || ev["utm_campaign"].presence || ev["campaign_id"].presence
     parts << campaign if campaign.present?
     if ev["campaign_id"].present? && ev["campaign_id"] != campaign
       parts << "campaign #{ev['campaign_id']}"

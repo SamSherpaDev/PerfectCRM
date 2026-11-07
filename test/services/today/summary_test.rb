@@ -296,6 +296,51 @@ class TodaySummaryTest < ActiveSupport::TestCase
     end
   end
 
+  test "a re-contact whose date has arrived returns to the call list after retries and leaves once called" do
+    due, later, booked = nil
+    travel_to Time.zone.local(2026, 8, 3, 10) do
+      due = inquiry("Re-contact due today", 1.day.ago)
+      CallLog.record!(due, key: "rc-due-call", occurred_at: 1.hour.ago, outcome: "no_answer", direction: "outbound")
+      due.mark_recontact!
+      later = inquiry("Re-contact due next week", 1.day.ago)
+      later.mark_recontact!(due_on: Date.new(2026, 11, 10))
+      booked = inquiry("Re-contact with a booked call", 1.day.ago)
+      booked.mark_recontact!
+    end
+
+    travel_to Time.zone.local(2026, 11, 2, 12) do
+      assert_not_includes Today::Summary.new.not_yet_called, due
+    end
+
+    travel_to Time.zone.local(2026, 11, 3, 12) do
+      booked.scheduled_calls.create!(scheduled_at: 1.day.from_now)
+      fresh = inquiry("Fresh inquiry", 1.hour.ago)
+      retry_lead = inquiry("Due 2nd try", 2.days.ago)
+      CallLog.record!(retry_lead, key: "rc-retry-1", occurred_at: 1.day.ago, outcome: "voicemail", direction: "outbound")
+      older = inquiry("Older first try", 3.days.ago)
+
+      summary = Today::Summary.new
+      assert_equal [ fresh, retry_lead, due, older ], summary.not_yet_called.to_a
+      entry = summary.call_entries.find { |e| e.lead == due }
+      assert_equal [ 1, "Re-contact due" ], [ entry.attempt, entry.attempt_label ]
+      assert_equal "rc-due-call", entry.last_call.idempotency_key
+
+      CallLog.record!(due, key: "rc-due-call-2", occurred_at: Time.current, outcome: "voicemail", direction: "outbound")
+      assert_not_includes Today::Summary.new.not_yet_called, due
+      assert due.reload.recontact?
+    end
+  end
+
+  test "follow-ups on a Re-contact lead stay on Today" do
+    lead = inquiry("Re-contact with a follow-up", 2.days.ago)
+    task = lead.tasks.create!(title: "Send the Annapurna notes", due_on: Date.current)
+    overdue = lead.tasks.create!(title: "Check flight dates", due_on: Date.yesterday)
+    lead.mark_recontact!
+    summary = Today::Summary.new
+    assert_includes summary.followups_due, task
+    assert_includes summary.overdue, overdue
+  end
+
   private
 
   def inquiry(name, received_at, phone: "+1 415 555 0134")

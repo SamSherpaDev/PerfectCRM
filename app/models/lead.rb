@@ -243,44 +243,12 @@ class Lead < ApplicationRecord
     metadata.dig("trip", "intent_label").to_s.strip.presence || ::Leads::TRIP_INTENTS[trip_intent]
   end
 
-  def video_source
-    metadata.is_a?(Hash) ? metadata["video_source"].to_s.strip.presence : nil
+  def ad_lead?
+    ::AdSpend::SOURCES.include?(source)
   end
 
-  def attribution_evidence
-    return {} unless metadata.is_a?(Hash)
-
-    acq = metadata["acquisition"].is_a?(Hash) ? metadata["acquisition"] : {}
-    return {} if acq["permission"].is_a?(Hash) && !::Leads::Acquisition.permitted?(acq)
-
-    consent = acq["consent"].is_a?(Hash) ? acq["consent"] : {}
-    return {} if consent.any? && (consent["analytics"] == false || consent["marketing"] == false)
-
-    attr = metadata["attribution"].is_a?(Hash) ? metadata["attribution"] : {}
-    touches = %w[last_non_direct_touch last_touch first_touch].filter_map do |key|
-      touch = acq[key]
-      next unless touch.is_a?(Hash)
-
-      touch["campaign"].is_a?(Hash) ? touch.merge(touch["campaign"]) : touch
-    end
-    url_params = [
-      attr["landing_url"],
-      acq.dig("last_non_direct_touch", "landing_url"),
-      acq.dig("last_touch", "landing_url"),
-      acq.dig("first_touch", "landing_url"),
-      acq.dig("submission_page", "landing_url"),
-      acq.dig("submission_page", "url"),
-      metadata.dig("page", "url")
-    ].compact_blank.each_with_object({}) do |url, acc|
-      ::Leads::Acquisition.query_params(url).each { |k, v| acc[k] ||= v if v.present? }
-    end
-
-    %w[campaign_id campaign_name adset_id ad_id utm_source utm_medium utm_campaign utm_content utm_term fbclid gclid].each_with_object({}) do |key, out|
-      val = attr[key].to_s.strip.presence ||
-        touches.lazy.map { |t| t[key].to_s.strip.presence }.find(&:present?) ||
-        url_params[key].to_s.strip.presence
-      out[key] = val if val.present?
-    end
+  def video_source
+    metadata.is_a?(Hash) ? metadata["video_source"].to_s.strip.presence : nil
   end
 
   def potential?
@@ -335,7 +303,7 @@ class Lead < ApplicationRecord
       )
       record_interested_again! if saved_change_to_not_interested_marked_at?
       record_recontact_restored! if saved_change_to_recontact_marked_at?
-      CallLog.mark_recontact_after_three_unanswered_calls!(self)
+      CallLog.move_after_three_unanswered_calls!(self)
     end
   end
 
@@ -366,7 +334,6 @@ class Lead < ApplicationRecord
       now = Time.current
       target_date = resolve_recontact_due_on(due_on: due_on, months: months, now: now)
       update!(recontact_marked_at: recontact_marked_at || now, recontact_on: target_date)
-      cancel_open_scheduled_calls!(at: now, reason: "recontact", summary_reason: "moved to Re-contact")
     end
   end
 
@@ -709,18 +676,18 @@ class Lead < ApplicationRecord
     raise ActiveRecord::RecordInvalid, self
   end
 
-  def cancel_open_scheduled_calls!(at: Time.current, reason: "not_interested", summary_reason: "marked not interested")
+  def cancel_open_scheduled_calls!(at: Time.current)
     scheduled_calls.scheduled.order(:scheduled_at, :id).each do |call|
       call.cancel!(cancelled_at: at)
       stamp = call.scheduled_at.in_time_zone.strftime("%b %-d, %-l:%M %p").strip
       activity_events.create!(
         kind: "scheduled_call",
-        summary: "Scheduled call for #{stamp} cancelled (#{summary_reason})",
+        summary: "Scheduled call for #{stamp} cancelled (marked not interested)",
         occurred_at: at,
         metadata: {
           "scheduled_call_id" => call.id,
           "scheduled_at" => call.scheduled_at.iso8601,
-          "reason" => reason,
+          "reason" => "not_interested",
           "actor" => Current.user_email.presence || "manual"
         }
       )
