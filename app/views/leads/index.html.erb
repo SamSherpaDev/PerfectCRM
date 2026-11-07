@@ -41,7 +41,7 @@
             <div class="min-w-0 sm:flex-1">
               <%= link_to lead.display_name, lead_path(lead, return_to: @lead_action_return_to), class: "link font-medium" %>
               <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs muted">
-                <span class="src inline-flex items-center gap-1.5">
+                <span class="src inline-flex gap-1.5">
                   <%= render "shared/icon", name: lead_source_icon(lead.source), class: "h-3.5 w-3.5" %>
                   <%= lead_source_label(lead) %>
                 </span>

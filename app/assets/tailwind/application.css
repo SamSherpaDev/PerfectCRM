@@ -1461,20 +1461,27 @@
     flex: none;
   }
 
-  /* Leads: source, fit score, pipeline group labels. */
+  /* Leads: source, fit score, pipeline group labels.
+     Ad sources carry campaign, ad, and UTM ids, so the label wraps inside its
+     card and the icon stays centered on the first line. */
   .src {
     display: inline-flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 6px;
+    min-width: 0;
     font-size: 12.5px;
     color: var(--pb-ink-2);
-    white-space: nowrap;
+    overflow-wrap: anywhere;
   }
   .src svg {
     width: 14px;
     height: 14px;
+    margin-top: calc((1lh - 14px) / 2);
     color: var(--pb-ink-4);
     flex: none;
+  }
+  .ev .meta .src svg {
+    margin-top: calc((1lh - 13px) / 2);
   }
   .fit {
     display: flex;
