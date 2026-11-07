@@ -26,7 +26,8 @@ class ScheduledCallsController < ApplicationController
   end
 
   def complete
-    event = @scheduled_call.complete!(outcome: params[:outcome], save_key: params[:save_key], inquiry_id: params[:inquiry_id])
+    event = @scheduled_call.complete!(outcome: params[:outcome], save_key: params[:save_key], inquiry_id: params[:inquiry_id],
+      video_source: params[:video_source])
     destination = return_destination
     redirect_to destination, notice: CallLog.notice(event, with_text: URI.parse(destination).path != polymorphic_path(@owner))
   rescue ActiveRecord::RecordInvalid => e

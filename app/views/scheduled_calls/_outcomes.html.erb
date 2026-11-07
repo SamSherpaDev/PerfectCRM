@@ -12,4 +12,5 @@
     <%= button_tag CallLog::LABELS.fetch(outcome), name: "outcome", value: outcome, class: button_class,
           data: (confirm_call ? { action: "click->contact-confirm#confirm" } : {}) %>
   <% end %>
+  <%= render "records/video_source_field", form: form %>
 <% end %>

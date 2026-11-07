@@ -2457,6 +2457,11 @@
   padding-inline: 6px;
   font-size: 12px;
 }
+.call-video {
+  grid-column: 1 / -1;
+  width: 100%;
+  contain: inline-size;
+}
 .calls-recent {
   display: flex;
   flex-direction: column;

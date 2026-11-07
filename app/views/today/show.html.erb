@@ -100,6 +100,7 @@
                 <% CallLog::ONE_TAP.each do |outcome| %>
                   <%= button_tag CallLog::LABELS.fetch(outcome), name: "outcome", value: outcome, class: "btn-secondary btn-xs" %>
                 <% end %>
+                <%= render "records/video_source_field", form: form %>
               <% end %>
 
               <%= render "scheduled_calls/popover",

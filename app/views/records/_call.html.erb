@@ -29,9 +29,7 @@
               <%= button_tag CallLog::LABELS.fetch(outcome), name: "outcome", value: outcome, class: "btn-secondary btn-sm",
                     data: (confirm_call ? { action: "click->contact-confirm#confirm" } : {}) %>
             <% end %>
-            <div class="w-full mt-2">
-              <%= form.text_field :video_source, id: nil, maxlength: 240, placeholder: "What video got you here? (optional)", aria: { label: "What video got you here?" }, class: "input text-xs py-1.5" %>
-            </div>
+            <%= render "records/video_source_field", form: form %>
           <% end %>
         <% end %>
         <% recent = inquiry.activity_events.where(kind: "call").order(occurred_at: :desc, id: :desc).limit(3).to_a %>

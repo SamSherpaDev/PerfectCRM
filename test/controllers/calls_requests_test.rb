@@ -99,13 +99,13 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
     travel_to Time.zone.local(2026, 10, 20, 10, 0) do
       lead = Lead.create!(name: "Unsure Ad Lead", email: "unsure-ad@example.com", source: "meta_ads")
       lead.mark_unsure!
-      CallLog.record!(lead, key: "ad-vm-1", occurred_at: 3.days.ago, outcome: "voicemail", direction: "outbound")
-      CallLog.record!(lead, key: "ad-vm-2", occurred_at: 2.days.ago, outcome: "no_answer", direction: "outbound")
+      CallLog.record!(lead, key: "ad-vm-call-1", occurred_at: 3.days.ago, outcome: "voicemail", direction: "outbound")
+      CallLog.record!(lead, key: "ad-vm-call-2", occurred_at: 2.days.ago, outcome: "no_answer", direction: "outbound")
       due_call = lead.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 20, 9, 0))
       future_call = lead.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 25, 11, 0))
 
       2.times do
-        post lead_calls_path(lead), params: { save_key: "ad-vm-3", outcome: "voicemail", direction: "outbound" }
+        post lead_calls_path(lead), params: { save_key: "ad-vm-call-3", outcome: "voicemail", direction: "outbound" }
       end
       assert_redirected_to lead_path(lead, anchor: "record-details")
       assert_equal "Call logged: Voicemail. Moved to Re-contact after three unanswered calls. Send a short text by hand. " \
@@ -551,6 +551,37 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
     assert_not lead.reload.metadata.to_h.key?("video_source")
   end
 
+  test "a one-tap call from Today's call list logs the optional video answer on that one call event" do
+    travel_to Time.zone.local(2026, 11, 2, 10, 0) do
+      answered = Lead.create!(name: "Row Video Traveler", email: "row-video@example.com", phone: "+14155550171", received_at: 1.hour.ago)
+      skipped = Lead.create!(name: "Row Blank Traveler", email: "row-blank@example.com", phone: "+14155550172", received_at: 2.hours.ago)
+
+      get root_path
+      [ answered, skipped ].each do |lead|
+        assert_select "#call_list_lead_#{lead.id} form[action=?] input[name=video_source]", lead_calls_path(lead), count: 1 do |inputs|
+          assert_nil inputs.first["value"]
+          assert_equal "240", inputs.first["maxlength"]
+        end
+      end
+
+      assert_difference -> { answered.activity_events.where(kind: "call").count }, 1 do
+        post lead_calls_path(answered), params: { save_key: "row-video-1", outcome: "connected", direction: "outbound",
+          return_to: root_path, video_source: "  Annapurna sunrise reel  " }
+      end
+      assert_redirected_to root_path
+      assert_equal "Call logged: Talked.", flash[:notice]
+      assert_equal "Annapurna sunrise reel", answered.activity_events.find_by!(idempotency_key: "row-video-1").metadata["video_source"]
+
+      post lead_calls_path(skipped), params: { save_key: "row-video-2", outcome: "no_answer", direction: "outbound",
+        return_to: root_path, video_source: "" }
+      assert_equal "Call logged: No answer.", flash[:notice]
+      assert_not skipped.activity_events.find_by!(idempotency_key: "row-video-2").metadata.key?("video_source")
+
+      follow_redirect!
+      assert_select "#call_list_lead_#{answered.id}", count: 0
+    end
+  end
+
   test "an over-long video answer is shortened and the call is still logged" do
     lead = Lead.create!(name: "Long Video Answer", email: "long-video@example.com")
     answer = "Everest helicopter opener " * 20
@@ -598,7 +629,7 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
       assert_select "[aria-label='Re-contact list'] input[type=date]", count: 0
 
       patch reschedule_recontact_lead_path(lead), params: { months: 6, return_to: leads_path(tab: "recontact") }
-      assert_redirected_to leads_path(tab: "recontact")
+      assert_redirected_to lead_path(lead, return_to: leads_path(tab: "recontact"))
       assert_equal "Re-contact date set to May 7, 2027.", flash[:notice]
       assert_equal Date.new(2027, 5, 7), lead.reload.recontact_on
 

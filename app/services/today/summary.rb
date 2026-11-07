@@ -67,16 +67,20 @@ module Today
     #     Voicemail, or No answer) and that are due another try (attempt 2
     #     due 1 day after attempt 1; attempt 3 due 2 days after attempt 2; at
     #     most 3 attempts). The ad-lead routine counts CallLog.unanswered_attempts
-    #     instead (Voicemail or No answer, one per day, since the latest
-    #     response), retries daily, and gets varied time-of-day guidance;
+    #     instead (outbound Voicemail or No answer, one per day, since the
+    #     latest response or restore), retries daily, and gets varied
+    #     time-of-day guidance;
     # (c) Re-contact leads whose date has arrived and that have no call or
     #     open scheduled call since, earliest date first;
     # (d) older uncalled inquiries up to 14 days old, oldest first.
     # Calls logged before CALL_CADENCE_STARTS_ON belong to the separate
     # backlog call sheet: such a lead stays off the list until a new call
     # starts its cadence.
-    # A cadence is the run of calls within 14 days before the latest call,
-    # and a lead leaves the list once its latest call is over 14 days old.
+    # Outside the ad-lead routine, a cadence is the run of calls within 14
+    # days before the latest call; the routine's count is the same one its
+    # Re-contact move uses, so it also includes backlog-sheet calls and calls
+    # older than 14 days. Either way a lead leaves the list once its latest
+    # call is over 14 days old.
     # Leads drop off once a call connects, they are marked Not interested,
     # Re-contact (until the re-contact date), spam or archived, have a
     # scheduled call, or have used 3 attempts. An open call booked on a

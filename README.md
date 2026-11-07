@@ -560,7 +560,8 @@ after attempt 1, attempt 3 due 2 days after attempt 2 - Day 0, Day 1, Day 3, up
 to 3 attempts; leads on the ad-lead routine, `Lead#ad_call_routine?`, count
 the same attempts as their Re-contact move and text reminder
 (`CallLog.unanswered_attempts`: outbound `Voicemail` or `No answer`, one per
-Pacific day, since the latest response or restore), so another call logged the
+Pacific day, since the latest response or restore, with no 14-day or backlog
+cutoff), so another call logged the
 same day or an `Attempted` call does not use up a try and a new miss after a
 response starts again at the 2nd try, and get attempt 3 1 day after attempt 2 -
 Day 0, Day 1, Day 2 - with varied morning/afternoon/evening time-of-day
@@ -571,7 +572,8 @@ first. Uncalled inquiries over 14 days old and leads whose latest call is over
 14 days old stay off the list. Calls logged before 2026-10-20
 (`Today::Summary::CALL_CADENCE_STARTS_ON`) belong to the separate backlog call
 sheet: a lead with such a call stays off the list until a new call is logged,
-which starts its cadence. Each
+which starts its cadence (an ad-lead routine lead then still counts its earlier
+unanswered backlog calls, as its Re-contact move does). Each
 row shows its attempt badge (`1st try`, `2nd try`, `3rd try`, or
 `Re-contact due`), a suggested time-of-day window and a `Text reminder`
 marker on ad-lead routine retries, a `Check`
@@ -828,11 +830,12 @@ Archived like other lost leads. Calls already booked, or booked later, stay
 scheduled and visible on Today through moves and date changes, and follow-up
 tasks stay listed.
 
-Call logging also takes an optional "What video got you here?" answer
-(`video_source`, up to 240 characters, stored only on that call event; the
-field starts empty on every call, and the lead page shows the answer from the
-latest call that has one; source-history expiry removes it with the lead's
-calls). When an outbound `Voicemail` or `No answer` call is
+Call logging also takes an optional "What video got you here?" answer on
+every call form - the record call buttons and Add details, Today's call rows,
+and the scheduled call bar on Today and the record page (`video_source`, up to
+240 characters, stored only on that call event; the field starts empty on every
+call, and the lead page shows the answer from the latest call that has one;
+source-history expiry removes it with the lead's calls). When an outbound `Voicemail` or `No answer` call is
 the latest unanswered attempt of a lead on the ad-lead routine
 (`CallLog.missed_call_reminder`, from the same reset-aware per-day count as
 `CallLog.unanswered_attempts`), the `Call logged` notice, including after a

@@ -29,7 +29,7 @@
       </div>
       <div class="flex flex-wrap items-center gap-2">
         <% Lead::RECONTACT_MONTH_OPTIONS.each do |months| %>
-          <%= button_to "#{months} months", reschedule_recontact_lead_path(@lead), method: :patch, params: { months: months, return_to: lead_path(@lead, { return_to: params[:return_to].presence }.compact) }, class: "btn-secondary btn btn-xs" %>
+          <%= button_to "#{months} months", reschedule_recontact_lead_path(@lead), method: :patch, params: { months: months, return_to: @lead_action_return_to }, class: "btn-secondary btn btn-xs" %>
         <% end %>
         <%= button_to "Restore from Re-contact", unmark_recontact_lead_path(@lead), method: :patch, params: { return_to: @lead_action_return_to }, class: "btn-secondary btn btn-xs" %>
       </div>

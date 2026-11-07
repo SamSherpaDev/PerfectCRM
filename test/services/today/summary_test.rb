@@ -225,17 +225,17 @@ class TodaySummaryTest < ActiveSupport::TestCase
       entries = -> { Today::Summary.new.call_entries.to_h { |e| [ e.lead, [ e.attempt, e.suggested_window ] ] } }
 
       assert_equal({ ad => [ 1, nil ], web => [ 1, nil ] }, entries.call)
-      [ ad, web ].each { |lead| CallLog.record!(lead, key: "mix-#{lead.id}-1", occurred_at: Time.current, outcome: "voicemail", direction: "outbound") }
+      [ ad, web ].each { |lead| CallLog.record!(lead, key: "mix-call-#{lead.id}-1", occurred_at: Time.current, outcome: "voicemail", direction: "outbound") }
       assert_empty entries.call
 
       travel 1.day + 4.hours
       assert_equal({ ad => [ 2, "afternoon" ], web => [ 2, nil ] }, entries.call)
-      [ ad, web ].each { |lead| CallLog.record!(lead, key: "mix-#{lead.id}-2", occurred_at: Time.current, outcome: "no_answer", direction: "outbound") }
+      [ ad, web ].each { |lead| CallLog.record!(lead, key: "mix-call-#{lead.id}-2", occurred_at: Time.current, outcome: "no_answer", direction: "outbound") }
       assert_empty entries.call
 
       travel 1.day + 4.hours
       assert_equal({ ad => [ 3, "evening" ] }, entries.call)
-      CallLog.record!(ad, key: "mix-#{ad.id}-3", occurred_at: Time.current, outcome: "voicemail", direction: "outbound")
+      CallLog.record!(ad, key: "mix-call-#{ad.id}-3", occurred_at: Time.current, outcome: "voicemail", direction: "outbound")
       assert ad.reload.recontact?
       assert_empty entries.call
 

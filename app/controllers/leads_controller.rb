@@ -187,7 +187,7 @@ class LeadsController < ApplicationController
 
   def reschedule_recontact
     @lead.reschedule_recontact!(months: params[:months])
-    redirect_to lead_action_return_to, notice: "Re-contact date set to #{helpers.date_short(@lead.recontact_on)}."
+    redirect_to record_path_keeping_list(@lead), notice: "Re-contact date set to #{helpers.date_short(@lead.recontact_on)}."
   rescue ActiveRecord::RecordInvalid => e
     redirect_to record_path_keeping_list(@lead), alert: e.record.errors.full_messages.to_sentence
   end
