@@ -287,7 +287,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     get leads_path
     assert_response :success
     assert_select "h1", "Leads"
-    assert_equal [ "New", "Potential", "Unsure", "Not interested", "Archived" ],
+    assert_equal [ "New", "Potential", "Unsure", "Re-contact", "Not interested", "Archived" ],
       css_select("nav.tabs a").map { |tab| tab.at_css("span").text }
     assert_select "nav.tabs a", text: /New.*2/
     assert_select "a", text: "Chatty"
@@ -391,7 +391,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     follow_redirect!
     assert_select "h2", text: "New"
     assert_select "nav.tabs a", text: /Converted/, count: 0
-    %w[new potential unsure quoted not_interested archived].each do |tab|
+    %w[new potential unsure recontact quoted not_interested archived].each do |tab|
       get leads_path(tab: tab)
       assert_select "a", text: "Won", count: 0
     end
@@ -888,21 +888,22 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     assert_select "header.page-header a[href=?]", leads_path(tab: "new"), text: "Leads"
   end
 
-  test "Mark Unsure on a lead with three unanswered calls moves it to Not interested and says so" do
+  test "Mark Unsure on a lead with three unanswered calls moves it to Re-contact and says so" do
     lead = Lead.create!(name: "Never Picks Up", email: "never-picks-up@example.com")
     CallLog.record!(lead, key: "never-vm-1", occurred_at: 3.days.ago, outcome: "voicemail", direction: "outbound")
     CallLog.record!(lead, key: "never-na-2", occurred_at: 2.days.ago, outcome: "no_answer", direction: "outbound")
     CallLog.record!(lead, key: "never-vm-3", occurred_at: 1.day.ago, outcome: "voicemail", direction: "outbound")
-    assert_not lead.reload.not_interested?
+    assert_not lead.reload.recontact?
 
     patch mark_unsure_lead_path(lead), params: { return_to: leads_path(tab: "new") }
     assert_redirected_to leads_path(tab: "new")
-    assert_equal "Marked as Unsure - moved to Not interested after three unanswered calls.", flash[:notice]
-    assert lead.reload.not_interested?
+    assert_equal "Marked as Unsure - moved to Re-contact after three unanswered calls.", flash[:notice]
+    assert lead.reload.recontact?
+    assert_not lead.not_interested?
 
-    get leads_path(tab: "not_interested")
+    get leads_path(tab: "recontact")
     assert_select "a", text: lead.name
-    assert_select "p.card-caption", text: /did not answer three calls/
+    assert_select "p.card-caption", text: /did not answer three call attempts/
   end
 
   private

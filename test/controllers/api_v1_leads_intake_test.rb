@@ -1037,4 +1037,113 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     assert_response :ok
     assert_equal original, response.parsed_body
   end
+
+  test "both Meta lead paths carry campaign_id, ad_id, and landing-URL UTM parameters into the source tag without inventing IDs for legacy leads" do
+    helper = Class.new { include LeadsHelper }.new
+
+    # Path A: Ad landing / direct in-page inquiry (/pages/private-nepal-tours)
+    path_a_url = "https://www.sherpaholidays.com/pages/private-nepal-tours?utm_source=ig&utm_medium=paid&utm_campaign=sh_us_cold_cbo&campaign_id=52666579688338&adset_id=52670563689400&ad_id=52670563689538&utm_content=hook-b2-01&utm_term=private-nepal&fbclid=PAZXh0bgNhZW0BMABhZGlk"
+    post_intake intake_body(
+      "placement" => "landing",
+      "page" => { "url" => path_a_url, "title" => "Private Nepal Tours" },
+      "attribution" => {
+        "landing_url" => path_a_url,
+        "utm_source" => "ig",
+        "utm_medium" => "paid",
+        "utm_campaign" => "sh_us_cold_cbo",
+        "utm_content" => "hook-b2-01",
+        "utm_term" => "private-nepal",
+        "campaign_id" => "52666579688338",
+        "adset_id" => "52670563689400",
+        "ad_id" => "52670563689538",
+        "fbclid" => "PAZXh0bgNhZW0BMABhZGlk"
+      }
+    )
+    assert_response :accepted
+    lead_a = Lead.find(response.parsed_body["id"])
+    assert_equal "meta_ads", lead_a.source
+    assert_equal "sh_us_cold_cbo", lead_a.campaign_name
+    assert_equal "52666579688338", lead_a.attribution_evidence["campaign_id"]
+    assert_equal "52670563689538", lead_a.attribution_evidence["ad_id"]
+    assert_equal "hook-b2-01", lead_a.attribution_evidence["utm_content"]
+    assert_equal "private-nepal", lead_a.attribution_evidence["utm_term"]
+    assert_equal "Meta ads · sh_us_cold_cbo · campaign 52666579688338 · ad 52670563689538 · utm_content=hook-b2-01 · utm_term=private-nepal",
+      helper.lead_source_label(lead_a)
+
+    # Path B: Cross-page contact / product inquiry where ad params survive in landing_url / page.url
+    path_b_url = "https://www.sherpaholidays.com/pages/contact?utm_source=facebook&utm_medium=paid_social&campaign_id=52666579688338&ad_id=52670563689999&utm_content=opener-v5-03"
+    post_intake intake_body(
+      "contact" => { "name" => "Path B Traveler", "email" => "pathb@gmail.com" },
+      "placement" => "contact",
+      "page" => { "url" => path_b_url, "title" => "Contact Us" },
+      "attribution" => {},
+      "acquisition" => {
+        "permission" => { "state" => "allowed", "measurement" => true, "sharing" => true, "observed_at" => Time.current.iso8601 },
+        "first_touch" => { "landing_url" => path_b_url, "observed_at" => 5.minutes.ago.iso8601 },
+        "last_touch" => { "landing_url" => "https://www.sherpaholidays.com/pages/contact", "observed_at" => Time.current.iso8601 },
+        "last_non_direct_touch" => { "landing_url" => path_b_url, "observed_at" => 5.minutes.ago.iso8601 },
+        "submission_page" => { "url" => path_b_url }
+      }
+    )
+    assert_response :accepted
+    lead_b = Lead.find(response.parsed_body["id"])
+    assert_equal "meta_ads", lead_b.source
+    assert_equal "52666579688338", lead_b.campaign_name
+    assert_equal "52670563689999", lead_b.attribution_evidence["ad_id"]
+    assert_equal "opener-v5-03", lead_b.attribution_evidence["utm_content"]
+    assert_equal "Meta ads · 52666579688338 · ad 52670563689999 · utm_content=opener-v5-03",
+      helper.lead_source_label(lead_b)
+
+    # Legacy lead with campaign_id only and untagged website_form lead do not invent ad IDs
+    legacy_meta = Lead.create!(name: "Legacy v5", source: "meta_ads", campaign_name: "52666579688338")
+    untagged_web = Lead.create!(name: "Untagged Web", source: "website_form")
+    assert_equal "Meta ads · 52666579688338", helper.lead_source_label(legacy_meta)
+    assert_equal "Website form", helper.lead_source_label(untagged_web)
+  end
+
+  test "intake stores travel timing, party size band honestly without fake exact integers, and trip intent" do
+    post_intake intake_body(
+      "trip" => {
+        "handle" => "everest-base-camp-trek",
+        "title" => "Everest Base Camp Trek",
+        "timing_window" => "3_to_6_months",
+        "intent" => "helicopter_lodge"
+      },
+      "party" => { "size_band" => "3_4" }
+    )
+    assert_response :accepted
+    lead = Lead.find(response.parsed_body["id"])
+    assert_nil lead.party_size
+    assert_equal "3_4", lead.party_size_band
+    assert_equal "3 to 4 travelers", lead.party_size_band_label
+    assert_equal "3_to_6_months", lead.timing_window
+    assert_equal "In 3 to 6 months", lead.timing_window_label
+    assert_equal "helicopter_lodge", lead.trip_intent
+    assert_equal "Everest by air or helicopter-supported lodge trip", lead.trip_intent_label
+    assert_not lead.timing_unknown?
+
+    # Exact 1 or 2 size_band sets integer party_size; not_sure sets timing_unknown
+    post_intake intake_body(
+      "contact" => { "name" => "Exact Party Traveler", "email" => "exact-party@gmail.com" },
+      "qualification" => {
+        "timing_window" => "not_sure",
+        "party_size_band" => "2",
+        "trip_intent" => "ready_to_plan"
+      }
+    )
+    assert_response :accepted
+    exact_lead = Lead.find(response.parsed_body["id"])
+    assert_equal 2, exact_lead.party_size
+    assert_equal "2", exact_lead.party_size_band
+    assert exact_lead.timing_unknown?
+    assert_equal "ready_to_plan", exact_lead.trip_intent
+    assert_equal "Ready to plan dates and get a written proposal", exact_lead.trip_intent_label
+
+    # Invalid dropdown value returns 400 validation error mapped to field
+    post_intake intake_body("trip" => { "timing_window" => "next_century", "intent" => "spaceflight" }, "party" => { "size_band" => "100" })
+    assert_response :bad_request
+    assert_equal "invalid", response.parsed_body.dig("fields", "trip.timing_window")
+    assert_equal "invalid", response.parsed_body.dig("fields", "trip.intent")
+    assert_equal "invalid", response.parsed_body.dig("fields", "party.size_band")
+  end
 end

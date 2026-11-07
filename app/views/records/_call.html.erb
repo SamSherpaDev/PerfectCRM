@@ -29,6 +29,9 @@
               <%= button_tag CallLog::LABELS.fetch(outcome), name: "outcome", value: outcome, class: "btn-secondary btn-sm",
                     data: (confirm_call ? { action: "click->contact-confirm#confirm" } : {}) %>
             <% end %>
+            <div class="w-full mt-2">
+              <%= form.text_field :video_source, value: inquiry.video_source, id: nil, placeholder: "What video got you here? (optional)", aria: { label: "What video got you here?" }, class: "input text-xs py-1.5" %>
+            </div>
           <% end %>
         <% end %>
         <% recent = inquiry.activity_events.where(kind: "call").order(occurred_at: :desc, id: :desc).limit(3).to_a %>
@@ -36,11 +39,30 @@
           <ul class="calls-recent" aria-label="Recent calls">
             <% recent.each do |call| %>
               <li>
-                <span><%= CallLog::LABELS.fetch(call.metadata["outcome"].to_s, call.metadata["outcome"].to_s.humanize) %><% if call.metadata["direction"] == "inbound" %><span class="muted">, they called</span><% end %></span>
+                <span><%= CallLog::LABELS.fetch(call.metadata["outcome"].to_s, call.metadata["outcome"].to_s.humanize) %><% if call.metadata["direction"] == "inbound" %><span class="muted">, they called</span><% end %><% if call.metadata["video_source"].present? %><span class="muted"> · Video: <%= call.metadata["video_source"] %></span><% end %></span>
                 <time datetime="<%= call.occurred_at.iso8601 %>"><%= timeline_stamp(call.occurred_at) %></time>
               </li>
             <% end %>
           </ul>
+          <% latest_call = recent.first %>
+          <% if latest_call.metadata["direction"] == "outbound" && CallLog::UNANSWERED_OUTCOMES.include?(latest_call.metadata["outcome"]) && !inquiry.not_interested? %>
+            <% outbound_unanswered = recent.select { |c| c.metadata["direction"] == "outbound" && CallLog::UNANSWERED_OUTCOMES.include?(c.metadata["outcome"]) }.reverse %>
+            <% attempt_count = outbound_unanswered.size %>
+            <% next_window = CallLog.suggested_time_window(outbound_unanswered) %>
+            <div class="missed-call-reminder mt-3 rounded border border-rule-2 p-3 text-xs" data-missed-call-reminder>
+              <div class="flex flex-wrap items-center justify-between gap-1.5">
+                <p class="font-medium text-ink">Missed call (<%= CallLog::LABELS.fetch(latest_call.metadata["outcome"]) %>) - send a short text by hand</p>
+                <%= badge "Awaiting approval - inactive", :warning %>
+              </div>
+              <% if attempt_count < CallLog::AUTO_RECONTACT_CALLS && !inquiry.recontact? %>
+                <p class="mt-1 muted">Attempt <%= attempt_count %> of <%= CallLog::AUTO_RECONTACT_CALLS %> logged · try attempt <%= attempt_count + 1 %> next day in the <%= next_window %>.</p>
+              <% elsif inquiry.recontact? %>
+                <p class="mt-1 muted">3 unanswered attempts logged · moved to Re-contact<% if inquiry.recontact_on %> for <%= date_short(inquiry.recontact_on) %><% end %>.</p>
+              <% end %>
+              <label class="label mt-2" for="missed_call_text_draft_<%= inquiry.id %>">Editable text draft (caller sends manually after owner approval; never auto-sent)</label>
+              <%= text_area_tag :missed_call_text_draft, CallLog.missed_call_text_draft(inquiry), id: "missed_call_text_draft_#{inquiry.id}", rows: 3, class: "textarea text-xs mt-1" %>
+            </div>
+          <% end %>
         <% else %>
           <p class="hint">No calls yet. A tap logs an outbound call now.</p>
         <% end %>
@@ -80,6 +102,10 @@
         <div>
           <%= form.label :duration, "Duration in seconds (optional)", class: "label" %>
           <%= form.number_field :duration, min: 0, max: 86400, class: "input" %>
+        </div>
+        <div>
+          <%= form.label :video_source, "What video got you here? (optional)", class: "label" %>
+          <%= form.text_field :video_source, value: (lead ? record.video_source : nil), placeholder: "e.g., Everest vs Annapurna opener", class: "input" %>
         </div>
         <%= form.submit "Save call", class: "btn-secondary" %>
       <% end %>

@@ -400,4 +400,69 @@ class ApiV1LeadsDetailsTest < ActionDispatch::IntegrationTest
     assert_equal "invalid", response.parsed_body["fields"]["name"]
     assert_nil @lead.reload.travel_month
   end
+
+  test "step-2 details enriches cross-page Meta attribution and stores timing_window, party size_band honestly, and trip intent" do
+    helper = Class.new { include LeadsHelper; include RecordsHelper; include ActionView::Helpers::TextHelper }.new
+    landing = "https://www.sherpaholidays.com/pages/private-nepal-tours?utm_source=ig&utm_medium=paid&utm_campaign=sh_us_cold_cbo&utm_term=nepal_private_tours&utm_content=Ad+B+At+your+pace+-+Round+2+Hook+A&campaign_id=52666579688338&adset_id=52666579688138&ad_id=52670563689538"
+
+    post_details({
+      "schema" => "sherpa.inquiry.details.v1",
+      "submission_id" => @submission_id,
+      "trip" => {
+        "timing_window" => "3_to_6_months",
+        "timing_label" => "In 3 to 6 months",
+        "timing_unknown" => false,
+        "intent" => "cultural_tour",
+        "intent_label" => "Private cultural and sightseeing tour (hotel-based)",
+        "budget_band" => "4000_7000"
+      },
+      "party" => {
+        "size_band" => "3_4",
+        "size_label" => "3 to 4 travelers"
+      },
+      "attribution" => {
+        "fbclid" => "IwZXh0bgNhZW0BMABhZGlkAas2",
+        "utm_source" => "ig",
+        "utm_medium" => "paid",
+        "utm_campaign" => "sh_us_cold_cbo",
+        "utm_term" => "nepal_private_tours",
+        "utm_content" => "Ad B At your pace - Round 2 Hook A",
+        "campaign_id" => "52666579688338",
+        "adset_id" => "52666579688138",
+        "ad_id" => "52670563689538",
+        "landing_url" => landing
+      },
+      "acquisition" => {
+        "permission" => {
+          "state" => "allowed",
+          "measurement" => true,
+          "sharing" => true,
+          "opted_out" => false,
+          "observed_at" => Time.current.iso8601
+        },
+        "submission_page" => {
+          "url" => landing
+        }
+      }
+    })
+    assert_response :ok
+    @lead.reload
+    assert_equal "meta_ads", @lead.source
+    assert_equal "sh_us_cold_cbo", @lead.campaign_name
+    assert_equal "52666579688338", @lead.attribution_evidence["campaign_id"]
+    assert_equal "52666579688138", @lead.attribution_evidence["adset_id"]
+    assert_equal "52670563689538", @lead.attribution_evidence["ad_id"]
+    assert_equal "Ad B At your pace - Round 2 Hook A", @lead.attribution_evidence["utm_content"]
+    assert_equal "nepal_private_tours", @lead.attribution_evidence["utm_term"]
+    assert_equal "Meta ads · sh_us_cold_cbo · campaign 52666579688338 · ad 52670563689538 · utm_content=Ad B At your pace - Round 2 Hook A · utm_term=nepal_private_tours",
+      helper.lead_source_label(@lead)
+    assert_nil @lead.party_size
+    assert_equal "3_4", @lead.party_size_band
+    assert_equal "3 to 4 travelers", @lead.party_size_band_label
+    assert_equal "3_to_6_months", @lead.timing_window
+    assert_equal "In 3 to 6 months", @lead.timing_window_label
+    assert_equal "cultural_tour", @lead.trip_intent
+    assert_equal "Private cultural and sightseeing tour (hotel-based)", @lead.trip_intent_label
+    assert_equal "3 to 4 travelers · In 3 to 6 months", helper.lead_party_and_when(@lead)
+  end
 end

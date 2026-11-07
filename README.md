@@ -556,18 +556,20 @@ creation time if no receipt is recorded): first, active new inquiries from the
 last 24 hours with a phone number and no logged call yet, newest first; second,
 open leads with a phone number whose calls never connected (`Attempted`,
 `Voicemail`, or `No answer`) and that are due another try (attempt 2 due 1 day
-after attempt 1, attempt 3 due 2 days after attempt 2 - Day 0, Day 1, Day 3, up
-to 3 attempts); third, older uncalled inquiries up to 14 days old, oldest
+after attempt 1, attempt 3 due 1 day after attempt 2 - Day 0, Day 1, Day 2, up
+to 3 attempts across 3 consecutive days with varied morning/afternoon/evening
+time-of-day guidance); third, older uncalled inquiries up to 14 days old, oldest
 first. Uncalled inquiries over 14 days old and leads whose latest call is over
 14 days old stay off the list. Calls logged before 2026-10-20
 (`Today::Summary::CALL_CADENCE_STARTS_ON`) belong to the separate backlog call
 sheet: a lead with such a call stays off the list until a new call is logged,
-which starts its Day 0, Day 1, Day 3 cadence. Each
-row shows its attempt badge (`1st try`, `2nd try`, or `3rd try`), a `Check`
+which starts its Day 0, Day 1, Day 2 cadence. Each
+row shows its attempt badge (`1st try`, `2nd try`, or `3rd try`), suggested
+time-of-day window on retries, a `Check`
 marker on inquiries flagged as looking like spam, wait time, and one-tap
 `Talked` / `Voicemail` / `No answer` logging plus `Schedule call`. Leads drop
 off the list once a call connects (`Talked`), they are marked
-`Not interested`, `spam`, or `archived`, have an open scheduled call, or have
+`Re-contact`, `Not interested`, `spam`, or `archived`, have an open scheduled call, or have
 used 3 attempts. An open call booked on a client also takes that client's open
 inquiries off the list, so the person shows once, under Scheduled calls.
 
@@ -684,7 +686,7 @@ A lead carries source (`google_ads`, `meta_ads`, `trade_show`, `website_form`,
 advisor `referral_code` from the storefront `?ref=` links, Panda
 AI fit (`fit_score`, `fit_band`, `fit_reason`), and status (`new`,
 `chatting`, `quoted`, `nudged`, `lost`). Visible tabs are New, Potential, Unsure,
-Not interested, and Archived (the Quoted and Missing source tabs are hidden from the tab strip while their query params remain supported). Stages keep driving the pipeline, reports,
+Re-contact, Not interested, and Archived (the Quoted and Missing source tabs are hidden from the tab strip while their query params remain supported). Stages keep driving the pipeline, reports,
 and automations; on the Leads tabs, chatting and nudged leads stay in New until
 you sort them, and lost leads rest in Archived beside archived and spam leads
 (old Chatting, Nudged, and Lost links open those tabs). Converted leads leave
@@ -740,14 +742,19 @@ Not interested is not spam: it does not set `spam_marked_at` or the
 already sent. Logging an outbound `Voicemail` or `No answer` call on a lead in
 Unsure that now has three combined outbound `Voicemail` or `No answer` outcomes
 (`Attempted` does not count) with no response since the first of those three
-also marks the lead not interested automatically via `Lead#mark_not_interested!`,
-records a `not_interested` timeline note
-(`Moved to Not interested automatically after three unanswered calls`), and adds
-`Moved to Not interested after three unanswered calls.` to the `Call logged` notice,
-while keeping `unsure_marked_at` intact for **Interested again**. Mark Unsure
-runs the same check, so a lead that already has three unanswered calls moves
-straight to Not interested (`Marked as Unsure - moved to Not interested after
-three unanswered calls.`). A
+moves the lead to the **Re-contact** list (`Lead#mark_recontact!`, defaulting
+`recontact_on` to 3 months out and adjustable to 3, 4, 5, or 6 months or an
+explicit future date) rather than `Not interested`, records a `recontact`
+timeline note (`Moved to Re-contact automatically after three unanswered calls`),
+and adds `Moved to Re-contact (due ...) after three unanswered calls.` to the
+`Call logged` notice, while keeping `unsure_marked_at` intact for **Restore from
+Re-contact**. Mark Unsure runs the same check, so a lead that already has three
+unanswered calls moves straight to Re-contact (`Marked as Unsure - moved to
+Re-contact after three unanswered calls.`). Call logging also supports an
+optional "What video got you here?" (`video_source`) field and displays a manual
+missed-call text reminder and editable draft (marked awaiting approval and
+inactive, never sent automatically) when the latest outbound call is `Voicemail`
+or `No answer`. A
 response is a `Talked` call, any inbound call, or an inbound message that is a
 real reply (`Mail::ReplyAlerts.reply?`, the same rule that decides reply alerts)
 on the lead or its existing client, or sent from the lead's or its people's
@@ -758,12 +765,12 @@ Potential or Unsure) records an `interested_again` timeline note (`Restored
 from Not interested`) and also restarts the count, so only unanswered calls after the
 latest response or restore count. When live mail sync stores a real reply (the
 reply-alert rule, `Mail::ReplyAlerts.eligible?`; history imports never do this)
-from the lead's or its people's email address while its current not-interested
-mark came from that automatic move, `CallLog.restore_after_reply!` returns the
-lead to Unsure through `unmark_not_interested!`, and the `interested_again` note
+from the lead's or its people's email address while its current Re-contact or
+not-interested mark came from that automatic move, `CallLog.restore_after_reply!`
+returns the lead to Unsure, and the timeline note
 reads `Moved back to Unsure: they replied after the automatic move.` A lead
 marked Not interested by hand, including one re-marked by hand after an
-automatic move, is never restored by a reply.
+automatic move, is never restored by a reply or overwritten by unanswered calls.
 
 While marked not interested, a lead is excluded from Today's Calls to make today,
 New leads, Quotes out, Follow-ups, Replies waiting, and Scheduled calls, from

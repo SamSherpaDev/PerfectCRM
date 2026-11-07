@@ -5,7 +5,46 @@
 # verification, source derivation, suspicion scoring, and rate limiting.
 module Leads
   PAID_MEDIUMS = %w[cpc ppc paid].freeze
-  META_SOURCES = %w[facebook instagram meta fb ig].freeze
+  META_PAID_MEDIUMS = (PAID_MEDIUMS + %w[paid_social paidsocial]).freeze
+  META_SOURCES = %w[facebook instagram meta fb ig meta_ads].freeze
+  TIMING_WINDOWS = {
+    "within_3_months" => "Within the next 3 months",
+    "next_3_months" => "Within the next 3 months",
+    "3_to_6_months" => "In 3 to 6 months",
+    "6_to_12_months" => "In 6 to 12 months",
+    "12_plus_months" => "More than a year out",
+    "spring" => "Spring",
+    "summer" => "Summer",
+    "autumn" => "Autumn",
+    "winter" => "Winter",
+    "not_sure" => "Not sure yet"
+  }.freeze
+  PARTY_SIZE_BANDS = {
+    "1" => "Just me (1 traveler)",
+    "2" => "2 travelers",
+    "3_4" => "3 to 4 travelers",
+    "5_8" => "5 to 8 travelers",
+    "9_plus" => "9 or more travelers",
+    "not_sure" => "Not sure yet"
+  }.freeze
+  TRIP_INTENTS = {
+    "cultural_tour" => "Private cultural and sightseeing tour (hotel-based)",
+    "trek" => "Private Himalayan trek (lodge-to-lodge)",
+    "mixed_tour_walks" => "Sightseeing, wildlife and short walks",
+    "helicopter_lodge" => "Everest by air or helicopter-supported lodge trip",
+    "expedition_climb" => "High-altitude expedition or peak climb",
+    "multi_country" => "Nepal combined with Bhutan, Tibet or India",
+    "ready_to_plan" => "Ready to plan dates and get a written proposal",
+    "comparing_options" => "Comparing routes and seasons for an upcoming trip",
+    "need_guidance" => "Looking for guidance on what fits our group",
+    "early_research" => "Early research for a future trip",
+    "everest_trek" => "Everest Base Camp or Khumbu trek",
+    "annapurna_trek" => "Annapurna or Pokhara trek",
+    "cultural_wildlife" => "Cultural, Kathmandu, Pokhara, and Chitwan tour",
+    "custom_private" => "Custom private itinerary",
+    "comfort_walking" => "Easy walking and mountain views",
+    "not_sure" => "Not sure yet, help me choose"
+  }.freeze
   DISPOSABLE_DOMAINS = %w[
     mailinator.com guerrillamail.com 10minutemail.com tempmail.com
     yopmail.com trashmail.com getnada.com mohmal.com
@@ -50,7 +89,7 @@ module Leads
   end
 
   # google_ads on a click id or google+paid; meta_ads on a meta
-  # source with a paid medium or ad_id; trade_show on utm_medium=event (booth QR codes);
+  # source with a paid medium or ad/campaign id; trade_show on utm_medium=event (booth QR codes);
   # else website_form.
   def derive_source(attribution)
     attribution = (attribution || {}).with_indifferent_access
@@ -60,8 +99,11 @@ module Leads
     source = attribution[:utm_source].to_s.strip.downcase
     medium = attribution[:utm_medium].to_s.strip.downcase
     paid = PAID_MEDIUMS.include?(medium)
+    meta_ad_evidence = META_PAID_MEDIUMS.include?(medium) ||
+      attribution[:ad_id].present? || attribution[:campaign_id].present? || attribution[:adset_id].present?
     return "google_ads" if source == "google" && paid
-    return "meta_ads" if META_SOURCES.include?(source) && (paid || attribution[:ad_id].present?)
+    return "meta_ads" if META_SOURCES.include?(source) && meta_ad_evidence
+    return "meta_ads" if source.blank? && attribution[:fbclid].present? && meta_ad_evidence
     return "trade_show" if medium == "event"
 
     "website_form"
@@ -201,5 +243,135 @@ module Leads
         nil
       end
     end
+  end
+
+  def extract_inquiry_dropdowns(payload)
+    updates = {}
+    trip_meta = {}
+    party_meta = {}
+    errors = {}
+
+    trip = payload["trip"].is_a?(Hash) ? payload["trip"] : {}
+    party = payload["party"].is_a?(Hash) ? payload["party"] : {}
+    qual = payload["qualification"].is_a?(Hash) ? payload["qualification"] : {}
+    if payload.key?("qualification") && !payload["qualification"].is_a?(Hash) && !payload["qualification"].nil?
+      errors["qualification"] = "invalid"
+    end
+
+    timing_key = if trip.key?("timing_window")
+      "trip.timing_window"
+    elsif trip.key?("travel_timing")
+      "trip.travel_timing"
+    elsif qual.key?("timing_window")
+      "qualification.timing_window"
+    elsif qual.key?("travel_timing")
+      "qualification.travel_timing"
+    end
+    if timing_key
+      raw_timing = if trip.key?("timing_window")
+        trip["timing_window"]
+      elsif trip.key?("travel_timing")
+        trip["travel_timing"]
+      elsif qual.key?("timing_window")
+        qual["timing_window"]
+      else
+        qual["travel_timing"]
+      end
+      if raw_timing.nil? || raw_timing == ""
+        trip_meta["timing_window"] = nil
+        trip_meta["timing_label"] = nil
+      elsif raw_timing.is_a?(String) && TIMING_WINDOWS.key?(raw_timing.strip)
+        window = raw_timing.strip
+        raw_label = trip["timing_label"].presence || qual["timing_label"].presence || qual["travel_timing_label"].presence
+        if raw_label && (!raw_label.is_a?(String) || raw_label.strip.length > 120)
+          errors["trip.timing_label"] = "invalid"
+        else
+          trip_meta["timing_window"] = window
+          trip_meta["timing_label"] = raw_label ? raw_label.strip : TIMING_WINDOWS[window]
+          if !trip.key?("timing_unknown") && !trip.key?("month") && !trip.key?("year")
+            updates["timing_unknown"] = (window == "not_sure")
+          end
+        end
+      else
+        errors[timing_key] = "invalid"
+      end
+    end
+
+    intent_key = if trip.key?("intent")
+      "trip.intent"
+    elsif trip.key?("trip_intent")
+      "trip.trip_intent"
+    elsif qual.key?("intent")
+      "qualification.intent"
+    elsif qual.key?("trip_intent")
+      "qualification.trip_intent"
+    end
+    if intent_key
+      raw_intent = if trip.key?("intent")
+        trip["intent"]
+      elsif trip.key?("trip_intent")
+        trip["trip_intent"]
+      elsif qual.key?("intent")
+        qual["intent"]
+      else
+        qual["trip_intent"]
+      end
+      if raw_intent.nil? || raw_intent == ""
+        trip_meta["intent"] = nil
+        trip_meta["intent_label"] = nil
+      elsif raw_intent.is_a?(String) && TRIP_INTENTS.key?(raw_intent.strip)
+        intent = raw_intent.strip
+        raw_label = trip["intent_label"].presence || qual["intent_label"].presence || qual["trip_intent_label"].presence
+        if raw_label && (!raw_label.is_a?(String) || raw_label.strip.length > 120)
+          errors["trip.intent_label"] = "invalid"
+        else
+          trip_meta["intent"] = intent
+          trip_meta["intent_label"] = raw_label ? raw_label.strip : TRIP_INTENTS[intent]
+        end
+      else
+        errors[intent_key] = "invalid"
+      end
+    end
+
+    band_key = if party.key?("size_band")
+      "party.size_band"
+    elsif qual.key?("party_size_band")
+      "qualification.party_size_band"
+    elsif qual.key?("size_band")
+      "qualification.size_band"
+    elsif qual.key?("party_size")
+      "qualification.party_size"
+    end
+    if band_key
+      raw_band = if party.key?("size_band")
+        party["size_band"]
+      elsif qual.key?("party_size_band")
+        qual["party_size_band"]
+      elsif qual.key?("size_band")
+        qual["size_band"]
+      else
+        qual["party_size"]
+      end
+      if raw_band.nil? || raw_band == ""
+        party_meta["size_band"] = nil
+        party_meta["size_label"] = nil
+      elsif raw_band.is_a?(String) && PARTY_SIZE_BANDS.key?(raw_band.strip)
+        band = raw_band.strip
+        raw_label = party["size_label"].presence || qual["party_size_label"].presence
+        if raw_label && (!raw_label.is_a?(String) || raw_label.strip.length > 120)
+          errors["party.size_label"] = "invalid"
+        else
+          party_meta["size_band"] = band
+          party_meta["size_label"] = raw_label ? raw_label.strip : PARTY_SIZE_BANDS[band]
+          unless party.key?("size")
+            updates["party_size"] = band.in?(%w[1 2]) ? band.to_i : nil
+          end
+        end
+      else
+        errors[band_key] = "invalid"
+      end
+    end
+
+    [ updates, trip_meta, party_meta, errors ]
   end
 end
