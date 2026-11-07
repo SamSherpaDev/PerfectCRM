@@ -6,6 +6,30 @@
 module Leads
   PAID_MEDIUMS = %w[cpc ppc paid].freeze
   META_SOURCES = %w[facebook instagram meta fb ig].freeze
+  TIMING_WINDOWS = {
+    "within_3_months" => "Within the next 3 months",
+    "3_to_6_months" => "In 3 to 6 months",
+    "6_to_12_months" => "In 6 to 12 months",
+    "12_plus_months" => "More than a year out",
+    "not_sure" => "Not sure yet"
+  }.freeze
+  PARTY_SIZE_BANDS = {
+    "1" => "Just me (1 traveler)",
+    "2" => "2 travelers",
+    "3_4" => "3 to 4 travelers",
+    "5_8" => "5 to 8 travelers",
+    "9_plus" => "9 or more travelers",
+    "not_sure" => "Not sure yet"
+  }.freeze
+  TRIP_INTENTS = {
+    "cultural_tour" => "Private cultural and sightseeing tour (hotel-based)",
+    "trek" => "Private Himalayan trek (lodge-to-lodge)",
+    "mixed_tour_walks" => "Sightseeing, wildlife and short walks",
+    "helicopter_lodge" => "Everest by air or helicopter-supported lodge trip",
+    "expedition_climb" => "High-altitude expedition or peak climb",
+    "multi_country" => "Nepal combined with Bhutan, Tibet or India",
+    "not_sure" => "Not sure yet, help me choose"
+  }.freeze
   DISPOSABLE_DOMAINS = %w[
     mailinator.com guerrillamail.com 10minutemail.com tempmail.com
     yopmail.com trashmail.com getnada.com mohmal.com
@@ -201,5 +225,36 @@ module Leads
         nil
       end
     end
+  end
+
+  def extract_inquiry_dropdowns(payload)
+    trip = payload["trip"].is_a?(Hash) ? payload["trip"] : {}
+    party = payload["party"].is_a?(Hash) ? payload["party"] : {}
+    updates = {}
+    errors = {}
+    trip_meta = dropdown_answer(trip, "trip", "timing_window", TIMING_WINDOWS, errors)
+      .merge(dropdown_answer(trip, "trip", "intent", TRIP_INTENTS, errors))
+    party_meta = dropdown_answer(party, "party", "size_band", PARTY_SIZE_BANDS, errors)
+    if (window = trip_meta["timing_window"]) && !trip.key?("month") && !trip.key?("year")
+      updates["timing_unknown"] = window == "not_sure"
+    end
+    if (band = party_meta["size_band"])
+      updates["party_size"] = (band.to_i if %w[1 2].include?(band))
+    end
+    [ updates, trip_meta, party_meta, errors ]
+  end
+
+  def dropdown_answer(group, prefix, key, options, errors)
+    return {} unless group.key?(key)
+
+    value = group[key]
+    return { key => nil } if value.nil? || value == ""
+
+    code = value.strip if value.is_a?(String)
+    unless options.key?(code)
+      errors["#{prefix}.#{key}"] = "invalid"
+      return {}
+    end
+    { key => code }
   end
 end

@@ -31,14 +31,20 @@ module RecordsHelper
     safe_join([ noun, " ", stage ])
   end
 
-  # "2 travelers · October 2026", "Timing unknown", or nil when the form said nothing.
+  # "2 travelers · October 2026", "3-4 travelers · Within 3 months", "Timing unknown", or nil when the form said nothing.
   def lead_party_and_when(lead)
     parts = []
-    parts << pluralize(lead.party_size, "traveler") if lead.party_size.present?
+    if lead.party_size.present?
+      parts << pluralize(lead.party_size, "traveler")
+    elsif lead.respond_to?(:party_size_band_label) && lead.party_size_band_label.present?
+      parts << lead.party_size_band_label
+    end
     if lead.timing_unknown?
       parts << "Timing unknown"
     elsif lead.travel_month.present? || lead.travel_year.present?
       parts << [ (Date::MONTHNAMES[lead.travel_month] if lead.travel_month), lead.travel_year ].compact.join(" ")
+    elsif lead.respond_to?(:timing_window_label) && lead.timing_window_label.present?
+      parts << lead.timing_window_label
     end
     parts.join(" · ").presence
   end
@@ -82,7 +88,8 @@ module RecordsHelper
   EVENT_ACTORS = {
     "conversion" => "Converted", "stage_change" => "Stage", "quote" => "Quote",
     "task" => "Follow-up", "email" => "Email", "duplicate_inquiry" => "Duplicate inquiry",
-    "spam_review" => "Spam review", "scheduled_call" => "Scheduled call", "name_change" => "Name"
+    "spam_review" => "Spam review", "scheduled_call" => "Scheduled call", "name_change" => "Name",
+    "recontact" => "Re-contact", "recontact_restored" => "Re-contact"
   }.freeze
 
   def event_actor(event)

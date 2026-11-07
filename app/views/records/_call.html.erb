@@ -29,6 +29,7 @@
               <%= button_tag CallLog::LABELS.fetch(outcome), name: "outcome", value: outcome, class: "btn-secondary btn-sm",
                     data: (confirm_call ? { action: "click->contact-confirm#confirm" } : {}) %>
             <% end %>
+            <%= render "records/video_source_field", form: form %>
           <% end %>
         <% end %>
         <% recent = inquiry.activity_events.where(kind: "call").order(occurred_at: :desc, id: :desc).limit(3).to_a %>
@@ -36,11 +37,22 @@
           <ul class="calls-recent" aria-label="Recent calls">
             <% recent.each do |call| %>
               <li>
-                <span><%= CallLog::LABELS.fetch(call.metadata["outcome"].to_s, call.metadata["outcome"].to_s.humanize) %><% if call.metadata["direction"] == "inbound" %><span class="muted">, they called</span><% end %></span>
+                <span><%= CallLog::LABELS.fetch(call.metadata["outcome"].to_s, call.metadata["outcome"].to_s.humanize) %><% if call.metadata["direction"] == "inbound" %><span class="muted">, they called</span><% end %><% if call.metadata["video_source"].present? %><span class="muted"> · Video: <%= call.metadata["video_source"] %></span><% end %></span>
                 <time datetime="<%= call.occurred_at.iso8601 %>"><%= timeline_stamp(call.occurred_at) %></time>
               </li>
             <% end %>
           </ul>
+          <% if (reminder = CallLog.missed_call_reminder(inquiry, recent.first)) %>
+            <div class="missed-call-reminder mt-3 rounded border border-rule-2 p-3 text-xs" data-missed-call-reminder data-controller="copy-message">
+              <p class="font-medium text-ink">Missed call (<%= CallLog::LABELS.fetch(recent.first.metadata["outcome"]) %>) - send a short text by hand</p>
+              <p class="mt-1 muted"><%= reminder %></p>
+              <%= text_area_tag "missed_call_text", CallLog.missed_call_text(inquiry), id: nil, rows: 4, class: "input mt-2 text-xs", aria: { label: "Text to send by hand" }, data: { copy_message_target: "text" } %>
+              <div class="mt-2 flex items-center gap-2">
+                <button type="button" class="btn-secondary btn btn-xs" data-action="copy-message#copy">Copy text</button>
+                <span class="muted" role="status" data-copy-message-target="status"></span>
+              </div>
+            </div>
+          <% end %>
         <% else %>
           <p class="hint">No calls yet. A tap logs an outbound call now.</p>
         <% end %>
@@ -80,6 +92,10 @@
         <div>
           <%= form.label :duration, "Duration in seconds (optional)", class: "label" %>
           <%= form.number_field :duration, min: 0, max: 86400, class: "input" %>
+        </div>
+        <div>
+          <%= form.label :video_source, "What video got you here? (optional)", class: "label" %>
+          <%= form.text_field :video_source, maxlength: 240, placeholder: "e.g., Everest vs Annapurna opener", class: "input" %>
         </div>
         <%= form.submit "Save call", class: "btn-secondary" %>
       <% end %>

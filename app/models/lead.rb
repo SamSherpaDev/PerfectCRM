@@ -12,6 +12,8 @@ class Lead < ApplicationRecord
   BUDGET_BANDS = %w[discuss under_2000 2000_4000 4000_7000 7000_plus].freeze
   PLACEMENTS = %w[contact landing trip_page itinerary_designer trip_quiz].freeze
   SUSPECTED_SPAM_TAG = "suspected_spam"
+  DEFAULT_RECONTACT_MONTHS = 3
+  RECONTACT_MONTH_OPTIONS = [ 3, 6 ].freeze
 
   encrypts :phone, :phone_raw
 
@@ -100,10 +102,13 @@ class Lead < ApplicationRecord
     flagged = Tagging.joins(:tag).where(taggable_type: "Lead", tags: { name: SUSPECTED_SPAM_TAG }).select(:taggable_id)
     where.not(spam_marked_at: nil).or(where(id: flagged))
   }
-  scope :potential, -> { active.where(converted_client_id: nil, not_interested_marked_at: nil).where.not(potential_marked_at: nil).where.not(id: spam.select(:id)) }
+  scope :potential, -> { active.where(converted_client_id: nil, not_interested_marked_at: nil, recontact_marked_at: nil).where.not(potential_marked_at: nil).where.not(id: spam.select(:id)) }
   # Unsure holds leads the captain cannot call yet (voicemail, no reply):
   # not clearly Potential, not clearly spam. Suspected spam may wait here.
-  scope :unsure, -> { active.where(converted_client_id: nil, spam_marked_at: nil, not_interested_marked_at: nil).where.not(unsure_marked_at: nil) }
+  scope :unsure, -> { active.where(converted_client_id: nil, spam_marked_at: nil, not_interested_marked_at: nil, recontact_marked_at: nil).where.not(unsure_marked_at: nil) }
+  # Re-contact holds open ad leads with no contact after three call attempts
+  # for a 3-to-6-month follow-up window without treating no-answer as rejection.
+  scope :recontact, -> { open.where(spam_marked_at: nil, not_interested_marked_at: nil).where.not(recontact_marked_at: nil) }
   # Not interested sets a lead aside from every call/email list and automation
   # while keeping its stage and Potential/Unsure marks intact for undo.
   scope :not_interested, -> { active.where(converted_client_id: nil, spam_marked_at: nil).where.not(not_interested_marked_at: nil) }
@@ -111,9 +116,9 @@ class Lead < ApplicationRecord
   scope :lost, -> { active.where(status: "lost").where(converted_client_id: nil) }
   scope :converted, -> { where.not(converted_client_id: nil) }
   scope :by_status, ->(status) { active.where(status: status).where(converted_client_id: nil) }
-  scope :in_new_tab, -> { by_status(%w[new chatting nudged]).where(not_interested_marked_at: nil).where.not(id: potential.select(:id)).where.not(id: unsure.select(:id)) }
+  scope :in_new_tab, -> { by_status(%w[new chatting nudged]).where(not_interested_marked_at: nil, recontact_marked_at: nil).where.not(id: potential.select(:id)).where.not(id: unsure.select(:id)) }
   scope :stale, -> {
-    open.where(not_interested_marked_at: nil).where("COALESCE(last_touch_at, last_activity_at, updated_at, created_at) < ?", STALE_AFTER.ago)
+    open.where(not_interested_marked_at: nil, recontact_marked_at: nil).where("COALESCE(last_touch_at, last_activity_at, updated_at, created_at) < ?", STALE_AFTER.ago)
   }
   scope :ordered, -> { order(Arel.sql("COALESCE(last_activity_at, updated_at) DESC")) }
   scope :by_name, -> { order(:name) }
@@ -208,8 +213,41 @@ class Lead < ApplicationRecord
     metadata.is_a?(Hash) && metadata["inquiry_safety_net"] == true
   end
 
+  def timing_window
+    metadata.is_a?(Hash) ? metadata.dig("trip", "timing_window").to_s.strip.presence : nil
+  end
+
+  def timing_window_label
+    ::Leads::TIMING_WINDOWS[timing_window]
+  end
+
+  def party_size_band
+    metadata.is_a?(Hash) ? metadata.dig("party", "size_band").to_s.strip.presence : nil
+  end
+
+  def party_size_band_label
+    ::Leads::PARTY_SIZE_BANDS[party_size_band]
+  end
+
+  def trip_intent
+    metadata.is_a?(Hash) ? metadata.dig("trip", "intent").to_s.strip.presence : nil
+  end
+
+  def trip_intent_label
+    ::Leads::TRIP_INTENTS[trip_intent]
+  end
+
+  def ad_lead?
+    ::AdSpend::SOURCES.include?(source)
+  end
+
+  def video_source
+    activity_events.where(kind: "call").where("json_extract(metadata, '$.video_source') IS NOT NULL")
+      .order(occurred_at: :desc, id: :desc).first&.metadata&.dig("video_source")
+  end
+
   def potential?
-    potential_marked_at.present? && !not_interested? && !archived? && !converted? && !suspected_spam?
+    potential_marked_at.present? && !not_interested? && recontact_marked_at.nil? && !archived? && !converted? && !suspected_spam?
   end
 
   def mark_potential!
@@ -218,8 +256,15 @@ class Lead < ApplicationRecord
         errors.add(:base, "Only active, non-spam leads can be marked Potential")
         raise ActiveRecord::RecordInvalid, self
       end
-      update!(potential_marked_at: potential_marked_at || Time.current, unsure_marked_at: nil, not_interested_marked_at: nil)
+      update!(
+        potential_marked_at: potential_marked_at || Time.current,
+        unsure_marked_at: nil,
+        not_interested_marked_at: nil,
+        recontact_marked_at: nil,
+        recontact_on: nil
+      )
       record_interested_again! if saved_change_to_not_interested_marked_at?
+      record_recontact_restored! if saved_change_to_recontact_marked_at?
     end
     enqueue_ad_conversion
   end
@@ -235,7 +280,7 @@ class Lead < ApplicationRecord
   end
 
   def unsure?
-    unsure_marked_at.present? && !not_interested? && spam_marked_at.nil? && !archived? && !converted?
+    unsure_marked_at.present? && !not_interested? && recontact_marked_at.nil? && spam_marked_at.nil? && !archived? && !converted?
   end
 
   def mark_unsure!
@@ -244,9 +289,16 @@ class Lead < ApplicationRecord
         errors.add(:base, "Only active leads not marked as spam can be marked Unsure")
         raise ActiveRecord::RecordInvalid, self
       end
-      update!(unsure_marked_at: unsure_marked_at || Time.current, potential_marked_at: nil, not_interested_marked_at: nil)
+      update!(
+        unsure_marked_at: unsure_marked_at || Time.current,
+        potential_marked_at: nil,
+        not_interested_marked_at: nil,
+        recontact_marked_at: nil,
+        recontact_on: nil
+      )
       record_interested_again! if saved_change_to_not_interested_marked_at?
-      CallLog.mark_not_interested_after_three_unanswered_calls!(self)
+      record_recontact_restored! if saved_change_to_recontact_marked_at?
+      CallLog.move_after_three_unanswered_calls!(self)
     end
   end
 
@@ -257,6 +309,62 @@ class Lead < ApplicationRecord
         raise ActiveRecord::RecordInvalid, self
       end
       update!(unsure_marked_at: nil)
+    end
+  end
+
+  def recontact?
+    recontact_marked_at.present? && status != "lost" && !not_interested? && spam_marked_at.nil? && !archived? && !converted?
+  end
+
+  def recontact_due?(today = Date.current)
+    recontact? && recontact_on.present? && recontact_on <= today
+  end
+
+  # Open ad inquiries from new people. Other ad inquiries (an existing client's,
+  # lost, archived, converted, or not interested) get no text reminder or
+  # time-of-day guidance, and unanswered calls never move them automatically.
+  def ad_call_routine?
+    ad_lead? && existing_client_id.nil? && status != "lost" && !archived? && !converted? && !not_interested?
+  end
+
+  # Ad leads still in New (stage new) or Unsure; existing clients keep their place.
+  def recontact_eligible?
+    ad_call_routine? && (unsure? || Lead.in_new_tab.where(status: "new").exists?(id))
+  end
+
+  def mark_recontact!
+    with_lock do
+      unless recontact_eligible?
+        errors.add(:base, "Only ad leads in New or Unsure can be moved to Re-contact")
+        raise ActiveRecord::RecordInvalid, self
+      end
+      update!(recontact_marked_at: Time.current, recontact_on: Date.current + DEFAULT_RECONTACT_MONTHS.months)
+    end
+  end
+
+  def reschedule_recontact!(months:)
+    with_lock do
+      unless recontact?
+        errors.add(:base, "Only leads on the Re-contact list can get a new re-contact date")
+        raise ActiveRecord::RecordInvalid, self
+      end
+      count = Integer(months, exception: false)
+      unless RECONTACT_MONTH_OPTIONS.include?(count)
+        errors.add(:recontact_on, "must be 3 or 6 months out")
+        raise ActiveRecord::RecordInvalid, self
+      end
+      update!(recontact_on: Date.current + count.months)
+    end
+  end
+
+  def unmark_recontact!(**note)
+    with_lock do
+      if archived? || converted?
+        errors.add(:base, "Only active leads can be changed")
+        raise ActiveRecord::RecordInvalid, self
+      end
+      update!(recontact_marked_at: nil, recontact_on: nil)
+      record_recontact_restored!(**note) if saved_change_to_recontact_marked_at?
     end
   end
 
@@ -271,7 +379,7 @@ class Lead < ApplicationRecord
         raise ActiveRecord::RecordInvalid, self
       end
       now = Time.current
-      update!(not_interested_marked_at: not_interested_marked_at || now)
+      update!(not_interested_marked_at: not_interested_marked_at || now, recontact_marked_at: nil, recontact_on: nil)
       cancel_open_scheduled_calls!(at: now)
     end
   end
@@ -294,6 +402,8 @@ class Lead < ApplicationRecord
       self.potential_marked_at = nil
       self.unsure_marked_at = nil
       self.not_interested_marked_at = nil
+      self.recontact_marked_at = nil
+      self.recontact_on = nil
       self.spam_marked_at ||= Time.current
       archive!
       record_spam_review!("spam", "Marked as spam and archived")
@@ -486,7 +596,7 @@ class Lead < ApplicationRecord
   end
 
   def stale?
-    return false if converted? || status == "lost" || not_interested?
+    return false if converted? || status == "lost" || not_interested? || recontact?
 
     (last_touch || Time.current) < STALE_AFTER.ago
   end
@@ -556,6 +666,11 @@ class Lead < ApplicationRecord
 
   def record_interested_again!(summary: "Restored from Not interested", actor: nil)
     activity_events.create!(kind: "interested_again", summary: summary, occurred_at: Time.current,
+      metadata: { "actor" => actor || Current.user_email.presence || "manual" })
+  end
+
+  def record_recontact_restored!(summary: "Restored from Re-contact", actor: nil)
+    activity_events.create!(kind: "recontact_restored", summary: summary, occurred_at: Time.current,
       metadata: { "actor" => actor || Current.user_email.presence || "manual" })
   end
 

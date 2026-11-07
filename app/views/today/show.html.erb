@@ -60,7 +60,7 @@
       <h2 class="card-title" id="not-yet-called-heading">Calls to make today</h2>
       <%= badge @summary.not_yet_called.count, :neutral %>
     </div>
-    <%= card_caption "Last 24 hours of new inquiries with a phone (newest first), then unanswered calls due a retry on Day 1 (2nd try) and Day 3 (3rd try), then older first tries up to 14 days old." %>
+    <%= card_caption "Last 24 hours of new inquiries with a phone (newest first), then unanswered calls due a retry on Day 1 (2nd try) and Day 3 (3rd try; Day 2 at varied times of day for ad leads), then re-contacts whose date has arrived, then older first tries up to 14 days old." %>
     <% entries = @summary.call_entries %>
     <% if entries.any? %>
       <ul class="divide-y divide-rule-2">
@@ -82,6 +82,12 @@
                 <% if entry.last_call %>
                   <span>Last: <%= CallLog::LABELS.fetch(entry.last_call.metadata["outcome"], "Called") %> <%= distance_of_time_in_words(entry.last_call.occurred_at, @summary.now) %> ago</span>
                 <% end %>
+                <% if entry.suggested_window.present? %>
+                  <span>Try in the <%= entry.suggested_window %></span>
+                <% end %>
+                <% if entry.attempt > 1 && lead.ad_call_routine? && CallLog::UNANSWERED_OUTCOMES.include?(entry.last_call.metadata["outcome"]) %>
+                  <span>Text reminder</span>
+                <% end %>
                 <span><%= lead.trip_interest.presence || lead.trip_title.presence || "Trip inquiry" %></span>
               </div>
             </div>
@@ -94,6 +100,7 @@
                 <% CallLog::ONE_TAP.each do |outcome| %>
                   <%= button_tag CallLog::LABELS.fetch(outcome), name: "outcome", value: outcome, class: "btn-secondary btn-xs" %>
                 <% end %>
+                <%= render "records/video_source_field", form: form %>
               <% end %>
 
               <%= render "scheduled_calls/popover",
@@ -110,7 +117,7 @@
       <div class="empty-inline">
         <%= sketch :enso, class: "enso" %>
         <p class="text-sm text-ink">No calls to make right now.</p>
-        <p class="text-xs muted">New inquiries with a phone from the last 14 days and due 2nd or 3rd call tries appear here.</p>
+        <p class="text-xs muted">New inquiries with a phone from the last 14 days, due 2nd or 3rd call tries, and due re-contacts appear here.</p>
       </div>
     <% end %>
   </section>

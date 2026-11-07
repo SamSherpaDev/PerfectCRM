@@ -287,7 +287,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     get leads_path
     assert_response :success
     assert_select "h1", "Leads"
-    assert_equal [ "New", "Potential", "Unsure", "Not interested", "Archived" ],
+    assert_equal [ "New", "Potential", "Unsure", "Re-contact", "Not interested", "Archived" ],
       css_select("nav.tabs a").map { |tab| tab.at_css("span").text }
     assert_select "nav.tabs a", text: /New.*2/
     assert_select "a", text: "Chatty"
@@ -391,7 +391,7 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     follow_redirect!
     assert_select "h2", text: "New"
     assert_select "nav.tabs a", text: /Converted/, count: 0
-    %w[new potential unsure quoted not_interested archived].each do |tab|
+    %w[new potential unsure recontact quoted not_interested archived].each do |tab|
       get leads_path(tab: tab)
       assert_select "a", text: "Won", count: 0
     end

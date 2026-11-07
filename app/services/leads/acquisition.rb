@@ -50,6 +50,11 @@ module Leads::Acquisition
       raise ArgumentError, "acquisition.#{key}" unless input[key].is_a?(String) && input[key].length <= 200
       result[key] = input[key].strip
     end
+    if input["landing_url"].present?
+      query_params(input["landing_url"]).slice(*CAMPAIGN_KEYS).each do |key, val|
+        result[key] ||= val
+      end
+    end
     result["landing_url"] = safe_url(input["landing_url"], campaign: true)
     result["referrer_host"] = host(input["referrer"])
     result["unknown_reason"] = reason if reason.present?

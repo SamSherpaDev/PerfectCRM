@@ -90,7 +90,7 @@ class ScheduledCall < ApplicationRecord
     end
   end
 
-  def complete!(outcome:, save_key:, inquiry_id: nil, occurred_at: Time.current)
+  def complete!(outcome:, save_key:, inquiry_id: nil, occurred_at: Time.current, video_source: nil)
     return activity_event if activity_event && activity_event.idempotency_key == save_key
     ensure_scheduled!
     unless CallLog::OUTCOMES.include?(outcome)
@@ -104,7 +104,8 @@ class ScheduledCall < ApplicationRecord
     end
 
     transaction do
-      CallLog.record!(inquiry, key: save_key, occurred_at: occurred_at, outcome: outcome, direction: "outbound") do |event|
+      CallLog.record!(inquiry, key: save_key, occurred_at: occurred_at, outcome: outcome, direction: "outbound",
+        video_source: video_source) do |event|
         update!(status: "completed", outcome: outcome, completed_at: occurred_at, activity_event: event)
       end
     end

@@ -1037,4 +1037,190 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     assert_response :ok
     assert_equal original, response.parsed_body
   end
+
+  def ad_permission
+    { "state" => "allowed", "measurement" => true, "sharing" => true, "opted_out" => false, "observed_at" => Time.current.iso8601 }
+  end
+
+  def source_tag(lead)
+    Class.new { include LeadsHelper }.new.lead_source_label(lead)
+  end
+
+  test "a direct ad landing inquiry is tagged with the campaign and ad IDs from its landing touch" do
+    landing = "https://www.sherpaholidays.com/pages/private-nepal-tours?utm_source=ig&utm_medium=paid&utm_campaign=sh_us_cold_cbo" \
+      "&campaign_id=52666579688338&adset_id=52670563689400&ad_id=52670563689538&utm_content=hook-b2-01&utm_term=private-nepal&fbclid=PAZXh0bgNhZW0"
+    touch = { "observed_at" => 2.minutes.ago.iso8601, "landing_url" => landing, "referrer" => "https://l.instagram.com/" }
+    body = intake_body("acquisition" => { "permission" => ad_permission, "first_touch" => touch, "last_touch" => touch,
+      "last_non_direct_touch" => touch, "submission_page" => { "url" => landing } })
+    body["attribution"] = { "landing_url" => landing, "utm_source" => "ig", "utm_medium" => "paid", "utm_campaign" => "sh_us_cold_cbo" }
+    post_intake body
+    assert_response :accepted
+    lead = Lead.find(response.parsed_body["id"])
+    assert_equal "meta_ads", lead.source
+    assert_equal "sh_us_cold_cbo", lead.campaign_name
+    attribution = lead.metadata["attribution"]
+    assert_equal %w[52666579688338 52670563689400 52670563689538 hook-b2-01 private-nepal],
+      attribution.values_at("campaign_id", "adset_id", "ad_id", "utm_content", "utm_term")
+    assert_not_includes attribution["landing_url"], "fbclid"
+    assert_equal "Meta ads · sh_us_cold_cbo · campaign 52666579688338 · ad 52670563689538 · utm_content=hook-b2-01 · utm_term=private-nepal",
+      source_tag(lead)
+  end
+
+  test "a contact page inquiry reached through a decorated link keeps the ad IDs on its destination touch and leaves campaign_name to utm_campaign" do
+    destination = "https://www.sherpaholidays.com/pages/contact?utm_source=facebook&utm_medium=paid_social" \
+      "&campaign_id=52666579688338&adset_id=52666579688138&ad_id=52670563689999&utm_content=opener-v5-03"
+    organic = { "observed_at" => 3.days.ago.iso8601, "landing_url" => "https://www.sherpaholidays.com/", "referrer" => "https://www.google.com/" }
+    decorated = { "observed_at" => 1.minute.ago.iso8601, "landing_url" => destination, "referrer" => "https://www.sherpaholidays.com/pages/private-nepal-tours" }
+    body = intake_body("contact" => { "name" => "Path B Traveler", "email" => "pathb@gmail.com" }, "placement" => "contact",
+      "acquisition" => { "permission" => ad_permission, "first_touch" => organic, "last_touch" => decorated,
+        "last_non_direct_touch" => decorated, "submission_page" => { "url" => destination } })
+    body["attribution"] = {}
+    post_intake body
+    assert_response :accepted
+    lead = Lead.find(response.parsed_body["id"])
+    assert_equal "meta_ads", lead.source
+    assert_nil lead.campaign_name
+    assert_equal %w[52666579688338 52666579688138 52670563689999 opener-v5-03],
+      lead.metadata["attribution"].values_at("campaign_id", "adset_id", "ad_id", "utm_content")
+    assert_equal "Meta ads · campaign 52666579688338 · ad 52670563689999 · utm_content=opener-v5-03", source_tag(lead)
+    assert_emails 1 do
+      perform_enqueued_jobs only: LeadNotificationJob
+    end
+    source_line = ActionMailer::Base.deliveries.last.body.to_s.lines.map(&:strip).find { |line| line.start_with?("Source:") }
+    assert_equal "Source: meta_ads", source_line
+  end
+
+  test "attribution comes from one touch and never borrows an ad ID from an older visit" do
+    old_ad = "https://www.sherpaholidays.com/pages/everest-base-camp-trek?utm_source=facebook&utm_medium=paid_social&utm_campaign=old_ebc" \
+      "&campaign_id=111111&adset_id=111112&ad_id=111113"
+    recent_ad = "https://www.sherpaholidays.com/pages/private-nepal-tours?utm_source=ig&utm_medium=paid&utm_campaign=sh_us_cold_cbo&campaign_id=222222"
+    body = intake_body("contact" => { "name" => "Two Visits", "email" => "two-visit-lead@gmail.com" }, "acquisition" => {
+      "permission" => ad_permission,
+      "first_touch" => { "observed_at" => 9.days.ago.iso8601, "landing_url" => old_ad },
+      "last_non_direct_touch" => { "observed_at" => 1.day.ago.iso8601, "landing_url" => recent_ad },
+      "last_touch" => { "observed_at" => 1.minute.ago.iso8601, "landing_url" => "https://www.sherpaholidays.com/pages/contact" },
+      "submission_page" => { "url" => "https://www.sherpaholidays.com/pages/contact" }
+    })
+    body["attribution"] = {}
+    post_intake body
+    assert_response :accepted
+    lead = Lead.find(response.parsed_body["id"])
+    attribution = lead.metadata["attribution"]
+    assert_equal [ "222222", "sh_us_cold_cbo" ], attribution.values_at("campaign_id", "utm_campaign")
+    assert_nil attribution["ad_id"]
+    assert_nil attribution["adset_id"]
+    assert_equal "Meta ads · sh_us_cold_cbo · campaign 222222", source_tag(lead)
+  end
+
+  test "without acquisition a tagged page URL adds no campaign or ad IDs" do
+    tagged = "https://www.sherpaholidays.com/pages/private-nepal-tours?utm_source=ig&utm_medium=paid&utm_campaign=sh_us_cold_cbo" \
+      "&campaign_id=52666579688338&ad_id=52670563689538"
+    body = intake_body("contact" => { "name" => "No Consent", "email" => "no-consent-visitor@gmail.com" }, "page" => { "url" => tagged })
+    body["attribution"] = {}
+    post_intake body
+    assert_response :accepted
+    lead = Lead.find(response.parsed_body["id"])
+    assert_equal "website_form", lead.source
+    assert_nil lead.campaign_name
+    assert_equal({}, lead.metadata["attribution"])
+    assert_equal "https://www.sherpaholidays.com/pages/private-nepal-tours", lead.metadata.dig("page", "url")
+    assert_equal "Website form", source_tag(lead)
+  end
+
+  test "denied, withdrawn, or opted-out permission keeps ad IDs off the lead" do
+    landing = "https://www.sherpaholidays.com/pages/private-nepal-tours?utm_source=ig&utm_medium=paid&utm_campaign=sh_us_cold_cbo" \
+      "&campaign_id=52666579688338&ad_id=52670563689538"
+    [ { "state" => "denied" }, { "state" => "withdrawn" }, { "state" => "allowed", "opted_out" => true } ].each_with_index do |permission, i|
+      touch = { "observed_at" => 1.minute.ago.iso8601, "landing_url" => landing }
+      body = intake_body("contact" => { "name" => "Private Visitor", "email" => "private#{i}@gmail.com" }, "acquisition" => {
+        "permission" => permission, "first_touch" => touch, "last_touch" => touch, "last_non_direct_touch" => touch,
+        "submission_page" => { "url" => landing }
+      })
+      body["attribution"] = {}
+      post_intake body
+      assert_response :accepted
+      lead = Lead.find(response.parsed_body["id"])
+      assert_equal "website_form", lead.source, permission.inspect
+      assert_nil lead.campaign_name, permission.inspect
+      assert_equal({}, lead.metadata["attribution"].slice(*Leads::Acquisition::CAMPAIGN_KEYS, "landing_url"), permission.inspect)
+    end
+  end
+
+  test "Meta ads tagging keeps the existing paid-medium or ad_id rule" do
+    assert_equal "meta_ads", Leads.derive_source("utm_source" => "facebook", "utm_medium" => "paid")
+    assert_equal "meta_ads", Leads.derive_source("utm_source" => "ig", "utm_medium" => "social", "ad_id" => "52670563689538")
+    [
+      { "utm_source" => "facebook", "utm_medium" => "paid_social" },
+      { "utm_source" => "instagram", "utm_medium" => "paidsocial" },
+      { "utm_source" => "facebook", "utm_medium" => "social", "campaign_id" => "52666579688338" },
+      { "utm_source" => "facebook", "utm_medium" => "social", "adset_id" => "52666579688138" },
+      { "utm_source" => "meta_ads", "utm_medium" => "paid_social" },
+      { "fbclid" => "IwAR-click", "ad_id" => "52670563689538" },
+      { "fbclid" => "IwAR-click", "campaign_id" => "52666579688338", "utm_medium" => "paid_social" }
+    ].each do |attribution|
+      assert_equal "website_form", Leads.derive_source(attribution), attribution.inspect
+    end
+  end
+
+  test "the source tag keeps a supplied utm_term even when it repeats the ad set ID" do
+    lead = Lead.new(name: "Term Lead", source: "meta_ads", campaign_name: "sh_us_cold_cbo", metadata: { "attribution" => {
+      "utm_campaign" => "sh_us_cold_cbo", "campaign_id" => "52666579688338", "adset_id" => "52666579688138",
+      "ad_id" => "52670563689538", "utm_term" => "52666579688138"
+    } })
+    assert_equal "Meta ads · sh_us_cold_cbo · campaign 52666579688338 · ad 52670563689538 · utm_term=52666579688138", source_tag(lead)
+  end
+
+  test "intake stores inquiry dropdown codes with the CRM's approved wording and without inventing exact party sizes" do
+    post_intake intake_body("trip" => { "timing_window" => "3_to_6_months", "timing_label" => "Spring-ish", "intent" => "helicopter_lodge",
+      "intent_label" => "Chopper trip" }, "party" => { "size_band" => "3_4", "size_label" => "3 to 4 of us" })
+    assert_response :accepted
+    lead = Lead.find(response.parsed_body["id"])
+    assert_nil lead.party_size
+    assert_equal [ "3_4", "3 to 4 travelers" ], [ lead.party_size_band, lead.party_size_band_label ]
+    assert_equal [ "3_to_6_months", "In 3 to 6 months" ], [ lead.timing_window, lead.timing_window_label ]
+    assert_equal [ "helicopter_lodge", "Everest by air or helicopter-supported lodge trip" ], [ lead.trip_intent, lead.trip_intent_label ]
+    assert_equal({ "timing_window" => "3_to_6_months", "intent" => "helicopter_lodge" }, lead.metadata["trip"])
+    assert_equal({ "size_band" => "3_4" }, lead.metadata["party"])
+    assert_equal false, lead.timing_unknown
+
+    post_intake intake_body("contact" => { "name" => "Pair Traveler", "email" => "pair@gmail.com" },
+      "trip" => { "timing_window" => "not_sure", "intent" => "not_sure" }, "party" => { "size_band" => "2" })
+    assert_response :accepted
+    pair = Lead.find(response.parsed_body["id"])
+    assert_equal 2, pair.party_size
+    assert_equal true, pair.timing_unknown
+    assert_equal "Not sure yet, help me choose", pair.trip_intent_label
+  end
+
+  test "an unanswered timing question leaves timing unknown unset" do
+    post_intake intake_body("party" => { "size_band" => "1" })
+    assert_response :accepted
+    lead = Lead.find(response.parsed_body["id"])
+    assert_equal 1, lead.party_size
+    assert_nil lead.timing_unknown
+    assert_nil lead.timing_window
+  end
+
+  test "intake saves the inquiry and drops dropdown answers it does not recognize" do
+    assert_difference("Lead.count", 1) do
+      post_intake intake_body("trip" => { "timing_window" => "next_century", "intent" => "trek", "intent_label" => "x" * 121 },
+        "party" => { "size_band" => "100", "size_label" => "A hundred" })
+    end
+    assert_response :accepted
+    lead = Lead.find(response.parsed_body["id"])
+    assert_nil lead.timing_window
+    assert_nil lead.timing_unknown
+    assert_nil lead.party_size_band
+    assert_nil lead.metadata["party"]
+    assert_equal [ "trek", "Private Himalayan trek (lodge-to-lodge)" ], [ lead.trip_intent, lead.trip_intent_label ]
+    assert_equal({ "intent" => "trek" }, lead.metadata["trip"])
+    assert_not_includes lead.metadata.to_json, "next_century"
+    assert_not_includes lead.metadata.to_json, "A hundred"
+
+    assert_no_difference("Lead.count") do
+      post_intake intake_body("contact" => { "name" => "", "email" => "nobody@gmail.com" }, "trip" => { "timing_window" => "bogus" })
+    end
+    assert_response :bad_request
+    assert_equal({ "contact.name" => "invalid" }, response.parsed_body["fields"])
+  end
 end

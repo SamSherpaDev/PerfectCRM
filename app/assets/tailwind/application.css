@@ -1461,20 +1461,27 @@
     flex: none;
   }
 
-  /* Leads: source, fit score, pipeline group labels. */
+  /* Leads: source, fit score, pipeline group labels.
+     Ad sources carry campaign, ad, and UTM ids, so the label wraps inside its
+     card and the icon stays centered on the first line. */
   .src {
     display: inline-flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 6px;
+    min-width: 0;
     font-size: 12.5px;
     color: var(--pb-ink-2);
-    white-space: nowrap;
+    overflow-wrap: anywhere;
   }
   .src svg {
     width: 14px;
     height: 14px;
+    margin-top: calc((1lh - 14px) / 2);
     color: var(--pb-ink-4);
     flex: none;
+  }
+  .ev .meta .src svg {
+    margin-top: calc((1lh - 13px) / 2);
   }
   .fit {
     display: flex;
@@ -2457,6 +2464,11 @@
   padding-inline: 6px;
   font-size: 12px;
 }
+.call-video {
+  grid-column: 1 / -1;
+  width: 100%;
+  contain: inline-size;
+}
 .calls-recent {
   display: flex;
   flex-direction: column;
@@ -3188,10 +3200,12 @@
   color: var(--pb-ink-2);
   overflow-wrap: anywhere;
 }
+/* Outcome rows top-align (or baseline-align beside text) so neighbors stay
+   level with the one-tap buttons while the video field sits under them. */
 .scheduled-call-banner-actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
 }
 .scheduled-call-outcomes {
@@ -3202,7 +3216,7 @@
 .scheduled-call-inquiry {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: 8px 12px;
   margin-top: 12px;
@@ -3243,7 +3257,7 @@
 .scheduled-call-row-actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
 }
 

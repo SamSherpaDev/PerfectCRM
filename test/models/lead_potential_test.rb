@@ -445,6 +445,46 @@ class LeadPotentialTest < ActiveSupport::TestCase
     assert_equal 1, don.activity_events.where(kind: "not_interested").count
   end
 
+  test "three unanswered calls move an Unsure ad lead to Re-contact, and only a real reply brings it back to Unsure" do
+    lead = Lead.create!(name: "Ad Lead Away", email: "ad-lead-away@example.com", source: "meta_ads")
+    lead.mark_unsure!
+    open_call = lead.scheduled_calls.create!(scheduled_at: 2.days.from_now)
+    3.times do |index|
+      CallLog.record!(lead, key: "ad-away-vm-#{index + 1}", occurred_at: (3 - index).days.ago, outcome: "voicemail", direction: "outbound")
+    end
+    assert lead.reload.recontact?
+    assert_not lead.not_interested?
+    assert_equal Date.current + 3.months, lead.recontact_on
+    assert_equal "scheduled", open_call.reload.status
+    assert_equal 0, lead.activity_events.where(kind: "not_interested").count
+
+    ingest_live_reply(from: lead.email, subject: "Automatic reply: Your trip")
+    assert lead.reload.recontact?
+
+    ingest_live_reply(from: "Ad-Lead-Away@example.com", subject: "Re: Your trip")
+    assert lead.reload.unsure?
+    assert_not lead.recontact?
+    restore = lead.activity_events.where(kind: "recontact_restored").sole
+    assert_equal "Moved back to Unsure: they replied after the automatic move.", restore.summary
+    assert_equal "automatic", restore.metadata["actor"]
+  end
+
+  test "a real reply returns a New ad lead from Re-contact to New and says so" do
+    lead = Lead.create!(name: "New Ad Lead Away", email: "new-ad-away@example.com", source: "google_ads")
+    3.times do |index|
+      CallLog.record!(lead, key: "new-ad-away-#{index + 1}", occurred_at: (3 - index).days.ago, outcome: "no_answer", direction: "outbound")
+    end
+    assert lead.reload.recontact?
+    assert_not_includes Lead.in_new_tab, lead
+
+    ingest_live_reply(from: lead.email, subject: "Re: Your trip")
+    assert_not lead.reload.recontact?
+    assert_not lead.unsure?
+    assert_includes Lead.in_new_tab, lead
+    restore = lead.activity_events.where(kind: "recontact_restored").sole
+    assert_equal "Moved back to New: they replied after the automatic move.", restore.summary
+  end
+
   private
 
   def ingest_live_reply(from:, subject:, header: nil)

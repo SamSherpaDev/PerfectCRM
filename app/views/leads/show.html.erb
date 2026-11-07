@@ -13,6 +13,27 @@
         <p class="mt-0.5">This lead is marked not interested and hidden from call lists, follow-ups, and automatic emails. Choose Interested again above to restore them.</p>
       </div>
     </section>
+  <% elsif @lead.recontact? %>
+    <section class="callout-warning mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" role="region" aria-label="Re-contact list">
+      <div class="flex items-start gap-3">
+        <%= render "shared/icon", name: :calendar, class: "mt-0.5 h-5 w-5 shrink-0" %>
+        <div>
+          <% if @lead.recontact_due? %>
+            <p class="font-medium text-ink">Re-contact list · follow-up due since <%= date_short(@lead.recontact_on) %></p>
+            <p class="mt-0.5 text-sm">The follow-up date has arrived and nothing happens automatically. After the follow-up call, set a new date 3 or 6 months out or choose Restore from Re-contact.</p>
+          <% else %>
+            <p class="font-medium text-ink">Re-contact list<% if @lead.recontact_on.present? %> · due <%= date_short(@lead.recontact_on) %><% end %></p>
+            <p class="mt-0.5 text-sm">Held for a 3-to-6-month follow-up after no phone contact. Never contacted automatically; move the re-contact date to 3 or 6 months out or choose Restore from Re-contact.</p>
+          <% end %>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <% Lead::RECONTACT_MONTH_OPTIONS.each do |months| %>
+          <%= button_to "#{months} months", reschedule_recontact_lead_path(@lead), method: :patch, params: { months: months, return_to: @lead_action_return_to }, class: "btn-secondary btn btn-xs" %>
+        <% end %>
+        <%= button_to "Restore from Re-contact", unmark_recontact_lead_path(@lead), method: :patch, params: { return_to: @lead_action_return_to }, class: "btn-secondary btn btn-xs" %>
+      </div>
+    </section>
   <% end %>
   <% if @lead.suspected_spam? && !@lead.converted? %>
     <section class="card card-pad mb-5" aria-label="Spam review">

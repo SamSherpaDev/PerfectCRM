@@ -73,6 +73,8 @@ Rails.application.routes.draw do
       patch :unmark_potential
       patch :mark_unsure
       patch :unmark_unsure
+      patch :reschedule_recontact
+      patch :unmark_recontact
       patch :mark_not_interested
       patch :unmark_not_interested
       patch :mark_as_spam

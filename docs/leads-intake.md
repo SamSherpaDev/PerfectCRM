@@ -124,11 +124,22 @@ Source derivation: `google_ads` on `gclid`/`gbraid`/`wbraid`, or
 `utm_source=google` with a paid medium (`cpc`, `ppc`, `paid`); `meta_ads` on
 `facebook`/`instagram`/`meta`/`fb`/`ig` with a paid medium or `ad_id`;
 `trade_show` on `utm_medium=event` (travel show booth links and QR codes); else
-`website_form`. `campaign_name` copies `utm_campaign`.
+`website_form`. `campaign_name` copies `utm_campaign` only (it stays empty
+when `utm_campaign` is absent, so the inquiry email, reports, and webhook keep
+their meaning). The initial intake owns
+attribution: the lead's source tag (`LeadsHelper#lead_source_label`) reads
+only the stored `metadata["attribution"]` projection and shows its campaign
+name, `campaign <campaign_id>`, `ad <ad_id>`, `utm_campaign`, `utm_content`,
+and `utm_term`. A
+missing `ad_id` stays missing; nothing is inferred from another visit. The
+top-level `page.url` never contributes campaign or click parameters.
 With `acquisition`, this compatibility projection uses the eligible
 last-non-direct touch, falling back to the eligible last touch, and when
 `last_touch` is `unavailable` on a permission-allowed submission, falling back
-to `submission_page.landing_url` (utm/ad parameters). See the
+to `submission_page.landing_url` (utm/ad parameters). The projection is one
+complete snapshot: `campaign_id`, `adset_id`, `ad_id`, and `utm_*` come from
+the chosen touch (its own fields, plus any missing ones from its own
+`landing_url` query) or from that fallback, never merged across touches. See the
 [source contract](#additive-browser-payloads) for permission and ordering rules.
 The reference is `SH-XXXX`.
 
@@ -265,7 +276,29 @@ the lead page shows the answers.
 
 Month accepts integers 1-12, year 2020-2100, and party size 1-20.
 Budget bands are defined by `Lead::BUDGET_BANDS`. These fields accept `null`
-to clear them; `timing_unknown` accepts only `true` or `false`. Invalid field
+to clear them; `timing_unknown` accepts only `true` or `false`. Details takes
+qualification fields only and has no attribution channel of its own: only a
+details `acquisition` snapshot, under the permission and ordering rules above,
+refreshes the projection, and a rejected details post (`400`) leaves the
+initial intake's attribution unchanged.
+
+Both intake and details also accept three optional qualification dropdowns
+(`Leads.extract_inquiry_dropdowns`), each sent as a code:
+`trip.timing_window` (`within_3_months`, `3_to_6_months`, `6_to_12_months`,
+`12_plus_months`, `not_sure`); `party.size_band` (`1`, `2`, `3_4`, `5_8`,
+`9_plus`, `not_sure`); and `trip.intent` (`cultural_tour`, `trek`,
+`mixed_tour_walks`, `helicopter_lodge`, `expedition_climb`, `multi_country`,
+`not_sure`). Only the codes are stored, in `metadata["trip"]` and
+`metadata["party"]`; the CRM owns the approved option wording
+(`Leads::TIMING_WINDOWS`, `Leads::PARTY_SIZE_BANDS`, `Leads::TRIP_INTENTS`)
+and ignores any display label a client sends. Bands `"1"`
+and `"2"` set `Lead.party_size` to 1 or 2; range bands leave it `nil` unless
+details also sends an explicit integer `party.size`. A timing window sets
+`timing_unknown` (`true` only for `not_sure`) unless `trip.month`, `trip.year`,
+or an explicit `trip.timing_unknown` is sent; with no answer it stays `nil`.
+Intake never rejects an inquiry over them: an unknown code is dropped and the
+lead is saved. Details stays strict: there, an unknown code is a `400` and
+changes nothing. Invalid field
 values return `400`; model validation failures return `422`. Setting unknown
 timing does not clear stored dates; see [Leads](../README.md#leads) for display behavior.
 

@@ -157,6 +157,48 @@ class ScheduledCallsRequestsTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "the booked-call outcome bar on Today and the lead page logs the optional video answer on that one call event" do
+    travel_to Time.zone.local(2026, 10, 20, 10, 0) do
+      call = @lead.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 20, 16, 0))
+      complete_path = complete_lead_scheduled_call_path(@lead, call)
+
+      get root_path
+      assert_select "form[action=?] input[name=video_source]", complete_path, count: 1 do |inputs|
+        assert_nil inputs.first["value"]
+        assert_equal "240", inputs.first["maxlength"]
+      end
+      get lead_path(@lead)
+      assert_select ".calls .hint", text: /Next call/
+      assert_select "#scheduled-call form[action=?] input[name=video_source]", complete_path, count: 1
+
+      assert_difference -> { @lead.activity_events.where(kind: "call").count }, 1 do
+        post complete_path, params: { outcome: "connected", save_key: "booked-video-1",
+          video_source: "Everest base camp reel", return_to: root_path }
+      end
+      assert_redirected_to root_path
+      assert_equal "Call logged: Talked.", flash[:notice]
+      event = @lead.activity_events.find_by!(kind: "call", idempotency_key: "booked-video-1")
+      assert_equal [ "completed", "connected", event ], [ call.reload.status, call.outcome, call.activity_event ]
+      assert_equal "Everest base camp reel", event.metadata["video_source"]
+      get lead_path(@lead)
+      assert_select "#record-details dd", text: "Everest base camp reel"
+
+      second = @lead.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 20, 17, 0))
+      assert_difference -> { @lead.activity_events.where(kind: "call").count }, 1 do
+        post complete_lead_scheduled_call_path(@lead, second), params: { outcome: "no_answer", save_key: "booked-video-2",
+          video_source: "Helicopter opener " * 20 }
+      end
+      assert_equal "Call logged: No answer.", flash[:notice]
+      assert_equal [ "completed", "no_answer" ], [ second.reload.status, second.outcome ]
+      assert_equal ("Helicopter opener " * 13) + "Helico", second.activity_event.metadata["video_source"]
+
+      third = @lead.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 20, 18, 0))
+      post complete_lead_scheduled_call_path(@lead, third), params: { outcome: "voicemail", save_key: "booked-video-3", video_source: "" }
+      assert_equal "completed", third.reload.status
+      assert_not third.activity_event.metadata.key?("video_source")
+    end
+  end
+
   test "logging a call completes today's or a missed scheduled call but never a later booking" do
     travel_to Time.zone.local(2026, 10, 20, 10, 0) do
       later = @lead.scheduled_calls.create!(scheduled_at: Time.zone.local(2026, 10, 26, 10, 0))
@@ -517,5 +559,30 @@ class ScheduledCallsRequestsTest < ActionDispatch::IntegrationTest
     assert_equal "Call logged: Voicemail. Moved to Not interested after three unanswered calls.", flash[:notice]
     assert_equal [ "completed", "voicemail" ], [ call.reload.status, call.outcome ]
     assert lead.reload.not_interested?
+  end
+
+  test "a booked call stays scheduled and listed when its lead moves to Re-contact or the re-contact date changes" do
+    travel_to Time.zone.local(2026, 10, 20, 10, 0) do
+      lead = Lead.create!(name: "Booked Before Recontact", email: "booked-recontact@example.com", phone: "+14155550166", source: "meta_ads")
+      call = lead.scheduled_calls.create!(scheduled_on: "2026-10-20", scheduled_time: "15:00")
+
+      3.times do |i|
+        CallLog.record!(lead, key: "booked-recontact-#{i}", occurred_at: (3 - i).days.ago, outcome: "no_answer", direction: "outbound")
+      end
+      assert lead.reload.recontact?
+      assert_equal Date.new(2027, 1, 20), lead.recontact_on
+      assert_equal "scheduled", call.reload.status
+
+      patch reschedule_recontact_lead_path(lead), params: { months: 6, return_to: lead_path(lead) }
+      assert_redirected_to lead_path(lead)
+      assert_equal Date.new(2027, 4, 20), lead.reload.recontact_on
+      assert_equal "scheduled", call.reload.status
+
+      get root_path
+      assert_response :success
+      assert_select "#scheduled_call_#{call.id}"
+      get lead_path(lead)
+      assert_select "#scheduled-call"
+    end
   end
 end

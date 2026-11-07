@@ -23,6 +23,7 @@
   <% if lead %>
     <%= render "leads/potential_action", lead: record %>
     <%= render "leads/unsure_action", lead: record %>
+    <%= render "leads/recontact_action", lead: record %>
     <%= render "leads/not_interested_action", lead: record %>
     <% unless record.suspected_spam? %>
       <%= button_to "Mark as spam", mark_as_spam_lead_path(record), method: :patch, params: { return_to: @lead_action_return_to }, class: "btn-secondary btn btn-sm" %>

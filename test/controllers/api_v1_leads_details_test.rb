@@ -400,4 +400,90 @@ class ApiV1LeadsDetailsTest < ActionDispatch::IntegrationTest
     assert_equal "invalid", response.parsed_body["fields"]["name"]
     assert_nil @lead.reload.travel_month
   end
+
+  def tag_ad_lead!
+    @lead.update!(source: "meta_ads", campaign_name: "sh_us_cold_cbo", metadata: { "attribution" => {
+      "utm_source" => "ig", "utm_medium" => "paid", "utm_campaign" => "sh_us_cold_cbo",
+      "campaign_id" => "52666579688338", "ad_id" => "52670563689538", "utm_content" => "hook-b2-01"
+    } })
+    @lead.metadata["attribution"].dup
+  end
+
+  test "details qualification answers keep the intake attribution and store bands honestly" do
+    attribution = tag_ad_lead!
+    post_details({
+      "schema" => "sherpa.inquiry.details.v1",
+      "submission_id" => @submission_id,
+      "trip" => { "timing_window" => "3_to_6_months", "timing_label" => "Later this year", "intent" => "cultural_tour",
+        "intent_label" => "Culture trip" },
+      "party" => { "size_band" => "3_4", "size_label" => "Three or four of us" },
+      "attribution" => { "utm_source" => "facebook", "utm_medium" => "paid_social", "campaign_id" => "999", "ad_id" => "998" },
+      "page" => { "url" => "https://www.sherpaholidays.com/pages/contact?utm_source=facebook&utm_medium=paid&ad_id=997" }
+    })
+    assert_response :ok
+    @lead.reload
+    assert_equal attribution, @lead.metadata["attribution"]
+    assert_equal [ "meta_ads", "sh_us_cold_cbo" ], [ @lead.source, @lead.campaign_name ]
+    assert_equal "Meta ads · sh_us_cold_cbo · campaign 52666579688338 · ad 52670563689538 · utm_content=hook-b2-01",
+      Class.new { include LeadsHelper }.new.lead_source_label(@lead)
+    assert_nil @lead.party_size
+    assert_equal [ "3_4", "3 to 4 travelers" ], [ @lead.party_size_band, @lead.party_size_band_label ]
+    assert_equal [ "3_to_6_months", "In 3 to 6 months" ], [ @lead.timing_window, @lead.timing_window_label ]
+    assert_equal false, @lead.timing_unknown
+    assert_equal [ "cultural_tour", "Private cultural and sightseeing tour (hotel-based)" ], [ @lead.trip_intent, @lead.trip_intent_label ]
+    assert_not_includes @lead.metadata.to_json, "Later this year"
+    assert_not_includes @lead.metadata.to_json, "Culture trip"
+    assert_not_includes @lead.metadata.to_json, "Three or four of us"
+  end
+
+  test "explicit party size and travel dates on details win over the dropdown bands" do
+    post_details({
+      "schema" => "sherpa.inquiry.details.v1",
+      "submission_id" => @submission_id,
+      "trip" => { "timing_window" => "not_sure", "month" => 4, "year" => 2027 },
+      "party" => { "size_band" => "3_4", "size" => 3 }
+    })
+    assert_response :ok
+    @lead.reload
+    assert_equal [ 3, 4, 2027 ], [ @lead.party_size, @lead.travel_month, @lead.travel_year ]
+    assert_nil @lead.timing_unknown
+    assert_equal "3_4", @lead.party_size_band
+    assert_equal "3 travelers · April 2027", Class.new { include ActionView::Helpers::TextHelper, RecordsHelper }.new.lead_party_and_when(@lead)
+  end
+
+  test "an approximate timing window or size band shows only when no exact answer exists" do
+    post_details({
+      "schema" => "sherpa.inquiry.details.v1",
+      "submission_id" => @submission_id,
+      "trip" => { "timing_window" => "within_3_months" },
+      "party" => { "size_band" => "5_8" }
+    })
+    assert_response :ok
+    helper = Class.new { include ActionView::Helpers::TextHelper, RecordsHelper }.new
+    @lead.reload
+    assert_equal "5 to 8 travelers · Within the next 3 months", helper.lead_party_and_when(@lead)
+
+    post_details({ "schema" => "sherpa.inquiry.details.v1", "submission_id" => @submission_id, "trip" => { "month" => 10, "year" => 2027 } })
+    assert_response :ok
+    assert_equal "5 to 8 travelers · October 2027", helper.lead_party_and_when(@lead.reload)
+  end
+
+  test "an unknown details dropdown answer is a 400 that changes nothing" do
+    attribution = tag_ad_lead!
+    metadata = @lead.reload.metadata
+    assert_no_difference("Note.count") do
+      post_details({
+        "schema" => "sherpa.inquiry.details.v1",
+        "submission_id" => @submission_id,
+        "trip" => { "timing_window" => "3_to_6_months", "intent" => "spaceflight" },
+        "party" => { "size_band" => "3_4", "size_label" => "x" * 121 }
+      })
+    end
+    assert_response :bad_request
+    assert_equal({ "trip.intent" => "invalid" }, response.parsed_body["fields"])
+    @lead.reload
+    assert_equal metadata, @lead.metadata
+    assert_equal attribution, @lead.metadata["attribution"]
+    assert_nil @lead.timing_unknown
+  end
 end

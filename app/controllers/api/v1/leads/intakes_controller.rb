@@ -283,6 +283,10 @@ module Api
           placement = nil unless ::Lead::PLACEMENTS.include?(placement)
           now = Time.current
 
+          dropdown_updates, dropdown_trip_meta, dropdown_party_meta = ::Leads.extract_inquiry_dropdowns(payload)
+          dropdown_trip_meta.compact!
+          dropdown_party_meta.compact!
+
           lead = ::Lead.new(
             name: fields[:name],
             email: fields[:email],
@@ -292,8 +296,8 @@ module Api
             referral_code: referral_code_from(attribution),
             trip_handle: (trip["handle"].to_s.strip.presence || matched_trip["handle"])&.truncate(120),
             trip_title: (trip["title"].to_s.strip.presence || matched_trip["title"])&.truncate(160),
-            party_size: structured&.dig("group_size"),
-            timing_unknown: (true if structured&.dig("season") == "not_sure"),
+            party_size: structured&.dig("group_size") || dropdown_updates["party_size"],
+            timing_unknown: (structured&.dig("season") == "not_sure" ? true : dropdown_updates["timing_unknown"]),
             message: payload["message"].to_s.strip.presence&.truncate(4000),
             consent_contact_at: (Time.zone.parse(consent["contact_at"].to_s) rescue nil),
             consent_text_version: consent["text_version"].to_s.strip.presence&.truncate(64),
@@ -316,7 +320,10 @@ module Api
               "suspicion_hits" => hits.map(&:to_s),
               "ip_hash" => Digest::SHA256.hexdigest(request.remote_ip.to_s),
               "user_agent" => request.user_agent.to_s.truncate(300)
-            }.merge(itinerary ? { "itinerary" => itinerary } : {}).merge(quiz ? { "quiz" => quiz } : {})
+            }.merge(dropdown_trip_meta.any? ? { "trip" => dropdown_trip_meta } : {})
+             .merge(dropdown_party_meta.any? ? { "party" => dropdown_party_meta } : {})
+             .merge(itinerary ? { "itinerary" => itinerary } : {})
+             .merge(quiz ? { "quiz" => quiz } : {})
           )
           lead.tag_list = ::Lead::SUSPECTED_SPAM_TAG if score.positive?
           lead

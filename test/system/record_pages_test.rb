@@ -196,6 +196,24 @@ class RecordPagesTest < ApplicationSystemTestCase
     assert_selector "[data-tab='thread'] .tab-count", text: "1", exact_text: true
   end
 
+  test "a long ad source tag wraps inside the Details and Timeline cards" do
+    lead = Lead.create!(name: "Ad Source", source: "meta_ads", received_at: Time.current,
+      metadata: { "attribution" => { "campaign_id" => "52666579688338",
+        "ad_id" => "52670563689999", "utm_content" => "opener-v5-03" } })
+    visit lead_path(lead)
+    assert_selector "#inquiry .src", text: "ad 52670563689999"
+
+    %w[#record-details #inquiry].each do |scope|
+      src_right, card_right = page.evaluate_script(<<~JS)
+        (() => {
+          const src = document.querySelector("#{scope} .src");
+          return [src.getBoundingClientRect().right, src.closest(".card").getBoundingClientRect().right];
+        })()
+      JS
+      assert_operator src_right, :<=, card_right, "#{scope} source tag runs past its card"
+    end
+  end
+
   test "archived leads remain read only" do
     lead = Lead.create!(name: "Archived lead", source: "manual")
     template = Template.create!(name: "Archived nudge", subject: "Hello", body: "Checking in")

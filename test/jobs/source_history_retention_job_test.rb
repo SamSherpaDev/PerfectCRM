@@ -83,11 +83,14 @@ class SourceHistoryRetentionJobTest < ActiveJob::TestCase
     SourceAnswers.record!(lead, choice: "personal_referral", detail: "Alex", method: "website_form")
     person = lead.people.create!(name: "Companion")
     SourceAnswers.record!(person, choice: "instagram", method: "website_form")
-    CallLog.record!(lead, key: SecureRandom.uuid, occurred_at: now - 25.months, direction: "outbound", outcome: "connected")
+    CallLog.record!(lead, key: SecureRandom.uuid, occurred_at: now - 25.months, direction: "outbound", outcome: "connected",
+      video_source: "Everest opener")
     lead.update_columns(last_touch_at: now - 25.months)
+    assert_equal "Everest opener", lead.reload.video_source
     SourceHistoryRetentionJob.perform_now(now: now)
     assert lead.reload.source_missing?
     assert_nil lead.reported_source_detail
+    assert_nil lead.video_source
     assert person.reload.source_missing?
     assert_empty lead.activity_events.where(kind: %w[source_answer call])
     assert_equal "Archived Source", lead.name

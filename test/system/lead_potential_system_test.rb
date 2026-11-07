@@ -59,7 +59,7 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
       waiting = Lead.create!(name: "Sorting#{width} Waiting")
       chatting = Lead.create!(name: "Sorting#{width} Chatting", status: "chatting")
       visit leads_path(tab: "new", q: "Sorting#{width}", sort: "name")
-      assert_equal [ "New", "Potential", "Unsure", "Not interested", "Archived" ],
+      assert_equal [ "New", "Potential", "Unsure", "Re-contact", "Not interested", "Archived" ],
         all("nav.tabs a").map { |tab| tab.first("span").text }
       assert_link chatting.name
       capture("new-#{width}")
@@ -241,7 +241,7 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
       page.current_window.resize_to(width, 900)
       lead = Lead.create!(name: "Tab traveler #{width}", status: "quoted", source: "manual")
       visit leads_path
-      assert_equal [ "New", "Potential", "Unsure", "Not interested", "Archived" ],
+      assert_equal [ "New", "Potential", "Unsure", "Re-contact", "Not interested", "Archived" ],
         all("nav.tabs a").map { |tab| tab.first("span").text }
       visit leads_path(tab: "quoted")
       assert_link lead.name
@@ -252,7 +252,7 @@ class LeadPotentialSystemTest < ApplicationSystemTestCase
       accept_confirm { click_button "Convert to client" }
       assert_selector "h1", text: lead.name
       assert_text "Started as a lead"
-      %w[new potential unsure quoted not_interested archived].each do |tab|
+      %w[new potential unsure recontact quoted not_interested archived].each do |tab|
         visit leads_path(tab: tab, q: lead.name)
         assert_no_link lead.name
       end

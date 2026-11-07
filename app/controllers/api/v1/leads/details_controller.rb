@@ -36,7 +36,7 @@ module Api
           if received && received < 24.hours.ago
             return render json: { error: "expired" }, status: :gone
           end
-          updates, errors = extract_updates(payload)
+          updates, trip_meta, party_meta, errors = extract_updates(payload)
           answer = payload["source_answer"]
           if payload.key?("source_answer")
             if !answer.is_a?(Hash) || !::SourceHistory::ANSWERS.key?(answer["code"]) ||
@@ -71,6 +71,16 @@ module Api
 
             phone_raw = updates.delete("phone_raw")
             lead.assign_attributes(updates)
+            if trip_meta.any?
+              existing_trip = (lead.metadata || {})["trip"]
+              merged_trip = (existing_trip.is_a?(Hash) ? existing_trip : {}).merge(trip_meta).compact
+              lead.metadata = (lead.metadata || {}).merge("trip" => merged_trip)
+            end
+            if party_meta.any?
+              existing_party = (lead.metadata || {})["party"]
+              merged_party = (existing_party.is_a?(Hash) ? existing_party : {}).merge(party_meta).compact
+              lead.metadata = (lead.metadata || {}).merge("party" => merged_party)
+            end
             if phone_raw.present? && lead.phone.blank? && lead.phone_raw.blank?
               lead.phone_raw = phone_raw
               lead.phone = ::Leads::Phone.normalize(phone_raw, country: lead.country)
@@ -220,7 +230,11 @@ module Api
             end
           end
 
-          [ updates, errors ]
+          dropdown_updates, trip_meta, party_meta, dropdown_errors = ::Leads.extract_inquiry_dropdowns(payload)
+          updates = dropdown_updates.merge(updates)
+          errors.merge!(dropdown_errors)
+
+          [ updates, trip_meta, party_meta, errors ]
         end
       end
     end
