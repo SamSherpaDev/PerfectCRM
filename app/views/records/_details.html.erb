@@ -68,10 +68,10 @@
         <dd><%= record.trip_intent_label %></dd>
       </div>
     <% end %>
-    <% if lead && record.video_source.present? %>
+    <% if lead && (video_source = record.video_source).present? %>
       <div>
         <dt>Video that got them here</dt>
-        <dd><%= record.video_source %></dd>
+        <dd><%= video_source %></dd>
       </div>
     <% end %>
     <% if lead && record.recontact? && record.recontact_on.present? %>

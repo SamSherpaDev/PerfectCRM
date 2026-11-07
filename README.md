@@ -558,9 +558,13 @@ open leads with a phone number whose calls never connected (`Attempted`,
 `Voicemail`, or `No answer`) and that are due another try (attempt 2 due 1 day
 after attempt 1, attempt 3 due 2 days after attempt 2 - Day 0, Day 1, Day 3, up
 to 3 attempts; leads on the ad-lead routine, `Lead#ad_call_routine?`, count
-one attempt per Pacific day, so another call logged the same day does not use
-up a try, and get attempt 3 1 day after attempt 2 - Day 0, Day 1, Day 2 - with
-varied morning/afternoon/evening time-of-day guidance); third, Re-contact leads whose re-contact date has
+the same attempts as their Re-contact move and text reminder
+(`CallLog.unanswered_attempts`: outbound `Voicemail` or `No answer`, one per
+Pacific day, since the latest response or restore), so another call logged the
+same day or an `Attempted` call does not use up a try and a new miss after a
+response starts again at the 2nd try, and get attempt 3 1 day after attempt 2 -
+Day 0, Day 1, Day 2 - with varied morning/afternoon/evening time-of-day
+guidance); third, Re-contact leads whose re-contact date has
 arrived and that have no logged call since that date, earliest date first;
 fourth, older uncalled inquiries up to 14 days old, oldest
 first. Uncalled inquiries over 14 days old and leads whose latest call is over
@@ -745,8 +749,9 @@ Potential or Unsure on a not-interested lead also clears `not_interested_marked_
 Not interested is not spam: it does not set `spam_marked_at` or the
 `suspected_spam` tag, and it does not alter spam reports or ad conversions
 already sent. Logging an outbound `Voicemail` or `No answer` call on a lead in
-Unsure that now has three combined outbound `Voicemail` or `No answer` outcomes
-(`Attempted` does not count) with no response since the first of those three
+Unsure that is not from an ad and now has three combined outbound
+`Voicemail` or `No answer` outcomes (`Attempted` does not count) with no
+response since the first of those three
 also marks the lead not interested automatically via `Lead#mark_not_interested!`,
 records a `not_interested` timeline note
 (`Moved to Not interested automatically after three unanswered calls`), and adds
@@ -754,17 +759,21 @@ records a `not_interested` timeline note
 while keeping `unsure_marked_at` intact for **Interested again**. Open ad
 leads (`source` in `AdSpend::SOURCES`: `google_ads` or `meta_ads`) that are
 not lost, archived, converted, not interested, or an existing client's inquiry
-follow the ad-lead routine instead (`Lead#ad_call_routine?`; other ad
-inquiries keep the usual rules): unanswered attempts count once per Pacific
+follow the ad-lead routine instead (`Lead#ad_call_routine?`; ad inquiries
+outside it, such as an existing client's or a lost one, are never moved by
+unanswered calls, to Re-contact or to Not interested, and get no text reminder
+or time-of-day guidance; an existing client's open inquiry keeps the Day 0,
+Day 1, Day 3 call list): unanswered attempts count once per Pacific
 day, using that day's latest call, so the move needs unanswered attempts on
 three different days. Such a lead in Unsure, or still in New at stage `new`,
 moves to the **Re-contact** list (`Lead#mark_recontact!`, `recontact_on` 3
 months out) rather than Not interested, records a `recontact` timeline note
 (`Moved to Re-contact automatically after three unanswered calls`), and adds
 `Moved to Re-contact after three unanswered calls.` to the `Call logged`
-notice. Mark Unsure runs the same check, so a lead that already has three
-unanswered calls moves straight to Not interested (`Marked as Unsure - moved
-to Not interested after three unanswered calls.`) or, for an ad-lead routine
+notice. Mark Unsure runs the same check, so a lead not from an ad that
+already has three unanswered calls moves straight to Not interested
+(`Marked as Unsure - moved to Not interested after three unanswered calls.`)
+or, for an ad-lead routine
 lead with attempts on three days, to Re-contact (`Marked as Unsure - moved to
 Re-contact after three unanswered calls.`). Leads moved to Not interested
 before the ad-lead routine existed stay unchanged. A
@@ -820,9 +829,10 @@ scheduled and visible on Today through moves and date changes, and follow-up
 tasks stay listed.
 
 Call logging also takes an optional "What video got you here?" answer
-(`video_source`, up to 240 characters; the field starts empty on every call,
-and the latest answer shows on the lead page; source-history expiry removes
-it with the lead's calls). When an outbound `Voicemail` or `No answer` call is
+(`video_source`, up to 240 characters, stored only on that call event; the
+field starts empty on every call, and the lead page shows the answer from the
+latest call that has one; source-history expiry removes it with the lead's
+calls). When an outbound `Voicemail` or `No answer` call is
 the latest unanswered attempt of a lead on the ad-lead routine
 (`CallLog.missed_call_reminder`, from the same reset-aware per-day count as
 `CallLog.unanswered_attempts`), the `Call logged` notice, including after a

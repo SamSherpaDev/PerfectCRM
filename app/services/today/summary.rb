@@ -65,9 +65,10 @@ module Today
     #     newest first, so a fresh inquiry is always on top;
     # (b) leads with a phone whose calls never connected (Attempted,
     #     Voicemail, or No answer) and that are due another try (attempt 2
-    #     due 1 day after attempt 1; attempt 3 due 2 days after attempt 2, or
-    #     1 day for the ad-lead routine, which counts one attempt per day and
-    #     gets varied time-of-day guidance across 3 days; at most 3 attempts);
+    #     due 1 day after attempt 1; attempt 3 due 2 days after attempt 2; at
+    #     most 3 attempts). The ad-lead routine counts CallLog.unanswered_attempts
+    #     instead (Voicemail or No answer, one per day, since the latest
+    #     response), retries daily, and gets varied time-of-day guidance;
     # (c) Re-contact leads whose date has arrived and that have no call or
     #     open scheduled call since, earliest date first;
     # (d) older uncalled inquiries up to 14 days old, oldest first.
@@ -131,17 +132,21 @@ module Today
           last_call = calls.last
           next if last_call.occurred_at < window_start
 
-          cadence = calls.select { |call| call.occurred_at >= last_call.occurred_at - CALL_LIST_WINDOW }
-          next if cadence.any? { |call| call_connected?(call) }
-
           routine = lead.ad_call_routine?
-          cadence = cadence.reverse.uniq { |call| call.occurred_at.in_time_zone.to_date }.reverse if routine
+          if routine
+            cadence = CallLog.unanswered_attempts(lead)
+            next if cadence.empty? && calls.any? { |call| call_connected?(call) }
+          else
+            cadence = calls.select { |call| call.occurred_at >= last_call.occurred_at - CALL_LIST_WINDOW }
+            next if cadence.any? { |call| call_connected?(call) }
+          end
           next if cadence.size >= MAX_CALL_ATTEMPTS
 
           attempt = cadence.size + 1
           days_wait = attempt == 2 || routine ? 1 : 2
-          due = last_call.occurred_at <= @now - days_wait.days ||
-            last_call.occurred_at.in_time_zone.to_date <= @today - days_wait.days
+          last_try = cadence.last
+          due = last_try.nil? || last_try.occurred_at <= @now - days_wait.days ||
+            last_try.occurred_at.in_time_zone.to_date <= @today - days_wait.days
           next unless due
 
           retries << CallEntry.new(

@@ -242,7 +242,8 @@ class Lead < ApplicationRecord
   end
 
   def video_source
-    metadata.is_a?(Hash) ? metadata["video_source"].to_s.strip.presence : nil
+    activity_events.where(kind: "call").where("json_extract(metadata, '$.video_source') IS NOT NULL")
+      .order(occurred_at: :desc, id: :desc).first&.metadata&.dig("video_source")
   end
 
   def potential?
@@ -319,7 +320,9 @@ class Lead < ApplicationRecord
     recontact? && recontact_on.present? && recontact_on <= today
   end
 
-  # Open ad inquiries from new people; existing clients keep the usual call rules.
+  # Open ad inquiries from new people. Other ad inquiries (an existing client's,
+  # lost, archived, converted, or not interested) get no text reminder or
+  # time-of-day guidance, and unanswered calls never move them automatically.
   def ad_call_routine?
     ad_lead? && existing_client_id.nil? && status != "lost" && !archived? && !converted? && !not_interested?
   end

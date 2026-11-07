@@ -43,9 +43,6 @@ module CallLog
         record.activity_events.create!(kind: "call", idempotency_key: key,
           summary: "Call: #{LABELS.fetch(outcome)}", occurred_at: occurred_at,
           metadata: call_meta)
-      if video.present? && !record.converted?
-        record.update!(metadata: (record.metadata.is_a?(Hash) ? record.metadata : {}).merge("video_source" => video))
-      end
       record.record_touch!(at: event.occurred_at) if event.metadata["outcome"] == "connected"
       if (client = record.converted_client || record.existing_client)
         client.activity_events.where(kind: "call").find_by("json_extract(metadata, '$.from_lead_event_id') = ?", event.id) ||

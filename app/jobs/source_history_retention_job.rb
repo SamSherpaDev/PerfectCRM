@@ -21,7 +21,7 @@ class SourceHistoryRetentionJob < ApplicationJob
           lead.update_columns(metadata: metadata)
         end
         if expired?(lead, now)
-          metadata.except!("acquisition", "attribution", "page", "legacy_observed", "video_source")
+          metadata.except!("acquisition", "attribution", "page", "legacy_observed")
           lead.update_columns(metadata: metadata)
           purge_source(lead)
           lead.people.each { |person| purge_source(person) }

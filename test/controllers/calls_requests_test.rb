@@ -321,6 +321,51 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "an Attempted call on an ad lead stays logged without using up a miss day, so Today, the text reminder, and Re-contact agree" do
+    text = "Suggested text: Hi Karma, this is Sam at SherpaHolidays. I just tried giving you a quick call about your trip inquiry. " \
+      "When is a good time for us to connect by phone, or is text easier for you?"
+    lead = nil
+    travel_to Time.zone.local(2026, 11, 2, 10, 0) do
+      lead = Lead.create!(name: "Karma Dolma", email: "karma@example.com", phone: "+14155550193", source: "meta_ads")
+      post lead_calls_path(lead), params: { save_key: "attempted-day-0", outcome: "voicemail", direction: "outbound", return_to: root_path }
+      assert_equal "Call logged: Voicemail. Send a short text by hand. Attempt 1 of 3 logged · try attempt 2 next day in the afternoon. #{text}",
+        flash[:notice]
+    end
+
+    travel_to Time.zone.local(2026, 11, 3, 15, 0) do
+      post lead_calls_path(lead), params: { save_key: "attempted-day-1", outcome: "attempted", direction: "outbound", return_to: root_path }
+      assert_equal "Call logged: Attempted.", flash[:notice]
+      assert_not lead.reload.recontact?
+      get lead_path(lead)
+      assert_select ".calls-recent li", text: /Attempted/
+      assert_select "[data-missed-call-reminder]", count: 0
+      get root_path
+      assert_select "#call_list_lead_#{lead.id}", text: /2nd try/
+      assert_select "#call_list_lead_#{lead.id}", text: /Text reminder/, count: 0
+      entry = Today::Summary.new.call_entries.find { |e| e.lead == lead }
+      assert_equal [ 2, "2nd try", "afternoon" ], [ entry.attempt, entry.attempt_label, entry.suggested_window ]
+    end
+
+    travel_to Time.zone.local(2026, 11, 4, 14, 0) do
+      post lead_calls_path(lead), params: { save_key: "attempted-day-2", outcome: "no_answer", direction: "outbound", return_to: root_path }
+      assert_equal "Call logged: No answer. Send a short text by hand. Attempt 2 of 3 logged · try attempt 3 next day in the evening. #{text}",
+        flash[:notice]
+      assert_not lead.reload.recontact?
+    end
+
+    travel_to Time.zone.local(2026, 11, 5, 18, 0) do
+      get root_path
+      assert_select "#call_list_lead_#{lead.id}", text: /3rd try/
+      entry = Today::Summary.new.call_entries.find { |e| e.lead == lead }
+      assert_equal [ 3, "3rd try", "evening" ], [ entry.attempt, entry.attempt_label, entry.suggested_window ]
+      post lead_calls_path(lead), params: { save_key: "attempted-day-3", outcome: "voicemail", direction: "outbound", return_to: root_path }
+      assert_equal "Call logged: Voicemail. Moved to Re-contact after three unanswered calls. Send a short text by hand. " \
+        "On the Re-contact list until Feb 5, 2027. #{text}", flash[:notice]
+      assert lead.reload.recontact?
+      assert_equal 4, lead.activity_events.where(kind: "call").count
+    end
+  end
+
   test "a later Talked or inbound call moves an automatic Re-contact lead back, unlike an earlier call logged late" do
     travel_to Time.zone.local(2026, 11, 7, 10, 0) do
       answered = Lead.create!(name: "Tashi Lama", email: "tashi@example.com", phone: "+14155550191", source: "meta_ads")
@@ -413,7 +458,7 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "lost, archived, converted, and existing-client ad inquiries keep the usual call rules without a text reminder" do
+  test "lost, archived, converted, and existing-client ad inquiries get no text reminder or time-of-day guidance" do
     existing = nil
     travel_to Time.zone.local(2026, 11, 2, 10, 0) do
       client = Client.create!(name: "Lhakpa Sherpa", email: "lhakpa@example.com")
@@ -485,6 +530,25 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
         assert_equal "240", input["maxlength"]
       end
     end
+
+    travel 1.hour
+    post lead_calls_path(lead), params: { save_key: "video-call-2", outcome: "no_answer", direction: "outbound" }
+    assert_equal "Call logged: No answer.", flash[:notice]
+    assert_not lead.activity_events.find_by!(idempotency_key: "video-call-2").metadata.key?("video_source")
+    get lead_path(lead)
+    assert_select ".calls-recent li", text: /No answer/ do |items|
+      items.each { |item| assert_no_match(/Video:/, item.text) }
+    end
+    assert_select "#record-details dd", text: "Everest vs Annapurna helicopter opener"
+
+    travel 1.hour
+    post lead_calls_path(lead), params: { save_key: "video-call-3", outcome: "connected", direction: "outbound",
+      video_source: "Annapurna base camp reel" }
+    get lead_path(lead)
+    assert_select "#record-details dd", text: "Annapurna base camp reel"
+    assert_select "#record-details dd", text: "Everest vs Annapurna helicopter opener", count: 0
+    assert_select ".calls-recent li", text: /Video: Everest vs Annapurna helicopter opener/
+    assert_not lead.reload.metadata.to_h.key?("video_source")
   end
 
   test "an over-long video answer is shortened and the call is still logged" do
