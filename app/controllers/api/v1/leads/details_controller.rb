@@ -36,7 +36,10 @@ module Api
           if received && received < 24.hours.ago
             return render json: { error: "expired" }, status: :gone
           end
-          updates, errors = extract_updates(payload)
+          updates, trip_meta, party_meta, errors = extract_updates(payload)
+          if payload.key?("attribution") && !payload["attribution"].is_a?(Hash) && !payload["attribution"].nil?
+            errors["attribution"] = "invalid"
+          end
           answer = payload["source_answer"]
           if payload.key?("source_answer")
             if !answer.is_a?(Hash) || !::SourceHistory::ANSWERS.key?(answer["code"]) ||
@@ -71,6 +74,16 @@ module Api
 
             phone_raw = updates.delete("phone_raw")
             lead.assign_attributes(updates)
+            if trip_meta.any?
+              existing_trip = (lead.metadata || {})["trip"]
+              merged_trip = (existing_trip.is_a?(Hash) ? existing_trip : {}).merge(trip_meta).compact
+              lead.metadata = (lead.metadata || {}).merge("trip" => merged_trip)
+            end
+            if party_meta.any?
+              existing_party = (lead.metadata || {})["party"]
+              merged_party = (existing_party.is_a?(Hash) ? existing_party : {}).merge(party_meta).compact
+              lead.metadata = (lead.metadata || {}).merge("party" => merged_party)
+            end
             if phone_raw.present? && lead.phone.blank? && lead.phone_raw.blank?
               lead.phone_raw = phone_raw
               lead.phone = ::Leads::Phone.normalize(phone_raw, country: lead.country)
@@ -86,6 +99,10 @@ module Api
                 lead.source_choice = answer["code"]
                 lead.reported_source_detail = detail
               end
+            end
+            raw_incoming_attr = payload["attribution"].is_a?(Hash) ? payload["attribution"] : {}
+            if payload["page"].is_a?(Hash) && raw_incoming_attr["landing_url"].blank? && payload.dig("page", "url").present?
+              raw_incoming_attr = raw_incoming_attr.merge("landing_url" => payload.dig("page", "url"))
             end
             if acquisition
               previous = (lead.metadata || {})["acquisition"] || {}
@@ -122,8 +139,33 @@ module Api
                 lead.campaign_name = nil
                 lead.source = "website_form" if %w[google_ads meta_ads].include?(lead.source)
               end
-              lead.metadata = (lead.metadata || {}).merge("acquisition" => acquisition,
-                "attribution" => ::Leads::Acquisition.legacy_attribution((lead.metadata || {})["attribution"] || {}, acquisition: acquisition))
+              existing_attr = (lead.metadata || {})["attribution"] || {}
+              input_for_legacy = raw_incoming_attr.any? ? existing_attr.merge(raw_incoming_attr) : existing_attr.slice("referral_code")
+              new_attribution = ::Leads::Acquisition.legacy_attribution(input_for_legacy, acquisition: acquisition)
+              if ::Leads::Acquisition.permitted?(acquisition) && raw_incoming_attr.any?
+                extra = ::Leads::Acquisition.legacy_attribution(raw_incoming_attr)
+                new_attribution = extra.merge(new_attribution)
+              end
+              lead.metadata = (lead.metadata || {}).merge("acquisition" => acquisition, "attribution" => new_attribution)
+              if ::Leads::Acquisition.permitted?(acquisition)
+                derived_source = ::Leads.derive_source(new_attribution)
+                lead.source = derived_source if lead.source == "website_form" && derived_source != "website_form"
+                if lead.campaign_name.blank?
+                  lead.campaign_name = (new_attribution["utm_campaign"].to_s.strip.presence || new_attribution["campaign_id"].to_s.strip.presence)&.truncate(160)
+                end
+              end
+            elsif raw_incoming_attr.any?
+              existing_acquisition = (lead.metadata || {})["acquisition"]
+              if existing_acquisition.nil? || ::Leads::Acquisition.permitted?(existing_acquisition)
+                existing_attr = (lead.metadata || {})["attribution"] || {}
+                merged_attr = existing_attr.merge(::Leads::Acquisition.legacy_attribution(raw_incoming_attr))
+                lead.metadata = (lead.metadata || {}).merge("attribution" => merged_attr)
+                derived_source = ::Leads.derive_source(merged_attr)
+                lead.source = derived_source if lead.source == "website_form" && derived_source != "website_form"
+                if lead.campaign_name.blank?
+                  lead.campaign_name = (merged_attr["utm_campaign"].to_s.strip.presence || merged_attr["campaign_id"].to_s.strip.presence)&.truncate(160)
+                end
+              end
             end
             call_note = nil
             if call_request && (lead.metadata || {}).dig("call_request")&.except("requested_at") != call_request
@@ -220,7 +262,11 @@ module Api
             end
           end
 
-          [ updates, errors ]
+          dropdown_updates, trip_meta, party_meta, dropdown_errors = ::Leads.extract_inquiry_dropdowns(payload)
+          updates = dropdown_updates.merge(updates)
+          errors.merge!(dropdown_errors)
+
+          [ updates, trip_meta, party_meta, errors ]
         end
       end
     end

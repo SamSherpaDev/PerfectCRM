@@ -11,7 +11,8 @@ class CallsController < ApplicationController
     # One-tap buttons send no time: the call happened now.
     occurred_at = params[:occurred_at].present? ? Time.zone.parse(params[:occurred_at].to_s) : Time.current
     event = CallLog.record!(inquiry, key: params[:save_key], occurred_at: occurred_at,
-      outcome: params[:outcome], direction: params[:direction], duration: params[:duration]) do |logged_event|
+      outcome: params[:outcome], direction: params[:direction], duration: params[:duration],
+      video_source: params[:video_source]) do |logged_event|
       ScheduledCall.complete_due_by!(logged_event)
     end
     redirect_to back, notice: CallLog.notice(event)

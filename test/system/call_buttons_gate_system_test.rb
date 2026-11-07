@@ -59,7 +59,7 @@ class CallButtonsGateSystemTest < ApplicationSystemTestCase
     capture_calls("phone-call-buttons")
   end
 
-  test "tapping No answer and Voicemail for three unanswered attempts on an Unsure lead moves it to Not interested with a timeline note and supports manual undo" do
+  test "tapping No answer and Voicemail for three unanswered attempts on an Unsure lead moves it to Re-contact with a timeline note and supports manual undo" do
     lead = Lead.create!(name: "Don Campbell System", email: "three-vm-sys@example.com")
     lead.mark_unsure!
     CallLog.record!(lead, key: "sys-3vm-1", occurred_at: 3.days.ago, outcome: "voicemail", direction: "outbound")
@@ -74,24 +74,25 @@ class CallButtonsGateSystemTest < ApplicationSystemTestCase
     within(".calls") do
       tolerate_submit_navigation { click_button "Voicemail" }
     end
-    tolerate_navigation_assertion { assert_text "Call logged: Voicemail. Moved to Not interested after three unanswered calls." }
+    tolerate_navigation_assertion { assert_text "Call logged: Voicemail. Moved to Re-contact after three unanswered calls." }
 
-    assert_selector "[role=alert][aria-label='Not interested warning']", text: "Not interested - do not contact"
-    assert_selector ".timeline", text: "Moved to Not interested automatically after three unanswered calls"
-    assert lead.reload.not_interested?
+    assert_selector "[role=region][aria-label='Re-contact list']", text: "Re-contact list"
+    assert_selector ".timeline", text: "Moved to Re-contact automatically after three unanswered calls"
+    assert lead.reload.recontact?
+    assert_not lead.not_interested?
     assert_not lead.unsure?
 
     visit leads_path(tab: "unsure", q: lead.name)
     assert_no_link lead.name
-    visit leads_path(tab: "not_interested", q: lead.name)
+    visit leads_path(tab: "recontact", q: lead.name)
     assert_link lead.name
 
-    within("li", text: lead.name) { click_button "Interested again" }
+    within("li", text: lead.name) { click_button "Restore from Re-contact" }
     assert_no_link lead.name
     visit leads_path(tab: "unsure", q: lead.name)
     assert_link lead.name
     assert lead.reload.unsure?
-    assert_not lead.not_interested?
+    assert_not lead.recontact?
   end
 
   def capture_calls(name)

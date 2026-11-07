@@ -122,9 +122,18 @@ flagged inquiries, `Reference: SH-XXXX`, and a direct link to the lead page.
 
 Source derivation: `google_ads` on `gclid`/`gbraid`/`wbraid`, or
 `utm_source=google` with a paid medium (`cpc`, `ppc`, `paid`); `meta_ads` on
-`facebook`/`instagram`/`meta`/`fb`/`ig` with a paid medium or `ad_id`;
+`facebook`/`instagram`/`meta`/`fb`/`ig` with a paid medium (`cpc`, `ppc`, `paid`,
+`paid_social`, `paidsocial`) or `ad_id`/`campaign_id`/`adset_id` (or `fbclid`
+with paid medium or `ad_id`/`campaign_id`/`adset_id`);
 `trade_show` on `utm_medium=event` (travel show booth links and QR codes); else
-`website_form`. `campaign_name` copies `utm_campaign`.
+`website_form`. `campaign_name` copies `utm_campaign`, falling back to
+`campaign_id` when `utm_campaign` is absent. Both `POST /api/v1/leads/intake`
+and `POST /api/v1/leads/intake/details` preserve `campaign_id`, `adset_id`,
+`ad_id`, `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term`,
+and `fbclid` across direct landing submissions and cross-page navigation when
+`acquisition.permission` is allowed, and surface them in the lead's source tag
+(`LeadsHelper#lead_source_label`) without inventing IDs for historical or
+untagged leads.
 With `acquisition`, this compatibility projection uses the eligible
 last-non-direct touch, falling back to the eligible last touch, and when
 `last_touch` is `unavailable` on a permission-allowed submission, falling back
@@ -265,7 +274,18 @@ the lead page shows the answers.
 
 Month accepts integers 1-12, year 2020-2100, and party size 1-20.
 Budget bands are defined by `Lead::BUDGET_BANDS`. These fields accept `null`
-to clear them; `timing_unknown` accepts only `true` or `false`. Invalid field
+to clear them; `timing_unknown` accepts only `true` or `false`. Both intake and
+details also accept optional inquiry qualification dropdowns (`Leads.extract_inquiry_dropdowns`):
+`trip.timing_window` (`within_3_months`, `3_to_6_months`, `6_to_12_months`,
+`12_plus_months`, `not_sure`), `party.size_band` (`1`, `2`, `3_4`, `5_8`,
+`9_plus`, `not_sure`), and `trip.intent` (`cultural_tour`, `trek`,
+`mixed_tour_walks`, `helicopter_lodge`, `expedition_climb`, `multi_country`,
+`ready_to_plan`, `comparing_options`, `need_guidance`, `early_research`,
+`not_sure`), plus optional display labels (`timing_label`, `size_label`,
+`intent_label`). Only exact bands `"1"` and `"2"` (or explicit integer
+`party.size`) set integer `Lead.party_size`; range bands (`3_4`, `5_8`,
+`9_plus`, `not_sure`) keep `Lead.party_size` `nil` and store the band in
+`metadata["party"]`. Invalid field
 values return `400`; model validation failures return `422`. Setting unknown
 timing does not clear stored dates; see [Leads](../README.md#leads) for display behavior.
 

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_06_154111) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_07_090558) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -429,6 +429,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_06_154111) do
     t.string "trip_title"
     t.datetime "unsure_marked_at"
     t.datetime "updated_at", null: false
+    t.datetime "recontact_marked_at"
+    t.date "recontact_on"
     t.index ["archived_at"], name: "index_leads_on_archived_at"
     t.index ["converted_client_id"], name: "index_leads_on_converted_client_id"
     t.index ["existing_client_id"], name: "index_leads_on_existing_client_id"
@@ -437,6 +439,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_06_154111) do
     t.index ["last_touch_at"], name: "index_leads_on_last_touch_at"
     t.index ["origin_lead_id"], name: "index_leads_on_origin_lead_id"
     t.index ["perfectbook_contact_id"], name: "index_leads_on_perfectbook_contact_id", unique: true, where: "perfectbook_contact_id IS NOT NULL AND converted_client_id IS NULL AND status != 'lost' AND archived_at IS NULL"
+    t.index ["recontact_marked_at"], name: "index_leads_on_recontact_marked_at"
+    t.index ["recontact_on"], name: "index_leads_on_recontact_on"
     t.index ["reference"], name: "index_leads_on_reference", unique: true, where: "reference IS NOT NULL AND reference != ''"
     t.index ["referred_by_client_id"], name: "index_leads_on_referred_by_client_id"
     t.index ["referred_by_organization_id"], name: "index_leads_on_referred_by_organization_id"

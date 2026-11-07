@@ -15,7 +15,11 @@ module Today
     CALL_LIST_WINDOW = 14.days
     CALL_CADENCE_STARTS_ON = Date.new(2026, 10, 20)
 
-    CallEntry = Data.define(:lead, :attempt, :attempt_label, :last_call, :waited_since)
+    CallEntry = Data.define(:lead, :attempt, :attempt_label, :last_call, :waited_since, :suggested_window) do
+      def initialize(lead:, attempt:, attempt_label:, last_call:, waited_since:, suggested_window: nil)
+        super
+      end
+    end
 
     ATTEMPT_LABELS = {
       1 => "1st try",
@@ -59,9 +63,9 @@ module Today
     # (a) inquiries from the last 24 hours with a phone and no call yet,
     #     newest first, so a fresh inquiry is always on top;
     # (b) leads with a phone whose calls never connected (Attempted,
-    #     Voicemail, or No answer) and that are due another try (attempt 2
-    #     due 1 day after attempt 1; attempt 3 due 2 days after attempt 2;
-    #     at most 3 attempts);
+    #     Voicemail, or No answer) and that are due another try across
+    #     3 consecutive days at varied times (attempt 2 due 1 day after
+    #     attempt 1; attempt 3 due 1 day after attempt 2; at most 3 attempts);
     # (c) older uncalled inquiries up to 14 days old, oldest first.
     # Calls logged before CALL_CADENCE_STARTS_ON belong to the separate
     # backlog call sheet: such a lead stays off the list until a new call
@@ -69,8 +73,9 @@ module Today
     # A cadence is the run of calls within 14 days before the latest call,
     # and a lead leaves the list once its latest call is over 14 days old.
     # Leads drop off once a call connects, they are marked Not interested,
-    # spam or archived, have a scheduled call, or have used 3 attempts. An
-    # open call booked on a client also takes that client's open inquiries off.
+    # Re-contact, spam or archived, have a scheduled call, or have used 3
+    # attempts. An open call booked on a client also takes that client's
+    # open inquiries off.
     # Leads flagged as suspected spam stay on the list for a check.
     def call_entries
       @call_entries ||= begin
@@ -80,7 +85,7 @@ module Today
           .where("activity_events.subject_id = leads.id").where("activity_events.occurred_at >= ?", [ window_start, cadence_start ].max)
         booked_clients = ScheduledCall.visible.scheduled.where.not(client_id: nil).select(:client_id)
         candidates = Lead.open
-          .where(not_interested_marked_at: nil, spam_marked_at: nil)
+          .where(not_interested_marked_at: nil, recontact_marked_at: nil, spam_marked_at: nil)
           .where("TRIM(COALESCE(leads.phone, '')) <> '' OR TRIM(COALESCE(leads.phone_raw, '')) <> ''")
           .where("(leads.status = 'new' AND COALESCE(leads.received_at, leads.created_at) >= ?) OR EXISTS (#{recently_called.select(:id).to_sql})", window_start)
           .where.not(id: ScheduledCall.scheduled.where.not(lead_id: nil).select(:lead_id))
@@ -107,7 +112,8 @@ module Today
               attempt: 1,
               attempt_label: ATTEMPT_LABELS.fetch(1),
               last_call: nil,
-              waited_since: waited_since
+              waited_since: waited_since,
+              suggested_window: nil
             )
             (waited_since >= @now - FRESH_INQUIRY_WITHIN ? fresh : older) << entry
             next
@@ -121,7 +127,7 @@ module Today
           next if cadence.any? { |call| call_connected?(call) }
 
           attempt = cadence.size + 1
-          days_wait = attempt == 2 ? 1 : 2
+          days_wait = 1
           due = last_call.occurred_at <= @now - days_wait.days ||
             last_call.occurred_at.in_time_zone.to_date <= @today - days_wait.days
           next unless due
@@ -131,7 +137,8 @@ module Today
             attempt: attempt,
             attempt_label: ATTEMPT_LABELS.fetch(attempt),
             last_call: last_call,
-            waited_since: waited_since
+            waited_since: waited_since,
+            suggested_window: CallLog.suggested_time_window(cadence)
           )
         end
 

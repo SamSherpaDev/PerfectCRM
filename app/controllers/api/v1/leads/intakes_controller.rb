@@ -207,12 +207,34 @@ module Api
           consent = payload["consent"].is_a?(Hash) ? payload["consent"] : {}
           errors["consent.contact"] = "invalid" unless consent["contact"] == true
 
+          dropdown_updates, dropdown_trip_meta, dropdown_party_meta, dropdown_errors = ::Leads.extract_inquiry_dropdowns(payload)
+          errors.merge!(dropdown_errors)
+
+          party = payload["party"].is_a?(Hash) ? payload["party"] : {}
+          if party.key?("size")
+            size = party["size"]
+            if size.nil?
+              dropdown_updates["party_size"] = nil
+            elsif size.is_a?(Integer) && size.between?(1, 20)
+              dropdown_updates["party_size"] = size
+            else
+              errors["party.size"] = "invalid"
+            end
+          end
+
           if errors.any?
             @validation_fields = errors
             return nil
           end
 
-          { name: name, email: email.presence, phone: phone }
+          {
+            name: name,
+            email: email.presence,
+            phone: phone,
+            dropdown_updates: dropdown_updates,
+            dropdown_trip_meta: dropdown_trip_meta,
+            dropdown_party_meta: dropdown_party_meta
+          }
         end
 
         def valid_email?(email)
@@ -257,8 +279,10 @@ module Api
           trip = payload["trip"].is_a?(Hash) ? payload["trip"] : {}
           matched_trip = itinerary&.dig("base_trip") || quiz&.dig("match") || {}
           structured = itinerary || quiz
-          attribution = ::Leads::Acquisition.legacy_attribution(payload["attribution"].is_a?(Hash) ? payload["attribution"] : {}, acquisition: acquisition)
           raw_page = payload["page"].is_a?(Hash) ? payload["page"] : {}
+          raw_attribution = payload["attribution"].is_a?(Hash) ? payload["attribution"] : {}
+          raw_attribution = raw_attribution.merge("landing_url" => raw_page["url"]) if raw_attribution["landing_url"].blank? && raw_page["url"].present?
+          attribution = ::Leads::Acquisition.legacy_attribution(raw_attribution, acquisition: acquisition)
           page = { "url" => ::Leads::Acquisition.safe_url(raw_page["url"]), "referrer" => ::Leads::Acquisition.host(raw_page["referrer"]),
             "locale" => raw_page["locale"].to_s.first(20), "template" => raw_page["template"].to_s.first(120) }
           page.except!("url", "referrer") if acquisition && !::Leads::Acquisition.permitted?(acquisition)
@@ -283,6 +307,18 @@ module Api
           placement = nil unless ::Lead::PLACEMENTS.include?(placement)
           now = Time.current
 
+          dropdown_updates = fields[:dropdown_updates] || {}
+          dropdown_trip_meta = (fields[:dropdown_trip_meta] || {}).compact
+          dropdown_party_meta = (fields[:dropdown_party_meta] || {}).compact
+          party_size = dropdown_updates.key?("party_size") ? dropdown_updates["party_size"] : structured&.dig("group_size")
+          timing_unknown = if dropdown_updates.key?("timing_unknown")
+            dropdown_updates["timing_unknown"]
+          elsif structured&.dig("season") == "not_sure"
+            true
+          else
+            false
+          end
+
           lead = ::Lead.new(
             name: fields[:name],
             email: fields[:email],
@@ -292,15 +328,16 @@ module Api
             referral_code: referral_code_from(attribution),
             trip_handle: (trip["handle"].to_s.strip.presence || matched_trip["handle"])&.truncate(120),
             trip_title: (trip["title"].to_s.strip.presence || matched_trip["title"])&.truncate(160),
-            party_size: structured&.dig("group_size"),
-            timing_unknown: (true if structured&.dig("season") == "not_sure"),
+            trip_interest: trip["interest"].to_s.strip.presence&.truncate(160),
+            party_size: party_size,
+            timing_unknown: timing_unknown,
             message: payload["message"].to_s.strip.presence&.truncate(4000),
             consent_contact_at: (Time.zone.parse(consent["contact_at"].to_s) rescue nil),
             consent_text_version: consent["text_version"].to_s.strip.presence&.truncate(64),
             placement: placement,
             capture_channel: "website_form",
             source: ::Leads.derive_source(attribution),
-            campaign_name: attribution["utm_campaign"].to_s.strip.presence&.truncate(160),
+            campaign_name: (attribution["utm_campaign"].to_s.strip.presence || attribution["campaign_id"].to_s.strip.presence)&.truncate(160),
             external_ref: external_ref,
             spam_score: score,
             archived_at: (now if auto_archived),
@@ -316,7 +353,10 @@ module Api
               "suspicion_hits" => hits.map(&:to_s),
               "ip_hash" => Digest::SHA256.hexdigest(request.remote_ip.to_s),
               "user_agent" => request.user_agent.to_s.truncate(300)
-            }.merge(itinerary ? { "itinerary" => itinerary } : {}).merge(quiz ? { "quiz" => quiz } : {})
+            }.merge(dropdown_trip_meta.any? ? { "trip" => dropdown_trip_meta } : {})
+             .merge(dropdown_party_meta.any? ? { "party" => dropdown_party_meta } : {})
+             .merge(itinerary ? { "itinerary" => itinerary } : {})
+             .merge(quiz ? { "quiz" => quiz } : {})
           )
           lead.tag_list = ::Lead::SUSPECTED_SPAM_TAG if score.positive?
           lead
