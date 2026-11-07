@@ -1146,15 +1146,41 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "intake stores inquiry dropdown answers without inventing exact party sizes" do
-    post_intake intake_body("trip" => { "timing_window" => "3_to_6_months", "intent" => "helicopter_lodge" },
-      "party" => { "size_band" => "3_4", "size_label" => "3 to 4 of us" })
+  test "Meta ads tagging keeps the existing paid-medium or ad_id rule" do
+    assert_equal "meta_ads", Leads.derive_source("utm_source" => "facebook", "utm_medium" => "paid")
+    assert_equal "meta_ads", Leads.derive_source("utm_source" => "ig", "utm_medium" => "social", "ad_id" => "52670563689538")
+    [
+      { "utm_source" => "facebook", "utm_medium" => "paid_social" },
+      { "utm_source" => "instagram", "utm_medium" => "paidsocial" },
+      { "utm_source" => "facebook", "utm_medium" => "social", "campaign_id" => "52666579688338" },
+      { "utm_source" => "facebook", "utm_medium" => "social", "adset_id" => "52666579688138" },
+      { "utm_source" => "meta_ads", "utm_medium" => "paid_social" },
+      { "fbclid" => "IwAR-click", "ad_id" => "52670563689538" },
+      { "fbclid" => "IwAR-click", "campaign_id" => "52666579688338", "utm_medium" => "paid_social" }
+    ].each do |attribution|
+      assert_equal "website_form", Leads.derive_source(attribution), attribution.inspect
+    end
+  end
+
+  test "the source tag keeps a supplied utm_term even when it repeats the ad set ID" do
+    lead = Lead.new(name: "Term Lead", source: "meta_ads", campaign_name: "sh_us_cold_cbo", metadata: { "attribution" => {
+      "utm_campaign" => "sh_us_cold_cbo", "campaign_id" => "52666579688338", "adset_id" => "52666579688138",
+      "ad_id" => "52670563689538", "utm_term" => "52666579688138"
+    } })
+    assert_equal "Meta ads · sh_us_cold_cbo · campaign 52666579688338 · ad 52670563689538 · utm_term=52666579688138", source_tag(lead)
+  end
+
+  test "intake stores inquiry dropdown codes with the CRM's approved wording and without inventing exact party sizes" do
+    post_intake intake_body("trip" => { "timing_window" => "3_to_6_months", "timing_label" => "Spring-ish", "intent" => "helicopter_lodge",
+      "intent_label" => "Chopper trip" }, "party" => { "size_band" => "3_4", "size_label" => "3 to 4 of us" })
     assert_response :accepted
     lead = Lead.find(response.parsed_body["id"])
     assert_nil lead.party_size
-    assert_equal [ "3_4", "3 to 4 of us" ], [ lead.party_size_band, lead.party_size_band_label ]
+    assert_equal [ "3_4", "3 to 4 travelers" ], [ lead.party_size_band, lead.party_size_band_label ]
     assert_equal [ "3_to_6_months", "In 3 to 6 months" ], [ lead.timing_window, lead.timing_window_label ]
     assert_equal [ "helicopter_lodge", "Everest by air or helicopter-supported lodge trip" ], [ lead.trip_intent, lead.trip_intent_label ]
+    assert_equal({ "timing_window" => "3_to_6_months", "intent" => "helicopter_lodge" }, lead.metadata["trip"])
+    assert_equal({ "size_band" => "3_4" }, lead.metadata["party"])
     assert_equal false, lead.timing_unknown
 
     post_intake intake_body("contact" => { "name" => "Pair Traveler", "email" => "pair@gmail.com" },
@@ -1187,6 +1213,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     assert_nil lead.party_size_band
     assert_nil lead.metadata["party"]
     assert_equal [ "trek", "Private Himalayan trek (lodge-to-lodge)" ], [ lead.trip_intent, lead.trip_intent_label ]
+    assert_equal({ "intent" => "trek" }, lead.metadata["trip"])
     assert_not_includes lead.metadata.to_json, "next_century"
     assert_not_includes lead.metadata.to_json, "A hundred"
 

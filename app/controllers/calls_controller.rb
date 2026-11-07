@@ -5,7 +5,8 @@ class CallsController < ApplicationController
   def create
     record = params[:client_id].present? ? Client.find(params[:client_id]) : Lead.find(params[:lead_id])
     inquiry = record.is_a?(Client) ? record.inquiries.find(params[:inquiry_id]) : record
-    back = safe_today_return_path(params[:return_to].to_s) || record_path_keeping_list(record, anchor: "record-details")
+    today = safe_today_return_path(params[:return_to].to_s)
+    back = today || record_path_keeping_list(record, anchor: "record-details")
     return redirect_to back, alert: "Restore this record before logging a call." if record.archived?
 
     # One-tap buttons send no time: the call happened now.
@@ -15,7 +16,7 @@ class CallsController < ApplicationController
       video_source: params[:video_source]) do |logged_event|
       ScheduledCall.complete_due_by!(logged_event)
     end
-    redirect_to back, notice: CallLog.notice(event)
+    redirect_to back, notice: CallLog.notice(event, with_text: today.present?)
   rescue ArgumentError, TypeError
     redirect_to back, alert: "Check the call time, outcome and duration."
   end

@@ -39,12 +39,12 @@ module RecordsHelper
     elsif lead.respond_to?(:party_size_band_label) && lead.party_size_band_label.present?
       parts << lead.party_size_band_label
     end
-    if lead.respond_to?(:timing_window_label) && lead.timing_window_label.present?
-      parts << lead.timing_window_label
-    elsif lead.timing_unknown?
+    if lead.timing_unknown?
       parts << "Timing unknown"
     elsif lead.travel_month.present? || lead.travel_year.present?
       parts << [ (Date::MONTHNAMES[lead.travel_month] if lead.travel_month), lead.travel_year ].compact.join(" ")
+    elsif lead.respond_to?(:timing_window_label) && lead.timing_window_label.present?
+      parts << lead.timing_window_label
     end
     parts.join(" · ").presence
   end

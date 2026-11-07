@@ -122,9 +122,7 @@ flagged inquiries, `Reference: SH-XXXX`, and a direct link to the lead page.
 
 Source derivation: `google_ads` on `gclid`/`gbraid`/`wbraid`, or
 `utm_source=google` with a paid medium (`cpc`, `ppc`, `paid`); `meta_ads` on
-`facebook`/`instagram`/`meta`/`fb`/`ig` with a paid medium (`cpc`, `ppc`, `paid`,
-`paid_social`, `paidsocial`) or `ad_id`/`campaign_id`/`adset_id` (or `fbclid`
-with paid medium or `ad_id`/`campaign_id`/`adset_id`);
+`facebook`/`instagram`/`meta`/`fb`/`ig` with a paid medium or `ad_id`;
 `trade_show` on `utm_medium=event` (travel show booth links and QR codes); else
 `website_form`. `campaign_name` copies `utm_campaign` only (it stays empty
 when `utm_campaign` is absent, so the inquiry email, reports, and webhook keep
@@ -285,22 +283,22 @@ refreshes the projection, and a rejected details post (`400`) leaves the
 initial intake's attribution unchanged.
 
 Both intake and details also accept three optional qualification dropdowns
-(`Leads.extract_inquiry_dropdowns`), each a code plus an optional display label
-of up to 120 characters (the CRM's own label is stored when none is sent):
+(`Leads.extract_inquiry_dropdowns`), each sent as a code:
 `trip.timing_window` (`within_3_months`, `3_to_6_months`, `6_to_12_months`,
-`12_plus_months`, `not_sure`) with `trip.timing_label`; `party.size_band` (`1`,
-`2`, `3_4`, `5_8`, `9_plus`, `not_sure`) with `party.size_label`; and
-`trip.intent` (`cultural_tour`, `trek`, `mixed_tour_walks`, `helicopter_lodge`,
-`expedition_climb`, `multi_country`, `not_sure`) with `trip.intent_label`.
-Answers are stored in `metadata["trip"]` and `metadata["party"]`. Bands `"1"`
+`12_plus_months`, `not_sure`); `party.size_band` (`1`, `2`, `3_4`, `5_8`,
+`9_plus`, `not_sure`); and `trip.intent` (`cultural_tour`, `trek`,
+`mixed_tour_walks`, `helicopter_lodge`, `expedition_climb`, `multi_country`,
+`not_sure`). Only the codes are stored, in `metadata["trip"]` and
+`metadata["party"]`; the CRM owns the approved option wording
+(`Leads::TIMING_WINDOWS`, `Leads::PARTY_SIZE_BANDS`, `Leads::TRIP_INTENTS`)
+and ignores any display label a client sends. Bands `"1"`
 and `"2"` set `Lead.party_size` to 1 or 2; range bands leave it `nil` unless
 details also sends an explicit integer `party.size`. A timing window sets
 `timing_unknown` (`true` only for `not_sure`) unless `trip.month`, `trip.year`,
 or an explicit `trip.timing_unknown` is sent; with no answer it stays `nil`.
-The options await approval and may change, so intake never rejects an inquiry
-over them: an unknown code or invalid label is dropped (a valid code keeps the
-CRM label) and the lead is saved. Details stays strict: there, an unknown code
-or invalid label is a `400` and changes nothing. Invalid field
+Intake never rejects an inquiry over them: an unknown code is dropped and the
+lead is saved. Details stays strict: there, an unknown code is a `400` and
+changes nothing. Invalid field
 values return `400`; model validation failures return `422`. Setting unknown
 timing does not clear stored dates; see [Leads](../README.md#leads) for display behavior.
 

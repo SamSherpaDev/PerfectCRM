@@ -9,11 +9,15 @@ module CallLog
   ONE_TAP = %w[connected voicemail no_answer].freeze
   NOT_INTERESTED_CONFIRM = "This lead is marked not interested. Log an outbound call anyway?"
   AUTO_RECONTACT_CALLS = 3
-  AUTO_NOT_INTERESTED_CALLS = AUTO_RECONTACT_CALLS
   AUTO_RECONTACT_SUMMARY = "Moved to Re-contact automatically after three unanswered calls"
   AUTO_NOT_INTERESTED_SUMMARY = "Moved to Not interested automatically after three unanswered calls"
   REPLIED_AFTER_AUTO_MOVE_SUMMARY = "Moved back to Unsure: they replied after the automatic move."
   TIME_WINDOWS = %w[morning afternoon evening].freeze
+  # Approved wording; the captain copies, edits, and sends it by hand.
+  MISSED_CALL_TEXT = "Hi {{first_name}}, this is Sam at SherpaHolidays. I just tried giving you a quick call about your trip inquiry. " \
+    "When is a good time for us to connect by phone, or is text easier for you?"
+  MISSED_CALL_TEXT_NO_NAME = "Hi, this is Sam at SherpaHolidays. I just tried giving you a quick call about your trip inquiry. " \
+    "When is a good time for us to connect by phone, or is text easier for you?"
   module_function
 
   def record!(record, key:, occurred_at:, outcome:, direction:, duration: nil, video_source: nil)
@@ -49,7 +53,12 @@ module CallLog
             occurred_at: event.occurred_at, metadata: event.metadata.merge("from_lead_id" => record.id, "from_lead_event_id" => event.id))
       end
       yield event if block_given?
-      if existing.nil? && event.metadata["direction"] == "outbound" && UNANSWERED_OUTCOMES.include?(event.metadata["outcome"])
+      inbound = event.metadata["direction"] == "inbound"
+      if existing.nil? && (inbound || event.metadata["outcome"] == "connected")
+        if record.recontact? && !three_unanswered_calls?(record)
+          restore_automatic_recontact!(record, inbound ? "they called" : "they answered a call")
+        end
+      elsif existing.nil? && UNANSWERED_OUTCOMES.include?(event.metadata["outcome"])
         move_after_three_unanswered_calls!(record, event: event)
       end
       event
@@ -82,26 +91,39 @@ module CallLog
     TIME_WINDOWS[(TIME_WINDOWS.index(tried.last).to_i + 1) % TIME_WINDOWS.size]
   end
 
-  def notice(event)
+  def notice(event, with_text: false)
     lead = event.subject
     moved = if lead.recontact? && lead.activity_events.exists?(kind: "recontact", idempotency_key: event.idempotency_key)
       " Moved to Re-contact after three unanswered calls."
     elsif lead.not_interested? && lead.activity_events.exists?(kind: "not_interested", idempotency_key: event.idempotency_key)
       " Moved to Not interested after three unanswered calls."
     end
+    logged = "Call logged: #{LABELS.fetch(event.metadata['outcome'])}.#{moved}"
     reminder = missed_call_reminder(lead, event)
-    "Call logged: #{LABELS.fetch(event.metadata['outcome'])}.#{moved}#{" Send a short text by hand. #{reminder}" if reminder}"
+    return logged unless reminder
+
+    "#{logged} Send a short text by hand. #{reminder}#{" Suggested text: #{missed_call_text(lead)}" if with_text}"
+  end
+
+  def missed_call_text(lead)
+    first_name = lead.name.to_s.split.first
+    first_name ? MISSED_CALL_TEXT.sub("{{first_name}}", first_name) : MISSED_CALL_TEXT_NO_NAME
   end
 
   def missed_call_reminder(lead, call)
-    return unless call && lead.ad_lead? && !lead.not_interested?
+    return unless call && lead.ad_call_routine?
 
     attempts = unanswered_attempts(lead)
     return unless attempts.last == call
 
     if lead.recontact?
-      date = " for #{lead.recontact_on.strftime('%b %-d, %Y')}" if lead.recontact_on
-      "#{attempts.size} unanswered #{'attempt'.pluralize(attempts.size)} logged · on the Re-contact list#{date}."
+      return unless lead.recontact_on
+
+      if call.occurred_at >= lead.recontact_on.in_time_zone.beginning_of_day
+        "Re-contact follow-up missed · set a new date 3 or 6 months out or choose Restore from Re-contact."
+      elsif !lead.recontact_due?
+        "On the Re-contact list until #{lead.recontact_on.strftime('%b %-d, %Y')}."
+      end
     elsif attempts.size < AUTO_RECONTACT_CALLS
       "Attempt #{attempts.size} of #{AUTO_RECONTACT_CALLS} logged · try attempt #{attempts.size + 1} next day in the #{suggested_time_window(attempts)}."
     else
@@ -110,15 +132,16 @@ module CallLog
   end
 
   # Outbound unanswered calls since the latest response or restore, oldest
-  # first, at most AUTO_RECONTACT_CALLS.
+  # first, at most AUTO_RECONTACT_CALLS. The ad-lead routine counts one
+  # attempt per CRM-local day, keeping that day's latest call.
   def unanswered_attempts(record)
-    record.activity_events.where(kind: "call")
+    attempts = record.activity_events.where(kind: "call")
       .where("json_extract(metadata, '$.outcome') IN (?) AND json_extract(metadata, '$.direction') = 'outbound'", UNANSWERED_OUTCOMES)
       .order(occurred_at: :desc, id: :desc)
-      .limit(AUTO_RECONTACT_CALLS)
-      .to_a
+      .to_a.lazy
       .take_while { |call| !responded_since?(record, call) }
-      .reverse
+    attempts = attempts.uniq { |call| call.occurred_at.in_time_zone.to_date } if record.ad_call_routine?
+    attempts.first(AUTO_RECONTACT_CALLS).reverse
   end
 
   def three_unanswered_calls?(record)
@@ -196,21 +219,24 @@ module CallLog
     moved
   end
 
+  def restore_automatic_recontact!(lead, reason)
+    move = lead.activity_events.where(kind: "recontact").order(:id).last
+    return false unless lead.recontact? && move && lead.recontact_marked_at <= move.created_at
+
+    place = if lead.unsure_marked_at.present? then "Unsure"
+    elsif lead.status == "quoted" then "Quoted"
+    else "New"
+    end
+    lead.unmark_recontact!(summary: "Moved back to #{place}: #{reason} after the automatic move.", actor: "automatic")
+    true
+  end
+
   def restore_after_reply!(message)
     sender = message.from_address.to_s.strip.downcase
     Lead.recontact.where(email: sender)
       .or(Lead.recontact.where(id: Person.where(email: sender).select(:lead_id)))
       .find_each do |lead|
-        lead.with_lock do
-          move = lead.activity_events.where(kind: "recontact").order(:id).last
-          next unless lead.recontact? && move && lead.recontact_marked_at <= move.created_at
-
-          place = if lead.unsure_marked_at.present? then "Unsure"
-          elsif lead.status == "quoted" then "Quoted"
-          else "New"
-          end
-          lead.unmark_recontact!(summary: "Moved back to #{place}: they replied after the automatic move.", actor: "automatic")
-        end
+        lead.with_lock { restore_automatic_recontact!(lead, "they replied") }
       end
     Lead.not_interested.where(email: sender)
       .or(Lead.not_interested.where(id: Person.where(email: sender).select(:lead_id)))

@@ -45,9 +45,14 @@
             <% end %>
           </ul>
           <% if (reminder = CallLog.missed_call_reminder(inquiry, recent.first)) %>
-            <div class="missed-call-reminder mt-3 rounded border border-rule-2 p-3 text-xs" data-missed-call-reminder>
+            <div class="missed-call-reminder mt-3 rounded border border-rule-2 p-3 text-xs" data-missed-call-reminder data-controller="copy-message">
               <p class="font-medium text-ink">Missed call (<%= CallLog::LABELS.fetch(recent.first.metadata["outcome"]) %>) - send a short text by hand</p>
               <p class="mt-1 muted"><%= reminder %></p>
+              <%= text_area_tag "missed_call_text", CallLog.missed_call_text(inquiry), id: nil, rows: 4, class: "input mt-2 text-xs", aria: { label: "Text to send by hand" }, data: { copy_message_target: "text" } %>
+              <div class="mt-2 flex items-center gap-2">
+                <button type="button" class="btn-secondary btn btn-xs" data-action="copy-message#copy">Copy text</button>
+                <span class="muted" role="status" data-copy-message-target="status"></span>
+              </div>
             </div>
           <% end %>
         <% else %>

@@ -66,8 +66,8 @@ module Today
     # (b) leads with a phone whose calls never connected (Attempted,
     #     Voicemail, or No answer) and that are due another try (attempt 2
     #     due 1 day after attempt 1; attempt 3 due 2 days after attempt 2, or
-    #     1 day for ad leads, which also get varied time-of-day guidance across
-    #     3 consecutive days; at most 3 attempts);
+    #     1 day for the ad-lead routine, which counts one attempt per day and
+    #     gets varied time-of-day guidance across 3 days; at most 3 attempts);
     # (c) Re-contact leads whose date has arrived and that have no call or
     #     open scheduled call since, earliest date first;
     # (d) older uncalled inquiries up to 14 days old, oldest first.
@@ -132,11 +132,14 @@ module Today
           next if last_call.occurred_at < window_start
 
           cadence = calls.select { |call| call.occurred_at >= last_call.occurred_at - CALL_LIST_WINDOW }
-          next if cadence.size >= MAX_CALL_ATTEMPTS
           next if cadence.any? { |call| call_connected?(call) }
 
+          routine = lead.ad_call_routine?
+          cadence = cadence.reverse.uniq { |call| call.occurred_at.in_time_zone.to_date }.reverse if routine
+          next if cadence.size >= MAX_CALL_ATTEMPTS
+
           attempt = cadence.size + 1
-          days_wait = attempt == 2 || lead.ad_lead? ? 1 : 2
+          days_wait = attempt == 2 || routine ? 1 : 2
           due = last_call.occurred_at <= @now - days_wait.days ||
             last_call.occurred_at.in_time_zone.to_date <= @today - days_wait.days
           next unless due
@@ -147,7 +150,7 @@ module Today
             attempt_label: ATTEMPT_LABELS.fetch(attempt),
             last_call: last_call,
             waited_since: waited_since,
-            suggested_window: (CallLog.suggested_time_window(cadence) if lead.ad_lead?)
+            suggested_window: (CallLog.suggested_time_window(cadence) if routine)
           )
         end
 

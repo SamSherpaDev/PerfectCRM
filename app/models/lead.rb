@@ -218,9 +218,7 @@ class Lead < ApplicationRecord
   end
 
   def timing_window_label
-    return nil unless metadata.is_a?(Hash)
-
-    metadata.dig("trip", "timing_label").to_s.strip.presence || ::Leads::TIMING_WINDOWS[timing_window]
+    ::Leads::TIMING_WINDOWS[timing_window]
   end
 
   def party_size_band
@@ -228,9 +226,7 @@ class Lead < ApplicationRecord
   end
 
   def party_size_band_label
-    return nil unless metadata.is_a?(Hash)
-
-    metadata.dig("party", "size_label").to_s.strip.presence || ::Leads::PARTY_SIZE_BANDS[party_size_band]
+    ::Leads::PARTY_SIZE_BANDS[party_size_band]
   end
 
   def trip_intent
@@ -238,9 +234,7 @@ class Lead < ApplicationRecord
   end
 
   def trip_intent_label
-    return nil unless metadata.is_a?(Hash)
-
-    metadata.dig("trip", "intent_label").to_s.strip.presence || ::Leads::TRIP_INTENTS[trip_intent]
+    ::Leads::TRIP_INTENTS[trip_intent]
   end
 
   def ad_lead?
@@ -325,10 +319,14 @@ class Lead < ApplicationRecord
     recontact? && recontact_on.present? && recontact_on <= today
   end
 
+  # Open ad inquiries from new people; existing clients keep the usual call rules.
+  def ad_call_routine?
+    ad_lead? && existing_client_id.nil? && status != "lost" && !archived? && !converted? && !not_interested?
+  end
+
   # Ad leads still in New (stage new) or Unsure; existing clients keep their place.
   def recontact_eligible?
-    ad_lead? && existing_client_id.nil? && status != "lost" &&
-      (unsure? || Lead.in_new_tab.where(status: "new").exists?(id))
+    ad_call_routine? && (unsure? || Lead.in_new_tab.where(status: "new").exists?(id))
   end
 
   def mark_recontact!

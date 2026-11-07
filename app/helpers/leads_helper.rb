@@ -12,8 +12,8 @@ module LeadsHelper
   LEAD_TAB_CAPTIONS = {
     "new" => "Leads you have not sorted yet. Mark Potential, Unsure, Not interested, or spam.",
     "potential" => "Leads you want to follow up with, across all stages. Remove Potential when you no longer need the reminder.",
-    "unsure" => "Leads you cannot call yet: voicemail, no reply, maybe spam. Move them on once you know. Three unanswered calls move an ad lead to Re-contact and any other lead to Not interested.",
-    "recontact" => "Ad leads who did not answer three call attempts. Held for a 3-to-6-month re-contact date; due ones show on Today. Never contacted automatically.",
+    "unsure" => "Leads you cannot call yet: voicemail, no reply, maybe spam. Move them on once you know. Unanswered calls on three different days move a new ad lead to Re-contact; three unanswered calls move any other lead to Not interested.",
+    "recontact" => "Ad leads who did not answer call attempts on three different days. Held for a 3-to-6-month re-contact date; due ones show on Today until the follow-up call, then wait for a new date or Restore. Never contacted automatically.",
     "not_interested" => "Leads who said they are not interested or did not answer three calls. Kept out of call lists, follow-ups, and automatic emails. Choose Interested again to restore.",
     "missing_source" => "All inquiries without a discovery answer, including converted records. Tests and spam stay out.",
     "archived" => "Archived, spam, and lost leads. Restore an archived lead any time."
@@ -48,7 +48,7 @@ module LeadsHelper
     if ev["utm_content"].present? && ev["utm_content"] != ev["ad_id"] && ev["utm_content"] != campaign
       parts << "utm_content=#{ev['utm_content']}"
     end
-    if ev["utm_term"].present? && ev["utm_term"] != ev["adset_id"] && ev["utm_term"] != campaign
+    if ev["utm_term"].present? && ev["utm_term"] != campaign
       parts << "utm_term=#{ev['utm_term']}"
     end
     parts.join(" · ")

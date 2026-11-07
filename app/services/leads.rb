@@ -5,8 +5,7 @@
 # verification, source derivation, suspicion scoring, and rate limiting.
 module Leads
   PAID_MEDIUMS = %w[cpc ppc paid].freeze
-  META_PAID_MEDIUMS = (PAID_MEDIUMS + %w[paid_social paidsocial]).freeze
-  META_SOURCES = %w[facebook instagram meta fb ig meta_ads].freeze
+  META_SOURCES = %w[facebook instagram meta fb ig].freeze
   TIMING_WINDOWS = {
     "within_3_months" => "Within the next 3 months",
     "3_to_6_months" => "In 3 to 6 months",
@@ -75,7 +74,7 @@ module Leads
   end
 
   # google_ads on a click id or google+paid; meta_ads on a meta
-  # source with a paid medium or ad/campaign id; trade_show on utm_medium=event (booth QR codes);
+  # source with a paid medium or ad_id; trade_show on utm_medium=event (booth QR codes);
   # else website_form.
   def derive_source(attribution)
     attribution = (attribution || {}).with_indifferent_access
@@ -85,11 +84,8 @@ module Leads
     source = attribution[:utm_source].to_s.strip.downcase
     medium = attribution[:utm_medium].to_s.strip.downcase
     paid = PAID_MEDIUMS.include?(medium)
-    meta_ad_evidence = META_PAID_MEDIUMS.include?(medium) ||
-      attribution[:ad_id].present? || attribution[:campaign_id].present? || attribution[:adset_id].present?
     return "google_ads" if source == "google" && paid
-    return "meta_ads" if META_SOURCES.include?(source) && meta_ad_evidence
-    return "meta_ads" if source.blank? && attribution[:fbclid].present? && meta_ad_evidence
+    return "meta_ads" if META_SOURCES.include?(source) && (paid || attribution[:ad_id].present?)
     return "trade_show" if medium == "event"
 
     "website_form"
@@ -236,9 +232,9 @@ module Leads
     party = payload["party"].is_a?(Hash) ? payload["party"] : {}
     updates = {}
     errors = {}
-    trip_meta = dropdown_answer(trip, "trip", "timing_window", "timing_label", TIMING_WINDOWS, errors)
-      .merge(dropdown_answer(trip, "trip", "intent", "intent_label", TRIP_INTENTS, errors))
-    party_meta = dropdown_answer(party, "party", "size_band", "size_label", PARTY_SIZE_BANDS, errors)
+    trip_meta = dropdown_answer(trip, "trip", "timing_window", TIMING_WINDOWS, errors)
+      .merge(dropdown_answer(trip, "trip", "intent", TRIP_INTENTS, errors))
+    party_meta = dropdown_answer(party, "party", "size_band", PARTY_SIZE_BANDS, errors)
     if (window = trip_meta["timing_window"]) && !trip.key?("month") && !trip.key?("year")
       updates["timing_unknown"] = window == "not_sure"
     end
@@ -248,22 +244,17 @@ module Leads
     [ updates, trip_meta, party_meta, errors ]
   end
 
-  def dropdown_answer(group, prefix, key, label_key, options, errors)
+  def dropdown_answer(group, prefix, key, options, errors)
     return {} unless group.key?(key)
 
     value = group[key]
-    return { key => nil, label_key => nil } if value.nil? || value == ""
+    return { key => nil } if value.nil? || value == ""
 
     code = value.strip if value.is_a?(String)
     unless options.key?(code)
       errors["#{prefix}.#{key}"] = "invalid"
       return {}
     end
-    label = group[label_key]
-    if label.present? && (!label.is_a?(String) || label.strip.length > 120)
-      errors["#{prefix}.#{label_key}"] = "invalid"
-      label = nil
-    end
-    { key => code, label_key => label.presence&.strip || options[code] }
+    { key => code }
   end
 end

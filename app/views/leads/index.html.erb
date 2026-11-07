@@ -47,7 +47,7 @@
                 </span>
                 <% if lead.potential? %><%= badge "Potential", :brand %><% end %>
                 <% if lead.unsure? %><%= badge "Unsure", :neutral %><% end %>
-                <% if lead.recontact? %><%= badge(lead.recontact_on ? "Re-contact #{date_short(lead.recontact_on)}" : "Re-contact", lead.recontact_due? ? :warning : :info) %><% end %>
+                <% if lead.recontact? %><%= badge(lead.recontact_due? ? "Re-contact due since #{date_short(lead.recontact_on)}" : (lead.recontact_on ? "Re-contact #{date_short(lead.recontact_on)}" : "Re-contact"), lead.recontact_due? ? :warning : :info) %><% end %>
                 <% if lead.not_interested? %><%= badge "Not interested", :danger %><% end %>
                 <%= status_badge(lead.converted? ? "converted" : lead.status) %>
                 <% if lead.call_schedulable? && (next_call = lead.next_scheduled_call) %>
@@ -107,7 +107,7 @@
       <% elsif @tab == "unsure" %>
         <%= render "shared/empty_state", title: "No unsure leads", body: "Mark Unsure on a lead that has not answered yet. They wait here until you know.", scene: :cairn %>
       <% elsif @tab == "recontact" %>
-        <%= render "shared/empty_state", title: "No leads on the re-contact list", body: "Ad leads with three unanswered call attempts move here for a 3-to-6-month follow-up instead of Not interested.", scene: :cairn %>
+        <%= render "shared/empty_state", title: "No leads on the re-contact list", body: "Ad leads with unanswered call attempts on three different days move here for a 3-to-6-month follow-up instead of Not interested.", scene: :cairn %>
       <% elsif @tab == "not_interested" %>
         <%= render "shared/empty_state", title: "No leads marked not interested", body: "Mark not interested on a lead who does not want to be contacted. They stay out of every call and email list until you choose Interested again.", scene: :cairn %>
       <% elsif @tab == "archived" %>

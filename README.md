@@ -557,9 +557,10 @@ last 24 hours with a phone number and no logged call yet, newest first; second,
 open leads with a phone number whose calls never connected (`Attempted`,
 `Voicemail`, or `No answer`) and that are due another try (attempt 2 due 1 day
 after attempt 1, attempt 3 due 2 days after attempt 2 - Day 0, Day 1, Day 3, up
-to 3 attempts; ad leads, `source` in `AdSpend::SOURCES`, get attempt 3 1 day
-after attempt 2 - Day 0, Day 1, Day 2 - with varied morning/afternoon/evening
-time-of-day guidance); third, Re-contact leads whose re-contact date has
+to 3 attempts; leads on the ad-lead routine, `Lead#ad_call_routine?`, count
+one attempt per Pacific day, so another call logged the same day does not use
+up a try, and get attempt 3 1 day after attempt 2 - Day 0, Day 1, Day 2 - with
+varied morning/afternoon/evening time-of-day guidance); third, Re-contact leads whose re-contact date has
 arrived and that have no logged call since that date, earliest date first;
 fourth, older uncalled inquiries up to 14 days old, oldest
 first. Uncalled inquiries over 14 days old and leads whose latest call is over
@@ -569,7 +570,7 @@ sheet: a lead with such a call stays off the list until a new call is logged,
 which starts its cadence. Each
 row shows its attempt badge (`1st try`, `2nd try`, `3rd try`, or
 `Re-contact due`), a suggested time-of-day window and a `Text reminder`
-marker on ad-lead retries, a `Check`
+marker on ad-lead routine retries, a `Check`
 marker on inquiries flagged as looking like spam, wait time, and one-tap
 `Talked` / `Voicemail` / `No answer` logging plus `Schedule call`. Leads drop
 off the list once a call connects (`Talked`), they are marked
@@ -750,19 +751,23 @@ also marks the lead not interested automatically via `Lead#mark_not_interested!`
 records a `not_interested` timeline note
 (`Moved to Not interested automatically after three unanswered calls`), and adds
 `Moved to Not interested after three unanswered calls.` to the `Call logged` notice,
-while keeping `unsure_marked_at` intact for **Interested again**. Ad leads
-(`source` in `AdSpend::SOURCES`: `google_ads` or `meta_ads`) follow the
-ad-lead routine instead: an ad lead in Unsure, or still in New at stage `new`,
-that is not an existing client's inquiry moves to the **Re-contact** list
-(`Lead#mark_recontact!`, `recontact_on` 3 months out) rather than Not
-interested, records a `recontact` timeline note (`Moved to Re-contact
-automatically after three unanswered calls`), and adds `Moved to Re-contact
-after three unanswered calls.` to the `Call logged` notice. Mark Unsure runs the
-same check, so a lead that already has three unanswered calls moves straight to
-Not interested (`Marked as Unsure - moved to Not interested after three
-unanswered calls.`) or, for an ad lead, to Re-contact (`Marked as Unsure -
-moved to Re-contact after three unanswered calls.`). Leads moved to Not
-interested before the ad-lead routine existed stay unchanged. A
+while keeping `unsure_marked_at` intact for **Interested again**. Open ad
+leads (`source` in `AdSpend::SOURCES`: `google_ads` or `meta_ads`) that are
+not lost, archived, converted, not interested, or an existing client's inquiry
+follow the ad-lead routine instead (`Lead#ad_call_routine?`; other ad
+inquiries keep the usual rules): unanswered attempts count once per Pacific
+day, using that day's latest call, so the move needs unanswered attempts on
+three different days. Such a lead in Unsure, or still in New at stage `new`,
+moves to the **Re-contact** list (`Lead#mark_recontact!`, `recontact_on` 3
+months out) rather than Not interested, records a `recontact` timeline note
+(`Moved to Re-contact automatically after three unanswered calls`), and adds
+`Moved to Re-contact after three unanswered calls.` to the `Call logged`
+notice. Mark Unsure runs the same check, so a lead that already has three
+unanswered calls moves straight to Not interested (`Marked as Unsure - moved
+to Not interested after three unanswered calls.`) or, for an ad-lead routine
+lead with attempts on three days, to Re-contact (`Marked as Unsure - moved to
+Re-contact after three unanswered calls.`). Leads moved to Not interested
+before the ad-lead routine existed stay unchanged. A
 response is a `Talked` call, any inbound call, or an inbound message that is a
 real reply (`Mail::ReplyAlerts.reply?`, the same rule that decides reply alerts)
 on the lead or its existing client, or sent from the lead's or its people's
@@ -780,9 +785,16 @@ clears that mark. A lead restored from Not interested returns to Unsure and its
 automatic move.`; a lead restored from Re-contact returns to where its marks
 and stage place it, and its `recontact_restored` note names that tab (`Moved
 back to Unsure: …` for a lead still marked Unsure, `Moved back to New: …` for a
-New-stage ad lead, or `Moved back to Quoted: …`). A lead marked Not interested
-by hand, including one re-marked by hand after an automatic move, is never
-restored by a reply or overwritten by unanswered calls.
+New-stage ad lead, or `Moved back to Quoted: …`). A `Talked` call or any
+inbound call that leaves fewer than three unanswered attempts after it (one
+that happened after the attempts behind the automatic Re-contact move, not an
+earlier call logged late) clears that mark the same way
+(`CallLog.restore_automatic_recontact!`), with a note such as
+`Moved back to New: they answered a call after the automatic move.` or
+`Moved back to Unsure: they called after the automatic move.`; calls never
+clear a Not interested mark. A lead marked Not interested by hand, including
+one re-marked by hand after an automatic move, is never restored by a reply or
+overwritten by unanswered calls.
 
 Only that automatic ad-lead move puts a lead on the Re-contact list
 (`Lead#recontact_eligible?`; there is no manual entry, and lost leads never
@@ -796,7 +808,12 @@ lead keeps its stage and any Unsure mark, leaves New, Potential, Unsure, the
 stale indicator, and the retry call list, and is never contacted
 automatically. When its date arrives it shows on Today's Calls to make today
 (`Re-contact due`) until a call is logged on or after that date, it is
-rescheduled, or it is restored; nothing changes its status on its own. A
+rescheduled, or it is restored; nothing changes its status on its own. A missed
+follow-up call gets the text reminder below and then waits for the captain:
+the lead page banner reads `Re-contact list · follow-up due since <date>` and
+the Re-contact tab badge `Re-contact due since <date>` until a new 3- or
+6-month date or Restore. There is no automatic retry and no new attempt
+count. A
 Re-contact lead later moved to the `lost` stage leaves the list and rests in
 Archived like other lost leads. Calls already booked, or booked later, stay
 scheduled and visible on Today through moves and date changes, and follow-up
@@ -806,13 +823,22 @@ Call logging also takes an optional "What video got you here?" answer
 (`video_source`, up to 240 characters; the field starts empty on every call,
 and the latest answer shows on the lead page; source-history expiry removes
 it with the lead's calls). When an outbound `Voicemail` or `No answer` call is
-an ad lead's latest unanswered attempt (`CallLog.missed_call_reminder`, from the
-same reset-aware count as `CallLog.unanswered_attempts`), the `Call logged`
-notice, including after a one-tap log from Today and after the third miss, adds
-`Send a short text by hand.` with the attempt progress and the suggested time
-of day for the next try, or the Re-contact date once the lead has moved; the
-lead's call card shows the same reminder. The text wording awaits approval, so
-PerfectCRM shows no draft, and nothing is ever sent automatically.
+the latest unanswered attempt of a lead on the ad-lead routine
+(`CallLog.missed_call_reminder`, from the same reset-aware per-day count as
+`CallLog.unanswered_attempts`), the `Call logged` notice, including after a
+one-tap log from Today and after the third miss, adds `Send a short text by
+hand.` with the attempt progress and the suggested time of day for the next
+try, the Re-contact date once the lead has moved, or, for a missed follow-up on
+a due Re-contact lead, a prompt to set a new date or restore. The lead's call
+card shows the same reminder with the approved text (`CallLog.missed_call_text`)
+in an editable box and a **Copy text** button: `Hi {{first_name}}, this is Sam
+at SherpaHolidays. I just tried giving you a quick call about your trip
+inquiry. When is a good time for us to connect by phone, or is text easier for
+you?` with the lead's first name, or the same text starting `Hi, this is Sam`
+when the lead has no name. When the log returns somewhere without that card
+(Today, or a list after completing a scheduled call), the notice ends with
+`Suggested text:` and the same text. The captain sends it by hand; nothing is
+ever sent automatically.
 
 While marked not interested, a lead is excluded from Today's Calls to make today,
 New leads, Quotes out, Follow-ups, Replies waiting, and Scheduled calls, from
@@ -897,7 +923,9 @@ Website inquiries now arrive directly in Leads. Open a lead to read its
 facts in Details and its inquiry as the oldest entry on the timeline,
 including a placeholder when a website submission has no message. Manual
 leads without inquiry evidence have no inquiry entry. Unknown timing takes
-precedence over previous dates.
+precedence over previous dates, and an explicit month or year takes precedence
+over an approximate timing window; an exact party size likewise wins over a
+size band.
 In Settings → Automations, manage the website site key, Automatic first reply (with a direct link to edit the First reply template), the Itinerary email, the Trip quiz email,
 and review machine events and delivery results (the Relay secret and n8n webhook URL sub-sections are hidden from the Settings UI while their endpoints and background jobs remain active). The website form and external
 n8n/Panda AI workflows are configured separately; see the

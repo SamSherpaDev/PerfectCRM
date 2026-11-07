@@ -414,9 +414,9 @@ class ApiV1LeadsDetailsTest < ActionDispatch::IntegrationTest
     post_details({
       "schema" => "sherpa.inquiry.details.v1",
       "submission_id" => @submission_id,
-      "trip" => { "timing_window" => "3_to_6_months", "intent" => "cultural_tour",
-        "intent_label" => "Private cultural and sightseeing tour (hotel-based)" },
-      "party" => { "size_band" => "3_4", "size_label" => "3 to 4 travelers" },
+      "trip" => { "timing_window" => "3_to_6_months", "timing_label" => "Later this year", "intent" => "cultural_tour",
+        "intent_label" => "Culture trip" },
+      "party" => { "size_band" => "3_4", "size_label" => "Three or four of us" },
       "attribution" => { "utm_source" => "facebook", "utm_medium" => "paid_social", "campaign_id" => "999", "ad_id" => "998" },
       "page" => { "url" => "https://www.sherpaholidays.com/pages/contact?utm_source=facebook&utm_medium=paid&ad_id=997" }
     })
@@ -431,6 +431,9 @@ class ApiV1LeadsDetailsTest < ActionDispatch::IntegrationTest
     assert_equal [ "3_to_6_months", "In 3 to 6 months" ], [ @lead.timing_window, @lead.timing_window_label ]
     assert_equal false, @lead.timing_unknown
     assert_equal [ "cultural_tour", "Private cultural and sightseeing tour (hotel-based)" ], [ @lead.trip_intent, @lead.trip_intent_label ]
+    assert_not_includes @lead.metadata.to_json, "Later this year"
+    assert_not_includes @lead.metadata.to_json, "Culture trip"
+    assert_not_includes @lead.metadata.to_json, "Three or four of us"
   end
 
   test "explicit party size and travel dates on details win over the dropdown bands" do
@@ -445,6 +448,24 @@ class ApiV1LeadsDetailsTest < ActionDispatch::IntegrationTest
     assert_equal [ 3, 4, 2027 ], [ @lead.party_size, @lead.travel_month, @lead.travel_year ]
     assert_nil @lead.timing_unknown
     assert_equal "3_4", @lead.party_size_band
+    assert_equal "3 travelers · April 2027", Class.new { include ActionView::Helpers::TextHelper, RecordsHelper }.new.lead_party_and_when(@lead)
+  end
+
+  test "an approximate timing window or size band shows only when no exact answer exists" do
+    post_details({
+      "schema" => "sherpa.inquiry.details.v1",
+      "submission_id" => @submission_id,
+      "trip" => { "timing_window" => "within_3_months" },
+      "party" => { "size_band" => "5_8" }
+    })
+    assert_response :ok
+    helper = Class.new { include ActionView::Helpers::TextHelper, RecordsHelper }.new
+    @lead.reload
+    assert_equal "5 to 8 travelers · Within the next 3 months", helper.lead_party_and_when(@lead)
+
+    post_details({ "schema" => "sherpa.inquiry.details.v1", "submission_id" => @submission_id, "trip" => { "month" => 10, "year" => 2027 } })
+    assert_response :ok
+    assert_equal "5 to 8 travelers · October 2027", helper.lead_party_and_when(@lead.reload)
   end
 
   test "an unknown details dropdown answer is a 400 that changes nothing" do
@@ -459,7 +480,7 @@ class ApiV1LeadsDetailsTest < ActionDispatch::IntegrationTest
       })
     end
     assert_response :bad_request
-    assert_equal({ "trip.intent" => "invalid", "party.size_label" => "invalid" }, response.parsed_body["fields"])
+    assert_equal({ "trip.intent" => "invalid" }, response.parsed_body["fields"])
     @lead.reload
     assert_equal metadata, @lead.metadata
     assert_equal attribution, @lead.metadata["attribution"]
