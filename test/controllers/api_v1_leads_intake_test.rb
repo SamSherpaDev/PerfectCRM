@@ -1046,6 +1046,16 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     Class.new { include LeadsHelper }.new.lead_source_label(lead)
   end
 
+  # Every string stored in the lead's metadata, so a macro check does not trip over JSON braces.
+  def stored_values(value)
+    case value
+    when Hash then value.values.flat_map { |item| stored_values(item) }
+    when Array then value.flat_map { |item| stored_values(item) }
+    when String then [ value ]
+    else []
+    end
+  end
+
   test "a direct ad landing inquiry is tagged with the campaign and ad IDs from its landing touch" do
     landing = "https://www.sherpaholidays.com/pages/private-nepal-tours?utm_source=ig&utm_medium=paid&utm_campaign=sh_us_cold_cbo" \
       "&campaign_id=52666579688338&adset_id=52670563689400&ad_id=52670563689538&utm_content=hook-b2-01&utm_term=private-nepal&fbclid=PAZXh0bgNhZW0"
@@ -1168,6 +1178,84 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
       "ad_id" => "52670563689538", "utm_term" => "52666579688138"
     } })
     assert_equal "Meta ads · sh_us_cold_cbo · campaign 52666579688338 · ad 52670563689538 · utm_term=52666579688138", source_tag(lead)
+  end
+
+  test "unresolved macros on the snapshot path are stored blank while the inquiry and valid IDs are kept" do
+    landing = "https://www.sherpaholidays.com/pages/private-nepal-tours?utm_source=ig&utm_medium=paid" \
+      "&utm_campaign={{campaign.name}}&campaign_id={{campaign.id}}&adset_id=52666579688138&ad_id={{ad.id}}&utm_content={{ad.name}}"
+    touch = { "observed_at" => 2.minutes.ago.iso8601, "landing_url" => landing, "referrer" => "https://l.instagram.com/" }
+    body = intake_body("acquisition" => { "permission" => ad_permission, "first_touch" => touch, "last_touch" => touch,
+      "last_non_direct_touch" => touch, "submission_page" => { "url" => landing } })
+    body["attribution"] = {}
+    post_intake body
+    assert_response :accepted
+    lead = Lead.find(response.parsed_body["id"])
+    assert_equal "meta_ads", lead.source
+    assert_nil lead.campaign_name
+    assert_equal "52666579688138", lead.metadata.dig("attribution", "adset_id")
+    assert_equal [ nil, nil, nil ], lead.metadata["attribution"].values_at("campaign_id", "ad_id", "utm_content")
+    assert_equal "https://www.sherpaholidays.com/pages/private-nepal-tours?utm_source=ig&utm_medium=paid&adset_id=52666579688138",
+      lead.metadata.dig("attribution", "landing_url")
+    assert_no_match(/%7B|%7D|\{\{|\}\}/i, stored_values(lead.metadata).join(" "))
+    assert_equal "Meta ads", source_tag(lead)
+  end
+
+  test "unresolved macros on the legacy attribution path never tag an ad or add a literal source" do
+    body = intake_body("attribution" => { "utm_source" => "ig", "utm_medium" => "social", "utm_campaign" => "{{campaign.name}}",
+      "campaign_id" => "{{campaign.id}}", "ad_id" => "{{ad.id}}", "utm_term" => "private-nepal",
+      "landing_url" => "https://www.sherpaholidays.com/pages/private-nepal-tours?utm_campaign=%7B%7Bcampaign.name%7D%7D&ad_id=%7B%7Bad.id%7D%7D" })
+    post_intake body
+    assert_response :accepted
+    lead = Lead.find(response.parsed_body["id"])
+    assert_equal "website_form", lead.source
+    assert_nil lead.campaign_name
+    assert_equal({ "utm_source" => "ig", "utm_medium" => "social", "utm_term" => "private-nepal",
+      "landing_url" => "https://www.sherpaholidays.com/pages/private-nepal-tours" }, lead.metadata["attribution"])
+    assert_equal "Website form · utm_term=private-nepal", source_tag(lead)
+  end
+
+  test "URL-encoded macros in a submission-page fallback stay out of the stored ad fields" do
+    landing = "https://www.sherpaholidays.com/pages/private-nepal-tours?utm_source=ig&utm_medium=paid" \
+      "&utm_campaign=%7B%7Bcampaign.name%7D%7D&campaign_id=%7B%7Bcampaign.id%7D%7D&ad_id=%7B%7Bad.id%7D%7D&utm_content=%7B%7Bad.name%7D%7D"
+    body = intake_body("acquisition" => { "permission" => ad_permission, "submission_page" => { "url" => landing } })
+    body["attribution"] = {}
+    post_intake body
+    assert_response :accepted
+    lead = Lead.find(response.parsed_body["id"])
+    assert_equal "meta_ads", lead.source
+    assert_nil lead.campaign_name
+    assert_equal({ "utm_source" => "ig", "utm_medium" => "paid" }, lead.metadata["attribution"].slice(*Leads::Acquisition::CAMPAIGN_KEYS))
+    assert_no_match(/%7B|%7D|\{\{|\}\}/i, stored_values(lead.metadata).join(" "))
+    assert_equal "Meta ads", source_tag(lead)
+  end
+
+  test "a numeric ad ID sent as a JSON number is kept as an exact string instead of rejecting the inquiry" do
+    touch = { "observed_at" => 2.minutes.ago.iso8601, "utm_source" => "ig", "utm_medium" => "paid", "utm_campaign" => "sh_us_cold_cbo",
+      "campaign_id" => "52666579688338", "ad_id" => 52670563689538, "landing_url" => "https://www.sherpaholidays.com/pages/private-nepal-tours" }
+    body = intake_body("acquisition" => { "permission" => ad_permission, "first_touch" => touch, "last_touch" => touch,
+      "last_non_direct_touch" => touch })
+    body["attribution"] = {}
+    post_intake body
+    assert_response :accepted
+    lead = Lead.find(response.parsed_body["id"])
+    assert_equal "52670563689538", lead.metadata.dig("attribution", "ad_id")
+    assert_equal "sh_us_cold_cbo", lead.campaign_name
+    assert_equal "Meta ads · sh_us_cold_cbo · campaign 52666579688338 · ad 52670563689538", source_tag(lead)
+  end
+
+  test "a non-digit ad ID alongside a valid campaign ID keeps the campaign and blanks only the ad" do
+    touch = { "observed_at" => 2.minutes.ago.iso8601, "utm_source" => "ig", "utm_medium" => "social",
+      "campaign_id" => "52666579688338", "ad_id" => "ad-{{ad.id}}", "landing_url" => "https://www.sherpaholidays.com/pages/private-nepal-tours" }
+    body = intake_body("acquisition" => { "permission" => ad_permission, "first_touch" => touch, "last_touch" => touch,
+      "last_non_direct_touch" => touch })
+    body["attribution"] = {}
+    post_intake body
+    assert_response :accepted
+    lead = Lead.find(response.parsed_body["id"])
+    assert_equal "52666579688338", lead.metadata.dig("attribution", "campaign_id")
+    assert_nil lead.metadata.dig("attribution", "ad_id")
+    assert_not_equal "meta_ads", lead.source
+    assert_equal "Website form · campaign 52666579688338", source_tag(lead)
   end
 
   test "intake stores inquiry dropdown codes with the CRM's approved wording and without inventing exact party sizes" do

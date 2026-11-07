@@ -7,6 +7,7 @@ module Leads::Acquisition
   TOUCHES = %w[first_touch last_touch last_non_direct_touch].freeze
   CLICK_KEYS = %w[gclid gbraid wbraid fbclid].freeze
   CAMPAIGN_KEYS = %w[utm_source utm_medium utm_campaign utm_content utm_term campaign_id ad_id adset_id].freeze
+  ID_KEYS = %w[campaign_id adset_id ad_id].freeze
   REASONS = %w[legacy_missing not_asked declined_permission no_detectable_referrer unresolved_identity unavailable withdrawn consent_granted_late].freeze
   PERMISSION_STATES = %w[allowed denied unavailable withdrawn].freeze
   module_function
@@ -47,8 +48,14 @@ module Leads::Acquisition
     result["observed_at"] = timestamp(input["observed_at"]) if input["observed_at"].present?
     (CAMPAIGN_KEYS + CLICK_KEYS).each do |key|
       next if input[key].blank?
-      raise ArgumentError, "acquisition.#{key}" unless input[key].is_a?(String) && input[key].length <= 200
-      result[key] = input[key].strip
+      if CAMPAIGN_KEYS.include?(key)
+        raise ArgumentError, "acquisition.#{key}" if input[key].is_a?(String) && input[key].length > 200
+        value = tracking_value(key, input[key])
+        result[key] = value if value
+      else
+        raise ArgumentError, "acquisition.#{key}" unless input[key].is_a?(String) && input[key].length <= 200
+        result[key] = input[key].strip
+      end
     end
     if input["landing_url"].present?
       query_params(input["landing_url"]).slice(*CAMPAIGN_KEYS).each do |key, val|
@@ -107,7 +114,8 @@ module Leads::Acquisition
     return nil if value.blank?
     uri = URI.parse(value.to_s)
     return nil unless %w[http https].include?(uri.scheme) && uri.host.present?
-    query = campaign ? URI.decode_www_form(uri.query.to_s).select { |key, val| CAMPAIGN_KEYS.include?(key) && val.length <= 200 } : []
+    # Invalid tracking values are dropped here too, so no stored URL carries an unresolved macro.
+    query = campaign ? URI.decode_www_form(uri.query.to_s).select { |key, val| CAMPAIGN_KEYS.include?(key) && val.length <= 200 && tracking_value(key, val) } : []
     # Host/path only, no credentials, fragments, click IDs, or arbitrary params.
     path = uri.path.to_s.first(512)
     "#{uri.scheme}://#{uri.host.downcase}#{path}" + (query.any? ? "?#{URI.encode_www_form(query)}" : "")
@@ -117,7 +125,8 @@ module Leads::Acquisition
 
   def legacy_attribution(input, acquisition: nil)
     result = input.slice(*(CAMPAIGN_KEYS + CLICK_KEYS + %w[first_seen_at referral_code]))
-      .transform_values { |value| value.to_s.first(200) }
+      .to_h { |key, value| [ key, CAMPAIGN_KEYS.include?(key) ? tracking_value(key, value.is_a?(String) ? value.first(200) : value) : value.to_s.first(200) ] }
+      .compact
     if input["landing_url"].present?
       begin
         query = URI.decode_www_form(URI.parse(input["landing_url"].to_s).query.to_s).to_h
@@ -168,11 +177,28 @@ module Leads::Acquisition
     uri = URI.parse(url.to_s)
     URI.decode_www_form(uri.query.to_s).each_with_object({}) do |(key, val), out|
       next unless (CAMPAIGN_KEYS + CLICK_KEYS).include?(key)
-      cleaned = val.to_s.strip
+      cleaned = CAMPAIGN_KEYS.include?(key) ? tracking_value(key, val) : val.to_s.strip
       out[key] = cleaned if cleaned.present? && cleaned.length <= 200
     end
   rescue URI::InvalidURIError, ArgumentError
     {}
+  end
+
+  # The one rule for ad and UTM text on every ingestion path (snapshot touches,
+  # legacy attribution, landing and submission URL fallbacks). Ad, adset and
+  # campaign IDs must be purely digits and stay exact strings, never coerced.
+  # UTM text may not carry an unresolved {{ or }} macro. Anything else is nil:
+  # the field stays blank and the lead is kept.
+  def tracking_value(key, value)
+    text = value.is_a?(Integer) && !value.negative? ? value.to_s : value
+    return nil unless text.is_a?(String)
+    text = text.strip
+    return nil if text.empty?
+    if ID_KEYS.include?(key)
+      text if text.match?(/\A\d+\z/)
+    else
+      text unless text.match?(/\{\{|\}\}/)
+    end
   end
 
   def backfill_unavailable_touches!
