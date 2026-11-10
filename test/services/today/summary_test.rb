@@ -372,6 +372,108 @@ class TodaySummaryTest < ActiveSupport::TestCase
     assert_includes summary.overdue, overdue
   end
 
+  test "attention? is false when mailbox and PerfectBook syncs are fresh and no replies or reads failed" do
+    travel_to Time.zone.local(2026, 11, 3, 14, 30) do
+      Setting.current.update!(mailbox_last_sync_at: 10.minutes.ago, mailbox_last_error: nil)
+      PerfectBook::SyncState.record_success!("bookings")
+      MailMessageQuarantine.create!(provider_message_id: "retry-pending", attempts: 2)
+
+      summary = Today::Summary.new
+      assert_not summary.attention?
+      assert_nil summary.mailbox_attention_label
+      assert_not summary.perfectbook_sync_behind?
+      assert_nil summary.perfectbook_attention_label
+      assert_empty summary.failed_replies
+      assert_nil summary.failed_replies_label
+      assert_equal 0, summary.set_aside_messages_count
+      assert_nil summary.set_aside_messages_label
+    end
+  end
+
+  test "mailbox_attention_label reports when last mail sync is older than 20 minutes or an error is set" do
+    travel_to Time.zone.local(2026, 11, 3, 14, 35) do
+      Setting.current.update!(mailbox_last_sync_at: Time.zone.local(2026, 11, 3, 14, 10), mailbox_last_error: nil)
+      summary = Today::Summary.new
+      assert summary.attention?
+      assert_equal "Mailbox has not been read since 2:10 pm", summary.mailbox_attention_label
+
+      Setting.current.update!(mailbox_last_sync_at: Time.zone.local(2026, 11, 3, 14, 20), mailbox_last_error: "Token expired")
+      summary = Today::Summary.new
+      assert summary.attention?
+      assert_equal "Mailbox has not been read since 2:20 pm", summary.mailbox_attention_label
+
+      Setting.current.update!(mailbox_last_error: nil)
+      MailSyncState.create!(folder: "inbox", last_error: "Graph 503", last_error_at: 5.minutes.ago)
+      summary = Today::Summary.new
+      assert summary.attention?
+      assert_equal "Mailbox has not been read since 2:20 pm", summary.mailbox_attention_label
+    end
+  end
+
+  test "perfectbook_sync_behind? reports when last successful sync is older than 45 minutes" do
+    travel_to Time.zone.local(2026, 11, 3, 15, 0) do
+      state = PerfectBook::SyncState.for("bookings")
+      state.update!(last_success_at: 30.minutes.ago)
+      assert_not Today::Summary.new.perfectbook_sync_behind?
+
+      state.update!(last_success_at: 46.minutes.ago)
+      summary = Today::Summary.new
+      assert summary.attention?
+      assert summary.perfectbook_sync_behind?
+      assert_equal "PerfectBook sync is behind", summary.perfectbook_attention_label
+    end
+  end
+
+  test "failed_replies includes personal failed replies and swept stuck sends while excluding automatic replies and archived records" do
+    travel_to Time.zone.local(2026, 11, 3, 15, 0) do
+      lead = inquiry("Active lead", 1.day.ago)
+      failed_personal = reply(lead, status: "failed", sent_at: 10.minutes.ago)
+
+      client = Client.create!(name: "Maya", email: "maya@example.test")
+      stuck = client.conversations.create!(subject: "Dates").messages.create!(
+        direction: "out", status: "sending", subject: "Dates", to_addrs: client.email,
+        text_body: "Checking dates", created_at: 20.minutes.ago, updated_at: 20.minutes.ago
+      )
+      OutboundDeliverySweepJob.perform_now
+
+      auto_msg = reply(lead, status: "failed", sent_at: 5.minutes.ago)
+      AutomaticFirstReply.create!(lead: lead, message: auto_msg, email: lead.email)
+
+      archived_lead = inquiry("Archived lead", 2.days.ago)
+      reply(archived_lead, status: "failed", sent_at: 1.minute.ago)
+      archived_lead.archive!
+
+      archived_client = Client.create!(name: "Archived client", email: "archived@example.test")
+      archived_client.conversations.create!(subject: "Old").messages.create!(
+        direction: "out", status: "failed", subject: "Old", to_addrs: archived_client.email, text_body: "Old"
+      )
+      archived_client.archive!
+
+      summary = Today::Summary.new
+      assert summary.attention?
+      assert_equal [ failed_personal, stuck.reload ], summary.failed_replies
+      assert_equal "2 replies were not delivered", summary.failed_replies_label
+
+      stuck.update!(status: "sent")
+      summary = Today::Summary.new
+      assert_equal [ failed_personal ], summary.failed_replies
+      assert_equal "1 reply was not delivered", summary.failed_replies_label
+    end
+  end
+
+  test "set_aside_messages_count reports quarantined mail messages" do
+    MailMessageQuarantine.create!(provider_message_id: "msg-1", attempts: 3)
+    summary = Today::Summary.new
+    assert summary.attention?
+    assert_equal 1, summary.set_aside_messages_count
+    assert_equal "1 message could not be read", summary.set_aside_messages_label
+
+    MailMessageQuarantine.create!(provider_message_id: "msg-2", attempts: 4)
+    summary = Today::Summary.new
+    assert_equal 2, summary.set_aside_messages_count
+    assert_equal "2 messages could not be read", summary.set_aside_messages_label
+  end
+
   private
 
   def inquiry(name, received_at, phone: "+1 415 555 0134", source: "manual")
