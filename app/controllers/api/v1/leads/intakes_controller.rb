@@ -141,7 +141,7 @@ module Api
               "body_matches=#{replay_body_matches?(existing, payload, fields)}"
             )
             LeadNotification.enqueue_pending(existing.id)
-            conversion = existing.external_ref == external_ref && !::Leads.auto_archive?(existing.suspicion_hits)
+            conversion = existing.external_ref == external_ref && !existing.suspected_spam? && !::Leads.auto_archive?(existing.suspicion_hits)
             return render json: lead_response(existing, conversion: conversion), status: :ok
           end
 
@@ -198,7 +198,9 @@ module Api
               end
             end
           else
-            errors["contact.email"] = "invalid" unless valid_email?(email)
+            # A temporary DNS failure (timeout, SERVFAIL, refusal) is accepted on
+            # ordinary intake so a resolver hiccup never turns a customer away.
+            errors["contact.email"] = "invalid" if email.blank? || ::Leads::MailDomain.status(email) == :invalid
           end
 
           errors["submission_id"] = "invalid" if payload["submission_id"].to_s.strip.blank? ||
@@ -213,34 +215,6 @@ module Api
           end
 
           { name: name, email: email.presence, phone: phone }
-        end
-
-        def valid_email?(email)
-          return false if email.blank? || email.length > 254
-          return false unless email.match?(URI::MailTo::EMAIL_REGEXP)
-
-          domain = email.split("@").last.to_s
-          return false if domain.blank?
-          # Reserved names (RFC 2606) never have MX/A records; reject
-          # without a DNS round-trip so the check is deterministic offline.
-          return false if domain.downcase.end_with?(".invalid", ".example", ".test", ".localhost")
-
-          begin
-            Resolv::DNS.open do |dns|
-              mx = dns.getresources(domain, Resolv::DNS::Resource::IN::MX)
-              next true if mx.any?
-
-              a = dns.getresources(domain, Resolv::DNS::Resource::IN::A)
-              next true if a.any?
-
-              false
-            end
-          rescue StandardError
-            # DNS unreachable from here: fail open so a valid address is
-            # never rejected for a resolver outage. Definitive NXDOMAIN
-            # still resolves to no records above and rejects.
-            true
-          end
         end
 
         def seconds_to_submit(payload)
@@ -355,7 +329,7 @@ module Api
             lead.message.to_s == payload["message"].to_s.strip
         end
 
-        def lead_response(lead, conversion: !::Leads.auto_archive?(lead.suspicion_hits))
+        def lead_response(lead, conversion: !lead.suspected_spam? && !::Leads.auto_archive?(lead.suspicion_hits))
           receipt = {
             id: lead.id,
             reference: lead.reference,

@@ -68,4 +68,65 @@ class LeadNotificationJobTest < ActiveJob::TestCase
     assert_equal "failed", LeadWebhookDelivery.last.status
     assert_equal 500, LeadWebhookDelivery.last.http_status
   end
+
+  test "enqueue_pending skips notifications with a job in flight and re-enqueues after 10 minutes" do
+    assert_enqueued_with(job: LeadNotificationJob, args: [ @notification.id ]) do
+      LeadNotification.enqueue_pending
+    end
+    assert @notification.reload.last_enqueued_at.present?
+
+    travel 9.minutes do
+      assert_no_enqueued_jobs only: LeadNotificationJob do
+        LeadNotification.enqueue_pending
+      end
+    end
+
+    travel 11.minutes do
+      assert_enqueued_with(job: LeadNotificationJob, args: [ @notification.id ]) do
+        LeadNotification.enqueue_pending
+      end
+    end
+  end
+
+  test "notification gives up after 20 failed attempts and stops retrying" do
+    mailer = Object.new
+    def mailer.deliver_now
+      raise IOError, "mail unavailable"
+    end
+
+    @notification.update!(attempts: 19, available_at: 1.minute.ago)
+    LeadIntakeMailer.stub(:inquiry_copy, mailer) do
+      assert_no_enqueued_jobs only: LeadNotificationJob do
+        LeadNotificationJob.perform_now(@notification.id)
+      end
+    end
+
+    @notification.reload
+    assert_equal 20, @notification.attempts
+    assert_nil @notification.delivered_at
+    assert @notification.gave_up_at.present?
+    assert_equal "gave_up", @notification.status
+
+    travel 15.minutes do
+      assert_no_enqueued_jobs only: LeadNotificationJob do
+        LeadNotification.enqueue_pending
+      end
+    end
+  end
+
+  test "notification older than 24 hours gives up and stops retrying" do
+    @notification.update!(created_at: 25.hours.ago, available_at: 1.minute.ago)
+
+    assert_no_enqueued_jobs only: LeadNotificationJob do
+      LeadNotification.enqueue_pending
+    end
+
+    @notification.reload
+    assert @notification.gave_up_at.present?
+    assert_equal "gave_up", @notification.status
+
+    assert_no_difference("ActionMailer::Base.deliveries.size") do
+      LeadNotificationJob.perform_now(@notification.id)
+    end
+  end
 end

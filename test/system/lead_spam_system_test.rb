@@ -118,7 +118,9 @@ class LeadSpamSystemTest < ApplicationSystemTestCase
       req["Origin"] = "https://www.sherpaholidays.com"
       req["X-Sherpa-Site-Key"] = settings.site_key
       req.body = JSON.generate(payload)
-      Net::HTTP.start(uri.host, uri.port) { |http| http.request(req) }
+      Leads::MailDomain.stub(:status, :valid) do
+        Net::HTTP.start(uri.host, uri.port) { |http| http.request(req) }
+      end
     end
 
     post_intake.call(

@@ -107,16 +107,18 @@ class ExportsRequestsTest < ActionDispatch::IntegrationTest
       "X-Sherpa-Site-Key" => settings.site_key
     }
     submission_id = SecureRandom.uuid
-    post "/api/v1/leads/intake", params: JSON.generate({
-      schema: "sherpa.inquiry.v2", submission_id: submission_id,
-      contact: { name: "Anna Lindqvist", email: "anna@example.com", phone_raw: "+1 415 555 0134" },
-      trip: { handle: "private-nepal-tour", title: "Private Nepal tour" },
-      message: "=Two travelers, \"spring\"\nFlexible dates", placement: "landing",
-      consent: { contact: true, contact_at: "2026-09-14T18:06:40Z", text_version: "2026-09-v2" },
-      attribution: { gclid: "click-id", utm_campaign: "nepal-2027" },
-      timing: { started_at: "2026-09-14T18:05:58Z", submitted_at: "2026-09-14T18:06:40Z" },
-      page: { url: "https://www.sherpaholidays.com/contact?gclid=click-id" }
-    }), headers: headers
+    Leads::MailDomain.stub(:status, :valid) do
+      post "/api/v1/leads/intake", params: JSON.generate({
+        schema: "sherpa.inquiry.v2", submission_id: submission_id,
+        contact: { name: "Anna Lindqvist", email: "anna@example.com", phone_raw: "+1 415 555 0134" },
+        trip: { handle: "private-nepal-tour", title: "Private Nepal tour" },
+        message: "=Two travelers, \"spring\"\nFlexible dates", placement: "landing",
+        consent: { contact: true, contact_at: "2026-09-14T18:06:40Z", text_version: "2026-09-v2" },
+        attribution: { gclid: "click-id", utm_campaign: "nepal-2027" },
+        timing: { started_at: "2026-09-14T18:05:58Z", submitted_at: "2026-09-14T18:06:40Z" },
+        page: { url: "https://www.sherpaholidays.com/contact?gclid=click-id" }
+      }), headers: headers
+    end
     assert_response :accepted
     lead = Lead.find(response.parsed_body["id"])
 

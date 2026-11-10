@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_07_090558) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_10_060152) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -338,7 +338,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_07_090558) do
     t.string "event", null: false
     t.integer "lead_id", null: false
     t.datetime "updated_at", null: false
+    t.integer "attempts", default: 0, null: false
+    t.datetime "last_enqueued_at"
+    t.datetime "gave_up_at"
     t.index ["available_at"], name: "index_lead_notifications_on_available_at", where: "delivered_at IS NULL"
+    t.index ["gave_up_at"], name: "index_lead_notifications_on_gave_up_at", where: "gave_up_at IS NOT NULL"
     t.index ["lead_id"], name: "index_lead_notifications_on_lead_id"
   end
 
