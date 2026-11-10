@@ -191,6 +191,10 @@ module Mail
       held = []
       Array(attachments).each do |file|
         filename = file[:filename].to_s.presence || "attachment"
+        if file[:notice].present?
+          ordinary << { filename: filename, notice: file[:notice].to_s }
+          next
+        end
         content_type = file[:content_type].to_s.presence || "application/octet-stream"
         data = file[:data].to_s
         next if data.blank?
@@ -219,6 +223,10 @@ module Mail
     def attach_files(message, ordinary, held, uploaded)
       skipped = []
       ordinary.each do |file|
+        if file[:notice].present?
+          skipped << file[:notice]
+          next
+        end
         filename = file[:filename]
         content_type = file[:content_type]
         data = file[:data]

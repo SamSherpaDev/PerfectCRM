@@ -146,13 +146,13 @@ module Mail
           end
         rescue NotConfiguredError, GrantRevokedError
           raise
-        rescue GraphError => e
+        rescue StandardError => e
           # The captain reads one error line, so it has to name its folder
           # wherever it surfaces: against the folder here, and in the failure
           # the run raises, which is what SyncJob copies onto the mailbox card.
           message = "#{folder.name}: #{e.message}"
           ::MailSyncState.record_error!(folder.id, message)
-          failure ||= e.class.new(message)
+          failure ||= e.exception(message)
         end
       ensure
         # Runs on a caller's break as well as on normal completion, so a run
@@ -322,7 +322,7 @@ module Mail
         Array(page["value"]).each do |entry|
           next if entry["@removed"] || entry["id"].blank?
           next if screen_listing && !Mail.keeps?(listed_recipients(entry))
-          next if skip_stored && ::Message.exists?(provider_message_id: entry["id"])
+          next if skip_stored && (::Message.exists?(provider_message_id: entry["id"]) || ::MailMessageQuarantine.quarantined?(entry["id"]))
 
           loaded = load_message(client, entry["id"])
           next if loaded.nil?
@@ -359,24 +359,46 @@ module Mail
       folder_id = folder.id
       url = state.delta_link.presence || delta_url(folder_id)
       last_page = nil
-      loop do
-        last_page = client.get_json(url, headers: delta_headers)
-        Array(last_page["value"]).each do |entry|
-          next if entry["@removed"]
-          next if entry["id"].blank?
-          next if entry_time(entry) < watched_since
-          next if ::Message.exists?(provider_message_id: entry["id"])
+      folder_failure = nil
+      retryable_failure = false
+      begin
+        loop do
+          last_page = client.get_json(url, headers: delta_headers)
+          Array(last_page["value"]).each do |entry|
+            next if entry["@removed"]
+            next if entry["id"].blank?
+            next if entry_time(entry) < watched_since
+            next if ::Message.exists?(provider_message_id: entry["id"])
+            next if ::MailMessageQuarantine.quarantined?(entry["id"])
 
-          loaded = load_message(client, entry["id"])
-          next if loaded.nil?
+            begin
+              loaded = load_message(client, entry["id"])
+              next if loaded.nil?
 
-          yield(*loaded)
+              yield(*loaded)
+              ::MailMessageQuarantine.clear!(entry["id"])
+            rescue NotConfiguredError, GrantRevokedError
+              raise
+            rescue StandardError => e
+              quarantine = ::MailMessageQuarantine.record_failure!(
+                provider_message_id: entry["id"],
+                folder: folder_id,
+                error: e
+              )
+              folder_failure ||= e
+              retryable_failure = true unless quarantine.quarantined?
+            end
+          end
+          url = last_page["@odata.nextLink"]
+          break if url.blank?
         end
-        url = last_page["@odata.nextLink"]
-        break if url.blank?
+        unless retryable_failure
+          delta_link = last_page["@odata.deltaLink"]
+          ::MailSyncState.record_success!(folder_id, delta_link: delta_link.presence || state.delta_link)
+        end
+      ensure
+        raise folder_failure if folder_failure && $!.nil?
       end
-      delta_link = last_page["@odata.deltaLink"]
-      ::MailSyncState.record_success!(folder_id, delta_link: delta_link.presence || state.delta_link)
     rescue GraphClient::GoneError
       # Sync token expired server-side. Re-priming alone would drop every
       # message that arrived since the last committed link, so the window
@@ -497,9 +519,12 @@ module Mail
       Array(attachments).each do |attachment|
         name = attachment["name"].to_s.presence || "attachment"
         content_type = attachment["contentType"].to_s.presence || "application/octet-stream"
-        if attachment["@odata.type"].to_s.include?("itemAttachment")
+        odata_type = attachment["@odata.type"].to_s
+        if odata_type.include?("itemAttachment")
           entry = forwarded_entry(client, message_id, attachment, name)
           entries << entry if entry
+        elsif odata_type.include?("referenceAttachment")
+          entries << { filename: name, notice: "#{name}: reference attachment (link only; open it in Outlook)." }
         else
           begin
             data = client.get_bytes("/me/messages/#{message_id}/attachments/#{attachment["id"]}/$value")
@@ -507,6 +532,10 @@ module Mail
           rescue GraphClient::NotFoundError
             # Vanished mid-sync: skip the file, keep its siblings.
             next
+          rescue NotConfiguredError, GrantRevokedError
+            raise
+          rescue GraphError
+            entries << { filename: name, notice: "#{name}: one attachment could not be read, open it in Outlook." }
           end
         end
       end
@@ -528,6 +557,10 @@ module Mail
       { filename: eml_name(name), content_type: "message/rfc822", data: eml, sensitive: !screened }
     rescue GraphClient::NotFoundError
       nil
+    rescue NotConfiguredError, GrantRevokedError
+      raise
+    rescue GraphError
+      { filename: name, notice: "#{name}: one attachment could not be read, open it in Outlook." }
     end
 
     # Rebuilds one forwarded message as MIME from whatever Graph handed

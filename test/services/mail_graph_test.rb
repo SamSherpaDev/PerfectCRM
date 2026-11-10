@@ -794,6 +794,50 @@ class MailGraphTest < ActiveSupport::TestCase
     assert_equal [ "forwarded.eml" ], stored.held_attachments.map { |entry| entry["filename"] }
   end
 
+  test "reference attachments store the link name as a note without requesting bytes" do
+    fetcher.fetch_new.to_a # prime
+    message = graph_message(id: "ref-att-1", from: "traveler@example.com", message_id: "<refatt1@test>",
+      body: "Here is the shared folder link.",
+      attachments: [
+        graph_reference_attachment(id: "ref-1", name: "Trip photos folder"),
+        graph_file_attachment(id: "file-1", name: "itinerary.txt")
+      ])
+    @mailbox.add("inbox", message, file_bytes: { "file-1" => "itinerary bytes" })
+
+    items = fetcher.fetch_new.to_a
+    assert_equal 1, items.length
+    stored = Mail::Ingester.ingest(parsed: items.first.parsed, provider: items.first.provider)[:message]
+    assert_equal 1, @mailbox.byte_fetches
+    assert_equal [ "itinerary.txt" ], stored.files.map { |file| file.filename.to_s }
+    assert_equal 1, stored.attachment_notices.length
+    assert_includes stored.attachment_notices.first, "Trip photos folder"
+    assert_match(/Outlook/i, stored.attachment_notices.first)
+  end
+
+  test "an attachment download failure stores the message with a visible Outlook note" do
+    fetcher.fetch_new.to_a # prime
+    message = graph_message(id: "broken-att-1", from: "traveler@example.com", message_id: "<brokenatt1@test>",
+      body: "Please see our dates in this reply.",
+      attachments: [
+        graph_file_attachment(id: "bad-a1", name: "corrupt-link.bin"),
+        graph_file_attachment(id: "good-a2", name: "dates.txt")
+      ])
+    @mailbox.add("inbox", message, file_bytes: { "good-a2" => "October dates" })
+    @mailbox.transport.on_get("/me/messages/broken-att-1/attachments/bad-a1/$value") do |*|
+      { status: 400, json: { "error" => { "code" => "BadRequest", "message" => "Attachment bytes unavailable" } } }
+    end
+
+    items = fetcher.fetch_new.to_a
+    result = Mail::Ingester.ingest(parsed: items.first.parsed, provider: items.first.provider)
+    assert_equal :stored, result[:status]
+    stored = result[:message]
+    assert_equal "Please see our dates in this reply.", stored.text_body
+    assert_equal [ "dates.txt" ], stored.files.map { |file| file.filename.to_s }
+    assert_equal 1, stored.attachment_notices.length
+    assert_includes stored.attachment_notices.first, "corrupt-link.bin"
+    assert_includes stored.attachment_notices.first, "one attachment could not be read, open it in Outlook"
+  end
+
   test "unconfigured fetcher refuses to run" do
     Setting.current.update!(ms_graph_refresh_token: nil)
     assert_not fetcher.configured?

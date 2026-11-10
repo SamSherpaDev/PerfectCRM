@@ -203,4 +203,92 @@ class MailSyncJobTest < ActiveSupport::TestCase
     assert_raises(Mail::ConnectionError) { Mail::SyncJob.new.perform(fetcher: fetcher) }
     assert_equal "graph down", Setting.current.reload.mailbox_last_error
   end
+
+  test "variant A: a Graph 400 on one attachment stores the message with a note and syncs messages after it" do
+    Mail::SyncJob.new.perform(fetcher: fetcher) # prime
+    initial_link = MailSyncState.for("inbox").delta_link
+
+    bad_attachment_msg = graph_message(
+      id: "att-400",
+      from: "traveler@example.com",
+      message_id: "<att400@test>",
+      body: "We are ready to book for November.",
+      attachments: [ graph_file_attachment(id: "broken-att", name: "broken.pdf", content_type: "application/pdf") ]
+    )
+    @mailbox.add("inbox", bad_attachment_msg)
+    @mailbox.add("inbox", sync_message(id: "after-att-400", from: "later@example.com"))
+    @mailbox.transport.on_get("/me/messages/att-400/attachments/broken-att/$value") do |*|
+      { status: 400, json: { "error" => { "code" => "ErrorInvalidParameter", "message" => "Cannot read bytes" } } }
+    end
+
+    assert_difference("Message.count", 2) do
+      assert_equal 2, Mail::SyncJob.new.perform(fetcher: fetcher)
+    end
+
+    first = Message.find_by!(provider_message_id: "att-400")
+    assert_equal "We are ready to book for November.", first.text_body
+    assert_equal 1, first.attachment_notices.size
+    assert_includes first.attachment_notices.first, "broken.pdf"
+    assert_includes first.attachment_notices.first, "one attachment could not be read, open it in Outlook"
+    assert Message.exists?(provider_message_id: "after-att-400")
+    assert_not_equal initial_link, MailSyncState.for("inbox").reload.delta_link
+    assert_nil Setting.current.reload.mailbox_last_error
+  end
+
+  test "variant B: an unexpected error on one message quarantines it, stores later messages and folders, writes mailbox_last_error, and advances after three attempts" do
+    Mail::SyncJob.new.perform(fetcher: fetcher) # prime
+    initial_inbox_link = MailSyncState.for("inbox").delta_link
+
+    @mailbox.add("inbox", sync_message(id: "poison-1", from: "poison@example.com"))
+    @mailbox.add("inbox", sync_message(id: "healthy-after", from: "healthy@example.com"))
+    @mailbox.add("sentitems", { **sync_message(id: "sent-after", from: "info@sherpaholidays.com",
+      to: "healthy@example.com"), "conversationId" => "sent-conv" })
+
+    original = Mail::Ingester.method(:ingest)
+    failing = lambda do |**args|
+      raise ArgumentError, "malformed message payload" if args[:provider][:message_id] == "poison-1"
+
+      original.call(**args)
+    end
+
+    Mail::Ingester.stub(:ingest, failing) do
+      # Attempt 1: poison-1 fails, but healthy-after (same folder) and sent-after (later folder) both store.
+      error = assert_raises(ArgumentError) { Mail::SyncJob.new.perform(fetcher: fetcher) }
+      assert_equal "Inbox: malformed message payload", error.message
+      assert Message.exists?(provider_message_id: "healthy-after")
+      assert Message.exists?(provider_message_id: "sent-after")
+      assert_equal "Inbox: malformed message payload", Setting.current.reload.mailbox_last_error
+      assert_equal "Inbox: malformed message payload", MailSyncState.for("inbox").last_error
+      assert_equal initial_inbox_link, MailSyncState.for("inbox").delta_link
+
+      quarantine = MailMessageQuarantine.find_by!(provider_message_id: "poison-1")
+      assert_equal "ArgumentError", quarantine.error_class
+      assert_equal 1, quarantine.attempts
+      assert_not quarantine.quarantined?
+
+      # Attempt 2: still below the three-attempt cap; inbox delta_link stays put for one last retry.
+      assert_raises(ArgumentError) { Mail::SyncJob.new.perform(fetcher: fetcher) }
+      assert_equal 2, quarantine.reload.attempts
+      assert_not quarantine.quarantined?
+      assert_equal initial_inbox_link, MailSyncState.for("inbox").reload.delta_link
+
+      # Attempt 3: reaches three failed attempts, marks quarantined, and advances the folder's delta_link.
+      assert_raises(ArgumentError) { Mail::SyncJob.new.perform(fetcher: fetcher) }
+      assert_equal 3, quarantine.reload.attempts
+      assert quarantine.quarantined?
+      assert_not_nil quarantine.quarantined_at
+      advanced_link = MailSyncState.for("inbox").reload.delta_link
+      assert_not_equal initial_inbox_link, advanced_link
+
+      # Run 4: poison-1 is never retried again, and new mail in the folder syncs cleanly.
+      @mailbox.add("inbox", sync_message(id: "fresh-after-quarantine", from: "fresh@example.com"))
+      fetches_before = @mailbox.requests.count { |req| req.url.include?("/me/messages/poison-1") }
+      assert_equal 1, Mail::SyncJob.new.perform(fetcher: fetcher)
+      fetches_after = @mailbox.requests.count { |req| req.url.include?("/me/messages/poison-1") }
+      assert_equal fetches_before, fetches_after
+      assert_equal 3, quarantine.reload.attempts
+      assert Message.exists?(provider_message_id: "fresh-after-quarantine")
+      assert_nil Setting.current.reload.mailbox_last_error
+    end
+  end
 end
