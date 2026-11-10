@@ -160,7 +160,7 @@
         <ul class="mt-2 space-y-3">
           <% @gave_up_notifications.each do |notification| %>
             <li class="flex items-start gap-3">
-              <%= render "shared/icon", name: :bolt, class: "h-4 w-4 mt-0.5 text-bad" %>
+              <%= render "shared/icon", name: :bolt, class: "h-4 w-4 mt-0.5 shrink-0 text-bad" %>
               <div class="min-w-0">
                 <p class="text-sm text-ink"><%= notification.event_label %> (<%= notification.event %>) gave up after <%= notification.attempts %> <%= "attempt".pluralize(notification.attempts) %></p>
                 <p class="text-xs muted"><%= time_24_12(notification.gave_up_at) %><% if notification.lead %> · <%= link_to notification.lead.reference.presence || notification.lead.name.presence || "Lead ##{notification.lead_id}", lead_path(notification.lead), class: "link-quiet" %><% end %></p>
@@ -170,7 +170,7 @@
           <% end %>
           <% @automation_events.each do |event| %>
             <li class="flex items-start gap-3">
-              <%= render "shared/icon", name: automation_icon(automation_caller(event)), class: "h-4 w-4 mt-0.5 text-info" %>
+              <%= render "shared/icon", name: automation_icon(automation_caller(event)), class: "h-4 w-4 mt-0.5 shrink-0 text-info" %>
               <div class="min-w-0">
                 <p class="text-sm text-ink"><%= event.summary %></p>
                 <p class="text-xs muted"><%= time_24_12(event.occurred_at) %></p>
@@ -180,7 +180,7 @@
           <% end %>
           <% @webhook_deliveries.each do |delivery| %>
             <li class="flex items-start gap-3">
-              <%= render "shared/icon", name: :external, class: "h-4 w-4 mt-0.5 muted" %>
+              <%= render "shared/icon", name: :external, class: "h-4 w-4 mt-0.5 shrink-0 muted" %>
               <div class="min-w-0">
                 <p class="text-sm text-ink"><%= delivery.event %> to <%= delivery.url %></p>
                 <p class="text-xs muted"><%= time_24_12(delivery.created_at) %><% if delivery.lead %> · <%= link_to delivery.lead.reference || delivery.lead.name, lead_path(delivery.lead), class: "link-quiet" %><% end %></p>
