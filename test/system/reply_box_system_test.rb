@@ -399,6 +399,7 @@ class ReplyBoxSystemTest < ApplicationSystemTestCase
     fill_in "Your name", with: 'Sam, "Sherpa Holidays"'
     fill_in "Signature lines", with: "Sam Sherpa Holidays"
     click_button "Save email settings"
+    assert_text "Settings saved."
     visit edit_settings_path
     assert_field "Your name", with: 'Sam, "Sherpa Holidays"'
     assert_field "Signature lines", with: "Sam Sherpa Holidays"
