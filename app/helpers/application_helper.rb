@@ -296,24 +296,17 @@ module ApplicationHelper
       items << link_to(pb_label, edit_settings_path(anchor: "perfectbook-heading"), class: "link-quiet")
     end
     if summary.failed_replies.any?
-      targets = summary.failed_replies.filter_map { |message| failed_reply_target(message) }.uniq { |_, path| path }
-      if targets.any?
-        record_links = targets.map { |name, path| link_to(name, path, class: "link-quiet") }
-        items << safe_join([
-          link_to(summary.failed_replies_label, targets.first.last, class: "link-quiet"),
-          " (",
-          safe_join(record_links, ", "),
-          ")"
-        ])
-      else
-        items << summary.failed_replies_label
-      end
+      targets = summary.failed_replies.map { |message| failed_reply_target(message) }.uniq { |_, path| path }
+      record_links = targets.map { |name, path| link_to(name, path, class: "link-quiet") }
+      items << safe_join([
+        link_to(summary.failed_replies_label, targets.first.last, class: "link-quiet"),
+        " (",
+        safe_join(record_links, ", "),
+        ")"
+      ])
     end
     if summary.set_aside_messages_count.positive?
-      items << safe_join([
-        link_to(summary.set_aside_messages_label, edit_settings_path(anchor: "mailbox-heading"), class: "link-quiet"),
-        " (retried, in Outlook)"
-      ])
+      items << link_to(summary.set_aside_messages_label, edit_settings_path(anchor: "mailbox-heading"), class: "link-quiet")
     end
     items
   end

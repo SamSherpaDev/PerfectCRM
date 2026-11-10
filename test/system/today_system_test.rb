@@ -109,7 +109,8 @@ class TodaySystemTest < ApplicationSystemTestCase
       assert_text "Mailbox has not been read since"
       assert_text "PerfectBook sync is behind"
       assert_text "2 replies were not delivered (Pemba Sherpa, Maya)"
-      assert_text "1 message could not be read (retried, in Outlook)"
+      assert_text "1 message could not be read"
+      assert_no_text "retried, in Outlook"
       assert_link "PerfectBook sync is behind", href: edit_settings_path(anchor: "perfectbook-heading")
       assert_link "Pemba Sherpa", href: lead_path(pemba)
       assert_link "Maya", href: client_path(maya)

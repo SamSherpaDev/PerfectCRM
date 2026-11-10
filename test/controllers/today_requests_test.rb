@@ -346,7 +346,7 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
       get root_path
       assert_response :success
       assert_select "p.today-attention[aria-label='Needs attention']",
-        text: "1 message could not be read (retried, in Outlook)" do
+        text: "1 message could not be read" do
         assert_select "a[href=?]", edit_settings_path(anchor: "mailbox-heading"),
           text: "1 message could not be read"
       end
@@ -359,7 +359,7 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
       assert_response :success
       assert_select "p.today-attention[aria-label='Needs attention']", count: 1 do |lines|
         text = lines.sole.text
-        assert_includes text, "Mailbox has not been read since 2:10 pm · PerfectBook sync is behind · 2 replies were not delivered (Pemba Sherpa, Maya) · 1 message could not be read (retried, in Outlook)"
+        assert_includes text, "Mailbox has not been read since 2:10 pm · PerfectBook sync is behind · 2 replies were not delivered (Pemba Sherpa, Maya) · 1 message could not be read"
         assert_select "a[href=?]", edit_settings_path(anchor: "mailbox-heading"), text: "Mailbox has not been read since 2:10 pm"
         assert_select "a[href=?]", edit_settings_path(anchor: "perfectbook-heading"), text: "PerfectBook sync is behind"
         assert_select "a[href=?]", lead_path(lead), text: "2 replies were not delivered"

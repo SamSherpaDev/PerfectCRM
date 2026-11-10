@@ -16,6 +16,7 @@ module Today
     CALL_CADENCE_STARTS_ON = Date.new(2026, 10, 20)
     MAILBOX_STALE_AFTER = 20.minutes
     PERFECTBOOK_STALE_AFTER = 45.minutes
+    FAILED_REPLY_WINDOW = 7.days
 
     CallEntry = Data.define(:lead, :attempt, :attempt_label, :last_call, :waited_since, :suggested_window) do
       def initialize(lead:, attempt:, attempt_label:, last_call:, waited_since:, suggested_window: nil)
@@ -64,15 +65,10 @@ module Today
       @mailbox_attention_label = begin
         settings = Setting.current
         last_sync = settings.mailbox_last_sync_at || (settings.mailbox_watched_since if settings.mailbox_connected?)
-        error_set = settings.mailbox_last_error.present? ||
-          MailSyncState.where(last_error_at: (@now - MailSyncState::ATTENTION_WINDOW)..).where.not(last_error: [ nil, "" ]).exists?
-        stale = last_sync.present? && last_sync < @now - MAILBOX_STALE_AFTER
-        if error_set || stale
-          if last_sync.present?
-            "Mailbox has not been read since #{last_sync.in_time_zone.strftime('%-I:%M %P')}"
-          else
-            "Mailbox has not been read"
-          end
+        if last_sync.present? && (settings.mailbox_last_error.present? || last_sync < @now - MAILBOX_STALE_AFTER)
+          last_sync = last_sync.in_time_zone
+          time_format = last_sync.to_date == @today ? "%-I:%M %P" : "%a %b %-d, %-I:%M %P"
+          "Mailbox has not been read since #{last_sync.strftime(time_format)}"
         end
       end
     end
@@ -80,14 +76,8 @@ module Today
     def perfectbook_sync_behind?
       return @perfectbook_sync_behind if defined?(@perfectbook_sync_behind)
 
-      @perfectbook_sync_behind = begin
-        last_success = PerfectBook::SyncState.last_success_at
-        if last_success.present?
-          last_success < @now - PERFECTBOOK_STALE_AFTER
-        else
-          PerfectBook::SyncState.last_error_row.present?
-        end
-      end
+      @perfectbook_sync_behind = PerfectBook::SyncState.where(job_name: PerfectBook::SyncState::JOBS)
+        .where(last_success_at: ...(@now - PERFECTBOOK_STALE_AFTER)).exists?
     end
 
     def perfectbook_attention_label
@@ -103,11 +93,20 @@ module Today
           .select(:id)
 
         Message.outbound.where(status: "failed")
+          .where(updated_at: (@now - FAILED_REPLY_WINDOW)..)
           .where.not(id: Message.automatic_replies.select(:id))
           .where.not(id: GuideRequest.where.not(message_id: nil).select(:message_id))
           .where("messages.conversation_id IS NULL OR messages.conversation_id NOT IN (#{archived_conversations.to_sql})")
+          .where(<<~SQL.squish)
+            NOT EXISTS (SELECT 1 FROM messages later
+              WHERE later.direction = 'out' AND later.status IN ('sent', 'received')
+                AND later.sent_at > messages.updated_at
+                AND (later.conversation_id = messages.conversation_id
+                  OR (messages.conversation_id IS NULL AND later.group_send_id = messages.group_send_id
+                    AND later.to_addresses = messages.to_addresses)))
+          SQL
           .newest_first
-          .includes(:group_send, conversation: :linkable)
+          .includes(:group_send, conversation: :owner)
           .to_a
       end
     end

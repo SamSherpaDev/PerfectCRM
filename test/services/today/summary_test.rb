@@ -401,12 +401,28 @@ class TodaySummaryTest < ActiveSupport::TestCase
       summary = Today::Summary.new
       assert summary.attention?
       assert_equal "Mailbox has not been read since 2:20 pm", summary.mailbox_attention_label
+    end
+  end
 
-      Setting.current.update!(mailbox_last_error: nil)
-      MailSyncState.create!(folder: "inbox", last_error: "Graph 503", last_error_at: 5.minutes.ago)
+  test "mailbox_attention_label adds the date when the mailbox was last read on another day" do
+    Setting.current.update!(mailbox_last_sync_at: Time.zone.local(2026, 11, 6, 14, 10), mailbox_last_error: "Token expired")
+
+    travel_to Time.zone.local(2026, 11, 6, 16, 0) do
+      assert_equal "Mailbox has not been read since 2:10 pm", Today::Summary.new.mailbox_attention_label
+    end
+    travel_to Time.zone.local(2026, 11, 9, 16, 0) do
+      assert_equal "Mailbox has not been read since Fri Nov 6, 2:10 pm", Today::Summary.new.mailbox_attention_label
+    end
+  end
+
+  test "mailbox_attention_label ignores a folder error left behind while the mailbox keeps syncing" do
+    travel_to Time.zone.local(2026, 11, 3, 14, 35) do
+      Setting.current.update!(mailbox_last_sync_at: 3.minutes.ago, mailbox_last_error: nil)
+      MailSyncState.create!(folder: "deleted-folder", last_error: "Graph 404", last_error_at: 1.day.ago)
+
       summary = Today::Summary.new
-      assert summary.attention?
-      assert_equal "Mailbox has not been read since 2:20 pm", summary.mailbox_attention_label
+      assert_nil summary.mailbox_attention_label
+      assert_not summary.attention?
     end
   end
 
@@ -421,6 +437,33 @@ class TodaySummaryTest < ActiveSupport::TestCase
       assert summary.attention?
       assert summary.perfectbook_sync_behind?
       assert_equal "PerfectBook sync is behind", summary.perfectbook_attention_label
+    end
+  end
+
+  test "perfectbook_sync_behind? reports one stalled job while the others keep succeeding" do
+    travel_to Time.zone.local(2026, 11, 3, 15, 0) do
+      PerfectBook::SyncState.for("catalog").update!(last_success_at: 5.minutes.ago)
+      PerfectBook::SyncState.for("contacts").update!(last_success_at: 5.minutes.ago)
+      bookings = PerfectBook::SyncState.for("bookings")
+      bookings.update!(last_success_at: 5.minutes.ago)
+      assert_not Today::Summary.new.perfectbook_sync_behind?
+
+      bookings.update!(last_success_at: 2.days.ago, last_error: "Booking 41 is malformed", last_error_at: 5.minutes.ago)
+      summary = Today::Summary.new
+      assert summary.perfectbook_sync_behind?
+      assert_equal "PerfectBook sync is behind", summary.perfectbook_attention_label
+    end
+  end
+
+  test "perfectbook_sync_behind? stays quiet when PerfectBook has never synced" do
+    travel_to Time.zone.local(2026, 11, 3, 15, 0) do
+      PerfectBook::SyncState.record_error!("catalog", "PERFECTBOOK_API_TOKEN is not set")
+      PerfectBook::SyncState.for("contacts")
+
+      summary = Today::Summary.new
+      assert_not summary.perfectbook_sync_behind?
+      assert_nil summary.perfectbook_attention_label
+      assert_not summary.attention?
     end
   end
 
@@ -461,6 +504,46 @@ class TodaySummaryTest < ActiveSupport::TestCase
     end
   end
 
+  test "failed_replies keeps a recent failure and drops ones older than 7 days or followed by a delivered message" do
+    travel_to Time.zone.local(2026, 11, 3, 15, 0) do
+      maya = Client.create!(name: "Maya", email: "maya@example.test")
+      recent = failed_reply(maya, failed_at: 6.days.ago)
+      failed_reply(maya, failed_at: 8.days.ago)
+
+      resent = failed_reply(maya, failed_at: 2.hours.ago)
+      resent.conversation.messages.create!(direction: "out", status: "sent", subject: "Trip",
+        to_addrs: maya.email, text_body: "Sending this again", sent_at: 1.hour.ago)
+
+      answered_from_outlook = failed_reply(maya, failed_at: 2.hours.ago)
+      answered_from_outlook.conversation.messages.create!(direction: "out", status: "received", subject: "Trip",
+        to_addrs: maya.email, text_body: "Sent from Outlook", sent_at: 30.minutes.ago)
+
+      failed_after_delivery = failed_reply(maya, failed_at: 3.hours.ago)
+      failed_after_delivery.conversation.messages.create!(direction: "out", status: "sent", subject: "Trip",
+        to_addrs: maya.email, text_body: "Earlier note", sent_at: 4.hours.ago)
+
+      summary = Today::Summary.new
+      assert_equal [ failed_after_delivery, recent ], summary.failed_replies
+      assert_equal "2 replies were not delivered", summary.failed_replies_label
+    end
+  end
+
+  test "failed_replies keeps a group send failure when only other recipients were delivered" do
+    travel_to Time.zone.local(2026, 11, 3, 15, 0) do
+      template = Template.create!(name: "Departure note", purpose: "custom", subject: "Departure", body: "See you soon")
+      group = GroupSend.create!(template: template, total_count: 2)
+      bounced = group.messages.create!(direction: "out", status: "failed", subject: "Departure",
+        to_addrs: "walk-in@example.test", text_body: "See you soon", updated_at: 2.hours.ago)
+      group.messages.create!(direction: "out", status: "sent", subject: "Departure",
+        to_addrs: "other@example.test", text_body: "See you soon", sent_at: 1.hour.ago)
+      assert_equal [ bounced ], Today::Summary.new.failed_replies
+
+      group.messages.create!(direction: "out", status: "sent", subject: "Departure",
+        to_addrs: "walk-in@example.test", text_body: "See you soon", sent_at: 30.minutes.ago)
+      assert_empty Today::Summary.new.failed_replies
+    end
+  end
+
   test "set_aside_messages_count reports quarantined mail messages" do
     MailMessageQuarantine.create!(provider_message_id: "msg-1", attempts: 3)
     summary = Today::Summary.new
@@ -478,6 +561,11 @@ class TodaySummaryTest < ActiveSupport::TestCase
 
   def inquiry(name, received_at, phone: "+1 415 555 0134", source: "manual")
     Lead.create!(name: name, email: "demo@example.test", phone_raw: phone, received_at: received_at, source: source)
+  end
+
+  def failed_reply(owner, failed_at:)
+    owner.conversations.create!(subject: "Trip").messages.create!(direction: "out", status: "failed",
+      subject: "Trip", to_addrs: owner.email, text_body: "Hello", created_at: failed_at, updated_at: failed_at)
   end
 
   def reply(lead, status:, sent_at: 1.hour.ago)
