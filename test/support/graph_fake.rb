@@ -115,6 +115,11 @@ module GraphMessageBuilder
     { "@odata.type" => "#microsoft.graph.itemAttachment", "id" => id,
       "name" => name, "contentType" => "message/rfc822", "size" => 1000, "isInline" => false }
   end
+
+  def graph_reference_attachment(id:, name: "Shared folder")
+    { "@odata.type" => "#microsoft.graph.referenceAttachment", "id" => id,
+      "name" => name, "contentType" => "application/octet-stream", "size" => 0, "isInline" => false }
+  end
 end
 
 # Scripted two-folder mailbox behind a FakeGraphTransport.

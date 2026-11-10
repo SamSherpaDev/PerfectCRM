@@ -34,6 +34,12 @@ production:
   mail_sync:
     class: Mail::SyncJob
     schedule: every 5 minutes
+  mail_set_aside_retry:
+    class: Mail::SetAsideRetryJob
+    schedule: every hour
+  outbound_delivery_sweep:
+    class: OutboundDeliverySweepJob
+    schedule: every 5 minutes America/Los_Angeles
   document_holdings_purge:
     class: DocumentHoldingsPurgeJob
     schedule: every hour

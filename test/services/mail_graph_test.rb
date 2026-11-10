@@ -477,6 +477,107 @@ class MailGraphTest < ActiveSupport::TestCase
     end
   end
 
+  test "an unreadable message inside an expired token's gap does not hold up the mail around it" do
+    fetcher.fetch_new.to_a # prime
+    synced_at = MailSyncState.for("inbox").last_sync_at
+    link_before = MailSyncState.for("inbox").delta_link
+    refused_at = (synced_at + 1.minute).utc
+    @mailbox.add("inbox", graph_message(id: "gap-refused", from: "operator@example.com",
+      message_id: "<gaprefused@test>", received: refused_at.iso8601))
+    @mailbox.transport.on_get("/me/messages/gap-refused") do |*|
+      { status: 400, json: { "error" => { "code" => "ErrorInvalidRequest", "message" => "Cannot read this item" } } }
+    end
+
+    3.times do |n|
+      @mailbox.add("inbox", graph_message(id: "gap-fine-#{n}", from: "client#{n}@example.com",
+        message_id: "<gapfine#{n}@test>", received: (synced_at + (n + 2).minutes).utc.iso8601))
+      @mailbox.expire_delta!("inbox")
+      seen = []
+      read = -> { fetcher.fetch_new { |item| seen << item.provider[:message_id] } }
+      if n < 2
+        error = assert_raises(Mail::ConnectionError, &read)
+        assert_match(/\AInbox: Microsoft Graph returned 400/, error.message)
+        # Until the message is given up on, the dead token stays so the gap replays.
+        assert_equal link_before, MailSyncState.for("inbox").delta_link
+      else
+        read.call
+      end
+      # The mail filed after the refused message is read on every run.
+      assert_includes seen, "gap-fine-#{n}"
+    end
+
+    # Refused three times: set aside, and the folder moves on to its new
+    # link with the gap filled around it.
+    assert MailMessageQuarantine.quarantined?("gap-refused")
+    assert_not_equal link_before, MailSyncState.for("inbox").delta_link
+    assert_match(/re-read to fill the gap/, MailSyncState.for("inbox").last_notice.to_s)
+
+    fetches = @mailbox.requests.count { |request| request.url.include?("/me/messages/gap-refused") }
+    @mailbox.add("inbox", graph_message(id: "after-gap", from: "new@example.com", message_id: "<aftergap@test>"))
+    assert_equal [ "after-gap" ], fetcher.fetch_new.to_a.map { |item| item.provider[:message_id] }
+    assert_equal fetches, @mailbox.requests.count { |request| request.url.include?("/me/messages/gap-refused") }
+  end
+
+  test "a storage, database or network outage while storing a message ends the folder's read and counts one try against it" do
+    fetcher.fetch_new.to_a # prime
+    link_before = MailSyncState.for("inbox").delta_link
+    @mailbox.add("inbox", graph_message(id: "unlucky", from: "client@example.com", message_id: "<unlucky@test>"))
+    @mailbox.add("inbox", graph_message(id: "behind", from: "other@example.com", message_id: "<behind@test>"))
+    outages = [
+      ActiveRecord::ConnectionNotEstablished.new("database is unreachable"),
+      ActiveRecord::StatementTimeout.new("SQLite3::BusyException: database is locked"),
+      ActiveStorage::IntegrityError.new("upload checksum mismatch"),
+      Errno::ENOSPC.new("storage volume"),
+      Net::ReadTimeout.new("storage service"),
+      Mail::ConnectionError.new("Microsoft Graph returned 503")
+    ]
+
+    outages.each do |outage|
+      seen = []
+      assert_raises(outage.class) do
+        fetcher.fetch_new do |item|
+          raise outage if item.provider[:message_id] == "unlucky"
+
+          seen << item.provider[:message_id]
+        end
+      end
+      assert_empty seen
+      assert_equal({ "unlucky" => 1 }, MailMessageQuarantine.pluck(:provider_message_id, :attempts).to_h)
+      assert_equal link_before, MailSyncState.for("inbox").delta_link
+      # Each kind is judged on a first try of its own.
+      MailMessageQuarantine.delete_all
+    end
+    assert_equal 0, @mailbox.requests.count { |request| request.url.include?("/me/messages/behind") }
+
+    assert_equal %w[unlucky behind], fetcher.fetch_new.to_a.map { |item| item.provider[:message_id] }
+    assert_not_equal link_before, MailSyncState.for("inbox").delta_link
+  end
+
+  test "Graph answering about access, timing or its own trouble on one message ends the folder's read and counts one try against it" do
+    fetcher.fetch_new.to_a # prime
+    link_before = MailSyncState.for("inbox").delta_link
+    @mailbox.add("inbox", graph_message(id: "unanswered", from: "client@example.com", message_id: "<unanswered@test>"))
+    @mailbox.add("inbox", graph_message(id: "queued", from: "other@example.com", message_id: "<queued@test>"))
+    status = nil
+    @mailbox.transport.on_get("/me/messages/unanswered") do |*|
+      { status: status, json: { "error" => { "code" => "Refused" } } }
+    end
+
+    [ 403, 408, 500, 503 ].each do |answer|
+      status = answer
+      seen = []
+      error = assert_raises(Mail::ConnectionError) { fetcher.fetch_new { |item| seen << item.provider[:message_id] } }
+      assert_instance_of Mail::ConnectionError, error
+      assert_equal "Inbox: Microsoft Graph returned #{answer} (Refused)", error.message
+      assert_empty seen
+      assert_equal({ "unanswered" => 1 }, MailMessageQuarantine.pluck(:provider_message_id, :attempts).to_h)
+      # Each answer is judged on a first try of its own.
+      MailMessageQuarantine.delete_all
+    end
+    assert_equal 0, @mailbox.requests.count { |request| request.url.include?("/me/messages/queued") }
+    assert_equal link_before, MailSyncState.for("inbox").delta_link
+  end
+
   test "a gap longer than the recovery window is reported instead of walked" do
     fetcher.fetch_new.to_a # prime
     # The grant was revoked, sync stopped, and the captain reconnected days
@@ -792,6 +893,50 @@ class MailGraphTest < ActiveSupport::TestCase
     stored = Mail::Ingester.ingest(parsed: items.first.parsed, provider: items.first.provider)[:message]
     assert_empty stored.files
     assert_equal [ "forwarded.eml" ], stored.held_attachments.map { |entry| entry["filename"] }
+  end
+
+  test "reference attachments store the link name as a note without requesting bytes" do
+    fetcher.fetch_new.to_a # prime
+    message = graph_message(id: "ref-att-1", from: "traveler@example.com", message_id: "<refatt1@test>",
+      body: "Here is the shared folder link.",
+      attachments: [
+        graph_reference_attachment(id: "ref-1", name: "Trip photos folder"),
+        graph_file_attachment(id: "file-1", name: "itinerary.txt")
+      ])
+    @mailbox.add("inbox", message, file_bytes: { "file-1" => "itinerary bytes" })
+
+    items = fetcher.fetch_new.to_a
+    assert_equal 1, items.length
+    stored = Mail::Ingester.ingest(parsed: items.first.parsed, provider: items.first.provider)[:message]
+    assert_equal 1, @mailbox.byte_fetches
+    assert_equal [ "itinerary.txt" ], stored.files.map { |file| file.filename.to_s }
+    assert_equal 1, stored.attachment_notices.length
+    assert_includes stored.attachment_notices.first, "Trip photos folder"
+    assert_match(/Outlook/i, stored.attachment_notices.first)
+  end
+
+  test "an attachment download failure stores the message with a visible Outlook note" do
+    fetcher.fetch_new.to_a # prime
+    message = graph_message(id: "broken-att-1", from: "traveler@example.com", message_id: "<brokenatt1@test>",
+      body: "Please see our dates in this reply.",
+      attachments: [
+        graph_file_attachment(id: "bad-a1", name: "corrupt-link.bin"),
+        graph_file_attachment(id: "good-a2", name: "dates.txt")
+      ])
+    @mailbox.add("inbox", message, file_bytes: { "good-a2" => "October dates" })
+    @mailbox.transport.on_get("/me/messages/broken-att-1/attachments/bad-a1/$value") do |*|
+      { status: 400, json: { "error" => { "code" => "BadRequest", "message" => "Attachment bytes unavailable" } } }
+    end
+
+    items = fetcher.fetch_new.to_a
+    result = Mail::Ingester.ingest(parsed: items.first.parsed, provider: items.first.provider)
+    assert_equal :stored, result[:status]
+    stored = result[:message]
+    assert_equal "Please see our dates in this reply.", stored.text_body
+    assert_equal [ "dates.txt" ], stored.files.map { |file| file.filename.to_s }
+    assert_equal 1, stored.attachment_notices.length
+    assert_includes stored.attachment_notices.first, "corrupt-link.bin"
+    assert_includes stored.attachment_notices.first, "one attachment could not be read, open it in Outlook"
   end
 
   test "unconfigured fetcher refuses to run" do

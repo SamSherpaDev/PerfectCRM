@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_10_060152) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_10_060326) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -481,6 +481,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_10_060152) do
     t.string "status", default: "draft", null: false
     t.integer "total_messages", default: 0, null: false
     t.datetime "updated_at", null: false
+  end
+
+  create_table "mail_message_quarantines", force: :cascade do |t|
+    t.integer "attempts", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.string "provider_message_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["provider_message_id"], name: "index_mail_message_quarantines_on_provider_message_id", unique: true
   end
 
   create_table "mail_sync_states", force: :cascade do |t|

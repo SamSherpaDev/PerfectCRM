@@ -75,13 +75,18 @@
         <dd><%= @settings.mailbox_last_error.presence || @mailbox_error&.last_error.presence || "None" %></dd>
       </div>
     </dl>
-    <% if @mailbox_notices.any? %>
+    <% if @mailbox_notices.any? || @mailbox_set_aside.positive? %>
       <div class="mt-4">
         <div class="flex flex-wrap items-baseline justify-between gap-2">
           <p class="text-sm font-medium text-ink">Worth a look</p>
-          <%= link_to "Import history", new_mail_import_path, class: "link text-sm" %>
+          <%= link_to "Import history", new_mail_import_path, class: "link text-sm" if @mailbox_notices.any? %>
         </div>
         <ul class="mt-1 space-y-1 text-sm text-ink-2">
+          <% if @mailbox_set_aside == 1 %>
+            <li>1 email could not be read and is waiting to be re-read. It is retried automatically about every hour and remains in Outlook.</li>
+          <% elsif @mailbox_set_aside > 1 %>
+            <li><%= @mailbox_set_aside %> emails could not be read and are waiting to be re-read. They are retried automatically about every hour and remain in Outlook.</li>
+          <% end %>
           <% @mailbox_notices.each do |state| %>
             <li><%= state.last_notice %> <span class="muted"><%= time_24_12(state.last_notice_at) %></span></li>
           <% end %>

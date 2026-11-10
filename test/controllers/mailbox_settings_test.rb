@@ -28,6 +28,37 @@ class MailboxSettingsTest < ActionDispatch::IntegrationTest
     assert_select "a[href=?]", new_mail_import_path, text: "Import history", count: 1
   end
 
+  test "the mailbox card counts mail waiting to be re-read until the retry has read it" do
+    mailbox = FakeMailbox.new
+    Setting.current.update!(ms_graph_refresh_token: "refresh-9", mailbox_watched_since: Time.current)
+    builder = Object.new.extend(GraphMessageBuilder)
+    %w[waiting-one waiting-two].each do |id|
+      mailbox.add("inbox", builder.graph_message(id: id, from: "#{id}@example.com", message_id: "<#{id}@test>"))
+      MailMessageQuarantine.create!(provider_message_id: id, attempts: MailMessageQuarantine::MAX_ATTEMPTS)
+    end
+    # Still being read again by live sync: not set aside, so not counted.
+    MailMessageQuarantine.create!(provider_message_id: "second-try", attempts: MailMessageQuarantine::MAX_ATTEMPTS - 1)
+
+    get edit_settings_path
+    assert_select "p", text: "Worth a look"
+    assert_select "li", text: "2 emails could not be read and are waiting to be re-read. " \
+      "They are retried automatically about every hour and remain in Outlook."
+    # Import history is the remedy for a gap notice, not for this.
+    assert_select "a[href=?]", new_mail_import_path, count: 0
+
+    mailbox.transport.on_get("/me/messages/waiting-two") { |*| { status: 400, json: {} } }
+    Mail::SetAsideRetryJob.new.perform(fetcher: Mail::GraphFetcher.new(transport: mailbox.transport))
+    get edit_settings_path
+    assert_select "li", text: "1 email could not be read and is waiting to be re-read. " \
+      "It is retried automatically about every hour and remains in Outlook."
+
+    mailbox.transport.on_get("/me/messages/waiting-two") { |*| { status: 200, json: mailbox.find("waiting-two") } }
+    Mail::SetAsideRetryJob.new.perform(fetcher: Mail::GraphFetcher.new(transport: mailbox.transport))
+    get edit_settings_path
+    assert_select "p", text: "Worth a look", count: 0
+    assert_no_match(/waiting to be re-read/, response.body)
+  end
+
   # The rendered page is the contract the browser acts on, and Turbo's
   # documented opt-out is what makes the browser submit natively. Without it
   # Turbo Drive follows the cross-origin 302 below with fetch, CORS rejects

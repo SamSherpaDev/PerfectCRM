@@ -5,6 +5,8 @@ class Message < ApplicationRecord
   alias_attribute :references, :references_text
 
   STATUSES = %w[queued sending sent failed received].freeze
+  STUCK_SENDING_AFTER = 15.minutes
+  INTERRUPTED_DELIVERY_ERROR = "Delivery was interrupted. Check Sent Items in Outlook before retrying.".freeze
 
   belongs_to :group_send, optional: true
   belongs_to :template, optional: true
@@ -176,6 +178,20 @@ class Message < ApplicationRecord
 
   def mark_failed!(error)
     update!(status: "failed", send_error: error.to_s.truncate(500))
+  end
+
+  def self.fail_stuck_sending!(before: STUCK_SENDING_AFTER.ago)
+    failed = 0
+    outbound.where(status: "sending").where(updated_at: ...before).find_each do |message|
+      claimed = where(id: message.id, direction: "out", status: "sending")
+        .where(updated_at: ...before)
+        .update_all(status: "failed", send_error: INTERRUPTED_DELIVERY_ERROR, updated_at: Time.current)
+      next unless claimed == 1
+
+      failed += 1
+      message.group_send&.refresh_status!
+    end
+    failed
   end
 
   # The record whose timeline carries this message, via its conversation.
