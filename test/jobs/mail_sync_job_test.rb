@@ -235,7 +235,7 @@ class MailSyncJobTest < ActiveSupport::TestCase
     assert_nil Setting.current.reload.mailbox_last_error
   end
 
-  test "variant B: an unexpected error on one message quarantines it, stores later messages and folders, writes mailbox_last_error, and advances after three attempts" do
+  test "variant B: an unexpected error on one message quarantines it, stores later messages and folders, writes mailbox_last_error, and advances after three attempts that got other mail through" do
     Mail::SyncJob.new.perform(fetcher: fetcher) # prime
     initial_inbox_link = MailSyncState.for("inbox").delta_link
 
@@ -266,13 +266,23 @@ class MailSyncJobTest < ActiveSupport::TestCase
       assert_equal 1, quarantine.attempts
       assert_not quarantine.quarantined?
 
-      # Attempt 2: still below the three-attempt cap; inbox delta_link stays put for one last retry.
+      # A run that reads nothing else proves nothing about the message: it
+      # is retried, and the attempt is not counted against it.
       assert_raises(ArgumentError) { Mail::SyncJob.new.perform(fetcher: fetcher) }
+      assert_equal 1, quarantine.reload.attempts
+      assert_equal initial_inbox_link, MailSyncState.for("inbox").reload.delta_link
+
+      # Attempt 2: still below the three-attempt cap; inbox delta_link stays put for one last retry.
+      @mailbox.add("inbox", sync_message(id: "healthy-second", from: "second@example.com"))
+      assert_raises(ArgumentError) { Mail::SyncJob.new.perform(fetcher: fetcher) }
+      assert Message.exists?(provider_message_id: "healthy-second")
       assert_equal 2, quarantine.reload.attempts
       assert_not quarantine.quarantined?
       assert_equal initial_inbox_link, MailSyncState.for("inbox").reload.delta_link
+      assert_empty MailSyncState.recently_noticed
 
       # Attempt 3: reaches three failed attempts, marks quarantined, and advances the folder's delta_link.
+      @mailbox.add("inbox", sync_message(id: "healthy-third", from: "third@example.com"))
       assert_raises(ArgumentError) { Mail::SyncJob.new.perform(fetcher: fetcher) }
       assert_equal 3, quarantine.reload.attempts
       assert quarantine.quarantined?
@@ -289,6 +299,86 @@ class MailSyncJobTest < ActiveSupport::TestCase
       assert_equal 3, quarantine.reload.attempts
       assert Message.exists?(provider_message_id: "fresh-after-quarantine")
       assert_nil Setting.current.reload.mailbox_last_error
+
+      # The clean run cleared the error line, so the mailbox card's notice
+      # is what still tells the captain a message was skipped for good.
+      assert_nil MailSyncState.for("inbox").last_error
+      noticed = MailSyncState.recently_noticed.to_a
+      assert_equal [ "inbox" ], noticed.map(&:folder)
+      assert_match(/\AInbox: /, noticed.first.last_notice)
+      assert_match(/could not be read after 3 tries/, noticed.first.last_notice)
+      assert_match(/Outlook/, noticed.first.last_notice)
     end
+  end
+
+  test "an outage that fails every message quarantines nothing and replays cleanly once it ends" do
+    Mail::SyncJob.new.perform(fetcher: fetcher) # prime
+    initial_link = MailSyncState.for("inbox").delta_link
+    @mailbox.add("inbox", sync_message(id: "during-outage-1", from: "one@example.com"))
+    @mailbox.add("inbox", sync_message(id: "during-outage-2", from: "two@example.com"))
+
+    # A deploy that breaks ingestion fails every message the same way, for
+    # one run more than the three-attempt cap.
+    Mail::Ingester.stub(:ingest, ->(**) { raise NoMethodError, "undefined method 'store' for nil" }) do
+      4.times do
+        error = assert_raises(NoMethodError) { Mail::SyncJob.new.perform(fetcher: fetcher) }
+        assert_equal "Inbox: undefined method 'store' for nil", error.message
+        assert_equal error.message, Setting.current.reload.mailbox_last_error
+      end
+    end
+    assert_equal 0, MailMessageQuarantine.count
+    assert_equal initial_link, MailSyncState.for("inbox").delta_link
+    assert_empty MailSyncState.recently_noticed
+
+    assert_difference("Message.count", 2) do
+      assert_equal 2, Mail::SyncJob.new.perform(fetcher: fetcher)
+    end
+    assert Message.exists?(provider_message_id: "during-outage-1")
+    assert Message.exists?(provider_message_id: "during-outage-2")
+    assert_not_equal initial_link, MailSyncState.for("inbox").reload.delta_link
+    assert_nil Setting.current.reload.mailbox_last_error
+  end
+
+  test "a Graph outage on one attachment download leaves the message for the next run instead of storing it without the file" do
+    Mail::SyncJob.new.perform(fetcher: fetcher) # prime
+    initial_link = MailSyncState.for("inbox").delta_link
+    with_attachment = graph_message(
+      id: "att-503",
+      from: "traveler@example.com",
+      message_id: "<att503@test>",
+      body: "Our day by day plan is attached.",
+      attachments: [ graph_file_attachment(id: "slow-att", name: "itinerary.txt") ]
+    )
+    @mailbox.add("inbox", with_attachment)
+    @mailbox.add("inbox", sync_message(id: "plain-after-503", from: "later@example.com"))
+    graph_down = true
+    @mailbox.transport.on_get("/me/messages/att-503/attachments/slow-att/$value") do |*|
+      if graph_down
+        { status: 503, json: { "error" => { "code" => "ServiceUnavailable" } } }
+      else
+        { status: 200, bytes: "Day 1: Kathmandu" }
+      end
+    end
+
+    # One run more than the three-attempt cap: the outage is never counted
+    # against the message, however long it lasts.
+    4.times do
+      error = assert_raises(Mail::ConnectionError) { Mail::SyncJob.new.perform(fetcher: fetcher) }
+      assert_match(/503/, error.message)
+    end
+    assert_not Message.exists?(provider_message_id: "att-503")
+    assert Message.exists?(provider_message_id: "plain-after-503")
+    assert_equal 0, MailMessageQuarantine.count
+    assert_equal initial_link, MailSyncState.for("inbox").delta_link
+
+    graph_down = false
+    assert_equal 1, Mail::SyncJob.new.perform(fetcher: fetcher)
+    stored = Message.find_by!(provider_message_id: "att-503")
+    assert_equal "Our day by day plan is attached.", stored.text_body
+    assert_equal [ "itinerary.txt" ], stored.files.map { |file| file.filename.to_s }
+    assert_equal "Day 1: Kathmandu", stored.files.first.download
+    assert_empty Array(stored.attachment_notices)
+    assert_not_equal initial_link, MailSyncState.for("inbox").reload.delta_link
+    assert_nil Setting.current.reload.mailbox_last_error
   end
 end

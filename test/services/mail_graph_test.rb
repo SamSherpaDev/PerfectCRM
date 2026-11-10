@@ -477,6 +477,77 @@ class MailGraphTest < ActiveSupport::TestCase
     end
   end
 
+  test "an unreadable message inside an expired token's gap does not hold up the mail around it" do
+    fetcher.fetch_new.to_a # prime
+    synced_at = MailSyncState.for("inbox").last_sync_at
+    link_before = MailSyncState.for("inbox").delta_link
+    refused_at = (synced_at + 1.minute).utc
+    @mailbox.add("inbox", graph_message(id: "gap-refused", from: "operator@example.com",
+      message_id: "<gaprefused@test>", received: refused_at.iso8601))
+    @mailbox.transport.on_get("/me/messages/gap-refused") do |*|
+      { status: 400, json: { "error" => { "code" => "ErrorInvalidRequest", "message" => "Cannot read this item" } } }
+    end
+
+    3.times do |n|
+      @mailbox.add("inbox", graph_message(id: "gap-fine-#{n}", from: "client#{n}@example.com",
+        message_id: "<gapfine#{n}@test>", received: (synced_at + (n + 2).minutes).utc.iso8601))
+      @mailbox.expire_delta!("inbox")
+      seen = []
+      error = assert_raises(Mail::ConnectionError) { fetcher.fetch_new { |item| seen << item.provider[:message_id] } }
+      assert_match(/\AInbox: Microsoft Graph returned 400/, error.message)
+      # The mail filed after the refused message is read on every run.
+      assert_includes seen, "gap-fine-#{n}"
+      # Until the message is given up on, the dead token stays so the gap replays.
+      assert_equal link_before, MailSyncState.for("inbox").delta_link if n < 2
+    end
+
+    # Refused three times while other mail got through: given up on, the
+    # folder moves on, and the mailbox card says which mail was skipped.
+    assert MailMessageQuarantine.quarantined?("gap-refused")
+    assert_not_equal link_before, MailSyncState.for("inbox").delta_link
+    notice = MailSyncState.for("inbox").last_notice.to_s
+    assert_match(/\AInbox: /, notice)
+    assert_match(/could not be read after 3 tries/, notice)
+    assert_includes notice, refused_at.in_time_zone("America/Los_Angeles").strftime("%H:%M")
+
+    fetches = @mailbox.requests.count { |request| request.url.include?("/me/messages/gap-refused") }
+    @mailbox.add("inbox", graph_message(id: "after-gap", from: "new@example.com", message_id: "<aftergap@test>"))
+    assert_equal [ "after-gap" ], fetcher.fetch_new.to_a.map { |item| item.provider[:message_id] }
+    assert_equal fetches, @mailbox.requests.count { |request| request.url.include?("/me/messages/gap-refused") }
+  end
+
+  test "a storage, database or Graph outage on one message is retried and never counted against it" do
+    fetcher.fetch_new.to_a # prime
+    link_before = MailSyncState.for("inbox").delta_link
+    @mailbox.add("inbox", graph_message(id: "unlucky", from: "client@example.com", message_id: "<unlucky@test>"))
+    outages = [
+      ActiveRecord::StatementInvalid.new("SQLite3::BusyException: database is locked"),
+      ActiveStorage::IntegrityError.new("upload checksum mismatch"),
+      Errno::ENOSPC.new("storage volume"),
+      Mail::ConnectionError.new("Microsoft Graph returned 503")
+    ]
+
+    # One run more than the three-attempt cap, each with other mail getting through.
+    outages.each_with_index do |outage, n|
+      @mailbox.add("inbox", graph_message(id: "lucky-#{n}", from: "other#{n}@example.com", message_id: "<lucky#{n}@test>"))
+      seen = []
+      assert_raises(outage.class) do
+        fetcher.fetch_new do |item|
+          raise outage if item.provider[:message_id] == "unlucky"
+
+          seen << item.provider[:message_id]
+        end
+      end
+      assert_includes seen, "lucky-#{n}"
+    end
+    assert_equal 0, MailMessageQuarantine.count
+    assert_equal link_before, MailSyncState.for("inbox").delta_link
+    assert_empty MailSyncState.recently_noticed
+
+    assert_includes fetcher.fetch_new.to_a.map { |item| item.provider[:message_id] }, "unlucky"
+    assert_not_equal link_before, MailSyncState.for("inbox").delta_link
+  end
+
   test "a gap longer than the recovery window is reported instead of walked" do
     fetcher.fetch_new.to_a # prime
     # The grant was revoked, sync stopped, and the captain reconnected days

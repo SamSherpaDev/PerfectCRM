@@ -1,4 +1,5 @@
 require "test_helper"
+require "fugit"
 
 class OutboundDeliveryJobTest < ActiveJob::TestCase
   setup do
@@ -154,8 +155,15 @@ class OutboundDeliveryJobTest < ActiveJob::TestCase
     assert_empty ActionMailer::Base.deliveries
   end
 
-  test "OutboundDeliverySweepJob is scheduled every 5 minutes in America/Los_Angeles" do
-    schedule = YAML.load_file(Rails.root.join("config/recurring.yml")).dig("production", "outbound_delivery_sweep")
-    assert_equal({ "class" => "OutboundDeliverySweepJob", "schedule" => "every 5 minutes America/Los_Angeles" }, schedule)
+  test "the production schedule runs the stuck-send sweep every 5 minutes, in a form Solid Queue accepts" do
+    entry = YAML.load_file(Rails.root.join("config/recurring.yml")).fetch("production").fetch("outbound_delivery_sweep")
+    assert_equal OutboundDeliverySweepJob, entry.fetch("class").constantize
+
+    # Solid Queue parses a recurring schedule with Fugit and refuses, at
+    # boot, anything that is not a single cron.
+    cron = Fugit.parse(entry.fetch("schedule"), multi: :fail)
+    assert_instance_of Fugit::Cron, cron
+    first = cron.next_time(Time.utc(2026, 11, 10, 12, 1))
+    assert_equal 5.minutes, cron.next_time(first).to_i - first.to_i
   end
 end

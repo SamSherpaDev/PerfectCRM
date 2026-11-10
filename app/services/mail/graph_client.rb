@@ -52,6 +52,11 @@ module Mail
     class NotFoundError < GraphError; end
     # 410 Gone on a deltaLink: the sync token expired server-side.
     class GoneError < GraphError; end
+    # Any other 4xx: Graph refused this one request and asking again gets
+    # the same answer. Still a ConnectionError to callers that only report
+    # a failure; the mailbox reader tells the two apart, because a refusal
+    # belongs to the message it was asked for and an outage does not.
+    class RejectedError < ConnectionError; end
 
     REVOKED = "Mailbox access was revoked or expired. Reconnect the mailbox in Settings.".freeze
     THROTTLED = "Microsoft Graph is throttling this mailbox. Try again shortly.".freeze
@@ -77,6 +82,8 @@ module Mail
           raise GoneError, "The sync token expired"
         when 429
           raise ThrottledError.new(retry_after: response.retry_after)
+        when 400..499
+          raise RejectedError, describe_failure(response)
         else
           raise ConnectionError, describe_failure(response)
         end
@@ -96,6 +103,8 @@ module Mail
           raise NotFoundError, "Not found: #{url}"
         when 429
           raise ThrottledError.new(retry_after: response.retry_after)
+        when 400..499
+          raise RejectedError, describe_failure(response)
         else
           raise ConnectionError, describe_failure(response)
         end

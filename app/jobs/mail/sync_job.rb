@@ -45,10 +45,6 @@ class Mail::SyncJob < ApplicationJob
     ::Setting.current.update_columns(mailbox_last_error: e.message.to_s.truncate(500),
       mailbox_last_error_at: Time.current, updated_at: Time.current)
     false
-  rescue Mail::ConnectionError => e
-    ::Setting.current.update_columns(mailbox_last_error: e.message.to_s.truncate(500),
-      mailbox_last_error_at: Time.current, updated_at: Time.current)
-    raise
   rescue StandardError => e
     ::Setting.current.update_columns(mailbox_last_error: e.message.to_s.truncate(500),
       mailbox_last_error_at: Time.current, updated_at: Time.current)
