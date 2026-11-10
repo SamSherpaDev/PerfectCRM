@@ -493,16 +493,21 @@ class MailGraphTest < ActiveSupport::TestCase
         message_id: "<gapfine#{n}@test>", received: (synced_at + (n + 2).minutes).utc.iso8601))
       @mailbox.expire_delta!("inbox")
       seen = []
-      error = assert_raises(Mail::ConnectionError) { fetcher.fetch_new { |item| seen << item.provider[:message_id] } }
-      assert_match(/\AInbox: Microsoft Graph returned 400/, error.message)
+      read = -> { fetcher.fetch_new { |item| seen << item.provider[:message_id] } }
+      if n < 2
+        error = assert_raises(Mail::ConnectionError, &read)
+        assert_match(/\AInbox: Microsoft Graph returned 400/, error.message)
+        # Until the message is given up on, the dead token stays so the gap replays.
+        assert_equal link_before, MailSyncState.for("inbox").delta_link
+      else
+        read.call
+      end
       # The mail filed after the refused message is read on every run.
       assert_includes seen, "gap-fine-#{n}"
-      # Until the message is given up on, the dead token stays so the gap replays.
-      assert_equal link_before, MailSyncState.for("inbox").delta_link if n < 2
     end
 
-    # Refused three times while other mail got through: given up on, the
-    # folder moves on, and the mailbox card says which mail was skipped.
+    # Refused three times: given up on, the folder moves on, and the
+    # mailbox card says which mail was skipped.
     assert MailMessageQuarantine.quarantined?("gap-refused")
     assert_not_equal link_before, MailSyncState.for("inbox").delta_link
     notice = MailSyncState.for("inbox").last_notice.to_s
@@ -516,20 +521,22 @@ class MailGraphTest < ActiveSupport::TestCase
     assert_equal fetches, @mailbox.requests.count { |request| request.url.include?("/me/messages/gap-refused") }
   end
 
-  test "a storage, database or Graph outage on one message is retried and never counted against it" do
+  test "a storage, database or network outage while storing a message ends the folder's read and is never counted" do
     fetcher.fetch_new.to_a # prime
     link_before = MailSyncState.for("inbox").delta_link
     @mailbox.add("inbox", graph_message(id: "unlucky", from: "client@example.com", message_id: "<unlucky@test>"))
+    @mailbox.add("inbox", graph_message(id: "behind", from: "other@example.com", message_id: "<behind@test>"))
     outages = [
-      ActiveRecord::StatementInvalid.new("SQLite3::BusyException: database is locked"),
+      ActiveRecord::ConnectionNotEstablished.new("database is unreachable"),
+      ActiveRecord::StatementTimeout.new("SQLite3::BusyException: database is locked"),
       ActiveStorage::IntegrityError.new("upload checksum mismatch"),
       Errno::ENOSPC.new("storage volume"),
+      Net::ReadTimeout.new("storage service"),
       Mail::ConnectionError.new("Microsoft Graph returned 503")
     ]
 
-    # One run more than the three-attempt cap, each with other mail getting through.
-    outages.each_with_index do |outage, n|
-      @mailbox.add("inbox", graph_message(id: "lucky-#{n}", from: "other#{n}@example.com", message_id: "<lucky#{n}@test>"))
+    # Twice the three-attempt cap, with good mail waiting behind each time.
+    outages.each do |outage|
       seen = []
       assert_raises(outage.class) do
         fetcher.fetch_new do |item|
@@ -538,14 +545,39 @@ class MailGraphTest < ActiveSupport::TestCase
           seen << item.provider[:message_id]
         end
       end
-      assert_includes seen, "lucky-#{n}"
+      assert_empty seen
+      assert_equal 0, MailMessageQuarantine.count
     end
-    assert_equal 0, MailMessageQuarantine.count
+    assert_equal 0, @mailbox.requests.count { |request| request.url.include?("/me/messages/behind") }
     assert_equal link_before, MailSyncState.for("inbox").delta_link
     assert_empty MailSyncState.recently_noticed
 
-    assert_includes fetcher.fetch_new.to_a.map { |item| item.provider[:message_id] }, "unlucky"
+    assert_equal %w[unlucky behind], fetcher.fetch_new.to_a.map { |item| item.provider[:message_id] }
     assert_not_equal link_before, MailSyncState.for("inbox").delta_link
+  end
+
+  test "Graph answering about access, timing or its own trouble on one message is an outage, never counted" do
+    fetcher.fetch_new.to_a # prime
+    link_before = MailSyncState.for("inbox").delta_link
+    @mailbox.add("inbox", graph_message(id: "unanswered", from: "client@example.com", message_id: "<unanswered@test>"))
+    @mailbox.add("inbox", graph_message(id: "queued", from: "other@example.com", message_id: "<queued@test>"))
+    status = nil
+    @mailbox.transport.on_get("/me/messages/unanswered") do |*|
+      { status: status, json: { "error" => { "code" => "Refused" } } }
+    end
+
+    [ 403, 408, 500, 503 ].each do |answer|
+      status = answer
+      seen = []
+      error = assert_raises(Mail::ConnectionError) { fetcher.fetch_new { |item| seen << item.provider[:message_id] } }
+      assert_instance_of Mail::ConnectionError, error
+      assert_equal "Inbox: Microsoft Graph returned #{answer} (Refused)", error.message
+      assert_empty seen
+      assert_equal 0, MailMessageQuarantine.count
+    end
+    assert_equal 0, @mailbox.requests.count { |request| request.url.include?("/me/messages/queued") }
+    assert_equal link_before, MailSyncState.for("inbox").delta_link
+    assert_empty MailSyncState.recently_noticed
   end
 
   test "a gap longer than the recovery window is reported instead of walked" do

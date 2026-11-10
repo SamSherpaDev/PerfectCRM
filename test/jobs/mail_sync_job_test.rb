@@ -235,7 +235,7 @@ class MailSyncJobTest < ActiveSupport::TestCase
     assert_nil Setting.current.reload.mailbox_last_error
   end
 
-  test "variant B: an unexpected error on one message quarantines it, stores later messages and folders, writes mailbox_last_error, and advances after three attempts that got other mail through" do
+  test "variant B: an unexpected error on one message quarantines it, stores later messages and folders, writes mailbox_last_error, and advances after three attempts" do
     Mail::SyncJob.new.perform(fetcher: fetcher) # prime
     initial_inbox_link = MailSyncState.for("inbox").delta_link
 
@@ -262,15 +262,8 @@ class MailSyncJobTest < ActiveSupport::TestCase
       assert_equal initial_inbox_link, MailSyncState.for("inbox").delta_link
 
       quarantine = MailMessageQuarantine.find_by!(provider_message_id: "poison-1")
-      assert_equal "ArgumentError", quarantine.error_class
       assert_equal 1, quarantine.attempts
       assert_not quarantine.quarantined?
-
-      # A run that reads nothing else proves nothing about the message: it
-      # is retried, and the attempt is not counted against it.
-      assert_raises(ArgumentError) { Mail::SyncJob.new.perform(fetcher: fetcher) }
-      assert_equal 1, quarantine.reload.attempts
-      assert_equal initial_inbox_link, MailSyncState.for("inbox").reload.delta_link
 
       # Attempt 2: still below the three-attempt cap; inbox delta_link stays put for one last retry.
       @mailbox.add("inbox", sync_message(id: "healthy-second", from: "second@example.com"))
@@ -281,12 +274,13 @@ class MailSyncJobTest < ActiveSupport::TestCase
       assert_equal initial_inbox_link, MailSyncState.for("inbox").reload.delta_link
       assert_empty MailSyncState.recently_noticed
 
-      # Attempt 3: reaches three failed attempts, marks quarantined, and advances the folder's delta_link.
+      # Attempt 3: reaches three failed attempts, is given up on, and the
+      # folder's delta_link advances with nothing left to retry.
       @mailbox.add("inbox", sync_message(id: "healthy-third", from: "third@example.com"))
-      assert_raises(ArgumentError) { Mail::SyncJob.new.perform(fetcher: fetcher) }
+      assert_equal 1, Mail::SyncJob.new.perform(fetcher: fetcher)
+      assert Message.exists?(provider_message_id: "healthy-third")
       assert_equal 3, quarantine.reload.attempts
       assert quarantine.quarantined?
-      assert_not_nil quarantine.quarantined_at
       advanced_link = MailSyncState.for("inbox").reload.delta_link
       assert_not_equal initial_inbox_link, advanced_link
 
@@ -311,24 +305,87 @@ class MailSyncJobTest < ActiveSupport::TestCase
     end
   end
 
-  test "an outage that fails every message quarantines nothing and replays cleanly once it ends" do
+  test "one refused message alone in a quiet folder is given up on after three runs with nothing else arriving" do
+    Mail::SyncJob.new.perform(fetcher: fetcher) # prime
+    initial_link = MailSyncState.for("inbox").delta_link
+    @mailbox.add("inbox", sync_message(id: "refused-alone", from: "client@example.com"))
+    @mailbox.transport.on_get("/me/messages/refused-alone") do |*|
+      { status: 400, json: { "error" => { "code" => "ErrorInvalidRequest", "message" => "Cannot read this item" } } }
+    end
+
+    2.times do |n|
+      error = assert_raises(Mail::ConnectionError) { Mail::SyncJob.new.perform(fetcher: fetcher) }
+      assert_equal "Inbox: Microsoft Graph returned 400 (ErrorInvalidRequest: Cannot read this item)", error.message
+      assert_equal error.message, Setting.current.reload.mailbox_last_error
+      assert_equal n + 1, MailMessageQuarantine.find_by!(provider_message_id: "refused-alone").attempts
+      assert_not MailMessageQuarantine.quarantined?("refused-alone")
+      assert_equal initial_link, MailSyncState.for("inbox").reload.delta_link
+      assert_empty MailSyncState.recently_noticed
+    end
+
+    assert_equal 0, Mail::SyncJob.new.perform(fetcher: fetcher)
+    assert MailMessageQuarantine.quarantined?("refused-alone")
+    assert_not_equal initial_link, MailSyncState.for("inbox").reload.delta_link
+    assert_nil Setting.current.reload.mailbox_last_error
+    assert_match(/\AInbox: mail received .* could not be read after 3 tries/,
+      MailSyncState.recently_noticed.sole.last_notice)
+
+    opened = @mailbox.requests.count { |request| request.url.include?("/me/messages/refused-alone") }
+    assert_equal 3, opened
+    assert_equal 0, Mail::SyncJob.new.perform(fetcher: fetcher)
+    assert_equal opened, @mailbox.requests.count { |request| request.url.include?("/me/messages/refused-alone") }
+  end
+
+  test "a duplicate of stored mail neither counts as a failure nor changes how a refused message is counted" do
+    Mail::SyncJob.new.perform(fetcher: fetcher) # prime
+    @mailbox.add("inbox", sync_message(id: "original", from: "client@example.com", message_id: "<same@test>"))
+    assert_equal 1, Mail::SyncJob.new.perform(fetcher: fetcher)
+    initial_link = MailSyncState.for("inbox").delta_link
+
+    # Graph hands a moved or copied message a new id, so it is opened again
+    # and the ingester recognizes it by its Message-ID.
+    @mailbox.add("inbox", sync_message(id: "refused-beside-copy", from: "other@example.com"))
+    @mailbox.add("inbox", sync_message(id: "copy", from: "client@example.com", message_id: "<same@test>"))
+    @mailbox.transport.on_get("/me/messages/refused-beside-copy") do |*|
+      { status: 400, json: { "error" => { "code" => "ErrorInvalidRequest" } } }
+    end
+
+    assert_no_difference("Message.count") do
+      2.times do |n|
+        assert_raises(Mail::ConnectionError) { Mail::SyncJob.new.perform(fetcher: fetcher) }
+        assert_equal({ "refused-beside-copy" => n + 1 }, MailMessageQuarantine.pluck(:provider_message_id, :attempts).to_h)
+        assert_equal initial_link, MailSyncState.for("inbox").reload.delta_link
+      end
+
+      assert_equal 0, Mail::SyncJob.new.perform(fetcher: fetcher)
+    end
+    assert_equal({ "refused-beside-copy" => 3 }, MailMessageQuarantine.pluck(:provider_message_id, :attempts).to_h)
+    assert_not_equal initial_link, MailSyncState.for("inbox").reload.delta_link
+    assert_equal 3, @mailbox.requests.count { |request| request.url.include?("/me/messages/copy") }
+  end
+
+  test "an outage quarantines nothing, ends the folder's read each run, and replays cleanly once it ends" do
     Mail::SyncJob.new.perform(fetcher: fetcher) # prime
     initial_link = MailSyncState.for("inbox").delta_link
     @mailbox.add("inbox", sync_message(id: "during-outage-1", from: "one@example.com"))
     @mailbox.add("inbox", sync_message(id: "during-outage-2", from: "two@example.com"))
 
-    # A deploy that breaks ingestion fails every message the same way, for
-    # one run more than the three-attempt cap.
-    Mail::Ingester.stub(:ingest, ->(**) { raise NoMethodError, "undefined method 'store' for nil" }) do
+    # The database drops out while mail is being stored, for one run more
+    # than the three-attempt cap.
+    Mail::Ingester.stub(:ingest, ->(**) { raise ActiveRecord::ConnectionNotEstablished, "database is unreachable" }) do
       4.times do
-        error = assert_raises(NoMethodError) { Mail::SyncJob.new.perform(fetcher: fetcher) }
-        assert_equal "Inbox: undefined method 'store' for nil", error.message
+        error = assert_raises(ActiveRecord::ConnectionNotEstablished) { Mail::SyncJob.new.perform(fetcher: fetcher) }
+        assert_equal "Inbox: database is unreachable", error.message
         assert_equal error.message, Setting.current.reload.mailbox_last_error
       end
     end
     assert_equal 0, MailMessageQuarantine.count
     assert_equal initial_link, MailSyncState.for("inbox").delta_link
     assert_empty MailSyncState.recently_noticed
+    # Each run stopped at the first message instead of pressing on through
+    # the folder while nothing could be stored.
+    assert_equal 4, @mailbox.requests.count { |request| request.url.include?("/me/messages/during-outage-1") }
+    assert_equal 0, @mailbox.requests.count { |request| request.url.include?("/me/messages/during-outage-2") }
 
     assert_difference("Message.count", 2) do
       assert_equal 2, Mail::SyncJob.new.perform(fetcher: fetcher)
@@ -361,18 +418,20 @@ class MailSyncJobTest < ActiveSupport::TestCase
     end
 
     # One run more than the three-attempt cap: the outage is never counted
-    # against the message, however long it lasts.
+    # against the message, however long it lasts, and the folder's read
+    # stops there until Graph answers again.
     4.times do
       error = assert_raises(Mail::ConnectionError) { Mail::SyncJob.new.perform(fetcher: fetcher) }
       assert_match(/503/, error.message)
     end
     assert_not Message.exists?(provider_message_id: "att-503")
-    assert Message.exists?(provider_message_id: "plain-after-503")
+    assert_not Message.exists?(provider_message_id: "plain-after-503")
     assert_equal 0, MailMessageQuarantine.count
     assert_equal initial_link, MailSyncState.for("inbox").delta_link
 
     graph_down = false
-    assert_equal 1, Mail::SyncJob.new.perform(fetcher: fetcher)
+    assert_equal 2, Mail::SyncJob.new.perform(fetcher: fetcher)
+    assert Message.exists?(provider_message_id: "plain-after-503")
     stored = Message.find_by!(provider_message_id: "att-503")
     assert_equal "Our day by day plan is attached.", stored.text_body
     assert_equal [ "itinerary.txt" ], stored.files.map { |file| file.filename.to_s }
@@ -380,5 +439,31 @@ class MailSyncJobTest < ActiveSupport::TestCase
     assert_empty Array(stored.attachment_notices)
     assert_not_equal initial_link, MailSyncState.for("inbox").reload.delta_link
     assert_nil Setting.current.reload.mailbox_last_error
+  end
+
+  test "a run that stops at its cap after a message was set aside asks Graph for nothing more and still reports it" do
+    Mail::SyncJob.new.perform(fetcher: fetcher) # prime
+    @mailbox.add("inbox", sync_message(id: "refused-first", from: "client@example.com"))
+    @mailbox.add("inbox", sync_message(id: "stored-at-cap", from: "one@example.com"))
+    @mailbox.add("inbox", sync_message(id: "past-cap", from: "two@example.com"))
+    @mailbox.add("sentitems", { **sync_message(id: "next-folder", from: "info@sherpaholidays.com",
+      to: "one@example.com"), "conversationId" => "sent-conv" })
+    @mailbox.transport.on_get("/me/messages/refused-first") do |*|
+      { status: 400, json: { "error" => { "code" => "ErrorInvalidRequest" } } }
+    end
+    sent_requests = -> { @mailbox.requests.count { |request| request.url.include?("sentitems") || request.url.include?("next-folder") } }
+    before = sent_requests.call
+
+    error = assert_raises(Mail::ConnectionError) { Mail::SyncJob.new.perform(fetcher: fetcher, limit: 1) }
+    assert_match(/\AInbox: Microsoft Graph returned 400/, error.message)
+    assert_equal error.message, Setting.current.reload.mailbox_last_error
+    assert_equal error.message, MailSyncState.for("inbox").last_error
+    assert Message.exists?(provider_message_id: "stored-at-cap")
+    assert_not Message.exists?(provider_message_id: "past-cap")
+    # The cap ends the run where it stands: the folder after this one is
+    # not read and nothing in it is opened.
+    assert_equal before, sent_requests.call
+    assert_not Message.exists?(provider_message_id: "next-folder")
+    assert_equal 1, MailMessageQuarantine.find_by!(provider_message_id: "refused-first").attempts
   end
 end

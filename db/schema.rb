@@ -486,12 +486,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_10_060326) do
   create_table "mail_message_quarantines", force: :cascade do |t|
     t.integer "attempts", default: 0, null: false
     t.datetime "created_at", null: false
-    t.string "error_class", null: false
-    t.string "folder"
-    t.text "last_error"
-    t.datetime "last_failed_at"
     t.string "provider_message_id", null: false
-    t.datetime "quarantined_at"
     t.datetime "updated_at", null: false
     t.index ["provider_message_id"], name: "index_mail_message_quarantines_on_provider_message_id", unique: true
   end

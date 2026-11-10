@@ -89,16 +89,14 @@ module Mail
     # $select inside the cast.
     ITEM_EXPAND = "microsoft.graph.itemAttachment/item".freeze
 
-    # Failures that say nothing about the message they landed on: Graph
-    # unreachable, throttled or answering 5xx, and this app's own database
-    # and file storage. They are retried on the next run and never counted
-    # toward quarantine, so an outage cannot drop mail.
-    SYSTEMIC_FAILURES = [ ConnectionError, ::ActiveRecord::ActiveRecordError, ::ActiveStorage::Error,
-      SystemCallError, IOError, Timeout::Error, SocketError, OpenSSL::SSL::SSLError ].freeze
-    # The members of those families that do belong to one message: Graph
-    # refusing that message or attachment (4xx), and content the models
-    # will not accept.
-    MESSAGE_FAILURES = [ GraphClient::RejectedError, ::ActiveRecord::RecordInvalid ].freeze
+    # Failures that say nothing about the message they landed on: every
+    # Graph failure but a refusal of that one request (unreachable, timed
+    # out, throttled, 5xx, and the answers about access rather than content
+    # - see GraphClient::RejectedError), a database that cannot be reached
+    # or timed out, and file storage.
+    OUTAGES = [ GraphError, ::ActiveRecord::ConnectionNotEstablished, ::ActiveRecord::QueryAborted,
+      ::ActiveStorage::Error, SystemCallError, IOError, Timeout::Error, SocketError,
+      OpenSSL::SSL::SSLError ].freeze
     # The storage SDK raises from its own namespaces and is only loaded
     # where the S3 service is configured, so it is recognized by name.
     STORAGE_SDK = %w[Aws:: Seahorse::].freeze
@@ -120,66 +118,55 @@ module Mail
     end
 
     # The per-message boundary of one folder's live read, shared by the
-    # delta drain and the 410 gap recovery. A message that fails to load or
-    # store is set aside so the mail after it is still read, and the
-    # folder's position only moves once nothing is left to retry.
+    # delta drain and the 410 gap recovery.
     #
-    # A failure counts toward quarantine only when it belongs to the
-    # message: not a systemic one (see SYSTEMIC_FAILURES), and not in a read
-    # where no message got through at all, because an error that hits every
-    # message is an outage or a bad deploy whatever its class. Everything
-    # that does not count is retried on the next run, for as long as it
-    # takes.
+    # The kind of error alone decides what a failure means. An outage (see
+    # OUTAGES) is raised on: it ends the folder's read for this run, so a
+    # run stays bounded, and the folder replays next run for as long as the
+    # outage lasts. Anything else belongs to the message it landed on -
+    # Graph refusing that message, or content the app cannot parse or store
+    # - so it counts toward quarantine, once per read, and the message is
+    # set aside so the mail after it is still read.
     class LiveRead
       # Entries this read gave up on for good, for the caller to report.
       attr_reader :skipped
 
-      def initialize(folder)
-        @folder = folder
-        @failures = {}
-        @delivered = 0
+      def initialize
+        @retrying = {}
         @skipped = []
       end
 
-      # The block reads one listed message and answers whether it was
-      # handed over.
       def attempt(entry)
-        @delivered += 1 if yield
-        @failures.delete(entry["id"])
-        ::MailMessageQuarantine.clear!(entry["id"])
-      rescue NotConfiguredError, GrantRevokedError
-        raise
+        id = entry["id"]
+        yield
+        @retrying.delete(id)
+        ::MailMessageQuarantine.clear!(id)
       rescue StandardError => e
-        @failures[entry["id"]] = [ entry, e ]
+        raise if outage?(e)
+
+        set_aside(entry, e) unless @retrying.key?(id)
       end
 
+      # The first failure this read will retry next run, or nil once the
+      # folder's position may move.
       def failure
-        @failures.each_value.first&.last
-      end
-
-      # Counts what the read's failures amount to and answers whether the
-      # folder's position may move: only when none is left to retry.
-      def settle!
-        @failures.each_value.map do |entry, error|
-          next false unless counts?(error)
-
-          quarantine = ::MailMessageQuarantine.record_failure!(
-            provider_message_id: entry["id"], folder: @folder, error: error)
-          @skipped << entry if quarantine.quarantined?
-          quarantine.quarantined?
-        end.all?
+        @retrying.each_value.first
       end
 
       private
 
-      def counts?(error)
-        @delivered.positive? && !systemic?(error)
+      def set_aside(entry, error)
+        if ::MailMessageQuarantine.record_failure!(entry["id"]).quarantined?
+          @skipped << entry
+        else
+          @retrying[entry["id"]] = error
+        end
       end
 
-      def systemic?(error)
-        return false if MESSAGE_FAILURES.any? { |kind| error.is_a?(kind) }
+      def outage?(error)
+        return false if error.is_a?(GraphClient::RejectedError)
 
-        SYSTEMIC_FAILURES.any? { |kind| error.is_a?(kind) } || error.class.name.to_s.start_with?(*STORAGE_SDK)
+        OUTAGES.any? { |kind| error.is_a?(kind) } || error.class.name.to_s.start_with?(*STORAGE_SDK)
       end
     end
 
@@ -204,12 +191,13 @@ module Mail
     # after a full drain; a mid-folder failure leaves the old link so the
     # next run replays and skips what it already stored. A folder without a
     # link starts from its first delta round, which yields only mail
-    # received since the mailbox was connected. One folder's failure
+    # received since the mailbox was connected. One folder's failure -
+    # whatever ended its read, or else a message it set aside to retry -
     # is recorded against that folder and never starves the folders after
     # it: every folder is attempted, then the first failure is raised so the
     # run reads as partial rather than complete. Callers cap stored volume
     # themselves (see SyncJob): stopping early leaves the link uncommitted
-    # for replay.
+    # for replay and reads no further folder.
     def fetch_new
       raise NotConfiguredError, "Mailbox is not connected." unless configured?
       return enum_for(:fetch_new) unless block_given?
@@ -219,18 +207,29 @@ module Mail
       failure = nil
       begin
         mail_folders(graph).each do |folder|
-          drain_delta(graph, folder, ::MailSyncState.for(folder.id), watched_since) do |parsed, provider|
+          read = LiveRead.new
+          error = nil
+          drain_delta(graph, folder, ::MailSyncState.for(folder.id), watched_since, read) do |parsed, provider|
             yield Fetched.new(parsed: parsed, provider: provider, folder: folder.id)
           end
         rescue NotConfiguredError, GrantRevokedError
           raise
         rescue StandardError => e
-          # The captain reads one error line, so it has to name its folder
-          # wherever it surfaces: against the folder here, and in the failure
-          # the run raises, which is what SyncJob copies onto the mailbox card.
-          message = "#{folder.name}: #{e.message}"
-          ::MailSyncState.record_error!(folder.id, message)
-          failure ||= e.exception(message)
+          error = e
+        ensure
+          # Reported here, without raising, so a caller's break mid-folder
+          # still leaves what this read found on record and then unwinds
+          # with no further Graph request.
+          report_skipped(folder, read.skipped)
+          error ||= read.failure
+          if error
+            # The captain reads one error line, so it has to name its folder
+            # wherever it surfaces: against the folder here, and in the failure
+            # the run raises, which is what SyncJob copies onto the mailbox card.
+            message = "#{folder.name}: #{error.message}"
+            ::MailSyncState.record_error!(folder.id, message)
+            failure ||= error.exception(message)
+          end
         end
       ensure
         # Runs on a caller's break as well as on normal completion, so a run
@@ -422,10 +421,7 @@ module Mail
 
       read.attempt(entry) do
         loaded = load_message(client, id)
-        next false if loaded.nil?
-
-        yield(*loaded)
-        true
+        yield(*loaded) if loaded
       end
     end
 
@@ -444,14 +440,14 @@ module Mail
       delta_link
     end
 
-    # Drains one folder's delta, committing the new link at the end. A
-    # folder without a link starts from its initial round, which lists
-    # everything the folder holds; Graph then reports every change (a
-    # read-state toggle, a flag, a move in), and an uncommitted link replays
-    # the whole page on the next run. So only mail received since the
-    # mailbox was connected and not yet stored is fetched at all.
-    def drain_delta(client, folder, state, watched_since)
-      read = LiveRead.new(folder.id)
+    # Drains one folder's delta, committing the new link at the end unless
+    # the read set a message aside to retry. A folder without a link starts
+    # from its initial round, which lists everything the folder holds; Graph
+    # then reports every change (a read-state toggle, a flag, a move in),
+    # and an uncommitted link replays the whole page on the next run. So
+    # only mail received since the mailbox was connected and not yet stored
+    # is fetched at all.
+    def drain_delta(client, folder, state, watched_since, read)
       url = state.delta_link.presence || delta_url(folder.id)
       last_page = nil
       loop do
@@ -466,11 +462,10 @@ module Mail
         url = last_page["@odata.nextLink"]
         break if url.blank?
       end
-      if read.settle!
-        delta_link = last_page["@odata.deltaLink"]
-        ::MailSyncState.record_success!(folder.id, delta_link: delta_link.presence || state.delta_link)
-      end
-      report_skipped(folder, read.skipped)
+      return if read.failure
+
+      delta_link = last_page["@odata.deltaLink"]
+      ::MailSyncState.record_success!(folder.id, delta_link: delta_link.presence || state.delta_link)
     rescue GraphClient::GoneError
       # Sync token expired server-side. Re-priming alone would drop every
       # message that arrived since the last committed link, so the window
@@ -478,11 +473,6 @@ module Mail
       # discards the overlap. Bounded by the last successful sync, so a
       # stale token still cannot backfill the whole mailbox unasked.
       recover_gap(client, folder, state.last_sync_at, read) { |*loaded| yield(*loaded) }
-    ensure
-      # Runs on a caller's break as well as on completion, so a read that
-      # set a message aside never reports itself as clean. An exception
-      # already on its way out wins.
-      raise read.failure if read&.failure && $!.nil?
     end
 
     # The gap the dead token covered is read BEFORE the replacement link is
@@ -507,18 +497,17 @@ module Mail
       each_listed(client, folder.id, since) do |entry|
         read_live(client, read, entry) { |*loaded| yield(*loaded) }
       end
-      if read.settle!
-        ::MailSyncState.record_success!(folder.id, delta_link: delta_link)
-        ::MailSyncState.record_notice!(folder.id,
-          "#{folder.name}: Microsoft expired this folder's sync token; mail since #{notice_time(since)} was re-read to fill the gap.")
-      end
-      report_skipped(folder, read.skipped)
+      return if read.failure
+
+      ::MailSyncState.record_success!(folder.id, delta_link: delta_link)
+      ::MailSyncState.record_notice!(folder.id,
+        "#{folder.name}: Microsoft expired this folder's sync token; mail since #{notice_time(since)} was re-read to fill the gap.")
     end
 
     # A message given up on is the one failure a later clean run would
     # erase from view, so it goes on the mailbox card as a notice, which
-    # routine success does not clear. Recorded last, so it is never
-    # replaced by the gap notice of the same read.
+    # routine success does not clear. Recorded after the read is over, so
+    # it is never replaced by the gap notice of the same read.
     def report_skipped(folder, entries)
       return if entries.empty?
 
