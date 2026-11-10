@@ -47,9 +47,11 @@ class ApiV1LeadsItineraryIntakeTest < ActionDispatch::IntegrationTest
     }.deep_merge(overrides)
   end
 
-  def post_intake(body)
-    post "/api/v1/leads/intake", params: JSON.generate(body),
-      headers: { "CONTENT_TYPE" => "application/json", "Origin" => ORIGIN, "X-Sherpa-Site-Key" => @site_key }
+  def post_intake(body, mail_domain: :valid)
+    Leads::MailDomain.stub(:status, mail_domain) do
+      post "/api/v1/leads/intake", params: JSON.generate(body),
+        headers: { "CONTENT_TYPE" => "application/json", "Origin" => ORIGIN, "X-Sherpa-Site-Key" => @site_key }
+    end
   end
 
   def post_details(body)

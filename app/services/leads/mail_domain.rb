@@ -1,4 +1,5 @@
-# Quiz-only receivable-domain check. No mailbox probing and no fail-open.
+# Receivable-domain check for intake. No mailbox probing; returns :valid,
+# :invalid, or :temporary so callers choose how to treat a resolver outage.
 # dnsruby, not stdlib Resolv: Resolv#getresources returns [] for NXDOMAIN,
 # SERVFAIL, refusal and (on some versions) timeouts alike, so it cannot tell a
 # domain that cannot receive mail from a check that is temporarily unavailable.

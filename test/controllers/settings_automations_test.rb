@@ -120,10 +120,13 @@ class SettingsAutomationsTest < ActionDispatch::IntegrationTest
       occurred_at: Time.current, metadata: { "caller" => "panda-ai" })
     LeadWebhookDelivery.create!(lead: lead, event: "lead.created",
       url: "https://n8n.example.com/hook", status: "delivered", attempts: 1, http_status: 200)
+    lead.lead_notifications.create!(event: "email_copy", attempts: 20, gave_up_at: Time.current)
     get edit_settings_path
     assert_response :success
     assert_select "p", text: /Panda AI scored this lead/
     assert_select "p", text: /lead\.created to/
+    assert_select "p", text: /Inquiry email alert \(email_copy\) gave up after 20 attempts/
+    assert_select ".badge", text: "Gave up"
   end
 
   test "lead pages show no Automations heading; automations live in Settings" do

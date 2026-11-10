@@ -34,9 +34,26 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     }.deep_merge(overrides)
   end
 
-  def post_intake(body, headers: {})
-    post "/api/v1/leads/intake", params: body.is_a?(String) ? body : JSON.generate(body),
-      headers: { "CONTENT_TYPE" => "application/json", "Origin" => ORIGIN, "X-Sherpa-Site-Key" => @site_key }.merge(headers)
+  class FakeResolver
+    def initialize(answers = { "A" => [ Dnsruby::RR.create("example.com. 60 IN A 192.0.2.1") ] })
+      @answers = answers
+    end
+
+    def query(_domain, type)
+      value = @answers[type]
+      raise value if value.is_a?(Exception)
+
+      Struct.new(:answer).new(Array(value))
+    end
+
+    def close; end
+  end
+
+  def post_intake(body, headers: {}, dns: FakeResolver.new)
+    Leads::MailDomain.stub(:resolver, dns) do
+      post "/api/v1/leads/intake", params: body.is_a?(String) ? body : JSON.generate(body),
+        headers: { "CONTENT_TYPE" => "application/json", "Origin" => ORIGIN, "X-Sherpa-Site-Key" => @site_key }.merge(headers)
+    end
   end
 
   def relay_headers(body, at: Time.current, kid: nil)
@@ -500,8 +517,10 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
 
   test "relay mode skips the origin check and records the caller" do
     raw = JSON.generate(intake_body)
-    post "/api/v1/leads/intake", params: raw,
-      headers: { "CONTENT_TYPE" => "application/json" }.merge(relay_headers(raw, kid: "n8n"))
+    Leads::MailDomain.stub(:resolver, FakeResolver.new) do
+      post "/api/v1/leads/intake", params: raw,
+        headers: { "CONTENT_TYPE" => "application/json" }.merge(relay_headers(raw, kid: "n8n"))
+    end
     assert_response :accepted
     assert_equal "n8n", Lead.last.metadata["attribution"]["relay"]
   end
@@ -557,6 +576,45 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     post_intake intake_body("contact" => { "name" => "Anna Lindqvist", "email" => "anna@anything.invalid" })
     assert_response :bad_request
     assert_equal "invalid", response.parsed_body["fields"]["contact.email"]
+  end
+
+  test "email domain with NXDOMAIN or null MX is rejected on the contact form" do
+    post_intake intake_body("contact" => { "name" => "Anna Lindqvist", "email" => "anna@nxdomain.example.org" }),
+      dns: FakeResolver.new("MX" => Dnsruby::NXDomain.new)
+    assert_response :bad_request
+    assert_equal "invalid", response.parsed_body["fields"]["contact.email"]
+
+    null_mx = Dnsruby::RR.create("nullmx.example.org. 60 IN MX 0 .")
+    post_intake intake_body("contact" => { "name" => "Anna Lindqvist", "email" => "anna@nullmx.example.org" }),
+      dns: FakeResolver.new("MX" => [ null_mx ])
+    assert_response :bad_request
+    assert_equal "invalid", response.parsed_body["fields"]["contact.email"]
+  end
+
+  test "contact form saves the lead when DNS returns server failure or times out" do
+    assert_difference("Lead.count", 1) do
+      post_intake intake_body("contact" => { "name" => "Anna Lindqvist", "email" => "anna@servfail.example.org" }),
+        dns: FakeResolver.new("MX" => Dnsruby::ServFail.new)
+    end
+    assert_response :accepted
+    assert_equal "anna@servfail.example.org", Lead.last.email
+
+    assert_difference("Lead.count", 1) do
+      post_intake intake_body("contact" => { "name" => "Clara Jensen", "email" => "clara@timeout.example.org" }),
+        dns: FakeResolver.new("MX" => [], "A" => [], "AAAA" => Dnsruby::ResolvTimeout.new)
+    end
+    assert_response :accepted
+    assert_equal "clara@timeout.example.org", Lead.last.email
+  end
+
+  test "contact form accepts a domain with only an IPv6 AAAA record" do
+    aaaa = Dnsruby::RR.create("ipv6.example.org. 60 IN AAAA 2001:db8::1")
+    assert_difference("Lead.count", 1) do
+      post_intake intake_body("contact" => { "name" => "Anna Lindqvist", "email" => "anna@ipv6.example.org" }),
+        dns: FakeResolver.new("MX" => [], "A" => [], "AAAA" => [ aaaa ])
+    end
+    assert_response :accepted
+    assert_equal "anna@ipv6.example.org", Lead.last.email
   end
 
   test "missing consent is invalid" do
@@ -736,7 +794,7 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
       post_intake intake_body("contact" => contact)
     end
     assert_response :accepted
-    assert_equal true, response.parsed_body["conversion"]
+    assert_equal false, response.parsed_body["conversion"]
     retry_lead = Lead.find(response.parsed_body["id"])
     assert_not_equal archived.id, retry_lead.id
     assert_equal [ "name_matches_email" ], retry_lead.suspicion_hits
@@ -797,13 +855,13 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "lower-confidence suspect with a single moderate signal stays in New and is flagged only" do
+  test "lower-confidence suspect with a single moderate signal stays in New and is flagged only with conversion false" do
     body = intake_body(
       "contact" => { "name" => "Anna Lindqvist", "email" => "annalindqvist@example.com" }
     )
     post_intake body
     assert_response :accepted
-    assert_equal true, response.parsed_body["conversion"]
+    assert_equal false, response.parsed_body["conversion"]
     lead = Lead.last
     assert_equal 25, lead.spam_score
     assert lead.suspected_spam?
@@ -811,16 +869,22 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     assert_nil lead.spam_marked_at
     assert_equal [ "name_matches_email" ], lead.metadata["suspicion_hits"]
     assert_equal "Name matches email", lead.spam_reason
+
+    assert_no_difference("Lead.count") do
+      post_intake body
+    end
+    assert_response :ok
+    assert_equal false, response.parsed_body["conversion"]
   end
 
-  test "spam flags never reject: disposable domain and link-stuffing together still 202 and stay flag-only in New" do
+  test "spam flags never reject: disposable domain and link-stuffing together still 202 and stay flag-only in New with conversion false" do
     body = intake_body(
       "contact" => { "name" => "Cheap Deals", "email" => "x@mailinator.com" },
       "message" => "see http://a.example http://b.example http://c.example"
     )
     post_intake body
     assert_response :accepted
-    assert_equal true, response.parsed_body["conversion"]
+    assert_equal false, response.parsed_body["conversion"]
     lead = Lead.last
     assert_equal 50, lead.spam_score
     assert lead.suspected_spam?
@@ -1003,10 +1067,12 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     original = response.parsed_body
     lookup = Lead.method(:find_by)
     calls = 0
-    Lead.stub(:find_by, ->(*args) { calls += 1; calls == 1 ? nil : lookup.call(*args) }) do
-      assert_no_difference([ "Lead.count", "LeadNotification.count" ]) do
-        assert_enqueued_jobs 3, only: LeadNotificationJob do
-          post_intake body
+    travel 11.minutes do
+      Lead.stub(:find_by, ->(*args) { calls += 1; calls == 1 ? nil : lookup.call(*args) }) do
+        assert_no_difference([ "Lead.count", "LeadNotification.count" ]) do
+          assert_enqueued_jobs 3, only: LeadNotificationJob do
+            post_intake body
+          end
         end
       end
     end
@@ -1025,11 +1091,13 @@ class ApiV1LeadsIntakeTest < ActionDispatch::IntegrationTest
     def conflicting.save
       raise ActiveRecord::RecordNotUnique, "submission already exists"
     end
-    Lead.stub(:find_by, ->(*args) { calls += 1; calls == 1 ? nil : lookup.call(*args) }) do
-      Lead.stub(:new, conflicting) do
-        assert_no_difference([ "Lead.count", "LeadNotification.count" ]) do
-          assert_enqueued_jobs 3, only: LeadNotificationJob do
-            post_intake body
+    travel 11.minutes do
+      Lead.stub(:find_by, ->(*args) { calls += 1; calls == 1 ? nil : lookup.call(*args) }) do
+        Lead.stub(:new, conflicting) do
+          assert_no_difference([ "Lead.count", "LeadNotification.count" ]) do
+            assert_enqueued_jobs 3, only: LeadNotificationJob do
+              post_intake body
+            end
           end
         end
       end

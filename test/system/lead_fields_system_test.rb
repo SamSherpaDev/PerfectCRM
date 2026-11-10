@@ -136,6 +136,8 @@ class LeadFieldsSystemTest < ApplicationSystemTestCase
     request["Origin"] = "https://www.sherpaholidays.com"
     request["X-Sherpa-Site-Key"] = key
     request.body = JSON.generate(body)
-    Net::HTTP.start(uri.host, uri.port) { |http| http.request(request) }
+    Leads::MailDomain.stub(:status, :valid) do
+      Net::HTTP.start(uri.host, uri.port) { |http| http.request(request) }
+    end
   end
 end

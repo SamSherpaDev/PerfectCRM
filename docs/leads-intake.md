@@ -58,13 +58,17 @@ curl -X POST https://perfectcrm.sherpaholidays.com/api/v1/leads/intake \
 
 Behavior, in order: schema/size check (`400`); auth (`403`); rate limits
 (10 per IP per 10 minutes, 3 per email per hour - `429` with `Retry-After`);
-required fields (`contact.name` 2–120 chars, `contact.email` shaped with MX/A
-records, `consent.contact: true`, nonblank `submission_id` up to 64 chars);
-replay / 24-hour duplicate merge (`200`); and suspicion scoring that never
-rejects (`202`). DNS lookup failures fail open; a completed lookup with no MX or
-A record rejects the address. Every `200`/`202` intake body returns
+required fields (`contact.name` 2–120 chars, `contact.email` shaped with a
+receivable domain, `consent.contact: true`, nonblank `submission_id` up to 64
+chars); replay / 24-hour duplicate merge (`200`); and suspicion scoring that
+never rejects (`202`). The domain check accepts an MX record, or an A or AAAA
+record when MX is absent; temporary DNS failures (timeout, SERVFAIL, refusal)
+fail open; a completed lookup rejects the address when the domain does not
+exist, has no MX, A or AAAA record, or publishes a null MX. Every `200`/`202`
+intake body returns
 `{ "id", "reference", "received_at", "conversion" }`: `conversion` is `false`
-when this submission was auto-archived as a bot catch or merged as a duplicate
+when this submission is tagged `suspected_spam` (including auto-archived bot
+catches) or merged as a duplicate
 from a new `submission_id` into an existing lead, and `true` otherwise.
 Structured `trip_quiz` posts replace the name/email requirement and DNS
 fail-open with the [contact gate](#contact-gate-and-acceptance-receipt) rules,
@@ -74,7 +78,7 @@ Replays and duplicates pass authentication, rate limits, and required-field
 validation first. Replaying the same `submission_id`, including one that was
 merged as a duplicate, returns `200` with the original reference and the same
 `conversion` boolean the original submission got (`true` for a real new lead,
-`false` for an auto-archived catch or merged duplicate), and re-enqueues
+`false` for a lead tagged `suspected_spam` or a merged duplicate), and re-enqueues
 pending notifications without replacing the inquiry. A new `submission_id` from
 the same normalized email within 24 hours with the same message (equal after
 lowercasing and collapsing punctuation and whitespace) and no conflicting trip
@@ -85,8 +89,8 @@ creating a second lead, notification, or ad conversion (and Step 2
 resolve to that lead). Converted leads are never merge targets, and archived or
 spam leads are merge targets only for a submission that is itself auto-archived.
 Different trips or different messages from the same email open a separate
-inquiry (`202` with its own reference and `conversion: true` unless
-auto-archived), as do repeat submissions after 24 hours.
+inquiry (`202` with its own reference and `conversion: true` unless tagged
+`suspected_spam`), as do repeat submissions after 24 hours.
 
 Bot and spam scoring (`Leads.suspicion_hits`, `25` points per hit):
 - Auto-archiving hits (`Leads::AUTO_ARCHIVE_HITS`): `honeypot` (the hidden
@@ -104,7 +108,8 @@ Bot and spam scoring (`Leads.suspicion_hits`, `25` points per hit):
 - Flag-only hits: `many_links` (3+ links in `message`), `disposable_domain`
   (known throwaway email domain), and `name_matches_email` (local-part matches
   normalized name), alone or combined. The lead is tagged `suspected_spam`
-  (`Looks like spam`), kept in the `New` tab and on the Today call list (with a
+  (`Looks like spam`), returned with `conversion: false`, kept in the `New` tab
+  and on the Today call list (with a
   `Check` marker) for review, alerted with a `Check, then call:` subject, and
   withheld from automatic first replies and ad conversions until reviewed.
 - Missing or unparseable `timing` is not a hit; such inquiries are scored on the
@@ -528,10 +533,11 @@ SERVFAIL, refusal or network unavailability returns HTTP 503 with
 but only when that is the sole blocker: any definite field error (for example
 an invalid `contact.phone_raw` or missing `consent.contact`) returns the 400
 field map instead. It never fails open, sends a verification message, probes SMTP or uses an
-external verification service. Ordinary intake's older DNS behavior is unchanged.
-The quiz check uses dnsruby (`Leads::MailDomain`) because stdlib `Resolv`
-returns the same empty answer for NXDOMAIN, SERVFAIL and refusal, so it cannot
-separate a domain that cannot receive mail from an unavailable check.
+external verification service. Both ordinary intake and the quiz use dnsruby
+(`Leads::MailDomain`), because stdlib `Resolv` returns the same empty answer for
+NXDOMAIN, SERVFAIL and refusal and cannot separate a domain that cannot receive
+mail from an unavailable check; ordinary intake treats `:temporary` as
+acceptable and saves the lead, whereas the quiz returns 503 with retry.
 
 Quiz phones use Phonelib's maintained libphonenumber metadata, not the ordinary
 intake's formatting-only helper. US national input defaults to US; an explicit
@@ -918,8 +924,12 @@ verdicts and repeated statuses leave stage timing unchanged.
 Notification intent is saved in `lead_notifications` in the same transaction
 as the inquiry or details update. Intake and details replays re-check pending
 rows. The outbox makes failed notification jobs eligible for retry after five minutes.
-In production, a recurring minute-by-minute drain enqueues eligible rows in
-Solid Queue and recovers lost enqueues and expired delivery claims.
+In production, a recurring minute-by-minute drain enqueues eligible rows that do
+not already have a job in flight (`last_enqueued_at` blank or at least 10
+minutes old) in Solid Queue, recovering lost enqueues and expired delivery
+claims. Rows that remain undelivered after 20 attempts or 24 hours are marked as
+gave up (`gave_up_at`), stop retrying, and appear on the Settings → Automations
+card.
 Email copies and webhooks have at-least-once delivery: a crash after sending
 but before recording completion can resend them. Automatic greetings retain
 the separate delivery guarantees linked above. Each webhook attempt remains
