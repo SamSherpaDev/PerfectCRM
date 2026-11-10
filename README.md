@@ -161,7 +161,12 @@ Delivery runs on Solid Queue
 (`OutboundDeliveryJob`, retries with backoff); the timeline shows each
 message as queued, sending, sent, or failed. A failure retains the queued
 message and any saved draft. Retry on the timeline resends that message;
-it does not pick up later draft edits.
+it does not pick up later draft edits. A send cut off mid-delivery (a deploy
+or worker restart) does not stay on sending: `OutboundDeliverySweepJob` (every
+5 minutes, [`config/recurring.yml`](config/recurring.yml)) marks a message
+still sending after 15 minutes as failed, with a note to check Sent Items in
+Outlook before retrying because the email may already have gone out. The sweep
+never resends on its own.
 
 Private Nepal guide-only intake is a separate, default-off fulfillment path, not
 an inquiry or marketing signup. It reuses this info@ outbox with one SMTP attempt
@@ -1454,7 +1459,10 @@ re-linked to another record, or its thread is ignored.
 
 Ordinary email attachments are part of the conversation and stay in CRM storage.
 There is no attachment-count cap. On import, files over 25 MB are skipped with a visible
-message notice. Before any blob is created or uploaded, filenames, content types,
+message notice. A link-only attachment (a cloud file shared as a link, with no
+bytes to copy) and a single attachment Microsoft refuses to hand over get a
+notice pointing to Outlook instead, and the rest of the message is stored.
+Before any blob is created or uploaded, filenames, content types,
 and PDF titles are screened for passport, visa, insurance, identity/ID,
 date-of-birth, and scan documents. Flagged attachments are held, never filed
 as ordinary attachments. On import, the bytes wait in a short-lived holding

@@ -15,10 +15,11 @@
 # on every run, so a folder created in Outlook starts being watched without
 # a reconnect. Delta quirks handled: @removed entries are skipped, and so,
 # before their message is fetched, are entries already stored (a replay
-# after an uncommitted link) and entries received before the mailbox was
-# connected. Graph reports read-state toggles, flags and moves as delta
-# changes too, so an old message the captain touches or files away is not
-# new mail: it belongs to Import history and the depth he chose there.
+# after an uncommitted link), entries set aside after repeated failed reads
+# (see LiveRead) and entries received before the mailbox was connected.
+# Graph reports read-state toggles, flags and moves as delta changes too,
+# so an old message the captain touches or files away is not new mail: it
+# belongs to Import history and the depth he chose there.
 #
 # Privacy: the info@ hard filter (Mail.keeps?, enforced again in the
 # ingester) decides what is stored, and no attachment bytes move until it
