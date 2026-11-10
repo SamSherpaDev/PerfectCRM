@@ -286,4 +286,42 @@ module ApplicationHelper
     time = call.scheduled_at.in_time_zone
     "#{time.strftime('%a, %b %-d')} · #{time.strftime('%-I:%M %p')} PT · #{call.duration_minutes} min"
   end
+
+  def today_attention_items(summary)
+    items = []
+    if (mailbox_label = summary.mailbox_attention_label).present?
+      items << link_to(mailbox_label, edit_settings_path(anchor: "mailbox-heading"), class: "link-quiet")
+    end
+    if (pb_label = summary.perfectbook_attention_label).present?
+      items << link_to(pb_label, edit_settings_path(anchor: "perfectbook-heading"), class: "link-quiet")
+    end
+    if summary.failed_replies.any?
+      targets = summary.failed_replies.map { |message| failed_reply_target(message) }.uniq { |_, path| path }
+      record_links = targets.map { |name, path| link_to(name, path, class: "link-quiet") }
+      items << safe_join([
+        link_to(summary.failed_replies_label, targets.first.last, class: "link-quiet"),
+        " (",
+        safe_join(record_links, ", "),
+        ")"
+      ])
+    end
+    if summary.set_aside_messages_count.positive?
+      items << link_to(summary.set_aside_messages_label, edit_settings_path(anchor: "mailbox-heading"), class: "link-quiet")
+    end
+    items
+  end
+
+  private
+
+  def failed_reply_target(message)
+    if (owner = message.owner)
+      target = owner.is_a?(Lead) && owner.converted_client ? owner.converted_client : owner
+      label = target.respond_to?(:display_name) ? target.display_name : target.name
+      [ label, polymorphic_path(target) ]
+    elsif message.group_send
+      [ message.recipients.first.presence || "Send summary", group_send_path(message.group_send) ]
+    elsif message.conversation
+      [ message.conversation.display_subject, inbox_thread_path(message.conversation) ]
+    end
+  end
 end

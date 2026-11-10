@@ -69,4 +69,59 @@ class TodaySystemTest < ApplicationSystemTestCase
     width = page.evaluate_script("document.documentElement.scrollWidth")
     assert_operator width, :<=, 390, "Today overflows a 390px viewport (#{width}px)"
   end
+
+  test "today attention line is absent when all-clear and combines items cleanly at phone and desktop widths" do
+    maya = Client.create!(name: "Maya", email: "maya@example.com")
+    pemba = Lead.create!(name: "Pemba Sherpa", email: "pemba@example.com")
+
+    OmniAuth.config.mock_auth[:google_oauth2] = OmniAuth::AuthHash.new(
+      provider: "google_oauth2", uid: "google-captain",
+      extra: { id_token: JWT.encode(@claims, @key, "RS256") }
+    )
+
+    # All-clear state at phone (390px) and desktop (1400px)
+    Google::Auth::IDTokens.stub(:oidc_key_source, @source) do
+      visit "/auth/google_oauth2/callback"
+      assert_selector "h1", text: "Today"
+    end
+    page.current_window.resize_to(390, 844)
+    assert_no_selector ".today-attention"
+    assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, 390
+
+    page.current_window.resize_to(1400, 900)
+    assert_no_selector ".today-attention"
+    assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, 1400
+
+    # Combined attention state at phone (390px) and desktop (1400px)
+    Setting.current.update!(mailbox_last_sync_at: 35.minutes.ago)
+    PerfectBook::SyncState.for("bookings").update!(last_success_at: 60.minutes.ago)
+    maya.conversations.create!(subject: "Everest").messages.create!(
+      direction: "out", status: "failed", subject: "Everest", to_addrs: maya.email, text_body: "First", sent_at: 10.minutes.ago
+    )
+    pemba.conversations.create!(subject: "Annapurna").messages.create!(
+      direction: "out", status: "failed", subject: "Annapurna", to_addrs: pemba.email, text_body: "Second", sent_at: 5.minutes.ago
+    )
+    MailMessageQuarantine.create!(provider_message_id: "quarantined-sys-1", attempts: 3)
+
+    page.current_window.resize_to(390, 844)
+    visit root_path
+    within("p.today-attention[aria-label='Needs attention']") do
+      assert_text "Mailbox has not been read since"
+      assert_text "PerfectBook sync is behind"
+      assert_text "2 replies were not delivered (Pemba Sherpa, Maya)"
+      assert_text "1 message could not be read"
+      assert_no_text "retried, in Outlook"
+      assert_link "PerfectBook sync is behind", href: edit_settings_path(anchor: "perfectbook-heading")
+      assert_link "Pemba Sherpa", href: lead_path(pemba)
+      assert_link "Maya", href: client_path(maya)
+      assert_link "1 message could not be read", href: edit_settings_path(anchor: "mailbox-heading")
+    end
+    assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, 390
+
+    page.current_window.resize_to(1400, 900)
+    visit root_path
+    assert_selector "p.today-attention[aria-label='Needs attention']"
+    assert_operator page.evaluate_script("document.querySelector('.today-attention').offsetHeight"), :<=, 28
+    assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, 1400
+  end
 end

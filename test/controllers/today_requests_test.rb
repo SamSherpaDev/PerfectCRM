@@ -273,6 +273,112 @@ class TodayRequestsTest < ActionDispatch::IntegrationTest
     assert_select "p", text: /No replies waiting/
     assert_select "p", text: "No calls to make right now."
     assert_select "[aria-label='Unlinked inquiries']", count: 0
+    assert_select ".today-attention", count: 0
+  end
+
+  test "today renders identically when nothing needs attention and shows each attention item or all combined with fix links" do
+    travel_to Time.zone.local(2026, 11, 3, 14, 35) do
+      get root_path
+      assert_response :success
+      assert_select ".today-attention", count: 0
+      assert_select "[aria-label='Needs attention']", count: 0
+      baseline_page = css_select(".page").sole.to_html
+
+      Setting.current.update!(mailbox_last_sync_at: 5.minutes.ago, mailbox_last_error: nil)
+      PerfectBook::SyncState.for("bookings").update!(last_success_at: 10.minutes.ago)
+      get root_path
+      assert_response :success
+      assert_select ".today-attention", count: 0
+      assert_equal baseline_page, css_select(".page").sole.to_html
+
+      # 1. Mailbox stale (> 20 minutes)
+      Setting.current.update!(mailbox_last_sync_at: Time.zone.local(2026, 11, 3, 14, 10))
+      get root_path
+      assert_response :success
+      assert_select "p.today-attention[aria-label='Needs attention']", count: 1 do
+        assert_select "a[href=?]", edit_settings_path(anchor: "mailbox-heading"),
+          text: "Mailbox has not been read since 2:10 pm"
+      end
+
+      # 1b. Mailbox error set when last sync was recent
+      Setting.current.update!(mailbox_last_sync_at: Time.zone.local(2026, 11, 3, 14, 25), mailbox_last_error: "Graph 503")
+      get root_path
+      assert_response :success
+      assert_select "p.today-attention[aria-label='Needs attention']", count: 1 do
+        assert_select "a[href=?]", edit_settings_path(anchor: "mailbox-heading"),
+          text: "Mailbox has not been read since 2:25 pm"
+      end
+      Setting.current.update!(mailbox_last_error: nil)
+
+      # 2. PerfectBook sync behind (> 45 minutes)
+      PerfectBook::SyncState.for("bookings").update!(last_success_at: 50.minutes.ago)
+      get root_path
+      assert_response :success
+      assert_select "p.today-attention[aria-label='Needs attention']", count: 1 do
+        assert_select "a[href=?]", edit_settings_path(anchor: "perfectbook-heading"),
+          text: "PerfectBook sync is behind"
+      end
+      PerfectBook::SyncState.for("bookings").update!(last_success_at: 10.minutes.ago)
+
+      # 3. Undelivered replies linking to their records
+      lead = Lead.create!(name: "Pemba Sherpa", email: "pemba@example.com")
+      @client.conversations.create!(subject: "Everest").messages.create!(
+        direction: "out", status: "failed", subject: "Everest",
+        to_addrs: @client.email, text_body: "First reply", sent_at: 15.minutes.ago
+      )
+      lead.conversations.create!(subject: "Annapurna").messages.create!(
+        direction: "out", status: "failed", subject: "Annapurna",
+        to_addrs: lead.email, text_body: "Second reply", sent_at: 5.minutes.ago
+      )
+      get root_path
+      assert_response :success
+      assert_select "p.today-attention[aria-label='Needs attention']", count: 1 do
+        assert_select "a[href=?]", lead_path(lead), text: "2 replies were not delivered"
+        assert_select "a[href=?]", lead_path(lead), text: "Pemba Sherpa"
+        assert_select "a[href=?]", client_path(@client), text: "Maya"
+      end
+      Message.outbound.update_all(status: "sent")
+
+      # 4. Unreadable emails set aside by mailbox reading
+      quarantine = MailMessageQuarantine.create!(
+        provider_message_id: "quarantined-1", attempts: 3
+      )
+      get root_path
+      assert_response :success
+      assert_select "p.today-attention[aria-label='Needs attention']",
+        text: "1 message could not be read" do
+        assert_select "a[href=?]", edit_settings_path(anchor: "mailbox-heading"),
+          text: "1 message could not be read"
+      end
+
+      # 5. Combined case: all four active on one compact line
+      Setting.current.update!(mailbox_last_sync_at: Time.zone.local(2026, 11, 3, 14, 10))
+      PerfectBook::SyncState.for("bookings").update!(last_success_at: 50.minutes.ago)
+      Message.outbound.update_all(status: "failed")
+      get root_path
+      assert_response :success
+      assert_select "p.today-attention[aria-label='Needs attention']", count: 1 do |lines|
+        text = lines.sole.text
+        assert_includes text, "Mailbox has not been read since 2:10 pm · PerfectBook sync is behind · 2 replies were not delivered (Pemba Sherpa, Maya) · 1 message could not be read"
+        assert_select "a[href=?]", edit_settings_path(anchor: "mailbox-heading"), text: "Mailbox has not been read since 2:10 pm"
+        assert_select "a[href=?]", edit_settings_path(anchor: "perfectbook-heading"), text: "PerfectBook sync is behind"
+        assert_select "a[href=?]", lead_path(lead), text: "2 replies were not delivered"
+        assert_select "a[href=?]", lead_path(lead), text: "Pemba Sherpa"
+        assert_select "a[href=?]", client_path(@client), text: "Maya"
+        assert_select "a[href=?]", edit_settings_path(anchor: "mailbox-heading"), text: "1 message could not be read"
+      end
+
+      # Clearing all conditions restores the all-clear Today screen
+      Setting.current.update!(mailbox_last_sync_at: 5.minutes.ago)
+      PerfectBook::SyncState.for("bookings").update!(last_success_at: 10.minutes.ago)
+      Message.outbound.delete_all
+      lead.destroy!
+      quarantine.destroy!
+      get root_path
+      assert_response :success
+      assert_select ".today-attention", count: 0
+      assert_equal baseline_page, css_select(".page").sole.to_html
+    end
   end
 
   private

@@ -14,6 +14,9 @@ module Today
     FRESH_INQUIRY_WITHIN = 24.hours
     CALL_LIST_WINDOW = 14.days
     CALL_CADENCE_STARTS_ON = Date.new(2026, 10, 20)
+    MAILBOX_STALE_AFTER = 20.minutes
+    PERFECTBOOK_STALE_AFTER = 45.minutes
+    FAILED_REPLY_WINDOW = 7.days
 
     CallEntry = Data.define(:lead, :attempt, :attempt_label, :last_call, :waited_since, :suggested_window) do
       def initialize(lead:, attempt:, attempt_label:, last_call:, waited_since:, suggested_window: nil)
@@ -47,6 +50,85 @@ module Today
 
     def unlinked_inquiries
       @unlinked_inquiries ||= Leads::UnlinkedInquiries.new(now: @now).messages
+    end
+
+    def attention?
+      mailbox_attention_label.present? ||
+        perfectbook_sync_behind? ||
+        failed_replies.any? ||
+        set_aside_messages_count.positive?
+    end
+
+    def mailbox_attention_label
+      return @mailbox_attention_label if defined?(@mailbox_attention_label)
+
+      @mailbox_attention_label = begin
+        settings = Setting.current
+        last_sync = settings.mailbox_last_sync_at || (settings.mailbox_watched_since if settings.mailbox_connected?)
+        if last_sync.present? && (settings.mailbox_last_error.present? || last_sync < @now - MAILBOX_STALE_AFTER)
+          last_sync = last_sync.in_time_zone
+          time_format = last_sync.to_date == @today ? "%-I:%M %P" : "%a %b %-d, %-I:%M %P"
+          "Mailbox has not been read since #{last_sync.strftime(time_format)}"
+        end
+      end
+    end
+
+    def perfectbook_sync_behind?
+      return @perfectbook_sync_behind if defined?(@perfectbook_sync_behind)
+
+      @perfectbook_sync_behind = PerfectBook::SyncState.where(job_name: PerfectBook::SyncState::JOBS)
+        .where(last_success_at: ...(@now - PERFECTBOOK_STALE_AFTER)).exists?
+    end
+
+    def perfectbook_attention_label
+      "PerfectBook sync is behind" if perfectbook_sync_behind?
+    end
+
+    def failed_replies
+      @failed_replies ||= begin
+        archived_leads = Lead.archived.select(:id)
+        archived_clients = Client.archived.select(:id)
+        archived_conversations = Conversation.where(linkable_type: "Lead", linkable_id: archived_leads)
+          .or(Conversation.where(linkable_type: "Client", linkable_id: archived_clients))
+          .select(:id)
+
+        Message.outbound.where(status: "failed")
+          .where(updated_at: (@now - FAILED_REPLY_WINDOW)..)
+          .where.not(id: Message.automatic_replies.select(:id))
+          .where.not(id: GuideRequest.where.not(message_id: nil).select(:message_id))
+          .where("messages.conversation_id IS NULL OR messages.conversation_id NOT IN (#{archived_conversations.to_sql})")
+          .where(<<~SQL.squish)
+            NOT EXISTS (SELECT 1 FROM messages later
+              WHERE later.direction = 'out' AND later.status IN ('sent', 'received')
+                AND later.sent_at > messages.updated_at
+                AND later.conversation_id = messages.conversation_id)
+          SQL
+          .newest_first
+          .includes(:group_send, conversation: :owner)
+          .to_a
+      end
+    end
+
+    def failed_replies_count
+      failed_replies.size
+    end
+
+    def failed_replies_label
+      count = failed_replies_count
+      return nil if count.zero?
+
+      count == 1 ? "1 reply was not delivered" : "#{count} replies were not delivered"
+    end
+
+    def set_aside_messages_count
+      @set_aside_messages_count ||= MailMessageQuarantine.quarantined.count
+    end
+
+    def set_aside_messages_label
+      count = set_aside_messages_count
+      return nil if count.zero?
+
+      "#{count} #{'message'.pluralize(count)} could not be read"
     end
 
     # Sent or viewed quotes whose valid-until has not passed.

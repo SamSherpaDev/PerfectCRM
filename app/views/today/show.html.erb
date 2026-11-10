@@ -1,7 +1,8 @@
 <% content_for :title, "Today · PerfectCRM" %>
 <div class="page">
   <%= render layout: "shared/page_header", locals: { eyebrow: "Sherpa Holidays", title: "Today", subtitle: "Welcome, #{current_user.name.presence || current_user.email} · #{Date.current.strftime('%A, %B %-d')} · what is waiting on you, in one glance." } do %><% end %>
-  <%= render "shared/flash" %>
+  <%= render "shared/flash" %><% if @summary.attention? %>
+  <p class="today-attention" role="status" aria-label="Needs attention"><%= safe_join(today_attention_items(@summary), " · ") %></p><% end %>
 
   <section aria-label="Counts">
     <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
