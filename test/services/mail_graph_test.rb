@@ -506,14 +506,11 @@ class MailGraphTest < ActiveSupport::TestCase
       assert_includes seen, "gap-fine-#{n}"
     end
 
-    # Refused three times: given up on, the folder moves on, and the
-    # mailbox card says which mail was skipped.
+    # Refused three times: set aside, and the folder moves on to its new
+    # link with the gap filled around it.
     assert MailMessageQuarantine.quarantined?("gap-refused")
     assert_not_equal link_before, MailSyncState.for("inbox").delta_link
-    notice = MailSyncState.for("inbox").last_notice.to_s
-    assert_match(/\AInbox: /, notice)
-    assert_match(/could not be read after 3 tries/, notice)
-    assert_includes notice, refused_at.in_time_zone("America/Los_Angeles").strftime("%H:%M")
+    assert_match(/re-read to fill the gap/, MailSyncState.for("inbox").last_notice.to_s)
 
     fetches = @mailbox.requests.count { |request| request.url.include?("/me/messages/gap-refused") }
     @mailbox.add("inbox", graph_message(id: "after-gap", from: "new@example.com", message_id: "<aftergap@test>"))
@@ -521,7 +518,7 @@ class MailGraphTest < ActiveSupport::TestCase
     assert_equal fetches, @mailbox.requests.count { |request| request.url.include?("/me/messages/gap-refused") }
   end
 
-  test "a storage, database or network outage while storing a message ends the folder's read and is never counted" do
+  test "a storage, database or network outage while storing a message ends the folder's read and counts one try against it" do
     fetcher.fetch_new.to_a # prime
     link_before = MailSyncState.for("inbox").delta_link
     @mailbox.add("inbox", graph_message(id: "unlucky", from: "client@example.com", message_id: "<unlucky@test>"))
@@ -535,7 +532,6 @@ class MailGraphTest < ActiveSupport::TestCase
       Mail::ConnectionError.new("Microsoft Graph returned 503")
     ]
 
-    # Twice the three-attempt cap, with good mail waiting behind each time.
     outages.each do |outage|
       seen = []
       assert_raises(outage.class) do
@@ -546,17 +542,18 @@ class MailGraphTest < ActiveSupport::TestCase
         end
       end
       assert_empty seen
-      assert_equal 0, MailMessageQuarantine.count
+      assert_equal({ "unlucky" => 1 }, MailMessageQuarantine.pluck(:provider_message_id, :attempts).to_h)
+      assert_equal link_before, MailSyncState.for("inbox").delta_link
+      # Each kind is judged on a first try of its own.
+      MailMessageQuarantine.delete_all
     end
     assert_equal 0, @mailbox.requests.count { |request| request.url.include?("/me/messages/behind") }
-    assert_equal link_before, MailSyncState.for("inbox").delta_link
-    assert_empty MailSyncState.recently_noticed
 
     assert_equal %w[unlucky behind], fetcher.fetch_new.to_a.map { |item| item.provider[:message_id] }
     assert_not_equal link_before, MailSyncState.for("inbox").delta_link
   end
 
-  test "Graph answering about access, timing or its own trouble on one message is an outage, never counted" do
+  test "Graph answering about access, timing or its own trouble on one message ends the folder's read and counts one try against it" do
     fetcher.fetch_new.to_a # prime
     link_before = MailSyncState.for("inbox").delta_link
     @mailbox.add("inbox", graph_message(id: "unanswered", from: "client@example.com", message_id: "<unanswered@test>"))
@@ -573,11 +570,12 @@ class MailGraphTest < ActiveSupport::TestCase
       assert_instance_of Mail::ConnectionError, error
       assert_equal "Inbox: Microsoft Graph returned #{answer} (Refused)", error.message
       assert_empty seen
-      assert_equal 0, MailMessageQuarantine.count
+      assert_equal({ "unanswered" => 1 }, MailMessageQuarantine.pluck(:provider_message_id, :attempts).to_h)
+      # Each answer is judged on a first try of its own.
+      MailMessageQuarantine.delete_all
     end
     assert_equal 0, @mailbox.requests.count { |request| request.url.include?("/me/messages/queued") }
     assert_equal link_before, MailSyncState.for("inbox").delta_link
-    assert_empty MailSyncState.recently_noticed
   end
 
   test "a gap longer than the recovery window is reported instead of walked" do

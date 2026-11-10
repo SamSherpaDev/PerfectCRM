@@ -177,6 +177,7 @@ class SettingsController < ApplicationController
     @mailbox_address = Mail.mailbox_address
     @mailbox_error = MailSyncState.recently_errored.first
     @mailbox_notices = MailSyncState.recently_noticed.to_a
+    @mailbox_set_aside = MailMessageQuarantine.quarantined.count
     @graph_configured = Mail::GraphAuth.configured?
     @imports = MailImport.ordered.limit(5)
     @ai_calls_today = AiCall.today.count

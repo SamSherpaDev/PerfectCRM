@@ -1,8 +1,9 @@
 # Per-message failure boundary for Microsoft Graph mailbox sync.
-# Counts the failures that belong to a single message so one unreadable
-# message cannot stall later mail in its folder, and stops retrying a message
-# after MAX_ATTEMPTS of them so the folder's delta link can advance.
-# Which failures count is the reader's rule: Mail::GraphFetcher::LiveRead.
+# Counts each message's failed reads so one unreadable message cannot stall
+# later mail in its folder: after MAX_ATTEMPTS live sync sets the message
+# aside and the folder's delta link advances without it (the rule is
+# Mail::GraphFetcher::LiveRead). A row at MAX_ATTEMPTS is mail waiting to be
+# re-read by Mail::SetAsideRetryJob, and goes when the message reads.
 class MailMessageQuarantine < ApplicationRecord
   MAX_ATTEMPTS = 3
 

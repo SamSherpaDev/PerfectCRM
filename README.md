@@ -968,7 +968,8 @@ Automatic delivery gets one SMTP attempt: an uncertain or failed delivery is
 not retried automatically or by timeline Retry, to avoid duplicate greetings.
 Further correspondence must be composed and sent manually.
 
-**Reply alerts** go to info@sherpaholidays.com when live Mail::SyncJob imports
+**Reply alerts** go to info@sherpaholidays.com when live Mail::SyncJob, or the
+hourly retry of mail it set aside (see [Mail](#mail)), imports
 new inbound mail from an existing lead/client or their person, matched by the
 same identity rules as timelines. Each alert includes the sender, received
 time, up to 300 characters of plain text and a direct conversation link, with
@@ -1377,6 +1378,18 @@ quietly opening months of mail: sync resumes from now and the depth of the
 catch-up stays the captain's choice through Import history (`/mail_imports/new`), with a preview.
 The notice also says that import cannot recover mail that reached the mailbox
 only as a hidden copy (see the backfill rule below).
+
+One unreadable message does not hold up its folder either. Every failed read of
+a message counts against that message, whatever went wrong; after three tries
+sync sets it aside and the folder moves on without it. A failure that the next
+message would meet too (Microsoft unreachable, timing out, throttling or
+answering 5xx, the database or file storage down) also ends that folder's read
+for the run, so the mail behind such a message arrives once it has been set
+aside. Being set aside is temporary: `Mail::SetAsideRetryJob` (hourly, same
+schedule file, never alongside a sync run) re-reads every set-aside message,
+longest waiting first, until it reads, and then stores it like any other mail.
+While any are waiting, the Settings mailbox card says how many under Worth a
+look; the line goes when none are left. The mail itself never leaves Outlook.
 
 Every kept message lands on the right client, lead, or organization
 timeline (`Conversation` + `Message`, attachments via Active Storage on

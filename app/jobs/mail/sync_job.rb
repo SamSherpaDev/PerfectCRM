@@ -18,8 +18,17 @@ class Mail::SyncJob < ApplicationJob
   # that comfortably and follows GraphClient if its bounds change.
   THROTTLE_ALLOWANCE = (Mail::GraphClient::THROTTLE_WAITS * Mail::GraphClient::MAX_WAIT_SECONDS).seconds
   CONCURRENCY_WINDOW = THROTTLE_ALLOWANCE * 10
+  # One guard for every job that reads the mailbox into the app (see
+  # Mail::SetAsideRetryJob): the group is named so they share it instead of
+  # each getting a guard of its own.
+  MAILBOX_GUARD = { to: 1, key: "mail-sync", group: "mailbox", duration: CONCURRENCY_WINDOW }.freeze
 
-  limits_concurrency to: 1, key: "mail-sync", duration: CONCURRENCY_WINDOW
+  limits_concurrency(**MAILBOX_GUARD)
+
+  # How one fetched message is stored, and whether it was new.
+  def self.store(item)
+    Mail::Ingester.ingest(parsed: item.parsed, provider: item.provider, alert: true)[:status] == :stored
+  end
 
   def perform(fetcher: nil, limit: 200)
     fetcher ||= Mail::GraphFetcher.new
@@ -31,8 +40,7 @@ class Mail::SyncJob < ApplicationJob
       # always advances instead of starving behind already-seen mail.
       break if stored >= limit
 
-      result = Mail::Ingester.ingest(parsed: item.parsed, provider: item.provider, alert: true)
-      stored += 1 if result[:status] == :stored
+      stored += 1 if self.class.store(item)
     end
     ::Setting.current.update_columns(mailbox_last_sync_at: Time.current,
       mailbox_last_error: nil, mailbox_last_error_at: nil, updated_at: Time.current)
