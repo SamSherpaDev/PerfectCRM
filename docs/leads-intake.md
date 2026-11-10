@@ -58,11 +58,14 @@ curl -X POST https://perfectcrm.sherpaholidays.com/api/v1/leads/intake \
 
 Behavior, in order: schema/size check (`400`); auth (`403`); rate limits
 (10 per IP per 10 minutes, 3 per email per hour - `429` with `Retry-After`);
-required fields (`contact.name` 2–120 chars, `contact.email` shaped with MX/A
-records, `consent.contact: true`, nonblank `submission_id` up to 64 chars);
-replay / 24-hour duplicate merge (`200`); and suspicion scoring that never
-rejects (`202`). DNS lookup failures fail open; a completed lookup with no MX or
-A record rejects the address. Every `200`/`202` intake body returns
+required fields (`contact.name` 2–120 chars, `contact.email` shaped with a
+receivable domain, `consent.contact: true`, nonblank `submission_id` up to 64
+chars); replay / 24-hour duplicate merge (`200`); and suspicion scoring that
+never rejects (`202`). The domain check accepts an MX record, or an A or AAAA
+record when MX is absent; temporary DNS failures (timeout, SERVFAIL, refusal)
+fail open; a completed lookup rejects the address when the domain does not
+exist, has no MX, A or AAAA record, or publishes a null MX. Every `200`/`202`
+intake body returns
 `{ "id", "reference", "received_at", "conversion" }`: `conversion` is `false`
 when this submission is tagged `suspected_spam` (including auto-archived bot
 catches) or merged as a duplicate

@@ -88,6 +88,61 @@ class LeadNotificationJobTest < ActiveJob::TestCase
     end
   end
 
+  test "enqueue_pending leaves a notification eligible when the queue refuses the job" do
+    scheduled = @lead.lead_notifications.create!(event: "auto_first_reply", available_at: 2.minutes.from_now)
+    refuse = ->(*) { raise ActiveJob::EnqueueError, "queue database busy" }
+
+    queue_adapter.stub(:enqueue, refuse) do
+      queue_adapter.stub(:enqueue_at, refuse) do
+        assert_no_enqueued_jobs only: LeadNotificationJob do
+          LeadNotification.enqueue_pending
+        end
+      end
+    end
+    assert_nil @notification.reload.last_enqueued_at
+    assert_nil scheduled.reload.last_enqueued_at
+
+    assert_enqueued_jobs 2, only: LeadNotificationJob do
+      LeadNotification.enqueue_pending
+    end
+    assert @notification.reload.last_enqueued_at.present?
+    assert scheduled.reload.last_enqueued_at.present?
+  end
+
+  test "a delivery in progress on its last attempt is not marked gave up" do
+    notification = @notification
+    mailer = Object.new
+    mailer.define_singleton_method(:deliver_now) do
+      LeadNotification.enqueue_pending
+      LeadNotificationJob.perform_now(notification.id)
+    end
+
+    @notification.update!(attempts: 19, available_at: 1.minute.ago)
+    LeadIntakeMailer.stub(:inquiry_copy, mailer) do
+      LeadNotificationJob.perform_now(@notification.id)
+    end
+
+    @notification.reload
+    assert_equal 20, @notification.attempts
+    assert @notification.delivered_at.present?
+    assert_nil @notification.gave_up_at
+    assert_not_includes LeadNotification.gave_up, @notification
+  end
+
+  test "an abandoned last attempt gives up once its claim expires" do
+    @notification.update!(attempts: 20, available_at: 4.minutes.from_now)
+
+    LeadNotification.enqueue_pending
+    assert_nil @notification.reload.gave_up_at
+
+    travel 5.minutes do
+      assert_no_enqueued_jobs only: LeadNotificationJob do
+        LeadNotification.enqueue_pending
+      end
+    end
+    assert @notification.reload.gave_up?
+  end
+
   test "notification gives up after 20 failed attempts and stops retrying" do
     mailer = Object.new
     def mailer.deliver_now
@@ -105,7 +160,7 @@ class LeadNotificationJobTest < ActiveJob::TestCase
     assert_equal 20, @notification.attempts
     assert_nil @notification.delivered_at
     assert @notification.gave_up_at.present?
-    assert_equal "gave_up", @notification.status
+    assert @notification.gave_up?
 
     travel 15.minutes do
       assert_no_enqueued_jobs only: LeadNotificationJob do
@@ -123,7 +178,7 @@ class LeadNotificationJobTest < ActiveJob::TestCase
 
     @notification.reload
     assert @notification.gave_up_at.present?
-    assert_equal "gave_up", @notification.status
+    assert @notification.gave_up?
 
     assert_no_difference("ActionMailer::Base.deliveries.size") do
       LeadNotificationJob.perform_now(@notification.id)
