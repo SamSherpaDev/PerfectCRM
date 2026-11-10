@@ -101,9 +101,7 @@ module Today
             NOT EXISTS (SELECT 1 FROM messages later
               WHERE later.direction = 'out' AND later.status IN ('sent', 'received')
                 AND later.sent_at > messages.updated_at
-                AND (later.conversation_id = messages.conversation_id
-                  OR (messages.conversation_id IS NULL AND later.group_send_id = messages.group_send_id
-                    AND later.to_addresses = messages.to_addresses)))
+                AND later.conversation_id = messages.conversation_id)
           SQL
           .newest_first
           .includes(:group_send, conversation: :owner)

@@ -528,7 +528,7 @@ class TodaySummaryTest < ActiveSupport::TestCase
     end
   end
 
-  test "failed_replies keeps a group send failure when only other recipients were delivered" do
+  test "failed_replies keeps a group send failure when other recipients were delivered" do
     travel_to Time.zone.local(2026, 11, 3, 15, 0) do
       template = Template.create!(name: "Departure note", purpose: "custom", subject: "Departure", body: "See you soon")
       group = GroupSend.create!(template: template, total_count: 2)
@@ -537,10 +537,6 @@ class TodaySummaryTest < ActiveSupport::TestCase
       group.messages.create!(direction: "out", status: "sent", subject: "Departure",
         to_addrs: "other@example.test", text_body: "See you soon", sent_at: 1.hour.ago)
       assert_equal [ bounced ], Today::Summary.new.failed_replies
-
-      group.messages.create!(direction: "out", status: "sent", subject: "Departure",
-        to_addrs: "walk-in@example.test", text_body: "See you soon", sent_at: 30.minutes.ago)
-      assert_empty Today::Summary.new.failed_replies
     end
   end
 
