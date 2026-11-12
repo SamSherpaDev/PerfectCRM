@@ -480,9 +480,9 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
     travel_to Time.zone.local(2026, 11, 4, 10, 0) do # Wednesday
       lead = Lead.create!(name: "Pasang Lama", email: "pasang@example.com", phone: "+14155550204", source: "website_form",
         trip_title: "Manaslu Circuit", received_at: 2.days.ago - 1.hour)
-      CallLog.record!(lead, key: "ahead-1", occurred_at: 2.days.ago, outcome: "voicemail", direction: "outbound")
-      CallLog.record!(lead, key: "ahead-2", occurred_at: 1.day.ago, outcome: "no_answer", direction: "outbound")
-      post lead_calls_path(lead), params: { save_key: "ahead-3", outcome: "voicemail", direction: "outbound",
+      CallLog.record!(lead, key: "ahead-call-1", occurred_at: 2.days.ago, outcome: "voicemail", direction: "outbound")
+      CallLog.record!(lead, key: "ahead-call-2", occurred_at: 1.day.ago, outcome: "no_answer", direction: "outbound")
+      post lead_calls_path(lead), params: { save_key: "ahead-call-3", outcome: "voicemail", direction: "outbound",
         occurred_at: 3.minutes.from_now.iso8601 }
       assert lead.reload.recontact?
       get lead_path(lead)
