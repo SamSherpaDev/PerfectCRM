@@ -757,7 +757,8 @@ Potential or Unsure on a not-interested lead also clears `not_interested_marked_
 Not interested is not spam: it does not set `spam_marked_at` or the
 `suspected_spam` tag, and it does not alter spam reports or ad conversions
 already sent. Logging an outbound `Voicemail` or `No answer` call on a lead in
-Unsure outside the call routine (below) that now has three combined outbound
+Unsure that is not an ad, website, or quiz lead (`Lead#call_routine_lead?`,
+below) that now has three combined outbound
 `Voicemail` or `No answer` outcomes (`Attempted` does not count) with no
 response since the first of those three
 also marks the lead not interested automatically via `Lead#mark_not_interested!`,
@@ -780,8 +781,9 @@ moves to the **Re-contact** list (`Lead#mark_recontact!`, `recontact_on` 3
 months out) rather than Not interested, records a `recontact` timeline note
 (`Moved to Re-contact automatically after three unanswered calls`), and adds
 `Moved to Re-contact after three unanswered calls.` to the `Call logged`
-notice. Mark Unsure runs the same check, so a lead outside the call routine
-(trade show, email, referral, or manual) that already has three unanswered calls moves straight to Not interested
+notice. Mark Unsure runs the same check, so a lead that is not an ad, website,
+or quiz lead (trade show, email, referral, or manual) that already has three
+unanswered calls moves straight to Not interested
 (`Marked as Unsure - moved to Not interested after three unanswered calls.`)
 or, for a call routine
 lead with attempts on three days, to Re-contact (`Marked as Unsure - moved to
