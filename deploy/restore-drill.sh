@@ -1,9 +1,20 @@
 #!/usr/bin/env bash
-# Restore the primary replica and boot the running production image offline.
+# Restore the primary database and boot the running production image offline.
 # Run with Docker access on the VPS; optional argument is the app config directory.
+# RESTORE_SOURCE=litestream (default) or drive; see docs/operations.md, "Restore drill".
 set -euo pipefail
 
 cd -- "${1:-$(dirname "$0")}"
+
+RESTORE_SOURCE="${RESTORE_SOURCE:-litestream}"
+case "$RESTORE_SOURCE" in
+  litestream) ;;
+  drive) DRIVE_DAILY="${DRIVE_BACKUP_REMOTE:-sherpa-backup}:perfectcrm/daily" ;;
+  *)
+    echo "Restore drill FAILED: RESTORE_SOURCE must be litestream or drive." >&2
+    exit 1
+    ;;
+esac
 
 # Pin the actual running image, not a tag that may now point at another release.
 IMAGE="$(docker inspect --format '{{if .State.Running}}{{.Image}}{{end}}' perfectcrm-app)"
@@ -36,28 +47,52 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-# Only this read-only restore has network access and backup credentials.
-# Do not source either environment file as shell code or load .env.app.
-docker run --rm \
-  --env-file .env.litestream \
-  -v "$WORKDIR:/restore" \
-  -v "$PWD/litestream.yml:/etc/litestream.yml:ro" \
-  litestream/litestream:0.5.9 \
-  restore -config /etc/litestream.yml -o /restore/production.sqlite3 \
-  /rails/storage/production.sqlite3
+RESTORED_DATABASES=(production)
+case "$RESTORE_SOURCE" in
+  litestream)
+    # Only this read-only restore has network access and backup credentials.
+    # Do not source either environment file as shell code or load .env.app.
+    docker run --rm \
+      --env-file .env.litestream \
+      -v "$WORKDIR:/restore" \
+      -v "$PWD/litestream.yml:/etc/litestream.yml:ro" \
+      litestream/litestream:0.5.9 \
+      restore -config /etc/litestream.yml -o /restore/production.sqlite3 \
+      /rails/storage/production.sqlite3
+    ;;
+  drive)
+    # Host rclone reads only; the newest daily archive of each database wins.
+    DRIVE_LISTING="$(rclone lsf --files-only "$DRIVE_DAILY")"
+    for NAME in production production_queue; do
+      ARCHIVE="$(grep -E "^$NAME-[0-9]{4}-[0-9]{2}-[0-9]{2}\.sqlite3\.gz\$" <<<"$DRIVE_LISTING" | sort | tail -n 1 || true)"
+      if [ -z "$ARCHIVE" ]; then
+        echo "Restore drill FAILED: no $NAME archive in the Drive daily backups." >&2
+        exit 1
+      fi
+      echo "Restoring Drive archive $ARCHIVE"
+      if ! rclone cat "$DRIVE_DAILY/$ARCHIVE" | gzip -dc > "$WORKDIR/$NAME.sqlite3"; then
+        echo "Restore drill FAILED: Drive archive $ARCHIVE did not download and decompress." >&2
+        exit 1
+      fi
+    done
+    RESTORED_DATABASES=(production production_queue)
+    ;;
+esac
 
 # The Rails app UID needs a writable scratch directory for SQLite sidecars.
 docker run --rm --network none --user 0:0 --entrypoint chown \
   -v "$WORKDIR:/restore" "$IMAGE" -R 1000:1000 /restore
 
-INTEGRITY_RESULT="$(docker run --rm --network none --entrypoint sqlite3 \
-  -v "$WORKDIR:/restore" "$IMAGE" \
-  /restore/production.sqlite3 'PRAGMA integrity_check;')"
-if [ "$INTEGRITY_RESULT" != "ok" ]; then
-  printf 'Restore drill FAILED: database integrity check returned:\n%s\n' "$INTEGRITY_RESULT" >&2
-  exit 1
-fi
-echo "Restored database integrity: ok"
+for NAME in "${RESTORED_DATABASES[@]}"; do
+  INTEGRITY_RESULT="$(docker run --rm --network none --entrypoint sqlite3 \
+    -v "$WORKDIR:/restore" "$IMAGE" \
+    "/restore/$NAME.sqlite3" 'PRAGMA integrity_check;')"
+  if [ "$INTEGRITY_RESULT" != "ok" ]; then
+    printf 'Restore drill FAILED: %s database integrity check returned:\n%s\n' "$NAME" "$INTEGRITY_RESULT" >&2
+    exit 1
+  fi
+  echo "Restored $NAME database integrity: ok"
+done
 
 # Keep drill-only configuration out of the image and normal production boot.
 # No db:prepare, migrations, seeds, queue recovery, or job supervisor is run.

@@ -47,10 +47,39 @@ elif args[0] == 'rm':
     (state / 'container').unlink(missing_ok=True)
 '''
 
+# Host rclone for RESTORE_SOURCE=drive: lists DRIVE_LISTING and streams a
+# gzip archive (or bytes that are not gzip) for whichever file is requested.
+RCLONE = r'''#!/usr/bin/env python3
+import gzip
+import json
+import os
+from pathlib import Path
+import sys
+
+args = sys.argv[1:]
+with (Path(os.environ['STATE']) / 'rclone.jsonl').open('a') as log:
+    log.write(json.dumps(args) + '\n')
+if args[0] == 'lsf':
+    sys.stdout.write(os.environ['DRIVE_LISTING'])
+elif args[0] == 'cat':
+    data = b'SQLite format 3 stand-in'
+    sys.stdout.buffer.write(data if os.environ['DRIVE_ARCHIVE'] == 'corrupt' else gzip.compress(data))
+else:
+    sys.exit('unexpected rclone command')
+'''
+
+NEWEST_LISTING = '\n'.join([
+    'production-2026-11-09.sqlite3.gz', 'production-2026-11-11.sqlite3.gz',
+    'production-2026-10-30.sqlite3.gz', 'production_queue-2026-11-10.sqlite3.gz',
+    'production_queue-2026-11-11.sqlite3.gz', 'production-2026-11-12.sqlite3.gz.partial',
+    'notes.txt', ''])
+
 
 class RestoreDrillTest(unittest.TestCase):
     def run_drill(self, *, integrity_result='ok', health_code='200',
-                  app_image='sha256:running-image', container_running='true', **statuses):
+                  app_image='sha256:running-image', container_running='true',
+                  restore_source=None, drive_listing=NEWEST_LISTING, drive_archive='valid',
+                  **statuses):
         # Keep all fixture state outside the checkout, including failed scratch.
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -65,6 +94,7 @@ class RestoreDrillTest(unittest.TestCase):
             commands = root / 'commands'
             commands.mkdir()
             (commands / 'docker').write_text(DOCKER)
+            (commands / 'rclone').write_text(RCLONE)
             (commands / 'sleep').write_text('#!/bin/sh\nexit 0\n')
             (commands / 'rm').write_text('''#!/bin/sh
 printf '%s\\n' "$*" >> "$STATE/removals"
@@ -77,12 +107,21 @@ exec /bin/rm "$@"
                                STATE=str(root), TMPDIR=str(root), INTEGRITY_RESULT=integrity_result,
                                LITESTREAM_BUCKET="fixture", SPACES_ENDPOINT="fixture",
                                SPACES_REGION="auto", HEALTH_CODE=health_code,
-                               APP_IMAGE=app_image, CONTAINER_RUNNING=container_running)
+                               APP_IMAGE=app_image, CONTAINER_RUNNING=container_running,
+                               DRIVE_LISTING=drive_listing, DRIVE_ARCHIVE=drive_archive)
+            environment.pop('RESTORE_SOURCE', None)
+            environment.pop('DRIVE_BACKUP_REMOTE', None)
+            if restore_source is not None:
+                environment['RESTORE_SOURCE'] = restore_source
             for name in ('HEALTH', 'INTEGRITY', 'RESTORE', 'BOOT', 'RECORD', 'REMOVE', 'SCRATCH_REMOVE'):
                 environment[f'{name}_STATUS'] = str(statuses.get(name.lower(), 0))
             result = subprocess.run(['bash', str(script), str(app)], env=environment,
                                     text=True, capture_output=True, timeout=10)
-            calls = [json.loads(line) for line in (root / 'docker.jsonl').read_text().splitlines()]
+            docker_log = root / 'docker.jsonl'
+            calls = [json.loads(line) for line in docker_log.read_text().splitlines()] if docker_log.exists() else []
+            rclone_log = root / 'rclone.jsonl'
+            self.rclone_calls = ([json.loads(line) for line in rclone_log.read_text().splitlines()]
+                                 if rclone_log.exists() else [])
             if result.returncode == 0:
                 self.assertFalse((root / 'container').exists(), 'successful drill must remove its container')
             scratch = list(root.glob('perfectcrm-restore-drill.*'))
@@ -184,6 +223,55 @@ exec /bin/rm "$@"
         self.assertTrue(any(call[0] == 'rm' for call in calls))
         self.assertTrue(removed)
         self.assertEqual(len(scratch), 1)
+
+    def test_litestream_stays_the_default_source(self):
+        result, calls, _, _ = self.run_drill()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(any('restore' in call for call in calls))
+        self.assertEqual(self.rclone_calls, [])
+
+    def test_drive_source_restores_newest_daily_archives_offline(self):
+        result, calls, scratch, _ = self.run_drill(restore_source='drive')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('Restore drill passed', result.stdout)
+        self.assertFalse(any('restore' in call or '--env-file' in call for call in calls))
+        self.assertEqual(self.rclone_calls, [
+            ['lsf', '--files-only', 'sherpa-backup:perfectcrm/daily'],
+            ['cat', 'sherpa-backup:perfectcrm/daily/production-2026-11-11.sqlite3.gz'],
+            ['cat', 'sherpa-backup:perfectcrm/daily/production_queue-2026-11-11.sqlite3.gz'],
+        ])
+        checked = [call[-2] for call in calls if call[0] == 'run' and 'sqlite3' in call]
+        self.assertEqual(checked, ['/restore/production.sqlite3', '/restore/production_queue.sqlite3'])
+        for call in calls:
+            if call[0] == 'run':
+                self.assertEqual(call[call.index('--network') + 1], 'none')
+        self.assertTrue(any(call[0] == 'exec' and '--probe' in call for call in calls))
+        self.assertEqual(scratch, [])
+
+    def test_drive_source_without_an_archive_fails_before_boot(self):
+        listing = 'production-2026-11-11.sqlite3.gz\nproduction_queue-2026-11-11.sqlite3.gz.partial\n'
+        for name, text in (('empty', ''), ('queue missing', listing)):
+            with self.subTest(listing=name):
+                result, calls, scratch, _ = self.run_drill(restore_source='drive', drive_listing=text)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('archive in the Drive daily backups', result.stderr)
+                self.assertFalse(any(call[0] == 'run' for call in calls))
+                self.assertEqual(scratch, [])
+
+    def test_drive_source_corrupt_archive_fails_before_boot(self):
+        result, calls, scratch, _ = self.run_drill(restore_source='drive', drive_archive='corrupt')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('did not download and decompress', result.stderr)
+        self.assertFalse(any(call[0] == 'run' for call in calls))
+        self.assertEqual(scratch, [])
+
+    def test_unknown_source_fails_before_any_work(self):
+        result, calls, scratch, _ = self.run_drill(restore_source='r2')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('RESTORE_SOURCE must be litestream or drive', result.stderr)
+        self.assertEqual(calls, [])
+        self.assertEqual(self.rclone_calls, [])
+        self.assertEqual(scratch, [])
 
 
 if __name__ == '__main__':

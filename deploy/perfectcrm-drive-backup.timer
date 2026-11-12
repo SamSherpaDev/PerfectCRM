@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily PerfectCRM encrypted Drive backup
+
+[Timer]
+OnCalendar=*-*-* 11:45:00 UTC
+Persistent=false
+Unit=perfectcrm-drive-backup.service
+
+[Install]
+WantedBy=timers.target
