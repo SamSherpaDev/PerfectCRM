@@ -65,6 +65,18 @@ class BookingLinkTemplateMigrationTest < ActiveSupport::TestCase
     assert_includes output, "Skipped itinerary follow-up template #{@follow_up.id}"
   end
 
+  test "rows without exactly one blank line on the paragraph's far side are preserved and logged" do
+    @follow_up.update!(body: FOLLOW_UP.sub("ready.\n\nBest,", "ready.\nBest,"))
+    [ "group.\nBest,", "group.\n\n\nBest," ].each do |spacing|
+      @first_reply.update!(body: FIRST_REPLY.sub("group.\n\nBest,", spacing))
+      edited = [ @first_reply.body, @follow_up.body ]
+      output, = capture_io { MIGRATION.new.migrate(:up) }
+      assert_equal edited, [ @first_reply.reload.body, @follow_up.reload.body ]
+      assert_includes output, "Skipped first-reply template #{@first_reply.id}"
+      assert_includes output, "Skipped itinerary follow-up template #{@follow_up.id}"
+    end
+  end
+
   test "a row that already has a booking link is left alone" do
     body = "#{FIRST_REPLY}\n\nBook here: {{booking_link}}"
     @first_reply.update!(body: body)

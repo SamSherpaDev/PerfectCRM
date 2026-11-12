@@ -37,7 +37,7 @@ class AddBookingLinkToCallTemplates < ActiveRecord::Migration[8.1]
         template.update_columns(body: updated, updated_at: Time.current)
         say "Updated #{label} template #{template.id}"
       else
-        say "Skipped #{label} template #{template.id}: it already has the booking link or its anchor line is edited"
+        say "Skipped #{label} template #{template.id}: it already has the booking link, or its anchor line or the spacing around it is edited"
       end
     end
   end
@@ -50,21 +50,20 @@ class AddBookingLinkToCallTemplates < ActiveRecord::Migration[8.1]
     end
   end
 
-  # The paragraph sits next to an anchor that is its own line, found exactly once.
+  # The paragraph sits next to an anchor that is its own line, found exactly
+  # once, with one blank line or the body's edge on the paragraph's far side.
   def insert_after(body, anchor, line)
-    pattern = anchor_line(anchor)
     newline = newline_in(body)
-    body.sub(pattern) { "#{anchor}#{newline}#{newline}#{line}" } if body.scan(pattern).one?
+    place(body, anchor, /^#{Regexp.escape(anchor)}(?=\r?\n\r?\n[ \t]*\S|\z)/) { "#{anchor}#{newline}#{newline}#{line}" }
   end
 
   def insert_before(body, anchor, line)
-    pattern = anchor_line(anchor)
     newline = newline_in(body)
-    body.sub(pattern) { "#{line}#{newline}#{newline}#{anchor}" } if body.scan(pattern).one?
+    place(body, anchor, /(?:\A|(?<=\n\n|\n\r\n))#{Regexp.escape(anchor)}(?=\r?$)/) { "#{line}#{newline}#{newline}#{anchor}" }
   end
 
-  def anchor_line(anchor)
-    /^#{Regexp.escape(anchor)}(?=\r?$)/
+  def place(body, anchor, spaced, &paragraph)
+    body.dup.sub!(spaced, &paragraph) if body.scan(/^#{Regexp.escape(anchor)}(?=\r?$)/).one?
   end
 
   def newline_in(body)
