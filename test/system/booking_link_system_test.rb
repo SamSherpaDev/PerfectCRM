@@ -4,7 +4,7 @@ require_relative "../support/google_sign_in_test_helper"
 class BookingLinkSystemTest < ApplicationSystemTestCase
   include GoogleSignInTestHelper
 
-  URL = "https://calendar.app.google/sherpa-call".freeze
+  URL = "https://calendar.app.google/q3m1gGd6UVoNxSyA6".freeze
 
   setup do
     OmniAuth.config.mock_auth[:google_oauth2] = OmniAuth::AuthHash.new(
@@ -59,6 +59,12 @@ class BookingLinkSystemTest < ApplicationSystemTestCase
     find("#booking-heading").execute_script("this.scrollIntoView({block: 'center'})")
     assert_equal URL, find_field("Booking page link").value
     capture("settings-phone")
+    assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, 390
+    phone_lead = Lead.create!(name: "Booking Phone", email: "booking-phone@example.com", phone: "+14155550205", source: "website_form")
+    visit root_path
+    within("#call_list_lead_#{phone_lead.id}") { tolerate_submit_navigation { click_button "No answer" } }
+    tolerate_navigation_assertion { assert_selector ".flash-notice", text: "You can also pick a call time here: #{URL}" }
+    capture("today-flash-phone", ".flash-notice")
     assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, 390
     visit lead_path(lead, anchor: "record-details")
     within("[data-missed-call-reminder]") do

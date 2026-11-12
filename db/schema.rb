@@ -863,6 +863,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_12_222557) do
     t.string "appearance", default: "paper", null: false
     t.boolean "auto_first_reply_enabled", default: true, null: false
     t.datetime "auto_first_reply_enabled_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.string "booking_url", default: "", null: false
     t.datetime "created_at", null: false
     t.boolean "digest_enabled", default: true, null: false
     t.text "email_signature", default: "", null: false
@@ -896,7 +897,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_12_222557) do
     t.datetime "trip_quiz_email_enabled_at"
     t.datetime "updated_at", null: false
     t.string "weekly_report_recipient", default: "", null: false
-    t.string "booking_url", default: "", null: false
     t.index ["singleton_key"], name: "index_settings_on_singleton_key", unique: true
     t.index ["site_key"], name: "index_settings_on_site_key", unique: true, where: "site_key IS NOT NULL AND site_key != ''"
     t.check_constraint "singleton_key = 1", name: "settings_singleton"
