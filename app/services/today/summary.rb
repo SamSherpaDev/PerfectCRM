@@ -148,7 +148,7 @@ module Today
     # (b) leads with a phone whose calls never connected (Attempted,
     #     Voicemail, or No answer) and that are due another try (attempt 2
     #     due 1 day after attempt 1; attempt 3 due 2 days after attempt 2; at
-    #     most 3 attempts). The ad-lead routine counts CallLog.unanswered_attempts
+    #     most 3 attempts). The call routine (ad, website and quiz leads) counts CallLog.unanswered_attempts
     #     instead (outbound Voicemail or No answer, one per day, since the
     #     latest response or restore), retries daily, and gets varied
     #     time-of-day guidance;
@@ -158,7 +158,7 @@ module Today
     # Calls logged before CALL_CADENCE_STARTS_ON belong to the separate
     # backlog call sheet: such a lead stays off the list until a new call
     # starts its cadence.
-    # Outside the ad-lead routine, a cadence is the run of calls within 14
+    # Outside the call routine, a cadence is the run of calls within 14
     # days before the latest call; the routine's count is the same one its
     # Re-contact move uses, so it also includes backlog-sheet calls and calls
     # older than 14 days. Either way a lead leaves the list once its latest
@@ -218,7 +218,7 @@ module Today
           last_call = calls.last
           next if last_call.occurred_at < window_start
 
-          routine = lead.ad_call_routine?
+          routine = lead.call_routine?
           if routine
             cadence = CallLog.unanswered_attempts(lead)
             next if cadence.empty? && calls.any? { |call| call_connected?(call) }

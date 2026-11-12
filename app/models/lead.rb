@@ -106,7 +106,7 @@ class Lead < ApplicationRecord
   # Unsure holds leads the captain cannot call yet (voicemail, no reply):
   # not clearly Potential, not clearly spam. Suspected spam may wait here.
   scope :unsure, -> { active.where(converted_client_id: nil, spam_marked_at: nil, not_interested_marked_at: nil, recontact_marked_at: nil).where.not(unsure_marked_at: nil) }
-  # Re-contact holds open ad leads with no contact after three call attempts
+  # Re-contact holds open ad, website and quiz leads with no contact after three call attempts
   # for a 3-to-6-month follow-up window without treating no-answer as rejection.
   scope :recontact, -> { open.where(spam_marked_at: nil, not_interested_marked_at: nil).where.not(recontact_marked_at: nil) }
   # Not interested sets a lead aside from every call/email list and automation
@@ -241,6 +241,17 @@ class Lead < ApplicationRecord
     ::AdSpend::SOURCES.include?(source)
   end
 
+  # Website form leads (including safety-net leads rebuilt from website-form
+  # emails) and trip quiz leads, whatever their source.
+  def website_lead?
+    source == "website_form" || placement == "trip_quiz"
+  end
+
+  # Leads that follow the call routine; ad_lead? keeps meaning paid ads.
+  def call_routine_lead?
+    ad_lead? || website_lead?
+  end
+
   def video_source
     activity_events.where(kind: "call").where("json_extract(metadata, '$.video_source') IS NOT NULL")
       .order(occurred_at: :desc, id: :desc).first&.metadata&.dig("video_source")
@@ -320,22 +331,23 @@ class Lead < ApplicationRecord
     recontact? && recontact_on.present? && recontact_on <= today
   end
 
-  # Open ad inquiries from new people. Other ad inquiries (an existing client's,
-  # lost, archived, converted, or not interested) get no text reminder or
-  # time-of-day guidance, and unanswered calls never move them automatically.
-  def ad_call_routine?
-    ad_lead? && existing_client_id.nil? && status != "lost" && !archived? && !converted? && !not_interested?
+  # Open ad, website and quiz inquiries from new people. Other such inquiries
+  # (an existing client's, lost, archived, converted, or not interested) get no
+  # text reminder or time-of-day guidance, and unanswered calls never move them
+  # automatically.
+  def call_routine?
+    call_routine_lead? && existing_client_id.nil? && status != "lost" && !archived? && !converted? && !not_interested?
   end
 
-  # Ad leads still in New (stage new) or Unsure; existing clients keep their place.
+  # Routine leads still in New (stage new) or Unsure; existing clients keep their place.
   def recontact_eligible?
-    ad_call_routine? && (unsure? || Lead.in_new_tab.where(status: "new").exists?(id))
+    call_routine? && (unsure? || Lead.in_new_tab.where(status: "new").exists?(id))
   end
 
   def mark_recontact!
     with_lock do
       unless recontact_eligible?
-        errors.add(:base, "Only ad leads in New or Unsure can be moved to Re-contact")
+        errors.add(:base, "Only ad, website and quiz leads in New or Unsure can be moved to Re-contact")
         raise ActiveRecord::RecordInvalid, self
       end
       update!(recontact_marked_at: Time.current, recontact_on: Date.current + DEFAULT_RECONTACT_MONTHS.months)

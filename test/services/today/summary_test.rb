@@ -218,29 +218,34 @@ class TodaySummaryTest < ActiveSupport::TestCase
     end
   end
 
-  test "ad leads retry Day 0 -> Day 1 -> Day 2 at varied times of day while other leads keep Day 0 -> Day 1 -> Day 3" do
+  test "ad, website, and quiz leads retry Day 0 -> Day 1 -> Day 2 at varied times of day while other leads keep Day 0 -> Day 1 -> Day 3" do
     travel_to Time.zone.local(2026, 10, 20, 10) do
       ad = inquiry("Ad cadence traveler", 15.minutes.ago, source: "meta_ads")
       web = inquiry("Web cadence traveler", 15.minutes.ago, source: "website_form")
+      quiz = inquiry("Quiz cadence traveler", 15.minutes.ago, source: "trade_show")
+      quiz.update!(placement: "trip_quiz")
+      other = inquiry("Referral cadence traveler", 15.minutes.ago, source: "referral")
+      routine = [ ad, web, quiz ]
+      leads = routine + [ other ]
       entries = -> { Today::Summary.new.call_entries.to_h { |e| [ e.lead, [ e.attempt, e.suggested_window ] ] } }
 
-      assert_equal({ ad => [ 1, nil ], web => [ 1, nil ] }, entries.call)
-      [ ad, web ].each { |lead| CallLog.record!(lead, key: "mix-call-#{lead.id}-1", occurred_at: Time.current, outcome: "voicemail", direction: "outbound") }
+      assert_equal(leads.index_with { [ 1, nil ] }, entries.call)
+      leads.each { |lead| CallLog.record!(lead, key: "mix-call-#{lead.id}-1", occurred_at: Time.current, outcome: "voicemail", direction: "outbound") }
       assert_empty entries.call
 
       travel 1.day + 4.hours
-      assert_equal({ ad => [ 2, "afternoon" ], web => [ 2, nil ] }, entries.call)
-      [ ad, web ].each { |lead| CallLog.record!(lead, key: "mix-call-#{lead.id}-2", occurred_at: Time.current, outcome: "no_answer", direction: "outbound") }
+      assert_equal(routine.index_with { [ 2, "afternoon" ] }.merge(other => [ 2, nil ]), entries.call)
+      leads.each { |lead| CallLog.record!(lead, key: "mix-call-#{lead.id}-2", occurred_at: Time.current, outcome: "no_answer", direction: "outbound") }
       assert_empty entries.call
 
       travel 1.day + 4.hours
-      assert_equal({ ad => [ 3, "evening" ] }, entries.call)
-      CallLog.record!(ad, key: "mix-call-#{ad.id}-3", occurred_at: Time.current, outcome: "voicemail", direction: "outbound")
-      assert ad.reload.recontact?
+      assert_equal(routine.index_with { [ 3, "evening" ] }, entries.call)
+      routine.each { |lead| CallLog.record!(lead, key: "mix-call-#{lead.id}-3", occurred_at: Time.current, outcome: "voicemail", direction: "outbound") }
+      routine.each { |lead| assert lead.reload.recontact?, "#{lead.name} should move to Re-contact" }
       assert_empty entries.call
 
       travel 15.hours
-      assert_equal({ web => [ 3, nil ] }, entries.call)
+      assert_equal({ other => [ 3, nil ] }, entries.call)
     end
   end
 

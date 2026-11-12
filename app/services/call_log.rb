@@ -13,11 +13,28 @@ module CallLog
   AUTO_NOT_INTERESTED_SUMMARY = "Moved to Not interested automatically after three unanswered calls"
   REPLIED_AFTER_AUTO_MOVE_SUMMARY = "Moved back to Unsure: they replied after the automatic move."
   TIME_WINDOWS = %w[morning afternoon evening].freeze
-  # Approved wording; the captain copies, edits, and sends it by hand.
-  MISSED_CALL_TEXT = "Hi {{first_name}}, this is Sam at SherpaHolidays. I just tried giving you a quick call about your trip inquiry. " \
-    "When is a good time for us to connect by phone, or is text easier for you?"
-  MISSED_CALL_TEXT_NO_NAME = "Hi, this is Sam at SherpaHolidays. I just tried giving you a quick call about your trip inquiry. " \
-    "When is a good time for us to connect by phone, or is text easier for you?"
+  # Approved wording, one text per missed try (1-3) and an optional one after a
+  # missed Re-contact follow-up. The captain copies, edits, and sends it by hand.
+  # Keep each string byte for byte as approved: plain ASCII, one line.
+  TEXTS = {
+    1 => "Hi {{first_name}}, this is Sam at SherpaHolidays. I just tried giving you a quick call about your trip inquiry. When is a good time for us to connect by phone, or is text easier for you?",
+    2 => "Hi {{first_name}}, it's Sam at SherpaHolidays again about your {{trip}} inquiry. Would {{day}} morning or afternoon suit you for a short call? A quick reply here works too.",
+    3 => "Hi {{first_name}}, Sam at SherpaHolidays. I'll leave the calls here for now. Whenever you're ready to talk about {{trip}}, just reply and we'll call you the same business day.",
+    recontact: "Hi {{first_name}}, it's Sam at SherpaHolidays. You asked about {{trip}} back in {{month}}. Is it still on your list? Happy to talk whenever suits you."
+  }.freeze
+  # What {{trip}} reads when the inquiry names no trip.
+  TEXT_TRIP_FALLBACKS = { 2 => "trip", 3 => "your trip", recontact: "a trip" }.freeze
+
+  # The text reminder for a missed routine call: `note` is the progress line,
+  # `key` the try (1-3, or :recontact for a missed Re-contact follow-up), and
+  # `text` that try's approved text, filled in for the lead.
+  Reminder = Data.define(:note, :key, :text) do
+    def recontact? = key == :recontact
+
+    def label = recontact? ? "Text R (optional)" : "Text #{key}"
+
+    def aria_label = "Text #{recontact? ? 'R' : key} to send by hand"
+  end
   module_function
 
   def record!(record, key:, occurred_at:, outcome:, direction:, duration: nil, video_source: nil)
@@ -99,24 +116,50 @@ module CallLog
     reminder = missed_call_reminder(lead, event)
     return logged unless reminder
 
-    "#{logged} Send a short text by hand. #{reminder}#{" Suggested text: #{missed_call_text(lead)}" if with_text}"
+    suggestion = " #{reminder.recontact? ? 'Optional' : 'Suggested'} text: #{reminder.text}" if with_text
+    "#{logged} Send a short text by hand. #{reminder.note}#{suggestion}"
   end
 
-  def missed_call_text(lead)
+  # Fills one approved text for the lead. A nameless lead reads "Hi,"; {{day}}
+  # is the next weekday (never a weekend promise); {{month}} names the
+  # inquiry's month, with its year once it is more than 11 months old.
+  def missed_call_text(lead, key = 1)
+    text = TEXTS.fetch(key)
     first_name = lead.name.to_s.split.first
-    first_name ? MISSED_CALL_TEXT.sub("{{first_name}}", first_name) : MISSED_CALL_TEXT_NO_NAME
+    text = first_name ? text.sub("{{first_name}}", first_name) : text.sub("Hi {{first_name}},", "Hi,")
+    if text.include?("{{trip}}")
+      trip = [ lead.trip_interest, lead.trip_title ].filter_map do |value|
+        value = value.to_s.strip
+        value if value.present? && !value.casecmp?("Not sure yet")
+      end.first
+      text = text.sub("{{trip}}", trip || TEXT_TRIP_FALLBACKS.fetch(key))
+    end
+    text = text.sub("{{day}}", next_weekday.strftime("%A")) if text.include?("{{day}}")
+    if text.include?("{{month}}")
+      asked_at = (lead.received_at || lead.created_at).in_time_zone
+      text = text.sub("{{month}}", asked_at.strftime(asked_at < 11.months.ago ? "%B %Y" : "%B"))
+    end
+    text
+  end
+
+  def next_weekday(today = Date.current)
+    day = today + 1
+    day += 1 while day.saturday? || day.sunday?
+    day
   end
 
   def missed_call_reminder(lead, call)
-    return unless call && lead.ad_call_routine?
+    return unless call && lead.call_routine?
 
     attempts = unanswered_attempts(lead)
     return unless attempts.last == call
 
-    if lead.recontact?
+    key = attempts.size
+    note = if lead.recontact?
       return unless lead.recontact_on
 
       if call.occurred_at >= lead.recontact_on.in_time_zone.beginning_of_day
+        key = :recontact
         "Re-contact follow-up missed · set a new date 3 or 6 months out or choose Restore from Re-contact."
       elsif !lead.recontact_due?
         "On the Re-contact list until #{lead.recontact_on.strftime('%b %-d, %Y')}."
@@ -126,18 +169,19 @@ module CallLog
     else
       "#{attempts.size} unanswered attempts logged."
     end
+    Reminder.new(note: note, key: key, text: missed_call_text(lead, key)) if note
   end
 
   # Outbound unanswered calls since the latest response or restore, oldest
-  # first, at most AUTO_RECONTACT_CALLS. The ad-lead routine counts one
-  # attempt per CRM-local day, keeping that day's latest call.
+  # first, at most AUTO_RECONTACT_CALLS. The call routine (ad, website and quiz
+  # leads) counts one attempt per CRM-local day, keeping that day's latest call.
   def unanswered_attempts(record)
     attempts = record.activity_events.where(kind: "call")
       .where("json_extract(metadata, '$.outcome') IN (?) AND json_extract(metadata, '$.direction') = 'outbound'", UNANSWERED_OUTCOMES)
       .order(occurred_at: :desc, id: :desc)
       .to_a.lazy
       .take_while { |call| !responded_since?(record, call) }
-    attempts = attempts.uniq { |call| call.occurred_at.in_time_zone.to_date } if record.ad_call_routine?
+    attempts = attempts.uniq { |call| call.occurred_at.in_time_zone.to_date } if record.call_routine?
     attempts.first(AUTO_RECONTACT_CALLS).reverse
   end
 
@@ -162,7 +206,7 @@ module CallLog
   end
 
   def move_after_three_unanswered_calls!(record, event: nil)
-    if record.ad_lead?
+    if record.call_routine_lead?
       mark_recontact_after_three_unanswered_calls!(record, event: event)
     else
       mark_not_interested_after_three_unanswered_calls!(record, event: event)

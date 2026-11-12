@@ -122,6 +122,40 @@ class CallButtonsGateSystemTest < ApplicationSystemTestCase
     assert_not lead.recontact?
   end
 
+  test "a second missed call on a website lead shows Text 2 to copy at desktop and phone width" do
+    travel_to Time.zone.local(2026, 11, 4, 10, 0) # Wednesday
+    lead = Lead.create!(name: "Website System", email: "web-sys@example.com", phone: "+14155550203", source: "website_form",
+      trip_title: "Annapurna Circuit")
+    CallLog.record!(lead, key: "sys-web-1", occurred_at: 1.day.ago, outcome: "voicemail", direction: "outbound")
+    text2 = "Hi Website, it's Sam at SherpaHolidays again about your Annapurna Circuit inquiry. Would Thursday morning or " \
+      "afternoon suit you for a short call? A quick reply here works too."
+
+    visit lead_path(lead)
+    within(".calls") do
+      tolerate_submit_navigation { click_button "No answer" }
+    end
+    tolerate_navigation_assertion { assert_text "Call logged: No answer. Send a short text by hand. Attempt 2 of 3 logged" }
+    within("[data-missed-call-reminder]") do
+      assert_selector "[data-missed-call-text-label]", text: "Text 2"
+      assert_equal text2, find("textarea[aria-label='Text 2 to send by hand']").value
+      click_button "Copy text"
+      assert_selector "[role=status]", text: /Message copied\.|Select and copy the message below\./
+    end
+    capture_calls("text-2-desktop")
+
+    page.current_window.resize_to(390, 844)
+    visit lead_path(lead, anchor: "record-details")
+    within("[data-missed-call-reminder]") do
+      assert_selector "[data-missed-call-text-label]", text: "Text 2"
+      assert_equal text2, find("textarea[aria-label='Text 2 to send by hand']").value
+      assert_button "Copy text"
+    end
+    capture_calls("text-2-phone")
+    assert_operator page.evaluate_script("document.documentElement.scrollWidth"), :<=, 390
+  ensure
+    travel_back
+  end
+
   def capture_calls(name)
     return unless ENV["CALL_BUTTONS_EVIDENCE"]
 
