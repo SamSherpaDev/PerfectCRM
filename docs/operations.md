@@ -31,7 +31,7 @@ are not repeated here. This file covers only what differs for the CRM.
    `deploy/Caddyfile.snippet` to the system `Caddyfile` and reload Caddy.
    Into `/opt/apps/perfectcrm`: `deploy/compose.yml` as `compose.yml`,
    `deploy/litestream.yml`, `deploy/deploy.sh`, `deploy/nightly-backup.sh`,
-   `deploy/restore-drill.sh`, `deploy/bucket-smoke.sh`. Create `.env.app` and
+   `deploy/drive-backup.sh`, `deploy/restore-drill.sh`, `deploy/bucket-smoke.sh`. Create `.env.app` and
    `.env.litestream` from `.env.app.example` and `.env.litestream.example`,
    root-owned mode 600. Then verify bucket access with
    `./bucket-smoke.sh` - it lists both buckets with the same variables the
@@ -53,8 +53,8 @@ are not repeated here. This file covers only what differs for the CRM.
    repo goes private, log the box in once with a token that has
    `read:packages` before pulling:
    `echo <token> | docker login ghcr.io -u <github-username> --password-stdin`.
-6. **Healthchecks.** Follow [Nightly backup](#nightly-backup) for backup
-   monitoring and add a free uptime check on
+6. **Healthchecks.** Follow [Nightly backup](#nightly-backup) and
+   [Drive backup](#drive-backup) for backup monitoring and add a free uptime check on
    `https://perfectcrm.sherpaholidays.com/up`.
 7. **Restore drill.** Run `./restore-drill.sh` once before trusting backups
    (section "Restore drill" below), then quarterly.
@@ -184,7 +184,8 @@ All from `/opt/apps/perfectcrm` on the box.
   `DELETE FROM schema_migrations` before or after deploy. The stale
   `202609190323` row is harmless and may be removed.
 - **Health.** `https://perfectcrm.sherpaholidays.com/up` (uptime check)
-  and [Nightly backup](#nightly-backup) for backup monitoring.
+  and [Nightly backup](#nightly-backup) plus [Drive backup](#drive-backup)
+  for backup monitoring.
 
 ## Nightly backup
 
@@ -228,6 +229,75 @@ and the expected warning about the missing ping. PerfectBook uses its
 own `.env.nightly-backup`, remote, and `/var/log/perfectbook-nightly-backup.log`
 with the same cron command shape. The scripts change into their app directory.
 
+## Drive backup
+
+A daily encrypted copy of both databases in the owner's Google Drive, beside
+(never instead of) Litestream and the nightly R2 copy. The Google sign-in
+client, the `sherpa-drive` and `sherpa-backup` rclone remotes, the encryption
+key, the owner's private key copy, and recovery without the server are
+box-wide and live in PerfectBook's runbook, section "Drive backup"
+(`https://github.com/SamSherpaDev/BK-app/blob/main/docs/operations.md#drive-backup`).
+This section covers only the CRM job.
+
+`deploy/drive-backup.sh` takes the same `sqlite3 .backup` copies of the
+primary and queue databases as the nightly backup, gzips them, and uploads
+them through the encrypting `sherpa-backup` crypt remote, so Drive shows
+only scrambled file and folder names. Inside the remote it writes, named by
+the UTC date of the run:
+
+```
+perfectcrm/daily/production-YYYY-MM-DD.sqlite3.gz
+perfectcrm/daily/production_queue-YYYY-MM-DD.sqlite3.gz
+perfectcrm/monthly/production-YYYY-MM-DD.sqlite3.gz      (and production_queue-)
+```
+
+- **Verification.** After each upload, `rclone cryptcheck --one-way`
+  decrypts what landed on Drive and compares it with the local copy; a
+  mismatch fails the job.
+- **Retention.** Daily copies are deleted after 30 days and monthly copies
+  after 365 days. Drive keeps deleted files in its trash for 30 more days.
+- **Monthly copies.** The first successful run of each month adds a monthly
+  copy of each database, so a missed or failed 1st is covered by the next
+  run that month. A database whose monthly copy for that month (any day) is
+  already on Drive gets no second one.
+- **Reruns.** A copy already on Drive for that day is left untouched, so a
+  same-day rerun uploads nothing and takes no new snapshot.
+- **Attachments are not copied.** Ordinary CRM attachments have no Drive copy
+  yet: only the R2 attachments bucket holds them. Held identity documents
+  share that bucket and expire 24 hours after ingestion (README, "Mail"), so
+  a Drive copy kept for 30 days or more would break that promise.
+
+`deploy/perfectcrm-drive-backup.timer` starts
+`deploy/perfectcrm-drive-backup.service` daily at 11:45 UTC (03:45 Pacific
+standard time, 04:45 in summer), after the 03:15 Pacific nightly backup and
+15 minutes after PerfectBook's Drive job. `Persistent=false`, so a missed run
+is not caught up at boot. The oneshot service reuses the root-owned
+`.env.nightly-backup` (only `IMAGE_TAG` matters here), points rclone at
+root's configuration with `RCLONE_CONFIG`, and appends to
+`/var/log/perfectcrm-drive-backup.log`. Install, once the box-wide remotes
+exist:
+
+```sh
+sudo install -m 755 drive-backup.sh restore-drill.sh /opt/apps/perfectcrm/
+sudo install -m 644 perfectcrm-drive-backup.service perfectcrm-drive-backup.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now perfectcrm-drive-backup.timer
+systemctl list-timers perfectcrm-drive-backup.timer
+```
+
+Run it once by hand with `sudo systemctl start perfectcrm-drive-backup.service`;
+`systemctl show perfectcrm-drive-backup.service -p Result -p ExecMainStatus`
+must read `success` and `0`. The owner declined alerts, so there is no
+healthchecks ping: the job exits nonzero on any failure, and its unit result,
+log, and next run in `systemctl list-timers` are where failures show. Check
+them during routine server work and before relying on a restore. Then prove
+the copy restores with the drill's Drive source ([Restore drill](#restore-drill)).
+
+Limits: Drive alone can lose up to a day of data (Litestream on R2 stays the
+minute-level layer); the server's own Google access can permanently delete
+what it wrote, so the locked R2 copies stay; and losing the encryption key
+loses every Drive copy.
+
 ## Restore drill
 
 Run quarterly and once before trusting backups. On the VPS, with the deployed
@@ -239,20 +309,31 @@ cd /opt/apps/perfectcrm
 sudo ./restore-drill.sh
 ```
 
+To restore from the Drive backup instead of Litestream, run
+`sudo RESTORE_SOURCE=drive ./restore-drill.sh` (the default is
+`RESTORE_SOURCE=litestream`; any other value fails before any work). It
+lists `sherpa-backup:perfectcrm/daily` with root's rclone configuration,
+takes the newest `production-` and `production_queue-` archives by date,
+and streams each through `gzip -dc` into the scratch directory. A missing
+archive or one that does not download and decompress fails the drill before
+any boot. Both databases must pass the integrity check; the boot and record
+probe below are the same. This source needs neither `.env.litestream` nor
+`litestream.yml`, and no container gets network access.
+
 To verify a candidate script without replacing the installed one, copy it to a
 scratch path and run `sudo bash /tmp/<candidate>/restore-drill.sh /opt/apps/perfectcrm`.
 The optional argument selects the config directory; it does not select production
 storage. Remove that candidate directory afterward.
 
 The drill uses the immutable image ID of the running `perfectcrm-app`, rather
-than resolving `latest` or another tag. It restores the primary Litestream
-replica into a new writable directory under `${TMPDIR:-/tmp}`. The restore
-uses `restore -config /etc/litestream.yml -o /restore/production.sqlite3
-/rails/storage/production.sqlite3`, so the replica's configured R2 endpoint,
-region, bucket, and credentials apply. Only the Litestream restore container
-has network access and reads `.env.litestream`; it downloads the replica and
-never starts replication or writes to the backup bucket. The production
-storage volume is never mounted.
+than resolving `latest` or another tag. It restores into a new writable
+directory under `${TMPDIR:-/tmp}`. The default Litestream source restores
+only the primary replica with `restore -config /etc/litestream.yml -o
+/restore/production.sqlite3 /rails/storage/production.sqlite3`, so the
+replica's configured R2 endpoint, region, bucket, and credentials apply.
+Only the Litestream restore container has network access and reads
+`.env.litestream`; it downloads the replica and never starts replication or
+writes to the backup bucket. The production storage volume is never mounted.
 
 Before booting, `PRAGMA integrity_check` must return exactly `ok`; an error,
 empty result, or any diagnostic fails the drill. The app then boots in production

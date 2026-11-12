@@ -119,14 +119,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Install ShellCheck
-        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y shellcheck
+      - name: Install ShellCheck and rclone
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y shellcheck rclone
 
       - name: Lint operator scripts
         run: shellcheck -S warning deploy/*.sh test/deploy/*.sh
 
-      - name: Validate production Compose scoping
-        run: bash test/deploy/test_deploy.sh
+      - name: Run deploy tooling tests
+        run: |
+          command -v systemd-analyze
+          bash test/deploy/test_deploy.sh
 
   build-push:
     runs-on: ubuntu-latest
