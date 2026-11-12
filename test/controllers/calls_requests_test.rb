@@ -209,6 +209,25 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
     assert_not inquiry.not_interested?
   end
 
+  test "with a booking link the copy box and the Today flash add the booking line and still send nothing" do
+    Setting.current.update!(booking_url: "https://calendar.app.google/sherpa")
+    text = "Hi Maya, this is Sam at SherpaHolidays. I just tried giving you a quick call about your trip inquiry. " \
+      "When is a good time for us to connect by phone, or is text easier for you?\n" \
+      "You can also pick a call time here: https://calendar.app.google/sherpa"
+    travel_to Time.zone.local(2026, 11, 7, 9, 30) do
+      lead = Lead.create!(name: "Maya Lin", email: "maya@example.com", phone: "+14155550188", source: "meta_ads")
+      assert_no_difference -> { Message.count } do
+        post lead_calls_path(lead), params: { save_key: "booking-1", outcome: "no_answer", direction: "outbound", return_to: root_path }
+      end
+      assert_redirected_to root_path
+      assert flash[:notice].end_with?("Suggested text: #{text}")
+      get lead_path(lead)
+      assert_equal [ text ], css_select("[data-missed-call-reminder] textarea").map { |box| box.text.strip }
+      assert_select "[data-missed-call-reminder] button", text: "Copy text", count: 1
+      assert_select "[data-missed-call-reminder] form", count: 0
+    end
+  end
+
   test "a missed call on an ad lead shows the approved text to copy and send by hand and sends nothing" do
     travel_to Time.zone.local(2026, 11, 7, 9, 30) do
       lead = Lead.create!(name: "Maya Lin", email: "maya@example.com", phone: "+14155550188", source: "meta_ads",

@@ -18,6 +18,8 @@ TEMPLATES = [
 
       Please reply with a couple of times that work for you and your time zone. After we talk, I can put together options that fit your group.
 
+      If it is easier, you can also pick a call time here: {{booking_link}}
+
       Best,
     BODY
   },
@@ -31,6 +33,8 @@ TEMPLATES = [
       Your {{trip}} itinerary for {{departure_dates}} is ready. #{TemplatePolicyRefresh::ALTITUDE}
 
       #{TemplatePolicyRefresh::PRECEDENCE}
+
+      If a call would help, you can pick a time here: {{booking_link}}
 
       Best,
       {{my_name}}

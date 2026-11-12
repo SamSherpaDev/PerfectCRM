@@ -31,6 +31,23 @@ class AutomaticFirstReplyJobTest < ActiveSupport::TestCase
     assert_includes @lead.activity_events.where(kind: "automation").pluck(:summary), "Automatic first reply: sent"
   end
 
+  test "the booking paragraph is left out while Settings has no link and sent once it does" do
+    @template.update!(body: "Hi {{first_name}},\nLet's arrange a call.\n\nIf it is easier, you can also pick a call time here: " \
+      "{{booking_link}}\n\n{{signature}}")
+    AutomaticFirstReplyJob.perform_now(@lead.id)
+    message = AutomaticFirstReply.find_by!(email: @lead.email).message
+    assert_equal "queued", message.status
+    assert_not_includes message.text_body, "pick a call time"
+    assert_not_includes message.text_body, "missing"
+
+    Setting.current.update!(booking_url: "https://calendar.app.google/sherpa")
+    other = Lead.create!(name: "Second Traveler", email: "second@gmail.com", capture_channel: "website_form",
+      external_ref: "website_form:#{SecureRandom.uuid}", created_at: 3.minutes.ago, trip_title: "Nepal tour")
+    AutomaticFirstReplyJob.perform_now(other.id)
+    linked = AutomaticFirstReply.find_by!(email: other.email).message
+    assert_includes linked.text_body, "If it is easier, you can also pick a call time here: https://calendar.app.google/sherpa"
+  end
+
   test "direct replay cannot bypass two minute delay" do
     @lead.update_columns(created_at: Time.current)
     assert_no_difference("Message.count") do

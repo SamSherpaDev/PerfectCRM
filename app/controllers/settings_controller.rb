@@ -192,7 +192,7 @@ class SettingsController < ApplicationController
   end
 
   def sender_params
-    params.require(:setting).permit(:sender_name, :email_signature, :signature_logo, :google_review_url)
+    params.require(:setting).permit(:sender_name, :email_signature, :signature_logo, :google_review_url, :booking_url)
   end
 
   def update_appearance(value)

@@ -1,6 +1,7 @@
 require "test_helper"
 require_relative "../../db/migrate/20260926205306_refresh_default_template_wording"
 require_relative "../../db/migrate/20261006020537_refresh_default_first_reply"
+require_relative "../../db/migrate/20261112222557_add_booking_link_to_call_templates"
 
 class TemplateWordingMigrationTest < ActiveSupport::TestCase
   test "untouched launch templates move to the new wording and edited ones stay" do
@@ -33,6 +34,9 @@ class TemplateWordingMigrationTest < ActiveSupport::TestCase
       expected_subject = name == "Deposit nudge" ? "Payment for your {{trip}}" : new_subject
       expected_body = if name == RefreshDefaultFirstReply::NAME
         RefreshDefaultFirstReply::NEW_BODY.sub(" in March 2026", "").delete_suffix("\n{{my_name}}")
+          .sub("your group.\n", "your group.\n\n#{AddBookingLinkToCallTemplates::FIRST_REPLY_LINE}\n")
+      elsif name == AddBookingLinkToCallTemplates::FOLLOW_UP_NAME
+        TemplatePolicyRefresh.body(new_body).sub("\nBest,", "\n#{AddBookingLinkToCallTemplates::FOLLOW_UP_LINE}\n\nBest,")
       else
         TemplatePolicyRefresh.body(new_body)
       end

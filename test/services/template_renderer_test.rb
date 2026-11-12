@@ -9,6 +9,7 @@ class TemplateRendererTest < ActiveSupport::TestCase
       payment_reference: "SH-0142-MAYA", missing_documents: "passport copy",
       advisor_name: "Adventure Co.", my_name: "Sam", signature: "Sam",
       google_review_link: "https://g.page/r/sample/review",
+      booking_link: "https://calendar.app.google/sample",
       itinerary_link: "https://www.sherpaholidays.com/pages/design-your-trip#p=easy"
     }
     text = TemplateRenderer::PLACEHOLDERS.map { |name| "{{#{name}}}" }.join("|")
@@ -82,6 +83,15 @@ class TemplateRendererTest < ActiveSupport::TestCase
     text = "Please leave a review.\n\n{{google_review_link}}\n\nThanks"
     assert_equal "Please leave a review.\n\nhttps://g.page/r/x/review\n\nThanks",
       TemplateRenderer.render(text, google_review_link: "https://g.page/r/x/review")
+  end
+
+  test "an empty booking link drops its paragraph and a set one fills it" do
+    text = "Please reply with a couple of times.\n\nIf it is easier, you can also pick a call time here: {{booking_link}}\n\nBest,"
+    assert_equal "Please reply with a couple of times.\n\nBest,", TemplateRenderer.render(text, booking_link: "")
+    assert_equal "Please reply with a couple of times.\n\nIf it is easier, you can also pick a call time here: " \
+      "https://calendar.app.google/x\n\nBest,", TemplateRenderer.render(text, booking_link: "https://calendar.app.google/x")
+    assert_includes TemplateRenderer::PLACEHOLDERS, "booking_link"
+    assert_includes TemplateRenderer::OPTIONAL_PLACEHOLDERS, "booking_link"
   end
 
   test "placeholders_in lists unique names in order" do

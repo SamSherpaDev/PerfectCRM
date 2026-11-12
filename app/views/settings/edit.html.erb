@@ -268,6 +268,24 @@
     <% end %>
   </section>
 
+  <section class="card card-pad" aria-labelledby="booking-heading">
+    <h2 class="section-title" id="booking-heading">Call booking</h2>
+    <%= card_caption "The page leads use to pick a call time. It fills {{booking_link}} in templates and adds a line to the call texts." %>
+    <%= form_with model: @settings, url: settings_path, method: :patch, class: "mt-4 space-y-4" do |form| %>
+      <div>
+        <%= form.label :booking_url, "Booking page link", class: "label" %>
+        <%= form.url_field :booking_url, class: "input", autocomplete: "off", placeholder: "https://calendar.app.google/…" %>
+        <p class="hint">Your Google Calendar booking page. Until it is set, the booking line is left out of texts and emails.</p>
+      </div>
+      <% if @settings.errors[:booking_url].any? %>
+        <p class="text-sm text-bad" role="alert">Booking page link <%= @settings.errors[:booking_url].to_sentence %>.</p>
+      <% end %>
+      <div>
+        <%= form.submit "Save booking link", class: "btn-secondary btn btn-sm" %>
+      </div>
+    <% end %>
+  </section>
+
   <footer class="mt-6 text-center text-xs muted">
     <%= link_to "Export everything", settings_export_path, class: "link-quiet" %> · CSV zip of leads, clients, people, organizations, notes, tags, and timeline events.
   </footer>

@@ -22,6 +22,8 @@ module CallLog
     3 => "Hi {{first_name}}, Sam at SherpaHolidays. I'll leave the calls here for now. Whenever you're ready to talk about {{trip}}, just reply and we'll call you the same business day.",
     recontact: "Hi {{first_name}}, it's Sam at SherpaHolidays. You asked about {{trip}} back in {{month}}. Is it still on your list? Happy to talk whenever suits you."
   }.freeze
+  # Added on its own line under each text once Settings has a booking link.
+  BOOKING_LINE = "You can also pick a call time here: {{booking_link}}".freeze
   # What {{trip}} reads when the inquiry names no trip.
   TEXT_TRIP_FALLBACKS = { 2 => "trip", 3 => "your trip", recontact: "a trip" }.freeze
 
@@ -122,7 +124,8 @@ module CallLog
 
   # Fills one approved text for the lead. A nameless lead reads "Hi,"; {{day}}
   # is the next weekday (never a weekend promise); {{month}} names the
-  # inquiry's month, with its year once it is more than 11 months old.
+  # inquiry's month, with its year once it is more than 11 months old. With a
+  # booking link in Settings, BOOKING_LINE follows on its own line.
   def missed_call_text(lead, key = 1)
     text = TEXTS.fetch(key)
     first_name = lead.name.to_s.split.first
@@ -133,7 +136,8 @@ module CallLog
       asked_at = (lead.received_at || lead.created_at).in_time_zone
       text = text.sub("{{month}}", asked_at.strftime(asked_at < 11.months.ago ? "%B %Y" : "%B"))
     end
-    text
+    booking_url = Setting.current.booking_url.presence
+    booking_url ? "#{text}\n#{BOOKING_LINE.sub('{{booking_link}}') { booking_url }}" : text
   end
 
   def next_weekday(today = Date.current)

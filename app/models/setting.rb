@@ -1,5 +1,8 @@
 class Setting < ApplicationRecord
   APPEARANCES = %w[paper night].freeze
+  # A full https:// link with a host, as pasted from Google.
+  HTTPS_LINK = %r{\Ahttps://[^\s/]+(?:/[^\s]*)?\z}
+  HTTPS_LINK_MESSAGE = "must be a full link starting with https://".freeze
 
   has_one_attached :signature_logo
   serialize :signature_logo_checksums, coder: JSON
@@ -19,8 +22,7 @@ class Setting < ApplicationRecord
   validates :meta_dataset_id, format: { with: /\A\d{5,20}\z/, message: "is the number shown in Meta Events Manager" }, allow_blank: true
   validates :ad_booking_value_percent, numericality: { only_integer: true, greater_than_or_equal_to: 1, less_than_or_equal_to: 100 }
   validates :weekly_report_recipient, format: { with: URI::MailTo::EMAIL_REGEXP, allow_blank: true }
-  validates :google_review_url, format: { with: %r{\Ahttps://[^\s/]+(?:/[^\s]*)?\z}, allow_blank: true,
-    message: "must be a full link starting with https://" }
+  validates :google_review_url, :booking_url, format: { with: HTTPS_LINK, allow_blank: true, message: HTTPS_LINK_MESSAGE }
   validate :signature_logo_requirements
   validate :outbound_endpoints
 
@@ -28,7 +30,10 @@ class Setting < ApplicationRecord
   before_save :stamp_itinerary_email_enabled_at
   before_save :stamp_trip_quiz_email_enabled_at
   before_save :remember_signature_logo_checksums
-  before_validation { self.google_review_url = google_review_url.to_s.strip }
+  before_validation do
+    self.google_review_url = google_review_url.to_s.strip
+    self.booking_url = booking_url.to_s.strip
+  end
 
   normalizes :weekly_report_recipient, with: ->(value) { value.to_s.strip.downcase }
 

@@ -77,7 +77,8 @@ class TemplateContext
       "advisor_name" => advisor_name_for(record),
       "my_name" => settings.sender_name.presence,
       "signature" => EmailSignature.text_for(settings).presence,
-      "google_review_link" => settings.google_review_url.presence
+      "google_review_link" => settings.google_review_url.presence,
+      "booking_link" => settings.booking_url.presence
     }
     if booking&.available?
       context.merge!(booking_context(booking))

@@ -74,6 +74,17 @@ class TemplatesRequestsTest < ActionDispatch::IntegrationTest
     assert_match(/\$1,850\.00/, response.body)
   end
 
+  test "collection preview drops the booking paragraph until Settings has the link, then shows the real link" do
+    sign_in
+    body = "Times?\n\nIf it is easier, you can also pick a call time here: {{booking_link}}\n\nBest,"
+    post preview_templates_path, params: { template: { subject: "Hi", body: body } }
+    assert_response :success
+    assert_no_match(/pick a call time|missing: booking_link/, response.body)
+    Setting.current.update!(booking_url: "https://calendar.app.google/sherpa")
+    post preview_templates_path, params: { template: { subject: "Hi", body: body } }
+    assert_match(%r{pick a call time here: https://calendar\.app\.google/sherpa}, response.body)
+  end
+
   test "collection preview badges unknown placeholders" do
     sign_in
     post preview_templates_path, params: { template: { subject: "", body: "Hi {{nicknam}}" } }

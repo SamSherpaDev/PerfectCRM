@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_10_060326) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_12_222557) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -896,6 +896,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_10_060326) do
     t.datetime "trip_quiz_email_enabled_at"
     t.datetime "updated_at", null: false
     t.string "weekly_report_recipient", default: "", null: false
+    t.string "booking_url", default: "", null: false
     t.index ["singleton_key"], name: "index_settings_on_singleton_key", unique: true
     t.index ["site_key"], name: "index_settings_on_site_key", unique: true, where: "site_key IS NOT NULL AND site_key != ''"
     t.check_constraint "singleton_key = 1", name: "settings_singleton"

@@ -17,13 +17,13 @@ class TemplateRenderer
     first_name full_name trip departure_dates balance_due deposit_due
     invoice_number payment_reference missing_documents advisor_name
     payment_due_on balance_due_on terms_version
-    my_name signature google_review_link itinerary_link
+    my_name signature google_review_link booking_link itinerary_link
   ].freeze
 
   # Links a template may carry before they exist: a Settings link the captain
   # has not set up yet, or an itinerary link for a recipient who never used
   # the itinerary designer. Empty means "leave the line out", not "missing".
-  OPTIONAL_PLACEHOLDERS = %w[google_review_link itinerary_link].freeze
+  OPTIONAL_PLACEHOLDERS = %w[google_review_link booking_link itinerary_link].freeze
 
   PATTERN = /{{\s*([A-Za-z0-9_]+)\s*}}/.freeze
   DEFAULT_SUBJECT = "Planning your trip".freeze
