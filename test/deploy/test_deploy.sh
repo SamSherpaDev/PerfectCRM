@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Deploy operator-tooling tests. Run: bash test/deploy/test_deploy.sh
-# Needs: shellcheck, rclone, docker (with compose v2), python3. Missing Docker skips its section.
-# Missing ShellCheck or rclone skips its section cleanly; CI installs all three.
+# Needs: shellcheck, rclone, docker (with compose v2), python3, and systemd-analyze for the
+# timer checks. Missing Docker, ShellCheck, rclone, or systemd-analyze skips its section
+# cleanly; CI provides all of them.
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -35,9 +36,10 @@ else
 fi
 
 # 2. Drive backup against a real rclone crypt remote over a local folder.
-# Remotes come only from RCLONE_CONFIG_* variables with a throwaway password.
+# A throwaway rclone config defines sherpa-backup with a test-only password, and
+# a date shim pins the script's UTC day while rclone keeps real file ages.
 drive_backup_checks() {
-  local work drive stamp listing
+  local work drive stamp listing real_date gzipped december
   work="$(mktemp -d)"
   drive="$work/drive"
   mkdir -p "$drive" "$work/bin"
@@ -54,46 +56,52 @@ target="${target%\'}"
 printf 'SQLite format 3 stand-in %s\n' "$target" > "$out/$target"
 printf '%s\n' "$*" >> "$DOCKER_LOG"
 SHIM
-  chmod 700 "$work/bin/docker"
-  touch "$work/rclone.conf"
+  real_date="$(command -v date)"
+  cat > "$work/bin/date" <<SHIM
+#!/usr/bin/env bash
+if [ "\$*" = "-u +%Y-%m-%d" ]; then
+  printf '%s\n' "\$FAKE_TODAY"
+else
+  exec "$real_date" "\$@"
+fi
+SHIM
+  chmod 700 "$work/bin/docker" "$work/bin/date"
+  cat > "$work/rclone.conf" <<CONF
+[sherpa-drive]
+type = local
+
+[sherpa-backup]
+type = crypt
+remote = sherpa-drive:$drive
+password = $(printf 'throwaway-test-only' | rclone obscure -)
+filename_encryption = standard
+directory_name_encryption = true
+CONF
 
   run_backup() {
-    env PATH="$work/bin:$PATH" DOCKER_LOG="$work/docker.log" \
+    env PATH="$work/bin:$PATH" DOCKER_LOG="$work/docker.log" FAKE_TODAY="$1" \
       RCLONE_CONFIG="$work/rclone.conf" \
-      RCLONE_CONFIG_DRIVETEST_TYPE=local \
-      RCLONE_CONFIG_BACKUPTEST_TYPE=crypt \
-      RCLONE_CONFIG_BACKUPTEST_REMOTE="drivetest:$drive" \
-      RCLONE_CONFIG_BACKUPTEST_PASSWORD="$(printf 'throwaway-test-only' | rclone obscure -)" \
-      RCLONE_CONFIG_BACKUPTEST_FILENAME_ENCRYPTION=standard \
-      RCLONE_CONFIG_BACKUPTEST_DIRECTORY_NAME_ENCRYPTION=true \
-      DRIVE_BACKUP_REMOTE=backuptest DRIVE_BACKUP_DATE="$1" \
       bash "$REPO_ROOT/deploy/drive-backup.sh" > "$work/out.log" 2>&1
   }
-  plain() {
-    env RCLONE_CONFIG="$work/rclone.conf" RCLONE_CONFIG_DRIVETEST_TYPE=local \
-      RCLONE_CONFIG_BACKUPTEST_TYPE=crypt RCLONE_CONFIG_BACKUPTEST_REMOTE="drivetest:$drive" \
-      RCLONE_CONFIG_BACKUPTEST_PASSWORD="$(printf 'throwaway-test-only' | rclone obscure -)" \
-      RCLONE_CONFIG_BACKUPTEST_FILENAME_ENCRYPTION=standard \
-      RCLONE_CONFIG_BACKUPTEST_DIRECTORY_NAME_ENCRYPTION=true \
-      rclone "$@"
-  }
+  plain() { RCLONE_CONFIG="$work/rclone.conf" rclone "$@"; }
 
   # Seed an expired daily, a kept eleven-month-old monthly, and an expired monthly.
   printf 'old\n' > "$work/old.gz"
   touch -t "$(date -u -v-40d +%Y%m%d%H%M 2>/dev/null || date -u -d '40 days ago' +%Y%m%d%H%M)" "$work/old.gz"
-  plain copyto "$work/old.gz" backuptest:perfectcrm/daily/production-2000-01-02.sqlite3.gz
+  plain copyto "$work/old.gz" sherpa-backup:perfectcrm/daily/production-2000-01-02.sqlite3.gz
   touch -t "$(date -u -v-330d +%Y%m%d%H%M 2>/dev/null || date -u -d '330 days ago' +%Y%m%d%H%M)" "$work/old.gz"
-  plain copyto "$work/old.gz" backuptest:perfectcrm/monthly/production-2000-01-01.sqlite3.gz
+  plain copyto "$work/old.gz" sherpa-backup:perfectcrm/monthly/production-2000-01-01.sqlite3.gz
   touch -t "$(date -u -v-400d +%Y%m%d%H%M 2>/dev/null || date -u -d '400 days ago' +%Y%m%d%H%M)" "$work/old.gz"
-  plain copyto "$work/old.gz" backuptest:perfectcrm/monthly/production-1999-12-01.sqlite3.gz
+  plain copyto "$work/old.gz" sherpa-backup:perfectcrm/monthly/production-1999-12-01.sqlite3.gz
 
-  stamp=2026-11-01
+  # No run on November 1, so the 2nd is the month's first run.
+  stamp=2026-11-02
   if run_backup "$stamp"; then
-    pass "Drive backup runs against a crypt remote"
+    pass "Drive backup runs against the sherpa-backup crypt remote"
   else
     fail "Drive backup failed: $(cat "$work/out.log")"
   fi
-  listing="$(plain lsf -R backuptest:perfectcrm)"
+  listing="$(plain lsf -R sherpa-backup:perfectcrm)"
   for want in "daily/production-$stamp.sqlite3.gz" "daily/production_queue-$stamp.sqlite3.gz" \
       "monthly/production-$stamp.sqlite3.gz" "monthly/production_queue-$stamp.sqlite3.gz" \
       "monthly/production-2000-01-01.sqlite3.gz"; do
@@ -113,15 +121,22 @@ SHIM
   else
     pass "Drive backup pruned the expired monthly copy"
   fi
-  if [ "$(plain cat "backuptest:perfectcrm/daily/production-$stamp.sqlite3.gz" | gzip -dc)" = \
+  if [ "$(plain cat "sherpa-backup:perfectcrm/daily/production-$stamp.sqlite3.gz" | gzip -dc)" = \
       "SQLite format 3 stand-in production-$stamp.sqlite3" ]; then
     pass "Drive backup decrypts to the database snapshot"
   else
     fail "Drive backup content does not round-trip"
   fi
+  # Unencrypted gzip starts with 1f 8b and names the archive in its header.
+  gzipped=false
+  while IFS= read -r -d '' file; do
+    if [ "$(head -c 2 "$file" | od -An -tx1 | tr -d ' \n')" = 1f8b ]; then
+      gzipped=true
+    fi
+  done < <(find "$drive" -type f -print0)
   if find "$drive" | grep -qiE 'perfect|production|sqlite|daily|monthly'; then
     fail "Drive backup left plain-text names on disk"
-  elif grep -rqF 'SQLite format 3' "$drive"; then
+  elif [ "$gzipped" = true ] || grep -raqF "production-$stamp" "$drive"; then
     fail "Drive backup left plain-text content on disk"
   else
     pass "Drive backup stores only encrypted names and content"
@@ -141,17 +156,33 @@ SHIM
     fail "Drive backup same-day rerun took a new snapshot or failed: $(cat "$work/out.log")"
   fi
 
-  # Other days add a daily copy only.
-  if run_backup 2026-11-02 && ! plain lsf backuptest:perfectcrm/monthly | grep -qF 2026-11-02; then
-    pass "Drive backup adds monthly copies only on the 1st"
+  # A later run that month adds daily copies only.
+  if run_backup 2026-11-03; then
+    listing="$(plain lsf -R sherpa-backup:perfectcrm)"
+    if grep -qxF daily/production-2026-11-03.sqlite3.gz <<<"$listing" &&
+        grep -qxF daily/production_queue-2026-11-03.sqlite3.gz <<<"$listing" &&
+        [ "$(grep -F -- '-2026-11-' <<<"$listing" | grep '^monthly/' | sort)" = \
+          $'monthly/production-2026-11-02.sqlite3.gz\nmonthly/production_queue-2026-11-02.sqlite3.gz' ]; then
+      pass "Drive backup keeps one monthly copy per month"
+    else
+      fail "Drive backup monthly rule broken: $listing"
+    fi
   else
-    fail "Drive backup monthly rule broken: $(cat "$work/out.log")"
+    fail "Drive backup later run failed: $(cat "$work/out.log")"
   fi
 
-  if ! run_backup 2026-1-2 && grep -qF 'YYYY-MM-DD' "$work/out.log"; then
-    pass "Drive backup rejects a malformed date"
+  # A partial first December run left only the queue's monthly copy.
+  printf 'partial\n' > "$work/partial.gz"
+  plain copyto "$work/partial.gz" sherpa-backup:perfectcrm/monthly/production_queue-2026-12-01.sqlite3.gz
+  if run_backup 2026-12-02; then
+    december="$(plain lsf sherpa-backup:perfectcrm/monthly | grep -F -- '-2026-12-' | sort)"
+    if [ "$december" = $'production-2026-12-02.sqlite3.gz\nproduction_queue-2026-12-01.sqlite3.gz' ]; then
+      pass "Drive backup adds a monthly copy only for a database the month lacks"
+    else
+      fail "Drive backup December monthly copies wrong: $december"
+    fi
   else
-    fail "Drive backup accepted a malformed date"
+    fail "Drive backup December run failed: $(cat "$work/out.log")"
   fi
   rm -rf "$work"
 }

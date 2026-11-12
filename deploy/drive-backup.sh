@@ -6,21 +6,11 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 APP=perfectcrm
-REMOTE="${DRIVE_BACKUP_REMOTE:-sherpa-backup}"
+REMOTE=sherpa-backup
 IMAGE="ghcr.io/samsherpadev/perfectcrm:${IMAGE_TAG:-latest}"
-# DRIVE_BACKUP_DATE exists for tests only; production always uses today (UTC).
-STAMP="${DRIVE_BACKUP_DATE:-$(date -u +%Y-%m-%d)}"
-if [[ ! "$STAMP" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
-  echo "Drive backup FAILED: date must be YYYY-MM-DD, got: $STAMP" >&2
-  exit 1
-fi
+STAMP="$(date -u +%Y-%m-%d)"
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
-
-TARGETS=(daily)
-if [ "${STAMP:8:2}" = 01 ]; then
-  TARGETS+=(monthly)
-fi
 
 # One consistent snapshot per database per run, shared by every target.
 snapshot() {
@@ -33,21 +23,25 @@ snapshot() {
   gzip -f "$TMPDIR/$name-$STAMP.sqlite3"
 }
 
-for TARGET in "${TARGETS[@]}"; do
+for TARGET in daily monthly; do
+  # A daily copy is due once per day; a monthly copy on the month's first run.
+  case "$TARGET" in
+    daily) PERIOD="$STAMP" DAY='' ;;
+    monthly) PERIOD="${STAMP:0:7}" DAY='-[0-9]{2}' ;;
+  esac
   DEST="$REMOTE:$APP/$TARGET"
   STAGE="$TMPDIR/stage-$TARGET"
   mkdir "$STAGE"
   rclone mkdir "$DEST"
   EXISTING="$(rclone lsf --files-only "$DEST")"
   for NAME in production production_queue; do
-    FILE="$NAME-$STAMP.sqlite3.gz"
-    # A same-day rerun keeps the copy already verified on Drive.
-    if grep -qxF -- "$FILE" <<<"$EXISTING"; then
-      echo "$TARGET/$FILE is already on Drive; left untouched."
+    # A copy already on Drive for this period stays untouched.
+    if grep -qE -- "^$NAME-$PERIOD$DAY\.sqlite3\.gz\$" <<<"$EXISTING"; then
+      echo "$TARGET already holds a $NAME copy for $PERIOD; left untouched."
       continue
     fi
     snapshot "$NAME"
-    cp "$TMPDIR/$FILE" "$STAGE/$FILE"
+    cp "$TMPDIR/$NAME-$STAMP.sqlite3.gz" "$STAGE/"
   done
   if [ -n "$(ls -A "$STAGE")" ]; then
     rclone copy --ignore-existing "$STAGE" "$DEST"
@@ -59,7 +53,5 @@ done
 
 # Keep 30 days of daily copies and 12 months of monthly copies.
 rclone delete --min-age 30d "$REMOTE:$APP/daily"
-if rclone lsf --dirs-only "$REMOTE:$APP" | grep -qxF 'monthly/'; then
-  rclone delete --min-age 365d "$REMOTE:$APP/monthly"
-fi
+rclone delete --min-age 365d "$REMOTE:$APP/monthly"
 echo "Drive backup complete for $STAMP."

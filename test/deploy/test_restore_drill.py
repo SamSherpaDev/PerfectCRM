@@ -110,7 +110,6 @@ exec /bin/rm "$@"
                                APP_IMAGE=app_image, CONTAINER_RUNNING=container_running,
                                DRIVE_LISTING=drive_listing, DRIVE_ARCHIVE=drive_archive)
             environment.pop('RESTORE_SOURCE', None)
-            environment.pop('DRIVE_BACKUP_REMOTE', None)
             if restore_source is not None:
                 environment['RESTORE_SOURCE'] = restore_source
             for name in ('HEALTH', 'INTEGRITY', 'RESTORE', 'BOOT', 'RECORD', 'REMOVE', 'SCRATCH_REMOVE'):

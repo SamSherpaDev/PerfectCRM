@@ -241,27 +241,31 @@ This section covers only the CRM job.
 
 `deploy/drive-backup.sh` takes the same `sqlite3 .backup` copies of the
 primary and queue databases as the nightly backup, gzips them, and uploads
-them through the encrypting `sherpa-backup` crypt remote (override with
-`DRIVE_BACKUP_REMOTE`), so Drive shows only scrambled file and folder names.
-Inside the remote it writes, in UTC dates:
+them through the encrypting `sherpa-backup` crypt remote, so Drive shows
+only scrambled file and folder names. Inside the remote it writes, named by
+the UTC date of the run:
 
 ```
 perfectcrm/daily/production-YYYY-MM-DD.sqlite3.gz
 perfectcrm/daily/production_queue-YYYY-MM-DD.sqlite3.gz
-perfectcrm/monthly/production-YYYY-MM-01.sqlite3.gz      (and production_queue-)
+perfectcrm/monthly/production-YYYY-MM-DD.sqlite3.gz      (and production_queue-)
 ```
 
 - **Verification.** After each upload, `rclone cryptcheck --one-way`
   decrypts what landed on Drive and compares it with the local copy; a
   mismatch fails the job.
 - **Retention.** Daily copies are deleted after 30 days and monthly copies
-  (added on the 1st of each month) after 365 days. Drive keeps deleted files
-  in its trash for 30 more days.
+  after 365 days. Drive keeps deleted files in its trash for 30 more days.
+- **Monthly copies.** The first successful run of each month adds a monthly
+  copy of each database, so a missed or failed 1st is covered by the next
+  run that month. A database whose monthly copy for that month (any day) is
+  already on Drive gets no second one.
 - **Reruns.** A copy already on Drive for that day is left untouched, so a
   same-day rerun uploads nothing and takes no new snapshot.
-- **Attachments are not copied.** Held identity documents expire 24 hours
-  after ingestion (README, "Mail"); a 30-day copy would break that promise.
-  Ordinary attachments remain on the R2 attachments bucket only.
+- **Attachments are not copied.** Ordinary CRM attachments have no Drive copy
+  yet: only the R2 attachments bucket holds them. Held identity documents
+  share that bucket and expire 24 hours after ingestion (README, "Mail"), so
+  a Drive copy kept for 30 days or more would break that promise.
 
 `deploy/perfectcrm-drive-backup.timer` starts
 `deploy/perfectcrm-drive-backup.service` daily at 11:45 UTC (03:45 Pacific

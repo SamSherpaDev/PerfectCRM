@@ -9,7 +9,7 @@ cd -- "${1:-$(dirname "$0")}"
 RESTORE_SOURCE="${RESTORE_SOURCE:-litestream}"
 case "$RESTORE_SOURCE" in
   litestream) ;;
-  drive) DRIVE_DAILY="${DRIVE_BACKUP_REMOTE:-sherpa-backup}:perfectcrm/daily" ;;
+  drive) DRIVE_DAILY=sherpa-backup:perfectcrm/daily ;;
   *)
     echo "Restore drill FAILED: RESTORE_SOURCE must be litestream or drive." >&2
     exit 1
