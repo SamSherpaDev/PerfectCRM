@@ -139,8 +139,10 @@ paragraph with `{{booking_link}}` (see [Replying](#replying)): First reply
 after "Please reply with a couple of times...", Itinerary follow-up before
 "Best,". Their migration (`AddBookingLinkToCallTemplates`) inserts only that
 paragraph, at that exact anchor line, into the rows still named as the
-defaults; rows without the anchor line or already carrying `{{booking_link}}`
-are skipped and logged.
+defaults, keeping each row's line endings. Rows already carrying
+`{{booking_link}}`, without the anchor line exactly once, or without one blank
+line (or the body's edge) on the paragraph's side of the anchor are skipped
+and logged.
 
 The default Review ask requests a Google review; ask every traveler,
 regardless of how the trip went, and never offer gifts or discounts for reviews.
