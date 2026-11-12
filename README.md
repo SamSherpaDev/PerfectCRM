@@ -134,6 +134,16 @@ wording migration updates only rows whose name, subject, and body still
 exactly match the previous default. Subject or body edits are skipped and
 logged; renamed templates are outside the migration.
 
+The default First reply and Itinerary follow-up each carry one booking
+paragraph with `{{booking_link}}` (see [Replying](#replying)): First reply
+after "Please reply with a couple of times...", Itinerary follow-up before
+"Best,". Their migration (`AddBookingLinkToCallTemplates`) inserts only that
+paragraph, at that exact anchor line, into the rows still named as the
+defaults, keeping each row's line endings. Rows already carrying
+`{{booking_link}}`, without the anchor line exactly once, or without one blank
+line (or the body's edge) on the paragraph's side of the anchor are skipped
+and logged.
+
 The default Review ask requests a Google review; ask every traveler,
 regardless of how the trip went, and never offer gifts or discounts for reviews.
 Review ask and Repeat-trip nudge also invite referrals from past travelers.
@@ -263,8 +273,8 @@ to "Planning your trip". Subjects with all placeholder values stay personalized.
 In email bodies, unknown or empty placeholder values render `[missing: name]`,
 never blanks or an email substituted for an unknown name. Apart from the
 matching-inquiry trip fallback above, the optional placeholders
-(`TemplateRenderer::OPTIONAL_PLACEHOLDERS`) are `google_review_link` and
-`itinerary_link`. `itinerary_link` is the visitor's link back to the trip they
+(`TemplateRenderer::OPTIONAL_PLACEHOLDERS`) are `google_review_link`,
+`booking_link`, and `itinerary_link`. `itinerary_link` is the visitor's link back to the trip they
 built in the free itinerary designer, taken from the composing inquiry or,
 for a client, the newest matching converted inquiry that has one (the same
 email match as the trip fallback); without one, its whole line is left out of
@@ -272,8 +282,12 @@ the email body. `google_review_link` comes
 from Settings → Google reviews. Copy the write-review link from your Google
 Business Profile's "Ask for reviews", paste the full HTTPS URL, and press
 Save review link. Until that link is saved, its whole line is left out of
-the email body. Sample values appear only in the labeled
-template-editor preview, which uses the real review link. Set Your name,
+the email body. `booking_link` comes from Settings → Call booking: paste the
+full HTTPS link of your Google Calendar booking page and press Save booking
+link. Until it is saved, every line holding it is left out of email bodies
+(so the automatic first reply still sends, without it) and the call texts
+carry no booking line. Sample values appear only in the labeled
+template-editor preview, which uses the real review and booking links. Set Your name,
 Logo, and Signature in Settings → Signature and press Save email settings;
 these values also fill templates for recipients without CRM records.
 
@@ -867,7 +881,9 @@ lead's first name (a nameless lead reads `Hi,`); `{{trip}}` is the trip
 interest or trip title, skipping `Not sure yet`, else `trip`, `your trip`, or
 `a trip` for Texts 2, 3, and R; `{{day}}` is the next weekday name in Pacific
 time, never a weekend; `{{month}}` is the inquiry's month, with its year once
-it is more than 11 months old. When the log returns somewhere without that card
+it is more than 11 months old. Once Settings → Call booking has a link, every
+text gains one more line, `You can also pick a call time here: <link>`
+(`CallLog::BOOKING_LINE`); `CallLog::TEXTS` itself never changes. When the log returns somewhere without that card
 (Today, or a list after completing a scheduled call), the notice ends with
 `Suggested text:` (or `Optional text:` for Text R) and the same text. The
 captain sends it by hand; nothing is ever sent automatically.

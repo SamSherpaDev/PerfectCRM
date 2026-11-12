@@ -35,6 +35,12 @@ class TemplateContextTest < ActiveSupport::TestCase
     assert_equal "https://g.page/r/sherpa/review", TemplateContext.for(@client)["google_review_link"]
   end
 
+  test "fills the booking link from settings only once it is set" do
+    assert_nil TemplateContext.for(@client)["booking_link"]
+    Setting.current.update!(booking_url: "https://calendar.app.google/sherpa")
+    assert_equal "https://calendar.app.google/sherpa", TemplateContext.for(@client)["booking_link"]
+  end
+
   test "fills advisor name from the referring organization" do
     org = Organization.create!(name: "Adventure Co.", email: "a@example.com")
     @client.update!(referred_by_organization: org)

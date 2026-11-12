@@ -1,6 +1,6 @@
 <%# Preview contents: rendered subject + body with missing markers badged. %>
 <%# Settings-backed links use the real value so the preview shows what sends. %>
-<% context = ::TemplateRenderer::SAMPLE_CONTEXT.merge("google_review_link" => Setting.current.google_review_url.presence) %>
+<% context = ::TemplateRenderer::SAMPLE_CONTEXT.merge("google_review_link" => Setting.current.google_review_url.presence, "booking_link" => Setting.current.booking_url.presence) %>
 <% subject_html = ::TemplateRenderer.render_html(template.subject.to_s, context) %>
 <% body_html = ::TemplateRenderer.render_html(template.body.to_s, context) %>
 <% missing = template.placeholders - ::TemplateRenderer::PLACEHOLDERS %>

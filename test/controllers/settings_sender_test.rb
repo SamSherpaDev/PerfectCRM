@@ -35,6 +35,26 @@ class SettingsSenderTest < ActionDispatch::IntegrationTest
     assert_equal "", Setting.current.reload.google_review_url
   end
 
+  test "booking page link saves from Settings and rejects non-https links" do
+    sign_in
+    get edit_settings_path
+    assert_select "h2", "Call booking"
+    assert_select "label", "Booking page link"
+    assert_select "input[type=submit][value='Save booking link']"
+    patch settings_path, params: { setting: { booking_url: " https://calendar.app.google/sherpa " } }
+    assert_redirected_to edit_settings_path
+    assert_equal "https://calendar.app.google/sherpa", Setting.current.reload.booking_url
+
+    patch settings_path, params: { setting: { booking_url: "http://calendar.app.google/sherpa" } }
+    assert_response :unprocessable_entity
+    assert_select "[role=alert]", text: /Booking page link must be a full link starting with https:\/\//
+    assert_equal "https://calendar.app.google/sherpa", Setting.current.reload.booking_url
+
+    patch settings_path, params: { setting: { booking_url: "" } }
+    assert_redirected_to edit_settings_path
+    assert_equal "", Setting.current.reload.booking_url
+  end
+
   test "sender settings render on the edit page" do
     sign_in
     get edit_settings_path

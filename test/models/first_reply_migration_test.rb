@@ -1,5 +1,6 @@
 require "test_helper"
 require_relative "../../db/migrate/20261006020537_refresh_default_first_reply"
+require_relative "../../db/migrate/20261112222557_add_booking_link_to_call_templates"
 
 class FirstReplyMigrationTest < ActiveSupport::TestCase
   setup do
@@ -47,6 +48,7 @@ class FirstReplyMigrationTest < ActiveSupport::TestCase
     seeded = Template.find_by!(name: RefreshDefaultFirstReply::NAME)
     assert_equal RefreshDefaultFirstReply::SUBJECT, seeded.subject
     expected_body = RefreshDefaultFirstReply::NEW_BODY.sub(" in March 2026", "").delete_suffix("\n{{my_name}}")
+      .sub("your group.\n", "your group.\n\n#{AddBookingLinkToCallTemplates::FIRST_REPLY_LINE}\n")
     assert_equal expected_body, seeded.body
     assert_includes seeded.body, "Sherpa family business"
     assert_not_includes seeded.body, "in March 2026"
