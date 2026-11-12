@@ -127,13 +127,7 @@ module CallLog
     text = TEXTS.fetch(key)
     first_name = lead.name.to_s.split.first
     text = first_name ? text.sub("{{first_name}}", first_name) : text.sub("Hi {{first_name}},", "Hi,")
-    if text.include?("{{trip}}")
-      trip = [ lead.trip_interest, lead.trip_title ].filter_map do |value|
-        value = value.to_s.strip
-        value if value.present? && !value.casecmp?("Not sure yet")
-      end.first
-      text = text.sub("{{trip}}", trip || TEXT_TRIP_FALLBACKS.fetch(key))
-    end
+    text = text.sub("{{trip}}", lead.named_trip || TEXT_TRIP_FALLBACKS.fetch(key)) if text.include?("{{trip}}")
     text = text.sub("{{day}}", next_weekday.strftime("%A")) if text.include?("{{day}}")
     if text.include?("{{month}}")
       asked_at = (lead.received_at || lead.created_at).in_time_zone
@@ -158,8 +152,8 @@ module CallLog
     note = if lead.recontact?
       return unless lead.recontact_on
 
+      key = :recontact if recontact_follow_up?(lead, call)
       if call.occurred_at >= lead.recontact_on.in_time_zone.beginning_of_day
-        key = :recontact
         "Re-contact follow-up missed · set a new date 3 or 6 months out or choose Restore from Re-contact."
       elsif !lead.recontact_due?
         "On the Re-contact list until #{lead.recontact_on.strftime('%b %-d, %Y')}."
@@ -170,6 +164,13 @@ module CallLog
       "#{attempts.size} unanswered attempts logged."
     end
     Reminder.new(note: note, key: key, text: missed_call_text(lead, key)) if note
+  end
+
+  # A call made after the lead entered Re-contact is a Re-contact follow-up,
+  # whatever its current date, except the miss that moved it there (Try 3).
+  def recontact_follow_up?(lead, call)
+    move = lead.activity_events.where(kind: "recontact").order(:id).last
+    call.occurred_at > lead.recontact_marked_at && call.id != move&.metadata&.dig("call_event_id")
   end
 
   # Outbound unanswered calls since the latest response or restore, oldest

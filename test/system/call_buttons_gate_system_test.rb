@@ -123,7 +123,7 @@ class CallButtonsGateSystemTest < ApplicationSystemTestCase
   end
 
   test "a second missed call on a website lead shows Text 2 to copy at desktop and phone width" do
-    travel_to Time.zone.local(2026, 11, 4, 10, 0) # Wednesday
+    travel_to Date.current.next_occurring(:wednesday).in_time_zone.change(hour: 10)
     lead = Lead.create!(name: "Website System", email: "web-sys@example.com", phone: "+14155550203", source: "website_form",
       trip_title: "Annapurna Circuit")
     CallLog.record!(lead, key: "sys-web-1", occurred_at: 1.day.ago, outcome: "voicemail", direction: "outbound")

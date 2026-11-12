@@ -237,6 +237,15 @@ class Lead < ApplicationRecord
     ::Leads::TRIP_INTENTS[trip_intent]
   end
 
+  # The trip this inquiry names (trip interest, then trip title), skipping
+  # "Not sure yet"; nil when it names none, so each caller picks its fallback.
+  def named_trip
+    [ trip_interest, trip_title ].filter_map do |value|
+      trip = value.to_s.strip
+      trip if trip.present? && !trip.casecmp?("Not sure yet")
+    end.first
+  end
+
   def ad_lead?
     ::AdSpend::SOURCES.include?(source)
   end

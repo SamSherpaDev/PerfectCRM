@@ -857,7 +857,10 @@ card shows the same reminder with the approved text for the try just missed
 `Text 2`, `Text 3`, or `Text R (optional)`, in an editable box with a **Copy
 text** button: Text 1 after the 1st miss, Text 2 after the 2nd, Text 3 after
 the 3rd (and any later miss of a lead that cannot move to Re-contact), and the
-optional Text R after a missed Re-contact follow-up. `{{first_name}}` is the
+optional Text R after a missed Re-contact follow-up: any miss made after the
+lead entered Re-contact other than the one that moved it there
+(`CallLog.recontact_follow_up?`), so rescheduling the date keeps Text R.
+`{{first_name}}` is the
 lead's first name (a nameless lead reads `Hi,`); `{{trip}}` is the trip
 interest or trip title, skipping `Not sure yet`, else `trip`, `your trip`, or
 `a trip` for Texts 2, 3, and R; `{{day}}` is the next weekday name in Pacific

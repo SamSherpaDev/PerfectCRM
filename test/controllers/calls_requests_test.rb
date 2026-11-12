@@ -469,6 +469,35 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
       assert_select "[aria-label='Re-contact list']", text: /due Feb 6, 2027/
       assert_select "[aria-label='Re-contact list']", text: /follow-up due since/, count: 0
       assert_select "[data-missed-call-reminder]", text: /On the Re-contact list until Feb 6, 2027/
+      assert_select "[data-missed-call-text-label]", text: "Text R (optional)"
+      assert_select "[data-missed-call-reminder] textarea[aria-label='Text R to send by hand']", text: /You asked about a trip back in August/
+      assert_select "[data-missed-call-text-label]", text: "Text 3", count: 0
+    end
+  end
+
+  test "a third miss logged minutes ahead keeps Text 3, and a later miss while on the Re-contact list offers Text R" do
+    lead = nil
+    travel_to Time.zone.local(2026, 11, 4, 10, 0) do # Wednesday
+      lead = Lead.create!(name: "Pasang Lama", email: "pasang@example.com", phone: "+14155550204", source: "website_form",
+        trip_title: "Manaslu Circuit", received_at: 2.days.ago - 1.hour)
+      CallLog.record!(lead, key: "ahead-1", occurred_at: 2.days.ago, outcome: "voicemail", direction: "outbound")
+      CallLog.record!(lead, key: "ahead-2", occurred_at: 1.day.ago, outcome: "no_answer", direction: "outbound")
+      post lead_calls_path(lead), params: { save_key: "ahead-3", outcome: "voicemail", direction: "outbound",
+        occurred_at: 3.minutes.from_now.iso8601 }
+      assert lead.reload.recontact?
+      get lead_path(lead)
+      assert_select "[data-missed-call-reminder]", text: /On the Re-contact list until Feb 4, 2027/
+      assert_select "[data-missed-call-text-label]", text: "Text 3"
+      assert_select "[data-missed-call-reminder] textarea[aria-label='Text 3 to send by hand']", text: /I'll leave the calls here for now/
+    end
+
+    travel_to Time.zone.local(2026, 11, 9, 10, 0) do # Monday, on the list and not yet due
+      post lead_calls_path(lead), params: { save_key: "early-miss", outcome: "no_answer", direction: "outbound" }
+      get lead_path(lead)
+      assert_select "[data-missed-call-reminder]", text: /On the Re-contact list until Feb 4, 2027/
+      assert_select "[data-missed-call-text-label]", text: "Text R (optional)"
+      assert_select "[data-missed-call-reminder] textarea[aria-label='Text R to send by hand']",
+        text: /You asked about Manaslu Circuit back in November/
     end
   end
 
