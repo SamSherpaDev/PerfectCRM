@@ -103,10 +103,7 @@ class TemplateContext
     inquiry = matching_inquiries(owner, recipient_email).first
     return unless inquiry
 
-    [ inquiry.trip_interest, inquiry.trip_title ].filter_map do |value|
-      trip = value.to_s.strip
-      trip if trip.present? && !trip.casecmp?("Not sure yet")
-    end.first || "Nepal trip"
+    inquiry.named_trip || "Nepal trip"
   end
 
   # The recipient's own itinerary designer link, from their latest matching

@@ -138,17 +138,23 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "three unanswered calls move a New ad lead to Re-contact but leave a New non-ad lead in New" do
+  test "three unanswered calls move a New ad, website, or quiz lead to Re-contact but leave a New manual lead in New" do
     ad = Lead.create!(name: "New Ad Lead", email: "new-ad@example.com", phone: "+14155550181", source: "google_ads")
-    plain = Lead.create!(name: "New Web Lead", email: "new-web@example.com", phone: "+14155550182", source: "website_form")
-    [ ad, plain ].each do |lead|
+    web = Lead.create!(name: "New Web Lead", email: "new-web@example.com", phone: "+14155550183", source: "website_form")
+    quiz = Lead.create!(name: "New Quiz Lead", email: "new-quiz@example.com", phone: "+14155550184", source: "trade_show",
+      placement: "trip_quiz")
+    plain = Lead.create!(name: "New Manual Lead", email: "new-manual@example.com", phone: "+14155550182", source: "manual")
+    [ ad, web, quiz, plain ].each do |lead|
       CallLog.record!(lead, key: "new-#{lead.id}-call-1", occurred_at: 2.days.ago, outcome: "no_answer", direction: "outbound")
       CallLog.record!(lead, key: "new-#{lead.id}-call-2", occurred_at: 1.day.ago, outcome: "voicemail", direction: "outbound")
       post lead_calls_path(lead), params: { save_key: "new-#{lead.id}-call-3", outcome: "no_answer", direction: "outbound" }
     end
 
-    assert ad.reload.recontact?
-    assert_not_includes Lead.in_new_tab, ad
+    [ ad, web, quiz ].each do |lead|
+      assert lead.reload.recontact?, "#{lead.name} should move to Re-contact"
+      assert_not_includes Lead.in_new_tab, lead
+      assert_equal [ CallLog::AUTO_RECONTACT_SUMMARY ], lead.activity_events.where(kind: "recontact").pluck(:summary)
+    end
     assert_not plain.reload.recontact?
     assert_not plain.not_interested?
     assert_includes Lead.in_new_tab, plain
@@ -170,7 +176,7 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
 
     get leads_path(tab: "recontact")
     assert_select "a", text: lead.name
-    assert_select "p.card-caption", text: /Ad leads who did not answer call attempts on three different days/
+    assert_select "p.card-caption", text: /Ad, website and quiz leads who did not answer call attempts on three different days/
   end
 
   test "a connected call or a restore starts the ad lead's three-call count over" do
@@ -272,14 +278,16 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
 
       travel 1.day + 4.hours
       post lead_calls_path(lead), params: { save_key: "today-ad-4", outcome: "no_answer", direction: "outbound", return_to: root_path }
-      assert_equal "Call logged: No answer. Send a short text by hand. Attempt 2 of 3 logged · try attempt 3 next day in the morning. #{text}",
-        flash[:notice]
+      assert_equal "Call logged: No answer. Send a short text by hand. Attempt 2 of 3 logged · try attempt 3 next day in the morning. " \
+        "Suggested text: Hi Priya, it's Sam at SherpaHolidays again about your trip inquiry. Would Thursday morning or afternoon " \
+        "suit you for a short call? A quick reply here works too.", flash[:notice]
 
       travel 15.hours
       post lead_calls_path(lead), params: { save_key: "today-ad-5", outcome: "voicemail", direction: "outbound", return_to: root_path }
       assert_redirected_to root_path
       assert_equal "Call logged: Voicemail. Moved to Re-contact after three unanswered calls. Send a short text by hand. " \
-        "On the Re-contact list until Feb 5, 2027. #{text}", flash[:notice]
+        "On the Re-contact list until Feb 5, 2027. Suggested text: Hi Priya, Sam at SherpaHolidays. I'll leave the calls here for now. " \
+        "Whenever you're ready to talk about your trip, just reply and we'll call you the same business day.", flash[:notice]
       assert lead.reload.recontact?
     end
   end
@@ -306,8 +314,9 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
       assert_equal [ 2, "2nd try", "afternoon" ], [ entry.attempt, entry.attempt_label, entry.suggested_window ]
       travel 1.hour
       post lead_calls_path(lead), params: { save_key: "next-day-1", outcome: "no_answer", direction: "outbound", return_to: root_path }
-      assert_equal "Call logged: No answer. Send a short text by hand. Attempt 2 of 3 logged · try attempt 3 next day in the evening. #{text}",
-        flash[:notice]
+      assert_equal "Call logged: No answer. Send a short text by hand. Attempt 2 of 3 logged · try attempt 3 next day in the evening. " \
+        "Suggested text: Hi Nima, it's Sam at SherpaHolidays again about your trip inquiry. Would Wednesday morning or afternoon " \
+        "suit you for a short call? A quick reply here works too.", flash[:notice]
       assert_not lead.reload.recontact?
     end
 
@@ -316,7 +325,8 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
       assert_equal [ 3, "3rd try", "evening" ], [ entry.attempt, entry.attempt_label, entry.suggested_window ]
       post lead_calls_path(lead), params: { save_key: "third-day-1", outcome: "voicemail", direction: "outbound", return_to: root_path }
       assert_equal "Call logged: Voicemail. Moved to Re-contact after three unanswered calls. Send a short text by hand. " \
-        "On the Re-contact list until Feb 4, 2027. #{text}", flash[:notice]
+        "On the Re-contact list until Feb 4, 2027. Suggested text: Hi Nima, Sam at SherpaHolidays. I'll leave the calls here for now. " \
+        "Whenever you're ready to talk about your trip, just reply and we'll call you the same business day.", flash[:notice]
       assert lead.reload.recontact?
     end
   end
@@ -348,8 +358,9 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
 
     travel_to Time.zone.local(2026, 11, 4, 14, 0) do
       post lead_calls_path(lead), params: { save_key: "attempted-day-2", outcome: "no_answer", direction: "outbound", return_to: root_path }
-      assert_equal "Call logged: No answer. Send a short text by hand. Attempt 2 of 3 logged · try attempt 3 next day in the evening. #{text}",
-        flash[:notice]
+      assert_equal "Call logged: No answer. Send a short text by hand. Attempt 2 of 3 logged · try attempt 3 next day in the evening. " \
+        "Suggested text: Hi Karma, it's Sam at SherpaHolidays again about your trip inquiry. Would Thursday morning or afternoon " \
+        "suit you for a short call? A quick reply here works too.", flash[:notice]
       assert_not lead.reload.recontact?
     end
 
@@ -360,7 +371,8 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
       assert_equal [ 3, "3rd try", "evening" ], [ entry.attempt, entry.attempt_label, entry.suggested_window ]
       post lead_calls_path(lead), params: { save_key: "attempted-day-3", outcome: "voicemail", direction: "outbound", return_to: root_path }
       assert_equal "Call logged: Voicemail. Moved to Re-contact after three unanswered calls. Send a short text by hand. " \
-        "On the Re-contact list until Feb 5, 2027. #{text}", flash[:notice]
+        "On the Re-contact list until Feb 5, 2027. Suggested text: Hi Karma, Sam at SherpaHolidays. I'll leave the calls here for now. " \
+        "Whenever you're ready to talk about your trip, just reply and we'll call you the same business day.", flash[:notice]
       assert lead.reload.recontact?
       assert_equal 4, lead.activity_events.where(kind: "call").count
     end
@@ -398,7 +410,7 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
       assert_equal [ "Moved back to New: they called after the automatic move." ],
         called_back.activity_events.where(kind: "recontact_restored").pluck(:summary)
 
-      rejected = Lead.create!(name: "Pemba Tamang", email: "pemba@example.com", phone: "+14155550193", source: "website_form")
+      rejected = Lead.create!(name: "Pemba Tamang", email: "pemba@example.com", phone: "+14155550193", source: "referral")
       rejected.mark_unsure!
       3.times do |i|
         CallLog.record!(rejected, key: "restore-ni-#{i}", occurred_at: (3 - i).days.ago, outcome: "voicemail", direction: "outbound")
@@ -432,8 +444,8 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
       end
       assert_redirected_to root_path
       assert_equal "Call logged: Voicemail. Send a short text by hand. Re-contact follow-up missed · set a new date 3 or 6 months out " \
-        "or choose Restore from Re-contact. Suggested text: Hi Ang, this is Sam at SherpaHolidays. I just tried giving you a quick " \
-        "call about your trip inquiry. When is a good time for us to connect by phone, or is text easier for you?", flash[:notice]
+        "or choose Restore from Re-contact. Optional text: Hi Ang, it's Sam at SherpaHolidays. You asked about a trip back in August. " \
+        "Is it still on your list? Happy to talk whenever suits you.", flash[:notice]
       lead.reload
       assert lead.recontact?
       assert_equal Date.new(2026, 11, 3), lead.recontact_on
@@ -446,6 +458,8 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
       get lead_path(lead)
       assert_select "[aria-label='Re-contact list']", text: /follow-up due since Nov 3, 2026/
       assert_select "[data-missed-call-reminder]", text: /Re-contact follow-up missed · set a new date 3 or 6 months out or choose Restore from Re-contact/
+      assert_select "[data-missed-call-text-label]", text: "Text R (optional)"
+      assert_select "[data-missed-call-reminder] textarea[aria-label='Text R to send by hand']", text: /You asked about a trip back in August/
       get leads_path(tab: "recontact")
       assert_select ".badge", text: "Re-contact due since Nov 3, 2026"
 
@@ -455,6 +469,35 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
       assert_select "[aria-label='Re-contact list']", text: /due Feb 6, 2027/
       assert_select "[aria-label='Re-contact list']", text: /follow-up due since/, count: 0
       assert_select "[data-missed-call-reminder]", text: /On the Re-contact list until Feb 6, 2027/
+      assert_select "[data-missed-call-text-label]", text: "Text R (optional)"
+      assert_select "[data-missed-call-reminder] textarea[aria-label='Text R to send by hand']", text: /You asked about a trip back in August/
+      assert_select "[data-missed-call-text-label]", text: "Text 3", count: 0
+    end
+  end
+
+  test "a third miss logged minutes ahead keeps Text 3, and a later miss while on the Re-contact list offers Text R" do
+    lead = nil
+    travel_to Time.zone.local(2026, 11, 4, 10, 0) do # Wednesday
+      lead = Lead.create!(name: "Pasang Lama", email: "pasang@example.com", phone: "+14155550204", source: "website_form",
+        trip_title: "Manaslu Circuit", received_at: 2.days.ago - 1.hour)
+      CallLog.record!(lead, key: "ahead-call-1", occurred_at: 2.days.ago, outcome: "voicemail", direction: "outbound")
+      CallLog.record!(lead, key: "ahead-call-2", occurred_at: 1.day.ago, outcome: "no_answer", direction: "outbound")
+      post lead_calls_path(lead), params: { save_key: "ahead-call-3", outcome: "voicemail", direction: "outbound",
+        occurred_at: 3.minutes.from_now.iso8601 }
+      assert lead.reload.recontact?
+      get lead_path(lead)
+      assert_select "[data-missed-call-reminder]", text: /On the Re-contact list until Feb 4, 2027/
+      assert_select "[data-missed-call-text-label]", text: "Text 3"
+      assert_select "[data-missed-call-reminder] textarea[aria-label='Text 3 to send by hand']", text: /I'll leave the calls here for now/
+    end
+
+    travel_to Time.zone.local(2026, 11, 9, 10, 0) do # Monday, on the list and not yet due
+      post lead_calls_path(lead), params: { save_key: "early-miss", outcome: "no_answer", direction: "outbound" }
+      get lead_path(lead)
+      assert_select "[data-missed-call-reminder]", text: /On the Re-contact list until Feb 4, 2027/
+      assert_select "[data-missed-call-text-label]", text: "Text R (optional)"
+      assert_select "[data-missed-call-reminder] textarea[aria-label='Text R to send by hand']",
+        text: /You asked about Manaslu Circuit back in November/
     end
   end
 
@@ -495,8 +538,132 @@ class CallsRequestsTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "a missed call on a non-ad lead shows no text reminder" do
-    lead = Lead.create!(name: "Web Visitor", email: "web-visitor@example.com", phone: "+14155550187", source: "website_form")
+  test "lost, archived, converted, and existing-client website and quiz inquiries get no text reminder, hint, or automatic move" do
+    travel_to Time.zone.local(2026, 11, 2, 10, 0) do
+      [ { source: "website_form" }, { source: "trade_show", placement: "trip_quiz" } ].each_with_index do |kind, n|
+        client = Client.create!(name: "Returning #{n}", email: "returning-#{n}@example.com")
+        existing = Lead.create!(name: "Returning #{n}", email: "returning-#{n}@example.com", phone: "+1415555021#{n}",
+          existing_client: client, **kind)
+        existing.mark_unsure!
+        lost = Lead.create!(name: "Lost #{n}", email: "lost-#{n}@example.com", phone: "+1415555022#{n}", status: "lost",
+          lost_reason: "no_reply", **kind)
+        archived = Lead.create!(name: "Archived #{n}", email: "archived-#{n}@example.com", phone: "+1415555023#{n}", **kind)
+        archived.archive!
+        converted = Lead.create!(name: "Converted #{n}", email: "converted-#{n}@example.com", phone: "+1415555024#{n}", **kind)
+        converted.convert_to_client!
+        [ existing, lost, archived, converted ].each do |lead|
+          assert_not lead.reload.call_routine?, "#{lead.name} should be outside the call routine"
+          calls = 3.times.map do |i|
+            CallLog.record!(lead, key: "outside-#{lead.id}-#{i}", occurred_at: (3 - i).days.ago, outcome: "voicemail", direction: "outbound")
+          end
+          assert_equal "Call logged: Voicemail.", CallLog.notice(calls.last, with_text: true)
+          assert_not lead.reload.recontact?
+          assert_not lead.not_interested?
+        end
+        get lead_path(lost)
+        assert_select "[data-missed-call-reminder]", count: 0
+        assert existing.unsure?
+      end
+    end
+  end
+
+  test "each missed try on a website lead shows that try's approved text on the lead page to copy and send by hand" do
+    lead = nil
+    travel_to Time.zone.local(2026, 11, 4, 10, 0) do # Wednesday
+      lead = Lead.create!(name: "Tenzin Norbu", email: "tenzin@example.com", phone: "+14155550201", source: "website_form",
+        trip_title: "Annapurna Circuit")
+      assert_no_difference -> { Message.count } do
+        post lead_calls_path(lead), params: { save_key: "web-try-1", outcome: "voicemail", direction: "outbound" }
+      end
+      get lead_path(lead)
+      assert_select "[data-missed-call-text-label]", text: "Text 1"
+      assert_select "[data-missed-call-reminder] textarea[aria-label='Text 1 to send by hand']",
+        text: /Hi Tenzin, this is Sam at SherpaHolidays. I just tried giving you a quick call about your trip inquiry./
+      get root_path
+      assert_select "#call_list_lead_#{lead.id}", count: 0
+    end
+
+    travel_to Time.zone.local(2026, 11, 5, 15, 0) do # Thursday
+      get root_path
+      assert_select "#call_list_lead_#{lead.id}", text: /2nd try/
+      assert_select "#call_list_lead_#{lead.id}", text: /Try in the afternoon/
+      assert_select "#call_list_lead_#{lead.id}", text: /Text reminder/
+      assert_select "p.card-caption", text: /Day 2 at varied times of day for ad, website and quiz leads/
+      assert_no_difference -> { Message.count } do
+        post lead_calls_path(lead), params: { save_key: "web-try-2", outcome: "no_answer", direction: "outbound" }
+      end
+      get lead_path(lead)
+      assert_select "[data-missed-call-reminder]", text: /Attempt 2 of 3 logged/
+      assert_select "[data-missed-call-text-label]", text: "Text 2"
+      assert_equal [ "Hi Tenzin, it's Sam at SherpaHolidays again about your Annapurna Circuit inquiry. Would Friday morning or " \
+        "afternoon suit you for a short call? A quick reply here works too." ],
+        css_select("[data-missed-call-reminder] textarea[aria-label='Text 2 to send by hand']").map { |box| box.text.strip }
+      assert_select "[data-missed-call-reminder] button", text: "Copy text", count: 1
+      assert_select "[data-missed-call-reminder] form", count: 0
+    end
+
+    travel_to Time.zone.local(2026, 11, 6, 18, 0) do # Friday
+      get root_path
+      assert_select "#call_list_lead_#{lead.id}", text: /Try in the evening/
+      assert_no_difference -> { Message.count } do
+        post lead_calls_path(lead), params: { save_key: "web-try-3", outcome: "voicemail", direction: "outbound" }
+      end
+      assert lead.reload.recontact?
+      get lead_path(lead)
+      assert_select "[data-missed-call-reminder]", text: /On the Re-contact list until Feb 6, 2027/
+      assert_select "[data-missed-call-text-label]", text: "Text 3"
+      assert_equal [ "Hi Tenzin, Sam at SherpaHolidays. I'll leave the calls here for now. Whenever you're ready to talk about " \
+        "Annapurna Circuit, just reply and we'll call you the same business day." ],
+        css_select("[data-missed-call-reminder] textarea[aria-label='Text 3 to send by hand']").map { |box| box.text.strip }
+      assert_select "[data-missed-call-reminder] button", text: "Copy text", count: 1
+      assert_select "[data-missed-call-reminder] form", count: 0
+    end
+  end
+
+  test "a missed Friday call on a quiz lead suggests Monday, and a missed Re-contact follow-up offers the optional Text R" do
+    lead = nil
+    travel_to Time.zone.local(2026, 7, 30, 10, 0) do # Thursday
+      lead = Lead.create!(name: "Lhamo Sherpa", email: "lhamo@example.com", phone: "+14155550202", source: "trade_show",
+        placement: "trip_quiz", trip_interest: "Everest Base Camp Trek", received_at: 1.hour.ago)
+      CallLog.record!(lead, key: "quiz-try-1", occurred_at: Time.current, outcome: "voicemail", direction: "outbound")
+    end
+
+    travel_to Time.zone.local(2026, 7, 31, 12, 0) do # Friday
+      post lead_calls_path(lead), params: { save_key: "quiz-try-2", outcome: "no_answer", direction: "outbound", return_to: root_path }
+      assert_equal "Call logged: No answer. Send a short text by hand. Attempt 2 of 3 logged · try attempt 3 next day in the evening. " \
+        "Suggested text: Hi Lhamo, it's Sam at SherpaHolidays again about your Everest Base Camp Trek inquiry. Would Monday morning " \
+        "or afternoon suit you for a short call? A quick reply here works too.", flash[:notice]
+    end
+
+    travel_to Time.zone.local(2026, 8, 1, 12, 0) do
+      CallLog.record!(lead, key: "quiz-try-3", occurred_at: Time.current, outcome: "voicemail", direction: "outbound")
+      assert lead.reload.recontact?
+      assert_equal Date.new(2026, 11, 1), lead.recontact_on
+    end
+
+    travel_to Time.zone.local(2026, 11, 2, 11, 0) do
+      sign_in # the July request renewed the session only until a date before November
+      assert_includes Today::Summary.new.call_entries.map(&:lead), lead
+      assert_no_difference -> { Message.count } do
+        post lead_calls_path(lead), params: { save_key: "quiz-follow-up", outcome: "voicemail", direction: "outbound" }
+      end
+      get lead_path(lead)
+      assert_select "[data-missed-call-reminder]", text: /Re-contact follow-up missed/
+      assert_select "[data-missed-call-text-label]", text: "Text R (optional)"
+      assert_equal [ "Hi Lhamo, it's Sam at SherpaHolidays. You asked about Everest Base Camp Trek back in July. " \
+        "Is it still on your list? Happy to talk whenever suits you." ],
+        css_select("[data-missed-call-reminder] textarea[aria-label='Text R to send by hand']").map { |box| box.text.strip }
+      assert_select "[data-missed-call-reminder] button", text: "Copy text", count: 1
+      assert_select "[data-missed-call-reminder] form", count: 0
+
+      post lead_calls_path(lead), params: { save_key: "quiz-talked", outcome: "connected", direction: "outbound" }
+      get lead_path(lead)
+      assert_select "[data-missed-call-reminder]", count: 0
+    end
+  end
+
+  test "a missed call on a lead outside the call routine shows no text reminder" do
+    lead = Lead.create!(name: "Referred Visitor", email: "referred-visitor@example.com", phone: "+14155550187", source: "referral")
     post lead_calls_path(lead), params: { save_key: "web-missed-1", outcome: "no_answer", direction: "outbound", return_to: root_path }
     assert_equal "Call logged: No answer.", flash[:notice]
     get lead_path(lead)

@@ -61,7 +61,7 @@
       <h2 class="card-title" id="not-yet-called-heading">Calls to make today</h2>
       <%= badge @summary.not_yet_called.count, :neutral %>
     </div>
-    <%= card_caption "Last 24 hours of new inquiries with a phone (newest first), then unanswered calls due a retry on Day 1 (2nd try) and Day 3 (3rd try; Day 2 at varied times of day for ad leads), then re-contacts whose date has arrived, then older first tries up to 14 days old." %>
+    <%= card_caption "Last 24 hours of new inquiries with a phone (newest first), then unanswered calls due a retry on Day 1 (2nd try) and Day 3 (3rd try; Day 2 at varied times of day for ad, website and quiz leads), then re-contacts whose date has arrived, then older first tries up to 14 days old." %>
     <% entries = @summary.call_entries %>
     <% if entries.any? %>
       <ul class="divide-y divide-rule-2">
@@ -86,7 +86,7 @@
                 <% if entry.suggested_window.present? %>
                   <span>Try in the <%= entry.suggested_window %></span>
                 <% end %>
-                <% if entry.attempt > 1 && lead.ad_call_routine? && CallLog::UNANSWERED_OUTCOMES.include?(entry.last_call.metadata["outcome"]) %>
+                <% if entry.attempt > 1 && lead.call_routine? && CallLog::UNANSWERED_OUTCOMES.include?(entry.last_call.metadata["outcome"]) %>
                   <span>Text reminder</span>
                 <% end %>
                 <span><%= lead.trip_interest.presence || lead.trip_title.presence || "Trip inquiry" %></span>

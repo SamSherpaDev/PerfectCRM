@@ -905,6 +905,20 @@ class LeadsRequestsTest < ActionDispatch::IntegrationTest
     assert_select "p.card-caption", text: /did not answer three calls/
   end
 
+  test "Mark Unsure on a chatting website lead with three unanswered calls moves it to Re-contact and says so" do
+    lead = Lead.create!(name: "Web Never Picks Up", email: "web-never@example.com", source: "website_form", status: "chatting")
+    3.times do |i|
+      CallLog.record!(lead, key: "web-never-#{i}", occurred_at: (3 - i).days.ago, outcome: "voicemail", direction: "outbound")
+    end
+    assert_not lead.reload.recontact?
+
+    patch mark_unsure_lead_path(lead), params: { return_to: leads_path(tab: "new") }
+    assert_redirected_to leads_path(tab: "new")
+    assert_equal "Marked as Unsure - moved to Re-contact after three unanswered calls.", flash[:notice]
+    assert lead.reload.recontact?
+    assert_not lead.not_interested?
+  end
+
   private
 
   def rendered_return_to(form_action)
