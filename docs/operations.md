@@ -326,14 +326,14 @@ The optional argument selects the config directory; it does not select productio
 storage. Remove that candidate directory afterward.
 
 The drill uses the immutable image ID of the running `perfectcrm-app`, rather
-than resolving `latest` or another tag. It restores the primary Litestream
-replica into a new writable directory under `${TMPDIR:-/tmp}`. The restore
-uses `restore -config /etc/litestream.yml -o /restore/production.sqlite3
-/rails/storage/production.sqlite3`, so the replica's configured R2 endpoint,
-region, bucket, and credentials apply. Only the Litestream restore container
-has network access and reads `.env.litestream`; it downloads the replica and
-never starts replication or writes to the backup bucket. The production
-storage volume is never mounted.
+than resolving `latest` or another tag. It restores into a new writable
+directory under `${TMPDIR:-/tmp}`. The default Litestream source restores
+only the primary replica with `restore -config /etc/litestream.yml -o
+/restore/production.sqlite3 /rails/storage/production.sqlite3`, so the
+replica's configured R2 endpoint, region, bucket, and credentials apply.
+Only the Litestream restore container has network access and reads
+`.env.litestream`; it downloads the replica and never starts replication or
+writes to the backup bucket. The production storage volume is never mounted.
 
 Before booting, `PRAGMA integrity_check` must return exactly `ok`; an error,
 empty result, or any diagnostic fails the drill. The app then boots in production
