@@ -39,6 +39,22 @@ class BookingLinkTemplateMigrationTest < ActiveSupport::TestCase
     assert_equal 1, @follow_up.body.scan("{{booking_link}}").size
   end
 
+  test "rows saved from the editor with CRLF line endings get the paragraph in CRLF and down removes it" do
+    first_reply_crlf = FIRST_REPLY.gsub("\n", "\r\n")
+    follow_up_crlf = FOLLOW_UP.gsub("\n", "\r\n")
+    @first_reply.update!(body: first_reply_crlf)
+    @follow_up.update!(body: follow_up_crlf)
+    migrate
+    assert_equal first_reply_crlf.sub("group.\r\n\r\nBest,",
+      "group.\r\n\r\nIf it is easier, you can also pick a call time here: {{booking_link}}\r\n\r\nBest,"), @first_reply.reload.body
+    assert_equal follow_up_crlf.sub("ready.\r\n\r\nBest,",
+      "ready.\r\n\r\nIf a call would help, you can pick a time here: {{booking_link}}\r\n\r\nBest,"), @follow_up.reload.body
+    assert_equal ::TemplateRenderer.render(first_reply_crlf, first_name: "Mira", my_name: "Sam"),
+      ::TemplateRenderer.render(@first_reply.body, first_name: "Mira", my_name: "Sam")
+    ActiveRecord::Migration.suppress_messages { MIGRATION.new.migrate(:down) }
+    assert_equal [ first_reply_crlf, follow_up_crlf ], [ @first_reply.reload.body, @follow_up.reload.body ]
+  end
+
   test "rows without the exact anchor line are preserved and logged" do
     @first_reply.update!(body: FIRST_REPLY.sub("your time zone.", "your timezone."))
     @follow_up.update!(body: FOLLOW_UP.sub("Best,", "Warmly,"))

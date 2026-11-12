@@ -23,8 +23,8 @@ class AddBookingLinkToCallTemplates < ActiveRecord::Migration[8.1]
   end
 
   def down
-    remove(FIRST_REPLY_NAME, "\n\n#{FIRST_REPLY_LINE}")
-    remove(FOLLOW_UP_NAME, "#{FOLLOW_UP_LINE}\n\n")
+    remove(FIRST_REPLY_NAME) { |newline| "#{newline}#{newline}#{FIRST_REPLY_LINE}" }
+    remove(FOLLOW_UP_NAME) { |newline| "#{FOLLOW_UP_LINE}#{newline}#{newline}" }
   end
 
   private
@@ -42,21 +42,32 @@ class AddBookingLinkToCallTemplates < ActiveRecord::Migration[8.1]
     end
   end
 
-  def remove(name, text)
+  def remove(name)
     MigrationTemplate.where(name: name).find_each do |template|
       body = template.body.to_s
+      text = yield(newline_in(body))
       template.update_columns(body: body.sub(text, ""), updated_at: Time.current) if body.scan(text).one?
     end
   end
 
   # The paragraph sits next to an anchor that is its own line, found exactly once.
   def insert_after(body, anchor, line)
-    pattern = /^#{Regexp.escape(anchor)}$/
-    body.sub(pattern) { "#{anchor}\n\n#{line}" } if body.scan(pattern).one?
+    pattern = anchor_line(anchor)
+    newline = newline_in(body)
+    body.sub(pattern) { "#{anchor}#{newline}#{newline}#{line}" } if body.scan(pattern).one?
   end
 
   def insert_before(body, anchor, line)
-    pattern = /^#{Regexp.escape(anchor)}$/
-    body.sub(pattern) { "#{line}\n\n#{anchor}" } if body.scan(pattern).one?
+    pattern = anchor_line(anchor)
+    newline = newline_in(body)
+    body.sub(pattern) { "#{line}#{newline}#{newline}#{anchor}" } if body.scan(pattern).one?
+  end
+
+  def anchor_line(anchor)
+    /^#{Regexp.escape(anchor)}(?=\r?$)/
+  end
+
+  def newline_in(body)
+    body.include?("\r\n") ? "\r\n" : "\n"
   end
 end

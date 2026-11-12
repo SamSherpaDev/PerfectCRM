@@ -41,9 +41,12 @@ class BookingLinkSystemTest < ApplicationSystemTestCase
     lead = Lead.create!(name: "Booking System", email: "booking-sys@example.com", phone: "+14155550204", source: "website_form")
     text = "Hi Booking, this is Sam at SherpaHolidays. I just tried giving you a quick call about your trip inquiry. " \
       "When is a good time for us to connect by phone, or is text easier for you?\nYou can also pick a call time here: #{URL}"
+    visit root_path
+    within("#call_list_lead_#{lead.id}") { tolerate_submit_navigation { click_button "No answer" } }
+    tolerate_navigation_assertion { assert_selector ".flash-notice", text: "Call logged: No answer. Send a short text by hand." }
+    assert_equal "Suggested text: #{text}", find(".flash-notice span").evaluate_script("this.innerText")[/Suggested text: .*/m]
+    capture("today-flash-desktop", ".flash-notice")
     visit lead_path(lead)
-    within(".calls") { tolerate_submit_navigation { click_button "No answer" } }
-    tolerate_navigation_assertion { assert_text "Call logged: No answer. Send a short text by hand." }
     within("[data-missed-call-reminder]") do
       assert_equal text, find("textarea[aria-label='Text 1 to send by hand']").value
       assert_button "Copy text", count: 1
