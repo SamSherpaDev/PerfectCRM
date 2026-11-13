@@ -1,3 +1,5 @@
+import base64
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -31,9 +33,15 @@ elif args[0] == 'run':
         (state / 'container').touch()
         print('drill-container-id')
         sys.exit(int(os.environ['BOOT_STATUS']))
-    elif 'sqlite3' in args:
+    elif 'sqlite3' in args and 'PRAGMA integrity_check;' in args:
         print(os.environ['INTEGRITY_RESULT'])
         sys.exit(int(os.environ['INTEGRITY_STATUS']))
+    elif 'sqlite3' in args:
+        # Attachment queries: probe candidates select checksums, the
+        # never-copy query does not.
+        rows = os.environ['PROBE_ROWS' if 'checksum' in args[-1] else 'NEVER_COPY_ROWS']
+        sys.stdout.write(rows)
+        sys.exit(int(os.environ['QUERY_STATUS']))
     elif 'restore' in args:
         sys.exit(int(os.environ['RESTORE_STATUS']))
 elif args[0] == 'exec':
@@ -59,8 +67,13 @@ import sys
 args = sys.argv[1:]
 with (Path(os.environ['STATE']) / 'rclone.jsonl').open('a') as log:
     log.write(json.dumps(args) + '\n')
-if args[0] == 'lsf':
+if args[0] == 'lsf' and args[-1].endswith('/attachments'):
+    sys.stdout.write(os.environ['ATTACHMENT_LISTING'])
+    sys.exit(int(os.environ['MIRROR_STATUS']))
+elif args[0] == 'lsf':
     sys.stdout.write(os.environ['DRIVE_LISTING'])
+elif args[0] == 'cat' and '/attachments/' in args[-1]:
+    sys.stdout.buffer.write(os.environ['ATTACHMENT_BYTES'].encode())
 elif args[0] == 'cat':
     data = b'SQLite format 3 stand-in'
     sys.stdout.buffer.write(data if os.environ['DRIVE_ARCHIVE'] == 'corrupt' else gzip.compress(data))
@@ -74,11 +87,20 @@ NEWEST_LISTING = '\n'.join([
     'production_queue-2026-11-11.sqlite3.gz', 'production-2026-11-12.sqlite3.gz.partial',
     'notes.txt', ''])
 
+# Restored attachment rows and the Drive mirror for RESTORE_SOURCE=drive.
+NEWEST, OLDER, OLDEST, HELD = ('n' * 28, 'o' * 28, 'p' * 28, 'h' * 28)
+ATTACHMENT_BYTES = 'stored attachment bytes'
+CHECKSUM = base64.b64encode(hashlib.md5(ATTACHMENT_BYTES.encode()).digest()).decode()
+PROBE_ROWS = f'{NEWEST}|{CHECKSUM}\n{OLDER}|{CHECKSUM}\n{OLDEST}|{CHECKSUM}\n'
+ATTACHMENT_LISTING = f'{OLDEST}\n{OLDER}\n'
+
 
 class RestoreDrillTest(unittest.TestCase):
     def run_drill(self, *, integrity_result='ok', health_code='200',
                   app_image='sha256:running-image', container_running='true',
                   restore_source=None, drive_listing=NEWEST_LISTING, drive_archive='valid',
+                  never_copy_rows=f'{HELD}\n', probe_rows=PROBE_ROWS,
+                  attachment_listing=ATTACHMENT_LISTING, attachment_bytes=ATTACHMENT_BYTES,
                   **statuses):
         # Keep all fixture state outside the checkout, including failed scratch.
         with tempfile.TemporaryDirectory() as directory:
@@ -108,11 +130,14 @@ exec /bin/rm "$@"
                                LITESTREAM_BUCKET="fixture", SPACES_ENDPOINT="fixture",
                                SPACES_REGION="auto", HEALTH_CODE=health_code,
                                APP_IMAGE=app_image, CONTAINER_RUNNING=container_running,
-                               DRIVE_LISTING=drive_listing, DRIVE_ARCHIVE=drive_archive)
+                               DRIVE_LISTING=drive_listing, DRIVE_ARCHIVE=drive_archive,
+                               NEVER_COPY_ROWS=never_copy_rows, PROBE_ROWS=probe_rows,
+                               ATTACHMENT_LISTING=attachment_listing, ATTACHMENT_BYTES=attachment_bytes)
             environment.pop('RESTORE_SOURCE', None)
             if restore_source is not None:
                 environment['RESTORE_SOURCE'] = restore_source
-            for name in ('HEALTH', 'INTEGRITY', 'RESTORE', 'BOOT', 'RECORD', 'REMOVE', 'SCRATCH_REMOVE'):
+            for name in ('HEALTH', 'INTEGRITY', 'RESTORE', 'BOOT', 'RECORD', 'REMOVE', 'SCRATCH_REMOVE',
+                         'QUERY', 'MIRROR'):
                 environment[f'{name}_STATUS'] = str(statuses.get(name.lower(), 0))
             result = subprocess.run(['bash', str(script), str(app)], env=environment,
                                     text=True, capture_output=True, timeout=10)
@@ -228,6 +253,9 @@ exec /bin/rm "$@"
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(any('restore' in call for call in calls))
         self.assertEqual(self.rclone_calls, [])
+        queries = [call for call in calls if call[0] == 'run' and 'sqlite3' in call]
+        self.assertEqual([call[-1] for call in queries], ['PRAGMA integrity_check;'])
+        self.assertNotIn('attachment', result.stdout.lower())
 
     def test_drive_source_restores_newest_daily_archives_offline(self):
         result, calls, scratch, _ = self.run_drill(restore_source='drive')
@@ -238,9 +266,20 @@ exec /bin/rm "$@"
             ['lsf', '--files-only', 'sherpa-backup:perfectcrm/daily'],
             ['cat', 'sherpa-backup:perfectcrm/daily/production-2026-11-11.sqlite3.gz'],
             ['cat', 'sherpa-backup:perfectcrm/daily/production_queue-2026-11-11.sqlite3.gz'],
+            ['lsf', '--files-only', 'sherpa-backup:perfectcrm/attachments'],
+            ['cat', f'sherpa-backup:perfectcrm/attachments/{OLDER}'],
         ])
-        checked = [call[-2] for call in calls if call[0] == 'run' and 'sqlite3' in call]
+        checked = [call[-2] for call in calls if call[0] == 'run' and call[-1] == 'PRAGMA integrity_check;']
         self.assertEqual(checked, ['/restore/production.sqlite3', '/restore/production_queue.sqlite3'])
+        queries = [call for call in calls if call[0] == 'run' and 'sqlite3' in call
+                   and call[-1] != 'PRAGMA integrity_check;']
+        self.assertEqual(len(queries), 2)
+        for query in queries:
+            self.assertEqual(query[-2], '/restore/production.sqlite3')
+            self.assertIn('--network', query)
+        self.assertIn('Drive attachment copies ok', result.stdout)
+        for key in (NEWEST, OLDER, OLDEST, HELD):
+            self.assertNotIn(key, result.stdout + result.stderr)
         for call in calls:
             if call[0] == 'run':
                 self.assertEqual(call[call.index('--network') + 1], 'none')
@@ -263,6 +302,32 @@ exec /bin/rm "$@"
         self.assertIn('did not download and decompress', result.stderr)
         self.assertFalse(any(call[0] == 'run' for call in calls))
         self.assertEqual(scratch, [])
+
+    def test_drive_attachment_checks_fail_before_boot(self):
+        cases = {
+            'checksum mismatch': (dict(attachment_bytes='altered bytes'), 'does not match its recorded checksum'),
+            'held copy on Drive': (dict(attachment_listing=ATTACHMENT_LISTING + f'{HELD}\n'),
+                                   '1 Drive attachment copies belong to held or flagged files'),
+            'empty mirror': (dict(attachment_listing=''), 'none of the 3 newest restored attachments has a Drive copy'),
+            'unlisted mirror': (dict(mirror=3), 'could not list sherpa-backup:perfectcrm/attachments'),
+            'query failure': (dict(query=1), 'did not answer the attachment queries'),
+        }
+        for name, (options, message) in cases.items():
+            with self.subTest(case=name):
+                result, calls, scratch, _ = self.run_drill(restore_source='drive', **options)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(message, result.stderr)
+                self.assertNotIn('Restore drill passed', result.stdout)
+                self.assertFalse(any(call[:2] == ['run', '-d'] for call in calls))
+                for key in (NEWEST, OLDER, OLDEST, HELD):
+                    self.assertNotIn(key, result.stdout + result.stderr)
+                self.assertEqual(scratch, [])
+
+    def test_drive_source_without_ordinary_attachments_passes_with_nothing_to_probe(self):
+        result, _, _, _ = self.run_drill(restore_source='drive', probe_rows='', attachment_listing='')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('nothing to probe', result.stdout)
+        self.assertFalse(any(call[0] == 'cat' and '/attachments/' in call[-1] for call in self.rclone_calls))
 
     def test_unknown_source_fails_before_any_work(self):
         result, calls, scratch, _ = self.run_drill(restore_source='r2')

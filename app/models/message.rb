@@ -62,6 +62,10 @@ class Message < ApplicationRecord
   after_create :bump_conversation
   after_destroy :rebalance_conversation
 
+  # The hourly Drive attachment backup (AttachmentBackup) re-applies only the
+  # filename and type part to stored files. A rule change that needs the
+  # bytes (PDF titles, files inside an attached email) must ship a one-off
+  # rescreen that sets blob metadata "sensitive" on stored matches.
   def self.sensitive_attachment?(filename, content_type, data: nil)
     pattern = /passport|visa|insurance|identity|(?:\A|[^a-z])(?:id|dob)(?:[^a-z]|\z)|birth|scan/i
     return true if "#{filename} #{content_type}".match?(pattern)

@@ -308,6 +308,41 @@ class PerfectBookDocumentsTest < ActionDispatch::IntegrationTest
     assert_not ActiveStorage::Blob.exists?(blob.id)
   end
 
+  test "a stored file sent to PerfectBook stays marked and off the Drive backup when the hand-off fails" do
+    booking = make_booking
+    conversation = Conversation.create!(subject: "Docs", linkable: @client, last_message_at: Time.current)
+    message = conversation.messages.create!(direction: "in", from_address: @client.email,
+      to_addresses: [ "info@sherpaholidays.com" ], subject: "Docs", sent_at: Time.current, text_body: "see attached")
+    message.files.attach(io: StringIO.new("down-bytes"), filename: "form.pdf", content_type: "application/pdf")
+    message.files.attach(io: StringIO.new("stuck-bytes"), filename: "letter.pdf", content_type: "application/pdf")
+    down, stuck = message.files.attachments.order(:id).to_a
+    assert_equal [ down.blob.key, stuck.blob.key ].sort, AttachmentBackup.manifest.lines(chomp: true)[1..-2]
+    unreachable = Object.new
+    def unreachable.upload_traveler_document(**)
+      raise PerfectBook::UnavailableError, "timed out"
+    end
+    handoff = { booking_id: booking.id, traveler_id: 3, document_type: "visa" }
+
+    PerfectBook::Client.stub(:new, unreachable) do
+      post document_handoffs_path, params: { attachment_id: down.id, handoff: handoff }
+    end
+    assert_response :service_unavailable
+    fake, _calls = stub_pb_upload
+    PerfectBook::Client.stub(:new, fake) do
+      stuck.blob.service.stub(:delete, ->(*) { raise IOError, "storage unavailable" }) do
+        assert_raises(IOError) { post document_handoffs_path, params: { attachment_id: stuck.id, handoff: handoff } }
+      end
+    end
+
+    [ down, stuck ].each do |attachment|
+      assert ActiveStorage::Attachment.exists?(attachment.id)
+      assert_equal true, attachment.blob.reload.metadata["sensitive"]
+    end
+    assert_equal "#{AttachmentBackup::MANIFEST_HEADER}\nend 0\n", AttachmentBackup.manifest
+    get inbox_thread_path(conversation)
+    assert_select ".attachment-row", text: /Potentially sensitive/, count: 2
+  end
+
   test "failed expiry deletion retains sensitive bytes and references for the next sweep" do
     message, holding = make_holding
     blob = holding.file.blob

@@ -25,6 +25,8 @@ fi
 WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/perfectcrm-restore-drill.XXXXXX")"
 CONTAINER="${WORKDIR##*/}"
 BOOT_ATTEMPTED=false
+ATTACHMENTS_RESULT=''
+# shellcheck disable=SC2329 # Runs from the EXIT trap below.
 cleanup() {
   local status=$?
   trap - EXIT
@@ -39,7 +41,7 @@ cleanup() {
     status=1
   fi
   if [ "$status" -eq 0 ]; then
-    echo "Restore drill passed: integrity ok, /up HTTP 200, restored User read; container and scratch removed."
+    echo "Restore drill passed: integrity ok$ATTACHMENTS_RESULT, /up HTTP 200, restored User read; container and scratch removed."
   fi
   exit "$status"
 }
@@ -93,6 +95,67 @@ for NAME in "${RESTORED_DATABASES[@]}"; do
   fi
   echo "Restored $NAME database integrity: ok"
 done
+
+# Drive source only: the attachment mirror must hold no file the restored
+# database says may never be copied (held, in-flight, or flagged), and the
+# newest ordinary file it holds must decrypt to the recorded checksum.
+# Output is counts and pass/fail only, never a key or filename.
+restored_query() {
+  docker run --rm --network none --entrypoint sqlite3 \
+    -v "$WORKDIR:/restore" "$IMAGE" \
+    /restore/production.sqlite3 "$1"
+}
+NEVER_COPY_SQL="SELECT key FROM active_storage_blobs WHERE id IN
+    (SELECT blob_id FROM active_storage_attachments WHERE record_type = 'DocumentHolding')
+  UNION SELECT key FROM document_upload_orphans
+  UNION SELECT key FROM active_storage_blobs WHERE json_type(metadata, '\$.sensitive') NOT IN ('null', 'false');"
+PROBE_SQL="SELECT key, checksum FROM active_storage_blobs
+  WHERE id IN (SELECT blob_id FROM active_storage_attachments WHERE record_type = 'Message' AND name = 'files')
+    AND id NOT IN (SELECT blob_id FROM active_storage_attachments WHERE record_type = 'DocumentHolding')
+    AND key NOT IN (SELECT key FROM document_upload_orphans)
+    AND COALESCE(json_type(metadata, '\$.sensitive'), 'null') IN ('null', 'false')
+    AND checksum IS NOT NULL
+  ORDER BY created_at DESC, id DESC LIMIT 200;"
+if [ "$RESTORE_SOURCE" = drive ]; then
+  DRIVE_ATTACHMENTS=sherpa-backup:perfectcrm/attachments
+  if ! NEVER_COPY="$(restored_query "$NEVER_COPY_SQL")" || ! PROBES="$(restored_query "$PROBE_SQL")"; then
+    echo "Restore drill FAILED: the restored database did not answer the attachment queries." >&2
+    exit 1
+  fi
+  if ! ATTACHMENT_LISTING="$(rclone lsf --files-only "$DRIVE_ATTACHMENTS")"; then
+    echo "Restore drill FAILED: could not list $DRIVE_ATTACHMENTS (has perfectcrm-attachments-backup run?)." >&2
+    exit 1
+  fi
+  LEAKED="$(LC_ALL=C comm -12 <(LC_ALL=C sort -u <<<"$NEVER_COPY") <(LC_ALL=C sort -u <<<"$ATTACHMENT_LISTING") | grep -c . || true)"
+  if [ "$LEAKED" -ne 0 ]; then
+    echo "Restore drill FAILED: $LEAKED Drive attachment copies belong to held or flagged files." >&2
+    exit 1
+  fi
+  CANDIDATES="$(grep -c . <<<"$PROBES" || true)"
+  PROBE_KEY='' PROBE_CHECKSUM=''
+  while IFS='|' read -r KEY CHECKSUM; do
+    if [ -n "$KEY" ] && grep -qxF -- "$KEY" <<<"$ATTACHMENT_LISTING"; then
+      PROBE_KEY="$KEY" PROBE_CHECKSUM="$CHECKSUM"
+      break
+    fi
+  done <<<"$PROBES"
+  if [ "$CANDIDATES" -gt 0 ] && [ -z "$PROBE_KEY" ]; then
+    echo "Restore drill FAILED: none of the $CANDIDATES newest restored attachments has a Drive copy." >&2
+    exit 1
+  fi
+  if [ -n "$PROBE_KEY" ]; then
+    if ! ACTUAL="$(rclone cat "$DRIVE_ATTACHMENTS/$PROBE_KEY" | openssl md5 -binary | base64)" ||
+        [ "$ACTUAL" != "$PROBE_CHECKSUM" ]; then
+      echo "Restore drill FAILED: the newest Drive attachment copy does not match its recorded checksum." >&2
+      exit 1
+    fi
+    echo "Drive attachment copies: $(grep -c . <<<"$ATTACHMENT_LISTING" || true) listed, none held or flagged, checksum probe ok."
+    ATTACHMENTS_RESULT=', Drive attachment copies ok'
+  else
+    echo "Drive attachment copies: none held or flagged; the restored database has no ordinary attachment to probe."
+    ATTACHMENTS_RESULT=', Drive attachment copies ok (nothing to probe)'
+  fi
+fi
 
 # Keep drill-only configuration out of the image and normal production boot.
 # No db:prepare, migrations, seeds, queue recovery, or job supervisor is run.

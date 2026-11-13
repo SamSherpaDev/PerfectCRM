@@ -1,0 +1,10 @@
+[Unit]
+Description=Hourly PerfectCRM encrypted Drive attachment mirror
+
+[Timer]
+OnCalendar=*-*-* *:20:00 UTC
+Persistent=false
+Unit=perfectcrm-attachments-backup.service
+
+[Install]
+WantedBy=timers.target
