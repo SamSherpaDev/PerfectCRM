@@ -954,6 +954,11 @@
 .attachment-name > svg {
   @apply mt-[2px] shrink-0;
 }
+/* The hand-off button wraps inside the row on phones instead of running
+   past it and widening the page. */
+.attachment-row .btn {
+  white-space: normal;
+}
 .triage-card {
   @apply rounded-card border border-warn-mark bg-warn-tint px-5 py-4 text-sm;
 }
@@ -2796,6 +2801,7 @@
   border: 0;
   padding: 0;
   font: inherit;
+  text-align: left;
   cursor: pointer;
 }
 .traveler-docs {
