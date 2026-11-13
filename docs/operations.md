@@ -325,16 +325,15 @@ be copied, and held documents never qualify, so their 24-hour deletion
   before any Drive call. The job then permanently deletes copies whose keys
   left the allowlist, uploads new keys from the bucket, and decrypts each new
   upload on Drive with `rclone cryptcheck --one-way` to compare it with the
-  bucket's bytes. A key the bucket lacks is skipped and counted. An empty
-  manifest while Drive holds copies fails the run instead of deleting them.
-  Each run logs one line of counts only:
+  bucket's bytes. A key the bucket lacks is skipped and counted. Each run
+  logs one line of counts only:
   `<UTC time> Attachments backup: kept K, new N, removed G, not in bucket M.`
 - **Current state only.** The folder mirrors today's allowlist. A file
   removed from the CRM, sent to PerfectBook, or newly flagged loses its copy
-  on the next successful run, normally within an hour. Deletion uses
-  `--drive-use-trash=false` on this path only (database pruning keeps the
-  trash), and copies are never overwritten, so Drive keeps no trash entry or
-  older revision. Anything Google keeps after a delete is encrypted. The
+  on the next successful run, normally within an hour; an empty allowlist
+  removes every copy. Deletion uses `--drive-use-trash=false` on this path
+  only (database pruning keeps the trash), and copies are never overwritten,
+  so Drive keeps no trash entry or older revision. Anything Google keeps after a delete is encrypted. The
   mailbox keeps the original messages.
 - **Rule changes.** A widened name or type rule drops matching stored files
   on the next run. A rule that needs the file bytes is not re-applied to
@@ -458,14 +457,21 @@ probe below are the same. This source needs neither `.env.litestream` nor
 `litestream.yml`, and no container gets network access.
 
 The Drive source also checks the [attachments mirror](#attachments-backup)
-against the restored database before booting. It fails if
+against the restored database before booting. The restored image, still
+without network, asks the app's own rule (`AttachmentBackup`) for the keys it
+keeps off Drive and for the ordinary files, newest first, and writes both
+only into the drill's scratch directory. The drill fails if
 `sherpa-backup:perfectcrm/attachments` cannot be listed, if any copy there
-belongs to a held, in-flight, or marked-sensitive file, or if none of the
-200 newest ordinary attachments has a copy. It then downloads the newest
-one that has a copy and compares its MD5 with the checksum the database
-recorded. A restored database without ordinary attachments passes with
-nothing to probe. Output is counts and pass/fail only, never keys or
-filenames. The Litestream source makes no attachment checks.
+belongs to a held, in-flight, or flagged file (the captain's marker or the
+name and type screening), or if the newest ordinary attachment with a copy
+is more than 3 hours older than the newest ordinary attachment (one missed
+hourly run plus the archive's timing). It then downloads that copy and
+compares its MD5 with the checksum the database recorded. A restored
+database without ordinary attachments passes with nothing to probe. Output
+is counts and pass/fail only, never keys or filenames. The Litestream source
+makes no attachment checks. A Drive drill started between 11:45 and 12:20
+UTC can fail on files that reached the archive just before it and are not
+mirrored yet; rerun it after 12:20 UTC.
 
 To verify a candidate script without replacing the installed one, copy it to a
 scratch path and run `sudo bash /tmp/<candidate>/restore-drill.sh /opt/apps/perfectcrm`.

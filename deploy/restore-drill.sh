@@ -96,67 +96,6 @@ for NAME in "${RESTORED_DATABASES[@]}"; do
   echo "Restored $NAME database integrity: ok"
 done
 
-# Drive source only: the attachment mirror must hold no file the restored
-# database says may never be copied (held, in-flight, or flagged), and the
-# newest ordinary file it holds must decrypt to the recorded checksum.
-# Output is counts and pass/fail only, never a key or filename.
-restored_query() {
-  docker run --rm --network none --entrypoint sqlite3 \
-    -v "$WORKDIR:/restore" "$IMAGE" \
-    /restore/production.sqlite3 "$1"
-}
-NEVER_COPY_SQL="SELECT key FROM active_storage_blobs WHERE id IN
-    (SELECT blob_id FROM active_storage_attachments WHERE record_type = 'DocumentHolding')
-  UNION SELECT key FROM document_upload_orphans
-  UNION SELECT key FROM active_storage_blobs WHERE json_type(metadata, '\$.sensitive') NOT IN ('null', 'false');"
-PROBE_SQL="SELECT key, checksum FROM active_storage_blobs
-  WHERE id IN (SELECT blob_id FROM active_storage_attachments WHERE record_type = 'Message' AND name = 'files')
-    AND id NOT IN (SELECT blob_id FROM active_storage_attachments WHERE record_type = 'DocumentHolding')
-    AND key NOT IN (SELECT key FROM document_upload_orphans)
-    AND COALESCE(json_type(metadata, '\$.sensitive'), 'null') IN ('null', 'false')
-    AND checksum IS NOT NULL
-  ORDER BY created_at DESC, id DESC LIMIT 200;"
-if [ "$RESTORE_SOURCE" = drive ]; then
-  DRIVE_ATTACHMENTS=sherpa-backup:perfectcrm/attachments
-  if ! NEVER_COPY="$(restored_query "$NEVER_COPY_SQL")" || ! PROBES="$(restored_query "$PROBE_SQL")"; then
-    echo "Restore drill FAILED: the restored database did not answer the attachment queries." >&2
-    exit 1
-  fi
-  if ! ATTACHMENT_LISTING="$(rclone lsf --files-only "$DRIVE_ATTACHMENTS")"; then
-    echo "Restore drill FAILED: could not list $DRIVE_ATTACHMENTS (has perfectcrm-attachments-backup run?)." >&2
-    exit 1
-  fi
-  LEAKED="$(LC_ALL=C comm -12 <(LC_ALL=C sort -u <<<"$NEVER_COPY") <(LC_ALL=C sort -u <<<"$ATTACHMENT_LISTING") | grep -c . || true)"
-  if [ "$LEAKED" -ne 0 ]; then
-    echo "Restore drill FAILED: $LEAKED Drive attachment copies belong to held or flagged files." >&2
-    exit 1
-  fi
-  CANDIDATES="$(grep -c . <<<"$PROBES" || true)"
-  PROBE_KEY='' PROBE_CHECKSUM=''
-  while IFS='|' read -r KEY CHECKSUM; do
-    if [ -n "$KEY" ] && grep -qxF -- "$KEY" <<<"$ATTACHMENT_LISTING"; then
-      PROBE_KEY="$KEY" PROBE_CHECKSUM="$CHECKSUM"
-      break
-    fi
-  done <<<"$PROBES"
-  if [ "$CANDIDATES" -gt 0 ] && [ -z "$PROBE_KEY" ]; then
-    echo "Restore drill FAILED: none of the $CANDIDATES newest restored attachments has a Drive copy." >&2
-    exit 1
-  fi
-  if [ -n "$PROBE_KEY" ]; then
-    if ! ACTUAL="$(rclone cat "$DRIVE_ATTACHMENTS/$PROBE_KEY" | openssl md5 -binary | base64)" ||
-        [ "$ACTUAL" != "$PROBE_CHECKSUM" ]; then
-      echo "Restore drill FAILED: the newest Drive attachment copy does not match its recorded checksum." >&2
-      exit 1
-    fi
-    echo "Drive attachment copies: $(grep -c . <<<"$ATTACHMENT_LISTING" || true) listed, none held or flagged, checksum probe ok."
-    ATTACHMENTS_RESULT=', Drive attachment copies ok'
-  else
-    echo "Drive attachment copies: none held or flagged; the restored database has no ordinary attachment to probe."
-    ATTACHMENTS_RESULT=', Drive attachment copies ok (nothing to probe)'
-  fi
-fi
-
 # Keep drill-only configuration out of the image and normal production boot.
 # No db:prepare, migrations, seeds, queue recovery, or job supervisor is run.
 cat > "$WORKDIR/boot.rb" <<'RUBY'
@@ -177,12 +116,74 @@ if ARGV.delete("--probe")
   User.connection.execute("PRAGMA query_only = ON")
   User.select(:id).readonly.first!
   puts "Restored User record read (no fields logged)."
+elsif ARGV.delete("--attachment-sets")
+  require "/rails/config/environment"
+  ActiveRecord::Base.connection.execute("PRAGMA query_only = ON")
+  AttachmentBackup.write_drill_sets("/rails/storage")
 else
   ARGV.replace(["server", "-b", "127.0.0.1", "-p", "3000"])
   load "/rails/bin/rails"
 end
 RUBY
 chmod 644 "$WORKDIR/boot.rb"
+
+# Drive source only: the restored image, offline, asks the app's own rule
+# (AttachmentBackup) which keys must never have a Drive copy and which files
+# are ordinary, writing both only into scratch. The mirror must hold none of
+# the first, its newest ordinary copy may be at most FRESHNESS_HOURS older
+# than the newest ordinary file (one missed hourly run plus the archive's
+# timing), and that copy must decrypt to the recorded checksum.
+# Output is counts and pass/fail only, never a key or filename.
+if [ "$RESTORE_SOURCE" = drive ]; then
+  DRIVE_ATTACHMENTS=sherpa-backup:perfectcrm/attachments
+  FRESHNESS_HOURS=3
+  if ! docker run --rm --network none \
+      -e RAILS_ENV=production -e SECRET_KEY_BASE_DUMMY=1 \
+      -v "$WORKDIR:/rails/storage" \
+      --entrypoint ruby "$IMAGE" /rails/storage/boot.rb --attachment-sets ||
+      ! NEVER_COPY="$(<"$WORKDIR/never-copy")" || ! ELIGIBLE="$(<"$WORKDIR/eligible")"; then
+    echo "Restore drill FAILED: the restored database did not answer the attachment queries." >&2
+    exit 1
+  fi
+  if ! ATTACHMENT_LISTING="$(rclone lsf --files-only "$DRIVE_ATTACHMENTS")"; then
+    echo "Restore drill FAILED: could not list $DRIVE_ATTACHMENTS (has perfectcrm-attachments-backup run?)." >&2
+    exit 1
+  fi
+  LEAKED="$(LC_ALL=C comm -12 <(LC_ALL=C sort -u <<<"$NEVER_COPY") <(LC_ALL=C sort -u <<<"$ATTACHMENT_LISTING") | grep -c . || true)"
+  if [ "$LEAKED" -ne 0 ]; then
+    echo "Restore drill FAILED: $LEAKED Drive attachment copies belong to held or flagged files." >&2
+    exit 1
+  fi
+  UNCOPIED=0 NEWEST_AT='' PROBE_KEY='' PROBE_CHECKSUM=''
+  while IFS='|' read -r KEY CHECKSUM CREATED_AT; do
+    [ -n "$KEY" ] || continue
+    NEWEST_AT="${NEWEST_AT:-$CREATED_AT}"
+    if [ $((NEWEST_AT - CREATED_AT)) -gt $((FRESHNESS_HOURS * 3600)) ]; then
+      break
+    fi
+    if grep -qxF -- "$KEY" <<<"$ATTACHMENT_LISTING"; then
+      PROBE_KEY="$KEY" PROBE_CHECKSUM="$CHECKSUM"
+      break
+    fi
+    UNCOPIED=$((UNCOPIED + 1))
+  done <<<"$ELIGIBLE"
+  if [ -n "$NEWEST_AT" ] && [ -z "$PROBE_KEY" ]; then
+    echo "Restore drill FAILED: no Drive copy of a restored attachment within $FRESHNESS_HOURS hours of the newest one ($UNCOPIED without a copy)." >&2
+    exit 1
+  fi
+  if [ -n "$PROBE_KEY" ]; then
+    if ! ACTUAL="$(rclone cat "$DRIVE_ATTACHMENTS/$PROBE_KEY" | openssl md5 -binary | base64)" ||
+        [ "$ACTUAL" != "$PROBE_CHECKSUM" ]; then
+      echo "Restore drill FAILED: the newest Drive attachment copy does not match its recorded checksum." >&2
+      exit 1
+    fi
+    echo "Drive attachment copies: $(grep -c . <<<"$ATTACHMENT_LISTING" || true) listed, none held or flagged, $UNCOPIED newer not copied yet, checksum probe ok."
+    ATTACHMENTS_RESULT=', Drive attachment copies ok'
+  else
+    echo "Drive attachment copies: none held or flagged; the restored database has no ordinary attachment to probe."
+    ATTACHMENTS_RESULT=', Drive attachment copies ok (nothing to probe)'
+  fi
+fi
 
 # Use only the image's base environment and a throwaway Rails session secret.
 # No production volume, integration credentials, host ports, or external network.

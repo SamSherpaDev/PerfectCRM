@@ -1,5 +1,6 @@
 require "test_helper"
 require "rake"
+require "tmpdir"
 
 # The allowlist behind the hourly Drive attachment mirror: only ordinary
 # message files qualify, and held documents never do in any state.
@@ -95,33 +96,41 @@ class AttachmentBackupTest < ActiveSupport::TestCase
     assert_no_match(/itinerary|map|passport|visa/, summary.to_json)
   end
 
-  # deploy/restore-drill.sh checks the Drive mirror with its own SQL against
-  # the restored database; it must keep agreeing with the allowlist here.
-  def drill_sql(name)
-    script = Rails.root.join("deploy/restore-drill.sh").read
-    script[/^#{name}="(.*?)"$/m, 1].gsub("\\$", "$")
-  end
-
-  test "the restore drill's never-copy and probe queries agree with the allowlist" do
-    ordinary = message_file("itinerary.pdf")
+  # deploy/restore-drill.sh reads these two files from a restored database
+  # and fails if any never-copy key has a Drive copy.
+  test "the restore drill's key sets put every held, in-flight, or flagged file in never-copy" do
+    older = travel_to(Time.utc(2026, 11, 12, 9)) { message_file("itinerary.pdf", data: "itinerary bytes") }
+    newer = travel_to(Time.utc(2026, 11, 12, 11)) { message_file("map.png", "image/png", data: "map bytes") }
     renamed = message_file("passport.pdf")
+    typed = message_file("notes.bin", "image/passport-scan")
+    marked = message_file("receipt.pdf")
+    marked.update!(metadata: marked.metadata.merge("sensitive" => true))
     live = holding_file("visa-form.pdf", expires_at: 1.hour.from_now)
     expired = holding_file("ticket.pdf", expires_at: 1.hour.ago)
     orphan = message_file("upload-in-flight.pdf")
     DocumentUploadOrphan.create!(key: orphan.key, service_name: orphan.service_name)
-    marked = message_file("receipt.pdf")
-    marked.update!(metadata: marked.metadata.merge("sensitive" => true))
-    cleared = message_file("cleared.pdf")
-    cleared.update!(metadata: cleared.metadata.merge("sensitive" => false))
+    in_flight = ActiveStorage::Blob.generate_unique_secure_token
+    DocumentUploadOrphan.create!(key: in_flight, service_name: "test")
+    Draft.create!(owner: @client, conversation: @conversation).files.attach(blob("unsent.pdf"))
 
-    never_copy = ActiveRecord::Base.connection.select_values(drill_sql("NEVER_COPY_SQL"))
-    assert_equal [ live, expired, orphan, marked ].map(&:key).sort, never_copy.sort
-    assert_empty never_copy & manifest_keys
+    Dir.mktmpdir do |directory|
+      AttachmentBackup.write_drill_sets(directory)
+      never_copy = File.read(File.join(directory, "never-copy")).lines(chomp: true)
+      assert_equal [ renamed, typed, marked, live, expired, orphan ].map(&:key).push(in_flight).sort, never_copy
+      assert_equal [
+        "#{newer.key}|#{newer.checksum}|#{Time.utc(2026, 11, 12, 11).to_i}",
+        "#{older.key}|#{older.checksum}|#{Time.utc(2026, 11, 12, 9).to_i}"
+      ], File.read(File.join(directory, "eligible")).lines(chomp: true)
+    end
+    assert_equal [ older, newer ].map(&:key).sort, manifest_keys
+  end
 
-    probes = ActiveRecord::Base.connection.select_rows(drill_sql("PROBE_SQL"))
-    assert_equal [ ordinary, renamed, cleared ].map(&:key).sort, probes.map(&:first).sort
-    assert_equal ordinary.checksum, probes.to_h.fetch(ordinary.key)
-    assert_equal [ ordinary, cleared ].map(&:key).sort, manifest_keys
+  test "the restore drill's key sets are empty files without message files" do
+    Dir.mktmpdir do |directory|
+      AttachmentBackup.write_drill_sets(directory)
+      assert_equal "", File.read(File.join(directory, "never-copy"))
+      assert_equal "", File.read(File.join(directory, "eligible"))
+    end
   end
 
   test "rake tasks print the manifest and summary without filenames" do

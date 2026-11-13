@@ -88,9 +88,6 @@ drive_keys() {
 }
 rclone mkdir "$DEST"
 drive_keys > "$WORK/drive"
-if [ "$COUNT" -eq 0 ] && [ -s "$WORK/drive" ]; then
-  fail "the manifest is empty while Drive holds copies; refusing to delete them."
-fi
 
 # Deletes first, so a later upload failure never delays a removal. Only the
 # database drives deletion: a key missing from the bucket stays on Drive.

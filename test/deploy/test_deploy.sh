@@ -352,13 +352,13 @@ CONF
     fi
   done
 
-  # An empty allowlist against a non-empty Drive means the wrong database.
+  # Retention is current state only: an empty allowlist removes every copy.
   manifest
-  if ! remote_mirror && ! grep -qE '^(copy|delete) ' "$work/rclone.log" && drive_hashes | cmp -s "$work/before" - &&
-      grep -qF 'manifest is empty while Drive holds copies' "$work/out.log"; then
-    pass "attachment mirror refuses an empty manifest while Drive holds copies"
+  if remote_mirror && [ -z "$(drive_listing)" ] && ! grep -q '^copy ' "$work/rclone.log" &&
+      grep -qF 'kept 0, new 0, removed 3, not in bucket 0.' "$work/out.log"; then
+    pass "attachment mirror deletes every copy when the manifest is empty"
   else
-    fail "attachment mirror emptied Drive from an empty manifest: $(cat "$work/out.log")"
+    fail "attachment mirror kept copies after an empty manifest: $(cat "$work/out.log") $(drive_listing)"
   fi
 
   # Missing access settings fail before any work.
