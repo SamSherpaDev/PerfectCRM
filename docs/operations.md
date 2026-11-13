@@ -325,8 +325,10 @@ be copied, and held documents never qualify, so their 24-hour deletion
   before any Drive call. The job then permanently deletes copies whose keys
   left the allowlist, uploads new keys from the bucket, and decrypts each new
   upload on Drive with `rclone cryptcheck --one-way` to compare it with the
-  bucket's bytes. A key the bucket lacks is skipped and counted. Each run
-  logs one line of counts only:
+  bucket's bytes. If the upload or that check fails, the run permanently
+  deletes that run's new copies and fails, so the next run uploads and checks
+  them again; copies from earlier runs stay. A key the bucket lacks is skipped
+  and counted. Each run logs one line of counts only:
   `<UTC time> Attachments backup: kept K, new N, removed G, not in bucket M.`
 - **Current state only.** The folder mirrors today's allowlist. A file
   removed from the CRM, sent to PerfectBook, or newly flagged loses its copy

@@ -97,9 +97,15 @@ if [ -s "$WORK/gone" ]; then
   rclone delete --drive-use-trash=false --files-from "$WORK/gone" "$DEST"
 fi
 if [ -s "$WORK/new" ]; then
-  rclone copy --files-from "$WORK/new" --no-traverse --ignore-existing "$SRC" "$DEST"
-  # Decrypts what landed on Drive and compares it with the bucket's bytes.
-  rclone cryptcheck --one-way --files-from "$WORK/new" "$SRC" "$DEST"
+  # cryptcheck decrypts what landed on Drive and compares it with the bucket's
+  # bytes. A copy that did not pass is removed, so the next run uploads and
+  # checks it again instead of keeping it unverified.
+  if ! rclone copy --files-from "$WORK/new" --no-traverse --ignore-existing "$SRC" "$DEST" ||
+      ! rclone cryptcheck --one-way --files-from "$WORK/new" "$SRC" "$DEST"; then
+    rclone delete --drive-use-trash=false --files-from "$WORK/new" "$DEST" ||
+      fail "new copies did not upload or verify, and removing them failed."
+    fail "new copies did not upload or verify; removed them for the next run to retry."
+  fi
 fi
 
 drive_keys > "$WORK/after"

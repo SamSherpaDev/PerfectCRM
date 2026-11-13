@@ -191,7 +191,7 @@ CONF
 # the attachments bucket, a docker shim prints the app's manifest, and an
 # rclone shim logs every call before running the real rclone.
 attachments_backup_checks() {
-  local work drive bucket real_rclone listing held ordinary photo letter lost added call
+  local work drive bucket real_rclone listing held ordinary photo letter lost added late call step before after fresh
   work="$(mktemp -d)"
   drive="$work/drive"
   bucket="$work/bucket"
@@ -218,6 +218,12 @@ if [ -n "\${RCLONE_CONFIG_APPKEYS_TYPE:-}" ]; then
     RCLONE_CONFIG_APPKEYS_ACCESS_KEY_ID RCLONE_CONFIG_APPKEYS_SECRET_ACCESS_KEY
   export RCLONE_CONFIG_APPKEYS_TYPE=local
 fi
+# FAIL_STEP=copy uploads and then exits nonzero, as a copy that fails partway
+# does; FAIL_STEP=cryptcheck reports a failed check.
+case "\$1:\${FAIL_STEP:-}" in
+  copy:copy) "$real_rclone" "\$@"; exit 1 ;;
+  cryptcheck:cryptcheck) exit 1 ;;
+esac
 exec "$real_rclone" "\$@"
 SHIM
   chmod 700 "$work/bin/docker" "$work/bin/rclone"
@@ -243,7 +249,8 @@ CONF
   letter="$(key letter 4)"
   lost="$(key lost 5)"
   added="$(key added 6)"
-  for name in "$ordinary" "$photo" "$held" "$letter" "$added"; do
+  late="$(key late 7)"
+  for name in "$ordinary" "$photo" "$held" "$letter" "$added" "$late"; do
     printf 'attachment bytes of %s\n' "$name" > "$bucket/$name"
   done
   manifest() {
@@ -360,6 +367,39 @@ CONF
   else
     fail "attachment mirror kept copies after an empty manifest: $(cat "$work/out.log") $(drive_listing)"
   fi
+
+  # An upload that fails or does not verify is removed and retried next run;
+  # copies already on Drive before the failed run stay.
+  manifest "$letter"
+  remote_mirror || fail "attachment mirror setup run failed: $(cat "$work/out.log")"
+  for step in cryptcheck copy; do
+    if [ "$step" = cryptcheck ]; then
+      manifest "$letter" "$photo" "$added"
+      before="$letter"
+      after="$(printf '%s\n' "$added" "$letter" "$photo")"
+      fresh=2
+    else
+      manifest "$letter" "$photo" "$added" "$late"
+      before="$(printf '%s\n' "$added" "$letter" "$photo")"
+      after="$(printf '%s\n' "$added" "$late" "$letter" "$photo")"
+      fresh=1
+    fi
+    if ! remote_mirror FAIL_STEP="$step" && grep -q "^$step " "$work/rclone.log" &&
+        grep -q '^delete .*--drive-use-trash=false' "$work/rclone.log" && [ "$(drive_listing)" = "$before" ] &&
+        grep -qxF 'Attachments backup FAILED: new copies did not upload or verify; removed them for the next run to retry.' "$work/out.log" &&
+        ! grep -qE 'added|late|letter|photo' "$work/out.log"; then
+      pass "attachment mirror removes this run's copies when $step fails and keeps older ones"
+    else
+      fail "attachment mirror kept unverified copies after a failed $step: $(cat "$work/out.log") $(drive_listing)"
+    fi
+    if remote_mirror && [ "$(drive_listing)" = "$after" ] && grep -q '^copy ' "$work/rclone.log" &&
+        grep -q '^cryptcheck ' "$work/rclone.log" &&
+        grep -qF "new $fresh, removed 0, not in bucket 0." "$work/out.log"; then
+      pass "attachment mirror uploads and checks again after a failed $step"
+    else
+      fail "attachment mirror did not retry after a failed $step: $(cat "$work/out.log") $(drive_listing)"
+    fi
+  done
 
   # Missing access settings fail before any work.
   manifest "$ordinary"
