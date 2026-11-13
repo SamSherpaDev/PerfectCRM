@@ -137,11 +137,12 @@ chmod 644 "$WORKDIR/boot.rb"
 if [ "$RESTORE_SOURCE" = drive ]; then
   DRIVE_ATTACHMENTS=sherpa-backup:perfectcrm/attachments
   FRESHNESS_HOURS=3
+  # Read with cat: under set -e, bash 5.2 exits outright when $(<file) fails.
   if ! docker run --rm --network none \
       -e RAILS_ENV=production -e SECRET_KEY_BASE_DUMMY=1 \
       -v "$WORKDIR:/rails/storage" \
       --entrypoint ruby "$IMAGE" /rails/storage/boot.rb --attachment-sets ||
-      ! NEVER_COPY="$(<"$WORKDIR/never-copy")" || ! ELIGIBLE="$(<"$WORKDIR/eligible")"; then
+      ! NEVER_COPY="$(cat -- "$WORKDIR/never-copy")" || ! ELIGIBLE="$(cat -- "$WORKDIR/eligible")"; then
     echo "Restore drill FAILED: the restored database did not answer the attachment queries." >&2
     exit 1
   fi
