@@ -1488,6 +1488,9 @@ leaves New (marked Potential, Unsure, or spam, quoted, or archived), is
 re-linked to another record, or its thread is ignored.
 
 Ordinary email attachments are part of the conversation and stay in CRM storage.
+An hourly job also keeps an encrypted copy of each ordinary message attachment
+in the Drive backup; held documents never get one
+([Attachments backup](docs/operations.md#attachments-backup)).
 There is no attachment-count cap. On import, files over 25 MB are skipped with a visible
 message notice. A link-only attachment (a cloud file shared as a link, with no
 bytes to copy) and a single attachment Microsoft refuses to hand over get a
@@ -1528,6 +1531,8 @@ Every stored ordinary attachment still offers **Remove from CRM, collect in
 PerfectBook** if the captain identifies a sensitive file that screening missed.
 This deletes its stored file and removes every message or draft attachment
 sharing that file, records an activity event, and leaves a follow-up note.
+A file removed from the CRM or sent to PerfectBook loses its Drive backup copy
+on the next hourly run, normally within an hour.
 Storage failures preserve the reference and triage retry path. Only the
 explicit **Send to PerfectBook** action uploads bytes to PerfectBook; neither
 holding nor removing a file changes the mailbox.

@@ -1,0 +1,11 @@
+[Unit]
+Description=PerfectCRM hourly encrypted Drive attachment mirror
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+Environment=RCLONE_CONFIG=/root/.config/rclone/rclone.conf
+ExecStart=/bin/bash -c 'set -ae; . /opt/apps/perfectcrm/.env.nightly-backup; exec /opt/apps/perfectcrm/drive-attachments-backup.sh'
+StandardOutput=append:/var/log/perfectcrm-attachments-backup.log
+StandardError=append:/var/log/perfectcrm-attachments-backup.log

@@ -40,3 +40,6 @@
 
 # Worktree-local installed gems
 /vendor/bundle/
+
+# Python bytecode from the deploy tooling tests.
+__pycache__/

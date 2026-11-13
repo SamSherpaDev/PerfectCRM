@@ -25,6 +25,8 @@ fi
 WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/perfectcrm-restore-drill.XXXXXX")"
 CONTAINER="${WORKDIR##*/}"
 BOOT_ATTEMPTED=false
+ATTACHMENTS_RESULT=''
+# shellcheck disable=SC2329 # Runs from the EXIT trap below.
 cleanup() {
   local status=$?
   trap - EXIT
@@ -39,7 +41,7 @@ cleanup() {
     status=1
   fi
   if [ "$status" -eq 0 ]; then
-    echo "Restore drill passed: integrity ok, /up HTTP 200, restored User read; container and scratch removed."
+    echo "Restore drill passed: integrity ok$ATTACHMENTS_RESULT, /up HTTP 200, restored User read; container and scratch removed."
   fi
   exit "$status"
 }
@@ -114,12 +116,76 @@ if ARGV.delete("--probe")
   User.connection.execute("PRAGMA query_only = ON")
   User.select(:id).readonly.first!
   puts "Restored User record read (no fields logged)."
+elsif ARGV.delete("--attachment-sets")
+  require "/rails/config/environment"
+  ActiveRecord::Base.connection.execute("PRAGMA query_only = ON")
+  AttachmentBackup.write_drill_sets("/rails/storage")
 else
   ARGV.replace(["server", "-b", "127.0.0.1", "-p", "3000"])
   load "/rails/bin/rails"
 end
 RUBY
 chmod 644 "$WORKDIR/boot.rb"
+
+# Drive source only: the restored image, offline, asks the app's own rule
+# (AttachmentBackup) which keys must never have a Drive copy and which files
+# are ordinary, writing both only into scratch. The mirror must hold none of
+# the first, its newest ordinary copy may be at most FRESHNESS_HOURS older
+# than the newest ordinary file (one missed hourly run plus the archive's
+# timing), and that copy must decrypt to the recorded checksum.
+# Output is counts and pass/fail only, never a key or filename.
+if [ "$RESTORE_SOURCE" = drive ]; then
+  DRIVE_ATTACHMENTS=sherpa-backup:perfectcrm/attachments
+  FRESHNESS_HOURS=3
+  # Read with cat: under set -e, bash 5.2 exits outright when $(<file) fails.
+  if ! docker run --rm --network none \
+      -e RAILS_ENV=production -e SECRET_KEY_BASE_DUMMY=1 \
+      -v "$WORKDIR:/rails/storage" \
+      --entrypoint ruby "$IMAGE" /rails/storage/boot.rb --attachment-sets ||
+      ! NEVER_COPY="$(cat -- "$WORKDIR/never-copy")" || ! ELIGIBLE="$(cat -- "$WORKDIR/eligible")"; then
+    echo "Restore drill FAILED: the restored database did not answer the attachment queries." >&2
+    exit 1
+  fi
+  if ! ATTACHMENT_LISTING="$(rclone lsf --files-only "$DRIVE_ATTACHMENTS")"; then
+    echo "Restore drill FAILED: could not list $DRIVE_ATTACHMENTS (has perfectcrm-attachments-backup run?)." >&2
+    exit 1
+  fi
+  LEAKED="$(LC_ALL=C comm -12 <(LC_ALL=C sort -u <<<"$NEVER_COPY") <(LC_ALL=C sort -u <<<"$ATTACHMENT_LISTING") | grep -c . || true)"
+  if [ "$LEAKED" -ne 0 ]; then
+    echo "Restore drill FAILED: $LEAKED Drive attachment copies belong to held or flagged files." >&2
+    exit 1
+  fi
+  UNCOPIED=0 NEWEST_AT='' PROBE_KEY='' PROBE_CHECKSUM=''
+  while IFS='|' read -r KEY CHECKSUM CREATED_AT; do
+    [ -n "$KEY" ] || continue
+    NEWEST_AT="${NEWEST_AT:-$CREATED_AT}"
+    if [ $((NEWEST_AT - CREATED_AT)) -gt $((FRESHNESS_HOURS * 3600)) ]; then
+      break
+    fi
+    if grep -qxF -- "$KEY" <<<"$ATTACHMENT_LISTING"; then
+      PROBE_KEY="$KEY" PROBE_CHECKSUM="$CHECKSUM"
+      break
+    fi
+    UNCOPIED=$((UNCOPIED + 1))
+  done <<<"$ELIGIBLE"
+  if [ -n "$NEWEST_AT" ] && [ -z "$PROBE_KEY" ]; then
+    echo "Restore drill FAILED: no Drive copy of a restored attachment within $FRESHNESS_HOURS hours of the newest one ($UNCOPIED without a copy)." >&2
+    echo "If the newest restored attachments were removed from the CRM or sent to PerfectBook after the archive was taken, the backup can still be healthy; rerun after the next daily archive." >&2
+    exit 1
+  fi
+  if [ -n "$PROBE_KEY" ]; then
+    if ! ACTUAL="$(rclone cat "$DRIVE_ATTACHMENTS/$PROBE_KEY" | openssl md5 -binary | base64)" ||
+        [ "$ACTUAL" != "$PROBE_CHECKSUM" ]; then
+      echo "Restore drill FAILED: the newest Drive attachment copy does not match its recorded checksum." >&2
+      exit 1
+    fi
+    echo "Drive attachment copies: $(grep -c . <<<"$ATTACHMENT_LISTING" || true) listed, none held or flagged, $UNCOPIED newer not copied yet, checksum probe ok."
+    ATTACHMENTS_RESULT=', Drive attachment copies ok'
+  else
+    echo "Drive attachment copies: none held or flagged; the restored database has no ordinary attachment to probe."
+    ATTACHMENTS_RESULT=', Drive attachment copies ok (nothing to probe)'
+  fi
+fi
 
 # Use only the image's base environment and a throwaway Rails session secret.
 # No production volume, integration credentials, host ports, or external network.

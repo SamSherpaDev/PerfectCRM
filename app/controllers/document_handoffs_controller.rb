@@ -27,6 +27,7 @@ class DocumentHandoffsController < ApplicationController
       return render :new, status: :unprocessable_entity
     end
 
+    mark_source_sensitive!
     result = client.upload_traveler_document(booking_ref: booking.ref,
       traveler_id: traveler["id"], file: download_source, filename: @filename,
       content_type: @content_type, document_type: document_type, upload_id: upload_id)
@@ -76,6 +77,16 @@ class DocumentHandoffsController < ApplicationController
     else
       redirect_to inbox_path, alert: "That file is no longer waiting for a hand-off."
     end
+  end
+
+  # A file the captain sends to PerfectBook is sensitive from this point on,
+  # so a failed upload or storage delete still keeps it out of the Drive
+  # attachment backup (AttachmentBackup) and shows the sensitive badge.
+  def mark_source_sensitive!
+    return unless @attachment
+
+    blob = @attachment.blob
+    blob.update!(metadata: blob.metadata.merge("sensitive" => true))
   end
 
   def upload_id

@@ -31,7 +31,8 @@ are not repeated here. This file covers only what differs for the CRM.
    `deploy/Caddyfile.snippet` to the system `Caddyfile` and reload Caddy.
    Into `/opt/apps/perfectcrm`: `deploy/compose.yml` as `compose.yml`,
    `deploy/litestream.yml`, `deploy/deploy.sh`, `deploy/nightly-backup.sh`,
-   `deploy/drive-backup.sh`, `deploy/restore-drill.sh`, `deploy/bucket-smoke.sh`. Create `.env.app` and
+   `deploy/drive-backup.sh`, `deploy/drive-attachments-backup.sh`, `deploy/restore-drill.sh`,
+   `deploy/bucket-smoke.sh`. Create `.env.app` and
    `.env.litestream` from `.env.app.example` and `.env.litestream.example`,
    root-owned mode 600. Then verify bucket access with
    `./bucket-smoke.sh` - it lists both buckets with the same variables the
@@ -71,6 +72,7 @@ are not repeated here. This file covers only what differs for the CRM.
 | `ALLOWED_GOOGLE_EMAILS` | [Google sign-in allowlist](../README.md#google-sign-in) | `.env.app`, password manager |
 | `SPACES_*` (attachments bucket + keys) | Step 2 | `.env.app`, password manager |
 | `LITESTREAM_*`, backup-bucket `SPACES_ENDPOINT`/`SPACES_REGION` | Step 2 | `.env.litestream`, password manager |
+| `perfectcrm-attachments` rclone remote (read-only attachments-bucket token), `ATTACHMENTS_BUCKET` | [Attachments backup](#attachments-backup), `ATTACHMENTS_ACCESS=remote` only | Root's rclone configuration and `.env.nightly-backup`, password manager |
 | `SMTP_USERNAME`, `SMTP_PASSWORD` | Microsoft 365 SMTP credentials | `.env.app`, password manager |
 | `MS_GRAPH_CLIENT_ID`, `MS_GRAPH_CLIENT_SECRET`, `MS_GRAPH_TENANT_ID` | [Microsoft 365 mailbox](#microsoft-365-mailbox) | `.env.app`, password manager |
 | `CHANNEL_CHECKS_TOKEN` | Owner-created bearer credential for the channels manager | `.env.app`, password manager |
@@ -221,9 +223,11 @@ Root cron runs PerfectBook at 03:00 and PerfectCRM at 03:15 in server time
 
 The root-owned, mode-600 `/opt/apps/perfectcrm/.env.nightly-backup` supplies
 `BACKUP_RCLONE_REMOTE=perfectcrm-backups`, `LITESTREAM_BUCKET`, and
-`IMAGE_TAG=latest` (the deployment's current image tag). `HEALTHCHECKS_URL`
-stays unset because the owner chose not to configure backup alerts. If that
-choice changes, its optional ping URL belongs in this environment file.
+`IMAGE_TAG=latest` (the deployment's current image tag), plus the
+`ATTACHMENTS_*` settings in [Attachments backup](#attachments-backup).
+`HEALTHCHECKS_URL` stays unset because the owner chose not to configure
+backup alerts. If that choice changes, its optional ping URL belongs in this
+environment file.
 Check `/var/log/perfectcrm-nightly-backup.log` as root for backup results
 and the expected warning about the missing ping. PerfectBook uses its
 own `.env.nightly-backup`, remote, and `/var/log/perfectbook-nightly-backup.log`
@@ -262,10 +266,9 @@ perfectcrm/monthly/production-YYYY-MM-DD.sqlite3.gz      (and production_queue-)
   already on Drive gets no second one.
 - **Reruns.** A copy already on Drive for that day is left untouched, so a
   same-day rerun uploads nothing and takes no new snapshot.
-- **Attachments are not copied.** Ordinary CRM attachments have no Drive copy
-  yet: only the R2 attachments bucket holds them. Held identity documents
-  share that bucket and expire 24 hours after ingestion (README, "Mail"), so
-  a Drive copy kept for 30 days or more would break that promise.
+- **No file contents.** The archives hold attachment records only, never
+  file bytes. Ordinary attachments have their own hourly mirror
+  ([Attachments backup](#attachments-backup)).
 
 `deploy/perfectcrm-drive-backup.timer` starts
 `deploy/perfectcrm-drive-backup.service` daily at 11:45 UTC (03:45 Pacific
@@ -298,6 +301,143 @@ minute-level layer); the server's own Google access can permanently delete
 what it wrote, so the locked R2 copies stay; and losing the encryption key
 loses every Drive copy.
 
+### Attachments backup
+
+An hourly encrypted mirror of ordinary CRM email attachments in the same
+Drive backup, beside (never instead of) the R2 attachments bucket. Ordinary
+attachments and held identity documents share that bucket under random keys,
+so the job never lists the bucket: the app's database alone decides what may
+be copied, and held documents never qualify, so their 24-hour deletion
+(README, "Mail") still holds.
+
+- **Allowlist.** `bin/rails backup:attachment_manifest`
+  (`AttachmentBackup.manifest`) prints the key of every file attached to a
+  CRM message, except held documents in any state (live, expired, a failed
+  purge, or an upload still in flight), files marked potentially sensitive
+  (which includes every file sent to PerfectBook), files whose name or type
+  the import screening (`Message.sensitive_attachment?`) flags, and keys
+  outside Active Storage's format. Draft-only files and the signature logo
+  are not message files and are not copied. The output is a header, keys,
+  and an `end N` trailer, never filenames.
+- **Layout.** Inside the `sherpa-backup` crypt remote each file is one object
+  named by its blob key, `perfectcrm/attachments/<key>`, so Drive shows only
+  scrambled names. The key is also the object's name in the bucket.
+- **Each run.** The manifest must match its format exactly; a stray log
+  line, a missing trailer, a count mismatch, or a bad key fails the run
+  before any Drive call. The job then permanently deletes copies whose keys
+  left the allowlist, uploads new keys from the bucket, and decrypts each new
+  upload on Drive with `rclone cryptcheck --one-way` to compare it with the
+  bucket's bytes. If the upload or that check fails, the run permanently
+  deletes that run's new copies and fails, so the next run uploads and checks
+  them again; copies from earlier runs stay. A key the bucket lacks is skipped
+  and counted. Each run logs one line of counts only:
+  `<UTC time> Attachments backup: kept K, new N, removed G, not in bucket M.`
+- **Current state only.** The folder mirrors today's allowlist. A file
+  removed from the CRM, sent to PerfectBook, or newly flagged loses its copy
+  on the next successful run, normally within an hour; an empty allowlist
+  removes every copy. Deletion uses `--drive-use-trash=false` on this path
+  only (database pruning keeps the trash), and copies are never overwritten,
+  so Drive keeps no trash entry or older revision. Anything Google keeps after a delete is encrypted. The
+  mailbox keeps the original messages.
+- **Rule changes.** A widened name or type rule drops matching stored files
+  on the next run. A rule that needs the file bytes is not re-applied to
+  stored files; it needs a one-off rescreen that marks matching blobs
+  sensitive (see the comment on `Message.sensitive_attachment?`).
+
+`deploy/perfectcrm-attachments-backup.timer` starts the oneshot
+`deploy/perfectcrm-attachments-backup.service` every hour at minute 20 UTC,
+clear of the 11:30 and 11:45 UTC database jobs that use the same Google
+sign-in. `Persistent=false`, and a oneshot never overlaps itself, so a long
+first run only absorbs its own later ticks. The service reuses
+`.env.nightly-backup`, points rclone at root's configuration with
+`RCLONE_CONFIG`, and appends to `/var/log/perfectcrm-attachments-backup.log`.
+Run it only through systemd (`sudo systemctl start
+perfectcrm-attachments-backup.service`), never the script directly.
+
+**Bucket read access.** The host's backup credentials reach only the backup
+bucket, so the job needs read access to the attachments bucket.
+`ATTACHMENTS_ACCESS` in `.env.nightly-backup` selects how, and the job
+refuses to run until it is set. The owner chooses one:
+
+- `ATTACHMENTS_ACCESS=remote`: a `perfectcrm-attachments` remote in root's
+  rclone configuration holding a Cloudflare R2 API token limited to "Object
+  Read only" on the attachments bucket, plus `ATTACHMENTS_BUCKET=<attachments
+  bucket name>` in `.env.nightly-backup`. The job can then never change or
+  delete live files. The owner enters the token on the server with this
+  command; the values never appear on screen or in command arguments, and the
+  endpoint is copied from the existing `perfectcrm-backups` remote:
+
+  ```sh
+  sudo bash -c 'set -eu; conf=/root/.config/rclone/rclone.conf
+  ! grep -q "^\[perfectcrm-attachments\]" "$conf" || { echo "perfectcrm-attachments already exists." >&2; exit 1; }
+  endpoint="$(sed -n "/^\[perfectcrm-backups\]/,/^\[/s/^endpoint *= *//p" "$conf")"
+  [ -n "$endpoint" ] || { echo "perfectcrm-backups has no endpoint." >&2; exit 1; }
+  read -rsp "Read-only access key ID: " id; echo
+  read -rsp "Read-only secret access key: " secret; echo
+  printf "\n[perfectcrm-attachments]\ntype = s3\nprovider = Cloudflare\naccess_key_id = %s\nsecret_access_key = %s\nendpoint = %s\nno_check_bucket = true\n" "$id" "$secret" "$endpoint" >> "$conf"'
+  ```
+
+  Then `sudo rclone lsf --max-depth 1 perfectcrm-attachments:<bucket> | wc -l`
+  must print more than 0, and a test write such as
+  `echo probe | sudo rclone rcat perfectcrm-attachments:<bucket>/permission-probe`
+  must fail. If the write succeeds, the token is not read-only: delete the
+  probe object and replace the token.
+- `ATTACHMENTS_ACCESS=app-keys`: the app's existing read-write attachment
+  keys (`SPACES_ENDPOINT`, `SPACES_REGION`, `SPACES_BUCKET`,
+  `SPACES_ACCESS_KEY_ID`, `SPACES_SECRET_ACCESS_KEY` in `.env.app`), as
+  `bucket-smoke.sh` uses them. No owner step, but a backup job then holds
+  delete rights over live attachments. The script reads only those lines as
+  data, never sources `.env.app`, and hands them to rclone through its
+  environment.
+
+**Install and enable**, once the database Drive backup runs and the new image
+is deployed. Install the new `restore-drill.sh` with the job: its Drive source
+fails until the first attachments run completes.
+
+```sh
+sudo install -m 755 drive-attachments-backup.sh restore-drill.sh /opt/apps/perfectcrm/
+sudo install -m 644 perfectcrm-attachments-backup.service perfectcrm-attachments-backup.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+```
+
+Before enabling, set the access option and check the size. The eligible bytes
+are about what the mirror adds to Drive, which shares the owner's Google
+storage with PerfectBook's documents, both apps' database archives, Gmail,
+and Photos. If they exceed half the free space, stop and ask the owner about
+storage. If `rclone about` is refused under the `drive.file` scope, read the
+free space in Drive's web settings.
+
+```sh
+sudo docker exec -e RAILS_LOG_LEVEL=error perfectcrm-app bin/rails backup:attachment_summary
+sudo rclone about sherpa-drive:
+sudo systemctl enable --now perfectcrm-attachments-backup.timer
+sudo systemctl start --no-block perfectcrm-attachments-backup.service
+```
+
+The summary prints counts and bytes only (`eligible_files`, `eligible_bytes`,
+`held_files`, `flagged_files`, `unexpected_key_files`). When the first run
+ends, `systemctl show perfectcrm-attachments-backup.service -p Result -p
+ExecMainStatus` must read `success` and `0`; `sudo rclone lsf --files-only
+sherpa-backup:perfectcrm/attachments | wc -l` should match `eligible_files`,
+give or take files that arrived since; and the next hourly log line should
+show 0 new and 0 removed. Then run the Drive drill
+([Restore drill](#restore-drill)).
+
+**Restore.** Copy the mirror back into the bucket with a remote that can
+write to it: `rclone copy sherpa-backup:perfectcrm/attachments
+<write remote>:<bucket>`. Active Storage uses each key unchanged as the
+object name, so restored files land where the database expects them. Before
+restoring a production database from any backup, stop
+`perfectcrm-attachments-backup.timer` and keep it stopped until the data is
+reconciled; otherwise the older database prunes the copies of newer files.
+Those files are still in R2 and upload again once the timer runs.
+
+Limits: there are no alerts (the owner's choice), so if the job breaks, for
+example because the Google sign-in is revoked, copies of files removed during
+the outage stay on Drive, encrypted, until it runs again. A sensitive file
+the screening misses is copied, just as it is stored in R2, and the captain's
+removal reaches Drive within the hour.
+
 ## Restore drill
 
 Run quarterly and once before trusting backups. On the VPS, with the deployed
@@ -319,6 +459,30 @@ archive or one that does not download and decompress fails the drill before
 any boot. Both databases must pass the integrity check; the boot and record
 probe below are the same. This source needs neither `.env.litestream` nor
 `litestream.yml`, and no container gets network access.
+
+The Drive source also checks the [attachments mirror](#attachments-backup)
+against the restored database before booting. The restored image, still
+without network, asks the app's own rule (`AttachmentBackup`) for the keys it
+keeps off Drive and for the ordinary files, newest first, and writes both
+only into the drill's scratch directory. The drill fails if
+`sherpa-backup:perfectcrm/attachments` cannot be listed, if any copy there
+belongs to a held, in-flight, or flagged file (the captain's marker or the
+name and type screening), or if the newest ordinary attachment with a copy
+is more than 3 hours older than the newest ordinary attachment (one missed
+hourly run plus the archive's timing). It then downloads that copy and
+compares its MD5 with the checksum the database recorded. A restored
+database without ordinary attachments passes with nothing to probe. Output
+is counts and pass/fail only, never keys or filenames. The Litestream source
+makes no attachment checks.
+
+The freshness check compares the archive with today's mirror and cannot see
+production, so it can fail on a healthy backup in two cases. A Drive drill
+started between 11:45 and 12:20 UTC can fail on files that reached the
+archive just before it and are not mirrored yet; rerun it after 12:20 UTC.
+And if the newest restored attachments were removed from the CRM or sent to
+PerfectBook after the archive was taken, the next hourly run deleted their
+copies as designed; the failure says so, and the drill should be rerun after
+the next daily archive.
 
 To verify a candidate script without replacing the installed one, copy it to a
 scratch path and run `sudo bash /tmp/<candidate>/restore-drill.sh /opt/apps/perfectcrm`.
@@ -364,10 +528,14 @@ there is no manual container cleanup after a successful run. If Docker or the
 filesystem prevents cleanup, resolve the reported failure and remove the named
 container/directory before repeating the drill.
 
-This is an offline primary-database boot test. It does not verify signed-in
-pages, encryption-key recovery, queue recovery, or attachment availability.
-Those require a separately planned acceptance check; production credentials,
+This is an offline primary-database boot test. Apart from the Drive source's
+attachments mirror probe, it does not verify signed-in pages, encryption-key
+recovery, queue recovery, or attachment availability in the bucket. Those
+require a separately planned acceptance check; production credentials,
 network access, and attachment bucket reads are intentionally outside this drill.
+The drill never writes production data, so the attachments timer may keep
+running during it; stop the timer only before a real production restore
+([Attachments backup](#attachments-backup), "Restore").
 
 ## Adding another app to this server
 
