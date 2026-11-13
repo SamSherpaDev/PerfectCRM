@@ -945,6 +945,15 @@
 .attachment-row {
   @apply flex flex-wrap items-center gap-2 rounded-control bg-band px-3 py-2 text-[12.5px];
 }
+/* The file name takes its own line and wraps, so a badge or the actions
+   beside it never squeeze it to a few characters. */
+.attachment-name {
+  @apply flex min-w-0 basis-full items-start gap-2;
+  overflow-wrap: anywhere;
+}
+.attachment-name > svg {
+  @apply mt-[2px] shrink-0;
+}
 .triage-card {
   @apply rounded-card border border-warn-mark bg-warn-tint px-5 py-4 text-sm;
 }

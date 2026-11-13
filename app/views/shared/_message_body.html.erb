@@ -34,10 +34,12 @@
     <ul class="thread-attachments" aria-label="Attachments">
       <% files.each do |file| %>
         <li class="attachment-row">
-          <%= render "shared/icon", name: :copy, class: "h-3.5 w-3.5" %>
-          <span class="min-w-0 flex-1 truncate"><%= file.filename %> · <%= number_to_human_size(file.byte_size) %></span>
-          <%= link_to "Download", attachment_path(file.id), class: "link text-xs" %>
+          <span class="attachment-name">
+            <%= render "shared/icon", name: :copy, class: "h-3.5 w-3.5" %>
+            <span><%= file.filename %> <span class="whitespace-nowrap">· <%= number_to_human_size(file.byte_size) %></span></span>
+          </span>
           <% if file.blob.metadata["sensitive"] %><%= badge "Potentially sensitive", :warning %><% end %>
+          <%= link_to "Download", attachment_path(file.id), class: "link text-xs" %>
           <%= link_to "Send to PerfectBook", new_document_handoff_path(attachment_id: file.id), class: "link text-xs" %>
           <%= button_to "Remove from CRM, collect in PerfectBook", move_to_perfectbook_attachment_path(file.id), method: :post, class: "btn-ghost btn btn-sm" %>
         </li>
