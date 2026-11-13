@@ -346,6 +346,25 @@ exec /bin/rm "$@"
                     self.assertNotIn(key, result.stdout + result.stderr)
                 self.assertEqual(scratch, [])
 
+    def test_newest_attachment_removed_after_the_archive_fails_with_the_rerun_advice(self):
+        # The archive holds NEWEST and an ordinary file six hours older. The
+        # captain then sent NEWEST to PerfectBook, and the next hourly run
+        # deleted its copy, so today's mirror holds only the older file.
+        rows = eligible_rows((NEWEST, 0), (OLDER, 6 * HOUR))
+        result, calls, scratch, _ = self.run_drill(restore_source='drive', eligible_rows=rows,
+                                                   attachment_listing=f'{OLDER}\n')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('no Drive copy of a restored attachment within 3 hours of the newest one (1 without a copy)',
+                      result.stderr)
+        self.assertIn('If the newest restored attachments were removed from the CRM or sent to PerfectBook '
+                      'after the archive was taken, the backup can still be healthy; rerun after the next '
+                      'daily archive.', result.stderr)
+        self.assertNotIn('Restore drill passed', result.stdout)
+        self.assertFalse(any(call[:2] == ['run', '-d'] for call in calls))
+        for key in (NEWEST, OLDER):
+            self.assertNotIn(key, result.stdout + result.stderr)
+        self.assertEqual(scratch, [])
+
     def test_drive_copy_exactly_three_hours_older_than_the_newest_passes(self):
         rows = eligible_rows((NEWEST, 0), (OLDER, 3 * HOUR), (OLDEST, 30 * 24 * HOUR))
         result, _, _, _ = self.run_drill(restore_source='drive', eligible_rows=rows)

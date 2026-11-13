@@ -169,6 +169,7 @@ if [ "$RESTORE_SOURCE" = drive ]; then
   done <<<"$ELIGIBLE"
   if [ -n "$NEWEST_AT" ] && [ -z "$PROBE_KEY" ]; then
     echo "Restore drill FAILED: no Drive copy of a restored attachment within $FRESHNESS_HOURS hours of the newest one ($UNCOPIED without a copy)." >&2
+    echo "If the newest restored attachments were removed from the CRM or sent to PerfectBook after the archive was taken, the backup can still be healthy; rerun after the next daily archive." >&2
     exit 1
   fi
   if [ -n "$PROBE_KEY" ]; then

@@ -469,9 +469,16 @@ hourly run plus the archive's timing). It then downloads that copy and
 compares its MD5 with the checksum the database recorded. A restored
 database without ordinary attachments passes with nothing to probe. Output
 is counts and pass/fail only, never keys or filenames. The Litestream source
-makes no attachment checks. A Drive drill started between 11:45 and 12:20
-UTC can fail on files that reached the archive just before it and are not
-mirrored yet; rerun it after 12:20 UTC.
+makes no attachment checks.
+
+The freshness check compares the archive with today's mirror and cannot see
+production, so it can fail on a healthy backup in two cases. A Drive drill
+started between 11:45 and 12:20 UTC can fail on files that reached the
+archive just before it and are not mirrored yet; rerun it after 12:20 UTC.
+And if the newest restored attachments were removed from the CRM or sent to
+PerfectBook after the archive was taken, the next hourly run deleted their
+copies as designed; the failure says so, and the drill should be rerun after
+the next daily archive.
 
 To verify a candidate script without replacing the installed one, copy it to a
 scratch path and run `sudo bash /tmp/<candidate>/restore-drill.sh /opt/apps/perfectcrm`.
