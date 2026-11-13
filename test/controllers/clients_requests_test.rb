@@ -174,6 +174,10 @@ class ClientsRequestsTest < ActionDispatch::IntegrationTest
     itinerary = outbound.reload.files.find { |file| file.filename.to_s == "itinerary.pdf" }
     logo_files = [ outbound, *replies ].flat_map { |message| message.files.select { |file| file.filename.to_s == "signature-logo.png" } }
     assert_equal 3, logo_files.size
+    # HTML parsing closes an open <p> at a <form>, so the remove button only
+    # stays in the quiet action row when that row is a block that can hold it.
+    assert_select "section[aria-labelledby='files-heading'] ul.files .acts form[action=?] button",
+      move_to_perfectbook_attachment_path(itinerary.id), text: "Remove from CRM, collect in PerfectBook", count: 1
     assert_select "ol.timeline .chips[aria-label='Attachments']", count: 2
     assert_select "ol.timeline .chips a.chip", count: 2
     assert_select "ol.timeline .chips a.chip[href=?]", attachment_path(itinerary.id), text: /itinerary\.pdf/, count: 1

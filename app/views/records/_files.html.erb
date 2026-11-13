@@ -23,11 +23,11 @@
                 <% if file.blob.metadata["sensitive"] %><%= badge "Potentially sensitive", :warning %><% end %>
                 <span><%= row.message.inbound? ? "From #{timeline_sender(row.message, record)}" : "You sent" %> · <%= date_short(row.at) %> · <%= number_to_human_size(file.byte_size) %></span>
               </p>
-              <p class="acts">
+              <div class="acts">
                 <%= link_to "Download", attachment_path(file.id), class: "link-quiet" %>
                 <%= link_to "Send to PerfectBook", new_document_handoff_path(attachment_id: file.id), class: "link-quiet" %>
                 <%= button_to "Remove from CRM, collect in PerfectBook", move_to_perfectbook_attachment_path(file.id), method: :post, class: "link-quiet" %>
-              </p>
+              </div>
             </div>
           <% when :held %>
             <% held = row.record %>
