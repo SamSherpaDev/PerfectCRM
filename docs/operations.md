@@ -223,9 +223,11 @@ Root cron runs PerfectBook at 03:00 and PerfectCRM at 03:15 in server time
 
 The root-owned, mode-600 `/opt/apps/perfectcrm/.env.nightly-backup` supplies
 `BACKUP_RCLONE_REMOTE=perfectcrm-backups`, `LITESTREAM_BUCKET`, and
-`IMAGE_TAG=latest` (the deployment's current image tag). `HEALTHCHECKS_URL`
-stays unset because the owner chose not to configure backup alerts. If that
-choice changes, its optional ping URL belongs in this environment file.
+`IMAGE_TAG=latest` (the deployment's current image tag), plus the
+`ATTACHMENTS_*` settings in [Attachments backup](#attachments-backup).
+`HEALTHCHECKS_URL` stays unset because the owner chose not to configure
+backup alerts. If that choice changes, its optional ping URL belongs in this
+environment file.
 Check `/var/log/perfectcrm-nightly-backup.log` as root for backup results
 and the expected warning about the missing ping. PerfectBook uses its
 own `.env.nightly-backup`, remote, and `/var/log/perfectbook-nightly-backup.log`
