@@ -5,22 +5,40 @@
 access-key-id: ${LITESTREAM_ACCESS_KEY_ID}
 secret-access-key: ${LITESTREAM_SECRET_ACCESS_KEY}
 
+# Tuned for R2 request cost on Litestream 0.5.9. monitor-interval plus
+# sync-interval bounds worst-case loss and snapshot retention bounds the
+# restore window; docs/operations.md, "Continuous database backups", owns the
+# resulting numbers. Read it before changing. Litestream silently ignores
+# misplaced keys: monitor/checkpoint are per database, sync-interval is per
+# replica, the rest are global.
+l0-retention: 5m
+l0-retention-check-interval: 1h
+levels:
+  - interval: 5m
+  - interval: 1h
+  - interval: 6h
+snapshot:
+  interval: 24h
+  retention: 25h
+
 dbs:
   - path: /rails/storage/production.sqlite3
-    sync-interval: 1s
+    monitor-interval: 20s
+    checkpoint-interval: 1h
     replica:
       type: s3
       bucket: ${LITESTREAM_BUCKET}
       path: perfectcrm/primary
       endpoint: ${SPACES_ENDPOINT}
       region: ${SPACES_REGION}
-      retention: 24h
+      sync-interval: 1s
   - path: /rails/storage/production_queue.sqlite3
-    sync-interval: 1s
+    monitor-interval: 20s
+    checkpoint-interval: 1h
     replica:
       type: s3
       bucket: ${LITESTREAM_BUCKET}
       path: perfectcrm/queue
       endpoint: ${SPACES_ENDPOINT}
       region: ${SPACES_REGION}
-      retention: 24h
+      sync-interval: 1s

@@ -62,6 +62,32 @@ are not repeated here. This file covers only what differs for the CRM.
 8. **Record secrets.** Every value from the secrets inventory is in the
    password manager as well as on the box. Nothing secret is in git.
 
+## Continuous database backups
+
+Litestream 0.5.9 replicates both `storage/production.sqlite3` and
+`storage/production_queue.sqlite3` to `perfectcrm/primary` and
+`perfectcrm/queue` in the backup bucket. Both use a 20 s database monitor
+interval and 1 s replica sync: worst-case loss is about 21 s plus upload
+time, with a 24-48 h point-in-time restore window.
+
+`deploy/litestream.yml` keeps checkpoints hourly, compaction levels at
+5 m / 1 h / 6 h, L0 retention at 5 m with an hourly sweep, and daily
+snapshots retained for 25 h. These settings reduce R2 request costs while
+keeping at least 24 h of restore history. Litestream silently ignores
+unknown or misplaced keys, so `test/deploy/litestream_config_test.rb`
+allowlists the keys read at each level.
+
+To update the bind-mounted configuration, save the current server file as
+`litestream.yml.prev`, copy `deploy/litestream.yml` into place, then run
+`docker compose -f compose.yml restart --timeout 40 litestream`. Do not use
+`up -d`: Compose does not detect content changes inside the bind mount.
+Check logs for replication of both databases, 1 s replica sync, the configured
+monitor intervals, and no errors or database-initialisation timeouts. Run
+the restore drill and restore the queue separately; after at least 2 h,
+verify point-in-time restores of both databases from before and after the
+switch. To roll back, copy `litestream.yml.prev` over `litestream.yml` and
+restart only Litestream the same way.
+
 ## Secrets inventory
 
 | Variable | Comes from | Stored |
@@ -297,9 +323,10 @@ them during routine server work and before relying on a restore. Then prove
 the copy restores with the drill's Drive source ([Restore drill](#restore-drill)).
 
 Limits: Drive alone can lose up to a day of data (Litestream on R2 stays the
-minute-level layer); the server's own Google access can permanently delete
-what it wrote, so the locked R2 copies stay; and losing the encryption key
-loses every Drive copy.
+seconds-level layer, see
+[Continuous database backups](#continuous-database-backups)); the server's
+own Google access can permanently delete what it wrote, so the locked R2
+copies stay; and losing the encryption key loses every Drive copy.
 
 ### Attachments backup
 
