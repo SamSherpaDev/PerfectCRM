@@ -5,11 +5,12 @@
 access-key-id: ${LITESTREAM_ACCESS_KEY_ID}
 secret-access-key: ${LITESTREAM_SECRET_ACCESS_KEY}
 
-# Tuned for R2 request cost on Litestream 0.5.9. Worst-case loss is about
-# monitor-interval + sync-interval (~21 s) plus upload time; point-in-time
-# restore reaches back 24-48 h. Litestream silently ignores misplaced keys:
-# monitor/checkpoint are per database, sync-interval is per replica, the rest
-# are global. See docs/operations.md before changing.
+# Tuned for R2 request cost on Litestream 0.5.9. monitor-interval plus
+# sync-interval bounds worst-case loss and snapshot retention bounds the
+# restore window; docs/operations.md, "Continuous database backups", owns the
+# resulting numbers. Read it before changing. Litestream silently ignores
+# misplaced keys: monitor/checkpoint are per database, sync-interval is per
+# replica, the rest are global.
 l0-retention: 5m
 l0-retention-check-interval: 1h
 levels:

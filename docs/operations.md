@@ -74,9 +74,8 @@ time, with a 24-48 h point-in-time restore window.
 5 m / 1 h / 6 h, L0 retention at 5 m with an hourly sweep, and daily
 snapshots retained for 25 h. These settings reduce R2 request costs while
 keeping at least 24 h of restore history. Litestream silently ignores
-unknown or misplaced keys; monitor/checkpoint belong on each database,
-sync on each replica, and retention/compaction settings at the top level.
-The allowlist test in `test/deploy/litestream_config_test.rb` guards this.
+unknown or misplaced keys, so `test/deploy/litestream_config_test.rb`
+allowlists the keys read at each level.
 
 To update the bind-mounted configuration, save the current server file as
 `litestream.yml.prev`, copy `deploy/litestream.yml` into place, then run
@@ -324,9 +323,10 @@ them during routine server work and before relying on a restore. Then prove
 the copy restores with the drill's Drive source ([Restore drill](#restore-drill)).
 
 Limits: Drive alone can lose up to a day of data (Litestream on R2 stays the
-roughly 20-second recovery-point layer); the server's own Google access can
-permanently delete what it wrote, so the locked R2 copies stay; and losing
-the encryption key loses every Drive copy.
+seconds-level layer, see
+[Continuous database backups](#continuous-database-backups)); the server's
+own Google access can permanently delete what it wrote, so the locked R2
+copies stay; and losing the encryption key loses every Drive copy.
 
 ### Attachments backup
 
